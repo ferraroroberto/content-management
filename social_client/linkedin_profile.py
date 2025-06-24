@@ -1,0 +1,94 @@
+import requests
+import json
+from datetime import datetime
+import os
+
+def load_config():
+    """Load configuration from config.json file."""
+    config_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config')
+    config_path = os.path.join(config_dir, 'config.json')
+    
+    try:
+        with open(config_path, 'r') as file:
+            return json.load(file)
+    except FileNotFoundError:
+        print(f"Error: Configuration file not found at {config_path}")
+        return None
+    except json.JSONDecodeError:
+        print(f"Error: Invalid JSON in configuration file at {config_path}")
+        return None
+
+def get_linkedin_profile(config):
+    """Fetch LinkedIn profile data using the API."""
+    if not config or 'linkedin_profile' not in config:
+        print("LinkedIn configuration not found in config file")
+        return None
+    
+    linkedin_config = config['linkedin_profile']
+    
+    url = linkedin_config.get('api_url')
+    headers = {
+        "x-rapidapi-key": linkedin_config.get('api_key'),
+        "x-rapidapi-host": linkedin_config.get('api_host')
+    }
+    querystring = linkedin_config.get('querystring', {})
+    
+    try:
+        response = requests.get(url, headers=headers, params=querystring)
+        response.raise_for_status()  # Raise an exception for bad status codes
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching LinkedIn profile: {e}")
+        return None
+
+def save_results(data):
+    """Save the results to a JSON file in the results directory."""
+    if not data:
+        print("No data to save")
+        return
+    
+    # Create results directory if it doesn't exist
+    results_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'results')
+    os.makedirs(results_dir, exist_ok=True)
+    
+    # Add metadata
+    current_date = datetime.now().strftime('%Y-%m-%d')
+    result_data = {
+        "date": current_date,
+        "platform": "LinkedIn",
+        "data_type": "profile",
+        "data": data
+    }
+    
+    # Generate filename with date
+    filename = f"linkedin_profile_{current_date}.json"
+    file_path = os.path.join(results_dir, filename)
+    
+    # Check if file already exists and delete it
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        print(f"Deleted existing file: {file_path}")
+    
+    # Save to file
+    with open(file_path, 'w', encoding='utf-8') as file:
+        json.dump(result_data, file, indent=4, ensure_ascii=False)
+    
+    print(f"Results saved to {file_path}")
+
+def main():
+    """Main function to execute the LinkedIn profile retrieval."""
+    # Load configuration
+    config = load_config()
+    if not config:
+        return
+    
+    # Get LinkedIn profile data
+    profile_data = get_linkedin_profile(config)
+    if not profile_data:
+        return
+    
+    # Save results
+    save_results(profile_data)
+
+if __name__ == "__main__":
+    main()

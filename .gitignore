@@ -1,0 +1,8 @@
+# Ignore virtual environment directory
+.venv/
+
+# Ignore docs directory
+docs/
+
+# Ignore config.json file
+config.json
