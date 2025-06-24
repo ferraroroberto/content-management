@@ -1,6 +1,6 @@
-# Social Media Data Scraper
+# Social Media Data Retrieval Tool
 
-This tool fetches LinkedIn, Instagram, Twitter, Threads, and Substack profile information and posts using APIs and saves the results to JSON files.
+This tool fetches data from various social media platforms (LinkedIn, Instagram, Twitter, Threads, Substack, and others) using APIs and saves the results to JSON files. It uses a unified API client approach to handle all platforms through a single configuration file.
 
 ## Setup
 
@@ -13,155 +13,112 @@ This tool fetches LinkedIn, Instagram, Twitter, Threads, and Substack profile in
 
 ## Usage
 
-### Collect All Data at Once
-
-Run the data collection script from the `reporting` directory:
+Run the social API client from the `reporting` directory:
 
 ```powershell
-# To collect data from all social media platforms
-python collect_data.py
-
-# To run in debug mode with more detailed logging
-python collect_data.py --debug
+# Run the social API client
+python social_client/social_api_client.py
 ```
 
-### Run Individual Modules
+The script will:
+1. Ask if you want to enable debug mode (y/n)
+2. Process all endpoints defined in your configuration file
+3. Save results to JSON files in the `results` directory
 
-You can also run individual modules from the `reporting` directory:
-
-```powershell
-# To fetch LinkedIn profile data
-python social_client/linkedin_profile.py
-
-# To fetch LinkedIn posts
-python social_client/linkedin_posts.py
-
-# To fetch Instagram profile data
-python social_client/instagram_profile.py
-
-# To fetch Instagram posts
-python social_client/instagram_posts.py
-
-# To fetch Twitter profile data
-python social_client/twitter_profile.py
-
-# To fetch Twitter posts
-python social_client/twitter_posts.py
-
-# To fetch Threads profile data
-python social_client/threads_profile.py
-
-# To fetch Threads posts
-python social_client/threads_posts.py
-
-# To fetch Substack profile data
-python social_client/substack_profile.py
-
-# To fetch Substack posts
-python social_client/substack_posts.py
-```
+When in debug mode:
+- More detailed logs will be displayed
+- You'll be prompted to continue after each endpoint is processed
+- You can stop processing at any time
 
 ## Logging
 
 The application uses a comprehensive logging system:
 
 - Console logs: All logs are displayed in the console
-- File logs: 
-  - Individual module logs are saved in the `logs` directory with the module name
-  - The main collection script logs are saved as `collect_data_YYYY-MM-DD.log`
 - Log levels:
   - INFO: Normal operation logs (default)
-  - DEBUG: Detailed debugging information (use `--debug` flag)
-- Emojis are used in logs for better visual identification of log types
+  - DEBUG: Detailed debugging information (when debug mode is enabled)
+- Emojis are used in logs for better visual identification of log types:
+  - 🚀 - Starting processes
+  - 📂 - Loading files
+  - 🔍 - Fetching data
+  - 📡 - API requests
+  - 🔑 - Parameter details
+  - 💾 - Saving data
+  - ✅ - Success messages
+  - ⚠️ - Warnings
+  - ❌ - Errors
+  - 📊 - Progress information
+  - 🐞 - Debug information
+  - ⏹️ - Process stopping
 
 ## Results
 
-The scripts will save the results to the `results` directory in JSON files with the following formats:
+The script will save the results to the `results` directory in JSON files with the following naming convention:
 
-### LinkedIn Profile Data
-- Filename: `linkedin_profile_YYYY-MM-DD.json`
-- Content includes:
-  - date: Current date
-  - platform: "LinkedIn"
-  - data_type: "profile"
-  - data: The full LinkedIn profile data
+`{platform}_{data_type}_{date}.json`
 
-### LinkedIn Posts Data
-- Filename: `linkedin_posts_YYYY-MM-DD.json`
-- Content includes:
-  - date: Current date
-  - platform: "LinkedIn"
-  - data_type: "posts"
-  - data: The LinkedIn posts data
+For example:
+- `linkedin_profile_2025-06-24.json`
+- `twitter_posts_2025-06-24.json`
 
-### Instagram Profile Data
-- Filename: `instagram_profile_YYYY-MM-DD.json`
-- Content includes:
-  - date: Current date
-  - platform: "Instagram"
-  - data_type: "profile"
-  - data: The Instagram profile data
+### Result File Structure
 
-### Instagram Posts Data
-- Filename: `instagram_posts_YYYY-MM-DD.json`
-- Content includes:
-  - date: Current date
-  - platform: "Instagram"
-  - data_type: "posts"
-  - data: The Instagram posts data
+Each result file contains:
+- `date`: Current date (YYYY-MM-DD)
+- `platform`: The social media platform name
+- `data_type`: The type of data (profile, posts, etc.)
+- `data`: The actual data retrieved from the API
 
-### Twitter Profile Data
-- Filename: `twitter_profile_YYYY-MM-DD.json`
-- Content includes:
-  - date: Current date
-  - platform: "Twitter"
-  - data_type: "profile"
-  - data: The Twitter profile data
-
-### Twitter Posts Data
-- Filename: `twitter_posts_YYYY-MM-DD.json`
-- Content includes:
-  - date: Current date
-  - platform: "Twitter"
-  - data_type: "posts"
-  - data: The Twitter posts data
-
-### Threads Profile Data
-- Filename: `threads_profile_YYYY-MM-DD.json`
-- Content includes:
-  - date: Current date
-  - platform: "Threads"
-  - data_type: "profile"
-  - data: The Threads profile data
-
-### Threads Posts Data
-- Filename: `threads_posts_YYYY-MM-DD.json`
-- Content includes:
-  - date: Current date
-  - platform: "Threads"
-  - data_type: "posts"
-  - data: The Threads posts data
-
-### Substack Profile Data
-- Filename: `substack_profile_YYYY-MM-DD.json`
-- Content includes:
-  - date: Current date
-  - platform: "Substack"
-  - data_type: "profile"
-  - data: The Substack profile data
-
-### Substack Posts Data
-- Filename: `substack_posts_YYYY-MM-DD.json`
-- Content includes:
-  - date: Current date
-  - platform: "Substack"
-  - data_type: "posts"
-  - data: The Substack posts data
+Example:
+```json
+{
+    "date": "2025-06-24",
+    "platform": "linkedin",
+    "data_type": "profile",
+    "data": {
+        // API response data
+    }
+}
+```
 
 ## Customization
 
-To change the profile URLs, usernames, or other API settings, edit the `config/config.json` file.
+The tool uses a unified configuration file located at `config/config.json` that defines all API endpoints and parameters.
+
+Example configuration structure:
+```json
+{
+    "twitter_profile": {
+        "api_url": "https://api-url-for-twitter-profile",
+        "api_key": "your-api-key",
+        "api_host": "api-host-for-twitter",
+        "querystring": {
+            "username": "your-twitter-username"
+        }
+    },
+    "linkedin_posts": {
+        "api_url": "https://api-url-for-linkedin-posts",
+        "api_key": "your-api-key",
+        "api_host": "api-host-for-linkedin",
+        "querystring": {
+            "username": "your-linkedin-username",
+            "limit": "10"
+        }
+    }
+    // Additional platforms and endpoints
+}
+```
+
+Each key in the configuration represents a unique endpoint to process and should follow the pattern `{platform}_{data_type}`.
 
 ## Note
 
 If a result file for the current date already exists, it will be deleted and overwritten with new data.
+
+## Adding New Platforms
+
+To add support for a new platform or endpoint:
+1. Add a new entry in the `config.json` file with appropriate API settings
+2. The new entry should follow the naming convention `{platform}_{data_type}`
+3. Run the social API client to process all endpoints including your new one
