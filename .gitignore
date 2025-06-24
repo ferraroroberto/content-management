@@ -6,3 +6,7 @@ docs/
 
 # Ignore config.json file
 config.json
+
+# Ignore contents of results directory but keep the directory itself
+results/*
+!results/README.md

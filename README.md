@@ -42,6 +42,9 @@ python social_client/threads_posts.py
 
 # To fetch Substack profile data
 python social_client/substack_profile.py
+
+# To fetch Substack posts
+python social_client/substack_posts.py
 ```
 
 ## Results
@@ -119,6 +122,14 @@ The scripts will save the results to the `results` directory in JSON files with 
   - platform: "Substack"
   - data_type: "profile"
   - data: The Substack profile data
+
+### Substack Posts Data
+- Filename: `substack_posts_YYYY-MM-DD.json`
+- Content includes:
+  - date: Current date
+  - platform: "Substack"
+  - data_type: "posts"
+  - data: The Substack posts data
 
 ## Customization
 

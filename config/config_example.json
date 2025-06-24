@@ -76,13 +76,20 @@
         "querystring": {
             "username": "example_username"
         }
-    },
-    "substack_profile": {
+    },    "substack_profile": {
         "api_url": "https://substack-live.p.rapidapi.com/profile/public-profile",
         "api_key": "your_api_key_here",
         "api_host": "substack-live.p.rapidapi.com",
         "querystring": {
             "handle": "example_handle"
+        }
+    },
+    "substack_posts": {
+        "api_url": "https://substack-live.p.rapidapi.com/profile/activity",
+        "api_key": "your_api_key_here",
+        "api_host": "substack-live.p.rapidapi.com",
+        "querystring": {
+            "profileId": "your_profile_id_here"
         }
     }
 }
