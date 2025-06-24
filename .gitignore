@@ -10,3 +10,6 @@ config.json
 # Ignore contents of results directory but keep the directory itself
 results/*
 !results/README.md
+
+# Ignore Python cache files
+__pycache__/

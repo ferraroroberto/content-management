@@ -13,7 +13,21 @@ This tool fetches LinkedIn, Instagram, Twitter, Threads, and Substack profile in
 
 ## Usage
 
-Run the scripts from the `reporting` directory:
+### Collect All Data at Once
+
+Run the data collection script from the `reporting` directory:
+
+```powershell
+# To collect data from all social media platforms
+python collect_data.py
+
+# To run in debug mode with more detailed logging
+python collect_data.py --debug
+```
+
+### Run Individual Modules
+
+You can also run individual modules from the `reporting` directory:
 
 ```powershell
 # To fetch LinkedIn profile data
@@ -46,6 +60,19 @@ python social_client/substack_profile.py
 # To fetch Substack posts
 python social_client/substack_posts.py
 ```
+
+## Logging
+
+The application uses a comprehensive logging system:
+
+- Console logs: All logs are displayed in the console
+- File logs: 
+  - Individual module logs are saved in the `logs` directory with the module name
+  - The main collection script logs are saved as `collect_data_YYYY-MM-DD.log`
+- Log levels:
+  - INFO: Normal operation logs (default)
+  - DEBUG: Detailed debugging information (use `--debug` flag)
+- Emojis are used in logs for better visual identification of log types
 
 ## Results
 
