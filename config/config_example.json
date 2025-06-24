@@ -1,0 +1,88 @@
+{
+    "linkedin_profile": {
+        "api_url": "https://fresh-linkedin-profile-data.p.rapidapi.com/get-linkedin-profile",
+        "api_key": "your_api_key_here",
+        "api_host": "fresh-linkedin-profile-data.p.rapidapi.com",
+        "querystring": {
+            "linkedin_url": "https://www.linkedin.com/in/username/",
+            "include_skills": "false",
+            "include_certifications": "false",
+            "include_publications": "false",
+            "include_honors": "false",
+            "include_volunteers": "false",
+            "include_projects": "false",
+            "include_patents": "false",
+            "include_courses": "false", 
+            "include_organizations": "false",
+            "include_profile_status": "false",
+            "include_company_public_url": "false"
+        }
+    },
+    "linkedin_posts": {
+        "api_url": "https://fresh-linkedin-profile-data.p.rapidapi.com/get-profile-posts",
+        "api_key": "your_api_key_here",
+        "api_host": "fresh-linkedin-profile-data.p.rapidapi.com",
+        "querystring": {
+            "linkedin_url": "https://www.linkedin.com/in/username/",
+            "type": "posts"
+        }
+    },
+    "instagram_profile": {
+        "api_url": "https://instagram-looter2.p.rapidapi.com/profile",
+        "api_key": "your_api_key_here",
+        "api_host": "instagram-looter2.p.rapidapi.com",
+        "querystring": {
+            "username": "example_username"
+        }
+    },
+    "instagram_posts": {
+        "api_url": "https://instagram-looter2.p.rapidapi.com/user-feeds",
+        "api_key": "your_api_key_here",
+        "api_host": "instagram-looter2.p.rapidapi.com",
+        "querystring": {
+            "id": "user_id_here",
+            "count": "12"
+        }
+    },
+    "twitter_profile": {
+        "api_url": "https://twitter241.p.rapidapi.com/user",
+        "api_key": "your_api_key_here",
+        "api_host": "twitter241.p.rapidapi.com",
+        "querystring": {
+            "username": "example_username"
+        }
+    },
+    "twitter_posts": {
+        "api_url": "https://twitter241.p.rapidapi.com/user-tweets",
+        "api_key": "your_api_key_here",
+        "api_host": "twitter241.p.rapidapi.com",
+        "querystring": {
+            "user": "user_id_here",
+            "count": "20"
+        }
+    },
+    "threads_profile": {
+        "api_url": "https://threads-api4.p.rapidapi.com/api/user/info",
+        "api_key": "your_api_key_here",
+        "api_host": "threads-api4.p.rapidapi.com",
+        "querystring": {
+            "username": "example_username"
+        }
+    },
+    "threads_posts": {
+        "api_url": "https://threads-scraper.p.rapidapi.com/api/v1/users/posts",
+        "api_key": "your_api_key_here",
+        "api_host": "threads-scraper.p.rapidapi.com",
+        "querystring": {
+            "username": "example_username"
+        }
+    },
+    "substack_profile": {
+        "api_url": "https://substack-live.p.rapidapi.com/profile/public-profile",
+        "api_key": "your_api_key_here",
+        "api_host": "substack-live.p.rapidapi.com",
+        "querystring": {
+            "handle": "example_handle"
+        }
+    }
+}
