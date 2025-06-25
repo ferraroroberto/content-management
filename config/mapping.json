@@ -130,5 +130,51 @@
                 "required": true
             }
         }
+    },
+    "twitter_profile": {
+        "fields": {
+            "num_followers": {
+                "path": "data.result.data.user.result.legacy.followers_count",
+                "type": "integer",
+                "required": true
+            }
+        }
+    },
+    "twitter_posts": {
+        "type": "array",
+        "array_path": "data.result.timeline.instructions.0.entries",
+        "fields": {
+            "post_id": {
+                "path": "content.itemContent.tweet_results.result.rest_id",
+                "type": "string",
+                "required": true
+            },
+            "num_likes": {
+                "path": "content.itemContent.tweet_results.result.legacy.favorite_count",
+                "type": "integer",
+                "required": true
+            },
+            "num_reshares": {
+                "path": "content.itemContent.tweet_results.result.legacy.retweet_count",
+                "type": "integer",
+                "required": true
+            },
+            "num_comments": {
+                "path": "content.itemContent.tweet_results.result.legacy.reply_count",
+                "type": "integer",
+                "required": true
+            },
+            "posted_at": {
+                "path": "content.itemContent.tweet_results.result.legacy.created_at",
+                "type": "string",
+                "required": true
+            },
+            "is_video": {
+                "path": "content.itemContent.tweet_results.result.legacy.extended_entities.media.0.type",
+                "type": "custom",
+                "transform": "value == 'video'",
+                "required": false
+            }
+        }
     }
 }

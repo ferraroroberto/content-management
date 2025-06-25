@@ -120,8 +120,13 @@ def convert_unix_timestamp(timestamp):
     """Convert Unix timestamp to human-readable date format."""
     if timestamp is None:
         return None
+    
+    # If it's already a formatted date string (contains dashes or colons), return as is
+    if isinstance(timestamp, str) and ('-' in timestamp or ':' in timestamp):
+        return timestamp
+        
     try:
-        # First try to convert as Unix timestamp (seconds since epoch)
+        # Try to convert as Unix timestamp (seconds since epoch)
         return datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
     except (ValueError, TypeError, OSError) as e:
         # If conversion fails, return the original value
@@ -179,8 +184,8 @@ def process_json_file(file_path, mapping_config):
         
         # Extract metadata
         date = data.get('date')
-        platform = data.get('platform')
-        data_type = data.get('data_type')
+        platform = data.get('platform', '').lower()  # Normalize to lowercase
+        data_type = data.get('data_type', '').lower()  # Normalize to lowercase
         
         # Extract date from filename for filtering only (not to be included in final DataFrame)
         file_date = extract_date_from_filename(file_path)
@@ -294,8 +299,8 @@ def process_all_files(mapping_config, results_dir=None, debug_mode=False):
         if records:
             # Group records by platform and data_type
             for record in records:
-                platform = record.get('platform')
-                data_type = record.get('data_type')
+                platform = record.get('platform', '').lower()  # Normalize to lowercase
+                data_type = record.get('data_type', '').lower()  # Normalize to lowercase
                 key = f"{platform}_{data_type}"
                 
                 if key not in data_by_platform_type:
