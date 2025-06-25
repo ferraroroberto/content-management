@@ -162,7 +162,7 @@ def process_array_data(data, mapping_config, file_date=None):
     field_mappings = mapping_config.get('fields', {})
     results = []
     
-    for item in array_data:
+    for index, item in enumerate(array_data):
         # Skip non-tweet entries for Twitter (e.g., who-to-follow, cursors)
         if 'find_array' in mapping_config:  # This is Twitter
             entry_id = item.get('entryId', '')
@@ -173,12 +173,35 @@ def process_array_data(data, mapping_config, file_date=None):
         # Extract all mapped fields
         record = {}
         skip_record = False
+        missing_fields = []
         
         for field_name, field_config in field_mappings.items():
             value = extract_field_value(item, field_config)
             
             if value is None and field_config.get('required', False):
-                logger.warning(f"⚠️ Required field '{field_name}' not found, skipping record")
+                missing_fields.append(field_name)
+                if logger.level <= logging.DEBUG:
+                    # More detailed debug logging
+                    path = field_config.get('path')
+                    logger.debug(f"DEBUG: Missing required field '{field_name}' (path: {path}) in record {index+1}")
+                    
+                    # Check if the parent object exists
+                    parent_path = '.'.join(path.split('.')[:-1]) if '.' in path else ''
+                    if parent_path:
+                        parent_obj = get_nested_value(item, parent_path)
+                        if parent_obj is None:
+                            logger.debug(f"DEBUG: Parent object at '{parent_path}' does not exist")
+                        else:
+                            logger.debug(f"DEBUG: Parent object exists: {parent_obj}")
+                    
+                    # Log a sample of the record for debugging
+                    try:
+                        import json
+                        record_sample = json.dumps(item, indent=2)[:500]  # First 500 chars to avoid huge logs
+                        logger.debug(f"DEBUG: Record sample: {record_sample}...")
+                    except:
+                        logger.debug(f"DEBUG: Unable to serialize record for logging")
+                
                 skip_record = True
                 break
             
@@ -190,6 +213,7 @@ def process_array_data(data, mapping_config, file_date=None):
                 record[field_name] = value
         
         if skip_record:
+            logger.warning(f"⚠️  Required field(s) {', '.join(missing_fields)} not found, skipping record {index+1}")
             continue
         
         # No date filtering here; process all records in the file
@@ -253,7 +277,7 @@ def process_json_file(file_path, mapping_config):
                 value = extract_field_value(data, field_config)
                 
                 if value is None and field_config.get('required', False):
-                    logger.warning(f"⚠️ Required field '{field_name}' not found in {file_path}")
+                    logger.warning(f"⚠️  Required field '{field_name}' not found in {file_path}")
                 
                 result[field_name] = value
             

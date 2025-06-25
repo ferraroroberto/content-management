@@ -180,5 +180,51 @@
                 "required": false
             }
         }
+    },
+    "substack_profile": {
+        "fields": {
+            "num_subscribers": {
+                "path": "data.data.subscriberCountNumber",
+                "type": "integer",
+                "required": true
+            }
+        }
+    },
+    "substack_posts": {
+        "type": "array",
+        "array_path": "data.data.items",
+        "fields": {
+            "post_id": {
+                "path": "entity_key",
+                "type": "string",
+                "required": true
+            },
+            "num_likes": {
+                "path": "comment.reaction_count",
+                "type": "integer",
+                "required": true
+            },
+            "num_reshares": {
+                "path": "comment.restacks",
+                "type": "integer",
+                "required": true
+            },
+            "num_comments": {
+                "path": "comment.children_count",
+                "type": "integer",
+                "required": true
+            },
+            "posted_at": {
+                "path": "comment.date",
+                "type": "string",
+                "required": true
+            },
+            "is_video": {
+                "path": "comment.media_clip_id",
+                "type": "custom",
+                "transform": "value != None",
+                "required": false
+            }
+        }
     }
 }
