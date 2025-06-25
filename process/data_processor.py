@@ -138,6 +138,23 @@ def process_array_data(data, mapping_config, file_date=None):
     array_path = mapping_config.get('array_path', 'data')
     array_data = get_nested_value(data, array_path)
     
+    # Special handling for finding arrays within structures (e.g., Twitter)
+    find_array_config = mapping_config.get('find_array')
+    if find_array_config and isinstance(array_data, list):
+        # Search for the correct item in the array
+        target_type = find_array_config.get('type')
+        entries_path = find_array_config.get('entries_path', 'entries')
+        
+        for item in array_data:
+            if isinstance(item, dict) and item.get('type') == target_type:
+                # Found the correct instruction, get the entries
+                array_data = item.get(entries_path, [])
+                break
+        else:
+            # If we didn't find the target type, array_data might still be the instructions list
+            logger.warning(f"⚠️ Could not find instruction with type '{target_type}'")
+            array_data = []
+    
     if not isinstance(array_data, list):
         logger.warning(f"⚠️ Expected array at path {array_path}, got {type(array_data)}")
         return []
@@ -146,6 +163,13 @@ def process_array_data(data, mapping_config, file_date=None):
     results = []
     
     for item in array_data:
+        # Skip non-tweet entries for Twitter (e.g., who-to-follow, cursors)
+        if 'find_array' in mapping_config:  # This is Twitter
+            entry_id = item.get('entryId', '')
+            if not entry_id.startswith('tweet-'):
+                logger.debug(f"Skipping non-tweet entry: {entry_id}")
+                continue
+        
         # Extract all mapped fields
         record = {}
         skip_record = False

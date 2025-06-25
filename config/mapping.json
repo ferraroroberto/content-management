@@ -142,7 +142,11 @@
     },
     "twitter_posts": {
         "type": "array",
-        "array_path": "data.result.timeline.instructions.0.entries",
+        "array_path": "data.result.timeline.instructions",
+        "find_array": {
+            "type": "TimelineAddEntries",
+            "entries_path": "entries"
+        },
         "fields": {
             "post_id": {
                 "path": "content.itemContent.tweet_results.result.rest_id",
