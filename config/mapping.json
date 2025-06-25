@@ -1,0 +1,134 @@
+{
+    "linkedin_profile": {
+        "fields": {
+            "num_followers": {
+                "path": "data.data.follower_count",
+                "type": "integer",
+                "required": true
+            }
+        }
+    },
+    "linkedin_posts": {
+        "type": "array",
+        "array_path": "data.data",
+        "fields": {
+            "post_url": {
+                "path": "post_url",
+                "type": "string",
+                "required": true
+            },
+            "num_likes": {
+                "path": "num_reactions",
+                "type": "integer",
+                "required": true
+            },
+            "num_reshares": {
+                "path": "num_reposts",
+                "type": "integer",
+                "required": true
+            },
+            "num_comments": {
+                "path": "num_comments",
+                "type": "integer",
+                "required": true
+            },
+            "posted_at": {
+                "path": "posted",
+                "type": "string",
+                "required": true
+            },
+            "is_video": {
+                "path": "video",
+                "type": "boolean_exists",
+                "required": false
+            }
+        }
+    },
+    "instagram_profile": {
+        "fields": {
+            "num_followers": {
+                "path": "data.edge_followed_by.count",
+                "type": "integer",
+                "required": true
+            }
+        }
+    },
+    "instagram_posts": {
+        "type": "array",
+        "array_path": "data.items",
+        "fields": {
+            "post_id": {
+                "path": "code",
+                "type": "string",
+                "required": true
+            },
+            "num_likes": {
+                "path": "like_count",
+                "type": "integer",
+                "required": true
+            },
+            "num_comments": {
+                "path": "comment_count",
+                "type": "integer",
+                "required": true
+            },
+            "posted_at": {
+                "path": "taken_at",
+                "type": "integer",
+                "required": true
+            },
+            "is_video": {
+                "path": "media_type",
+                "type": "custom",
+                "transform": "value == 2",
+                "required": true
+            }
+        }
+    },
+    "threads_profile": {
+        "fields": {
+            "num_followers": {
+                "path": "data.data.user.follower_count",
+                "type": "integer",
+                "required": true
+            }
+        }
+    },
+    "threads_posts": {
+        "type": "array",
+        "array_path": "data.data.posts",
+        "fields": {
+            "post_id": {
+                "path": "node.thread_items.0.post.code",
+                "type": "string",
+                "required": true
+            },
+            "num_likes": {
+                "path": "node.thread_items.0.post.like_count",
+                "type": "integer",
+                "required": true
+            },
+            "num_reshares": {
+                "path": "node.thread_items.0.post.text_post_app_info.repost_count",
+                "type": "integer",
+                "required": true
+            },
+            "num_comments": {
+                "path": "node.thread_items.0.post.text_post_app_info.direct_reply_count",
+                "type": "integer",
+                "required": true
+            },
+            "posted_at": {
+                "path": "node.thread_items.0.post.taken_at",
+                "type": "integer",
+                "required": true
+            },
+            "is_video": {
+                "path": "node.thread_items.0.post.media_type",
+                "type": "custom",
+                "transform": "value == 2",
+                "required": true
+            }
+        }
+    }
+}

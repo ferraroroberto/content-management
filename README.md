@@ -116,6 +116,53 @@ Each key in the configuration represents a unique endpoint to process and should
 
 If a result file for the current date already exists, it will be deleted and overwritten with new data.
 
+## Reporting Data Processor
+
+This tool processes JSON files from the `results` directory, extracts and maps fields according to the configuration in `config/mapping.json`, and outputs the results as CSV or Excel files.
+
+### Features
+
+- Processes **all JSON files** in the `results` directory, regardless of their date.
+- Extracts the date from each filename (e.g., `linkedin_posts_2025-06-25.json`) and includes it as the `file_date` field in the output.
+- Supports mapping and transformation of fields as defined in `config/mapping.json`.
+- Outputs one file per platform and data type, in either CSV or Excel format.
+- Logging with configurable debug mode.
+
+### Usage
+
+1. Place your JSON files in the `results` directory. The filename should contain a date in the format `YYYY-MM-DD` (e.g., `linkedin_posts_2025-06-25.json`).
+2. Configure your field mappings in `config/mapping.json`.
+3. Run the processor:
+
+   ```bash
+   python process/data_processor.py
+   ```
+
+4. When prompted, choose whether to enable debug mode.
+5. When prompted, choose the output format (CSV or Excel).
+6. Output files will be saved in the `results` directory.
+
+### Notes
+
+- **All records in every JSON file are processed.** There is no filtering by internal date fields such as `posted`. The date used for each record is taken from the filename.
+- The script requires Python 3 and the following packages:
+  - `pandas`
+  - `openpyxl` (if saving as Excel)
+- Logging output is shown in the console.
+
+### Configuration
+
+- **Mapping:** Edit `config/mapping.json` to define how fields are extracted and mapped.
+- **Logger:** Logger configuration is handled in `config/logger_config.py`.
+
+### Example
+
+Suppose you have a file named `linkedin_posts_2025-06-25.json` in the `results` directory. All records in this file will be processed, and the `file_date` field for each record will be set to `2025-06-25`.
+
+---
+
+For any issues or questions, please refer to the code comments or contact the maintainer.
+
 ## Adding New Platforms
 
 To add support for a new platform or endpoint:
