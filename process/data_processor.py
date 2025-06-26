@@ -87,7 +87,30 @@ def convert_boolean_to_integer(value):
         return 1 if value else 0
     return value
 
-def extract_field_value(data, field_config):
+def convert_to_date_string(value):
+    """Convert various date/time representations to 'YYYY-MM-DD' string."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        # Try to extract date part if it's a datetime string
+        import re
+        match = re.match(r"(\d{4}-\d{2}-\d{2})", value)
+        if match:
+            return match.group(1)
+        # Try parsing as datetime string
+        try:
+            dt = pd.to_datetime(value)
+            return dt.strftime('%Y-%m-%d')
+        except Exception:
+            return value
+    try:
+        # Assume it's a Unix timestamp (int or float)
+        dt = datetime.fromtimestamp(int(value))
+        return dt.strftime('%Y-%m-%d')
+    except Exception:
+        return value
+
+def extract_field_value(data, field_config, field_name=None):
     """Extract field value based on configuration."""
     path = field_config.get('path')
     field_type = field_config.get('type', 'string')
@@ -129,7 +152,8 @@ def extract_field_value(data, field_config):
                 return None
         elif value is not None and field_type == 'boolean':
             return convert_boolean_to_integer(value)
-                
+        elif value is not None and (field_type == 'date' or (field_name and field_name in ['date', 'posted_at', 'posted'])):
+            return convert_to_date_string(value)
         return convert_boolean_to_integer(value)  # Convert any boolean values
 
 def extract_date_from_filename(file_path):
@@ -202,7 +226,7 @@ def process_array_data(data, mapping_config, file_date=None):
         missing_fields = []
         
         for field_name, field_config in field_mappings.items():
-            value = extract_field_value(item, field_config)
+            value = extract_field_value(item, field_config, field_name=field_name)
             
             if value is None and field_config.get('required', False):
                 missing_fields.append(field_name)
@@ -249,6 +273,9 @@ def process_array_data(data, mapping_config, file_date=None):
             if field_name == 'posted_at' and value is not None:
                 # Store directly without keeping the raw value
                 record[field_name] = convert_unix_timestamp(value)
+            # Convert date fields to 'YYYY-MM-DD'
+            if field_name in ['posted_at', 'date', 'posted']:
+                record[field_name] = convert_to_date_string(value)
             else:
                 # Ensure any boolean values are converted to 1/0
                 record[field_name] = convert_boolean_to_integer(value)
@@ -294,7 +321,7 @@ def process_json_file(file_path, mapping_config):
             
             # Add metadata to each record
             for record in records:
-                record['date'] = date
+                record['date'] = convert_to_date_string(date)
                 record['platform'] = platform
                 record['data_type'] = data_type
             
@@ -307,7 +334,7 @@ def process_json_file(file_path, mapping_config):
         else:
             # Process single record (existing logic)
             result = {
-                'date': date,
+                'date': convert_to_date_string(date),
                 'platform': platform,
                 'data_type': data_type
             }
@@ -315,13 +342,16 @@ def process_json_file(file_path, mapping_config):
             field_mappings = platform_config.get('fields', {})
             
             for field_name, field_config in field_mappings.items():
-                value = extract_field_value(data, field_config)
+                value = extract_field_value(data, field_config, field_name=field_name)
                 
                 if value is None and field_config.get('required', False):
                     logger.warning(f"⚠️  Required field '{field_name}' not found in {file_path}")
                 
-                # Ensure any boolean values are converted to 1/0
-                result[field_name] = convert_boolean_to_integer(value)
+                # Convert date fields to 'YYYY-MM-DD'
+                if field_name in ['posted_at', 'date', 'posted']:
+                    result[field_name] = convert_to_date_string(value)
+                else:
+                    result[field_name] = convert_boolean_to_integer(value)
             
             logger.debug(f"✅ Extracted data: {result}")
             logger.info(f"✅ Extracted 1 record from {os.path.basename(file_path)}")
@@ -417,6 +447,11 @@ def process_all_files(mapping_config, main_config=None, debug_mode=False):
         
         # Order columns based on mapping configuration
         df = order_dataframe_columns(df, mapping_config)
+        
+        # Convert date columns to datetime and format as 'YYYY-MM-DD'
+        for col in df.columns:
+            if col in ['date', 'posted_at', 'posted']:
+                df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime('%Y-%m-%d')
         
         # Sort by posted date if available
         if 'posted' in df.columns:

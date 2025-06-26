@@ -183,7 +183,7 @@
     },
     "substack_profile": {
         "fields": {
-            "num_subscribers": {
+            "num_followers": {
                 "path": "data.data.subscriberCountNumber",
                 "type": "integer",
                 "required": true

@@ -1,0 +1,37 @@
+2025-06-26 19:14:36,086 - __main__ - INFO - 🚀 Starting Unified Profile Record Creation
+2025-06-26 19:14:36,089 - __main__ - INFO - No date specified, defaulting to yesterday: 2025-06-25
+2025-06-26 19:14:36,958 - __main__ - INFO - 🔄 Processing date: 2025-06-25
+2025-06-26 19:14:36,958 - __main__ - INFO - 🔄 Creating unified profile record for date: 2025-06-25
+2025-06-26 19:14:36,994 - __main__ - INFO - 📋 Found 5 profile tables: instagram_profile, linkedin_profile, substack_profile, threads_profile, twitter_profile
+2025-06-26 19:14:37,157 - __main__ - INFO - ✅ Created unified profile record with 8 columns
+2025-06-26 19:14:37,302 - __main__ - INFO - ✅ Successfully uploaded unified profile record to profile
+2025-06-26 19:21:04,203 - __main__ - INFO - 🚀 Starting Unified Profile Record Creation
+2025-06-26 19:21:04,206 - __main__ - INFO - No date specified, defaulting to yesterday: 2025-06-25
+2025-06-26 19:21:04,493 - __main__ - INFO - 🔄 Processing date: 2025-06-25
+2025-06-26 19:21:04,493 - __main__ - INFO - 🔄 Creating unified profile record for date: 2025-06-25
+2025-06-26 19:21:04,538 - __main__ - INFO - 📋 Found 5 profile tables: instagram_profile, linkedin_profile, substack_profile, threads_profile, twitter_profile
+2025-06-26 19:21:04,790 - __main__ - INFO - ✅ Created unified profile record with 8 columns
+2025-06-26 19:21:04,918 - __main__ - INFO - ✅ Successfully uploaded unified profile record to profile
+2025-06-26 19:24:14,318 - __main__ - INFO - 🚀 Starting Unified Profile Record Creation
+2025-06-26 19:24:14,730 - __main__ - INFO - 📋 Found 5 profile tables: instagram_profile, linkedin_profile, substack_profile, threads_profile, twitter_profile
+2025-06-26 19:24:14,912 - __main__ - INFO - Processing 3 dates: 2025-06-24, 2025-06-25, 2025-06-26
+2025-06-26 19:24:14,912 - __main__ - INFO - 🔄 Processing date: 2025-06-24
+2025-06-26 19:24:14,913 - __main__ - INFO - 🔄 Creating unified profile record for date: 2025-06-24
+2025-06-26 19:24:14,952 - __main__ - INFO - 📋 Found 5 profile tables: instagram_profile, linkedin_profile, substack_profile, threads_profile, twitter_profile
+2025-06-26 19:24:15,162 - __main__ - INFO - ✅ Created unified profile record with 8 columns
+2025-06-26 19:24:15,284 - __main__ - INFO - ✅ Successfully uploaded unified profile record to profile
+2025-06-26 19:24:15,285 - __main__ - INFO - 🔄 Processing date: 2025-06-25
+2025-06-26 19:24:15,285 - __main__ - INFO - 🔄 Creating unified profile record for date: 2025-06-25
+2025-06-26 19:24:15,318 - __main__ - INFO - 📋 Found 5 profile tables: instagram_profile, linkedin_profile, substack_profile, threads_profile, twitter_profile
+2025-06-26 19:24:15,500 - __main__ - INFO - ✅ Created unified profile record with 8 columns
+2025-06-26 19:24:15,608 - __main__ - INFO - ✅ Successfully uploaded unified profile record to profile
+2025-06-26 19:24:15,608 - __main__ - INFO - 🔄 Processing date: 2025-06-26
+2025-06-26 19:24:15,608 - __main__ - INFO - 🔄 Creating unified profile record for date: 2025-06-26
+2025-06-26 19:24:15,663 - __main__ - INFO - 📋 Found 5 profile tables: instagram_profile, linkedin_profile, substack_profile, threads_profile, twitter_profile
+2025-06-26 19:24:15,847 - __main__ - INFO - ✅ Created unified profile record with 8 columns
+2025-06-26 19:24:15,973 - __main__ - INFO - ✅ Successfully uploaded unified profile record to profile
+2025-06-26 19:24:15,973 - __main__ - INFO - ✅ All dates processed successfully.
+2025-06-26 19:25:42,439 - __main__ - INFO - 🚀 Starting Unified Profile Record Creation
+2025-06-26 19:25:42,851 - __main__ - INFO - 📋 Found 5 profile tables: instagram_profile, linkedin_profile, substack_profile, threads_profile, twitter_profile
+2025-06-26 19:25:43,037 - __main__ - INFO - Processing 3 dates: 2025-06-24, 2025-06-25, 2025-06-26
+2025-06-26 19:25:43,037 - __main__ - INFO - 🔄 Processing date: 2025-06-24

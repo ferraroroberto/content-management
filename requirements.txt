@@ -1,4 +1,14 @@
+# For making HTTP requests (used for API calls)
 requests==2.31.0
+# For compatibility with older Python versions (dependency of some packages)
 importlib-metadata==6.6.0
+# For data manipulation and analysis (used for DataFrame operations)
 pandas==2.2.2
+# For reading/writing Excel files (used by pandas)
 openpyxl==3.1.2
+# For interacting with the Notion API
+notion-client==2.2.1
+# For loading environment variables from .env files
+python-dotenv==1.0.1
+# PostgreSQL database adapter for Python (used for database uploads)
+psycopg2-binary==2.9.9

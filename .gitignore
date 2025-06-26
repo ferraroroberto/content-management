@@ -13,5 +13,7 @@ results/*
 !results/README.md
 
 # Ignore Python cache files
-
 __pycache__/
+
+# Ignore Notion sample DB
+/notion/database_sample
