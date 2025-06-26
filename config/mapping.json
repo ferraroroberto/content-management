@@ -12,24 +12,9 @@
         "type": "array",
         "array_path": "data.data",
         "fields": {
-            "post_url": {
+            "post_id": {
                 "path": "post_url",
                 "type": "string",
-                "required": true
-            },
-            "num_likes": {
-                "path": "num_reactions",
-                "type": "integer",
-                "required": true
-            },
-            "num_reshares": {
-                "path": "num_reposts",
-                "type": "integer",
-                "required": true
-            },
-            "num_comments": {
-                "path": "num_comments",
-                "type": "integer",
                 "required": true
             },
             "posted_at": {
@@ -41,7 +26,22 @@
                 "path": "video",
                 "type": "boolean_exists",
                 "required": false
-            }
+            },
+            "num_likes": {
+                "path": "num_reactions",
+                "type": "integer",
+                "required": true
+            },
+            "num_comments": {
+                "path": "num_comments",
+                "type": "integer",
+                "required": true
+            },
+            "num_reshares": {
+                "path": "num_reposts",
+                "type": "integer",
+                "required": true
+            }                       
         }
     },
     "instagram_profile": {
@@ -62,16 +62,6 @@
                 "type": "string",
                 "required": true
             },
-            "num_likes": {
-                "path": "like_count",
-                "type": "integer",
-                "required": true
-            },
-            "num_comments": {
-                "path": "comment_count",
-                "type": "integer",
-                "required": true
-            },
             "posted_at": {
                 "path": "taken_at",
                 "type": "integer",
@@ -82,7 +72,17 @@
                 "type": "custom",
                 "transform": "value == 2",
                 "required": true
-            }
+            },            
+            "num_likes": {
+                "path": "like_count",
+                "type": "integer",
+                "required": true
+            },
+            "num_comments": {
+                "path": "comment_count",
+                "type": "integer",
+                "required": true
+            }        
         }
     },
     "threads_profile": {
@@ -103,21 +103,6 @@
                 "type": "string",
                 "required": true
             },
-            "num_likes": {
-                "path": "node.thread_items.0.post.like_count",
-                "type": "integer",
-                "required": true
-            },
-            "num_reshares": {
-                "path": "node.thread_items.0.post.text_post_app_info.repost_count",
-                "type": "integer",
-                "required": true
-            },
-            "num_comments": {
-                "path": "node.thread_items.0.post.text_post_app_info.direct_reply_count",
-                "type": "integer",
-                "required": true
-            },
             "posted_at": {
                 "path": "node.thread_items.0.post.taken_at",
                 "type": "integer",
@@ -127,6 +112,21 @@
                 "path": "node.thread_items.0.post.media_type",
                 "type": "custom",
                 "transform": "value == 2",
+                "required": true
+            },            
+            "num_likes": {
+                "path": "node.thread_items.0.post.like_count",
+                "type": "integer",
+                "required": true
+            },
+            "num_comments": {
+                "path": "node.thread_items.0.post.text_post_app_info.direct_reply_count",
+                "type": "integer",
+                "required": true
+            },
+            "num_reshares": {
+                "path": "node.thread_items.0.post.text_post_app_info.repost_count",
+                "type": "integer",
                 "required": true
             }
         }
@@ -153,21 +153,6 @@
                 "type": "string",
                 "required": true
             },
-            "num_likes": {
-                "path": "content.itemContent.tweet_results.result.legacy.favorite_count",
-                "type": "integer",
-                "required": true
-            },
-            "num_reshares": {
-                "path": "content.itemContent.tweet_results.result.legacy.retweet_count",
-                "type": "integer",
-                "required": true
-            },
-            "num_comments": {
-                "path": "content.itemContent.tweet_results.result.legacy.reply_count",
-                "type": "integer",
-                "required": true
-            },
             "posted_at": {
                 "path": "content.itemContent.tweet_results.result.legacy.created_at",
                 "type": "string",
@@ -178,6 +163,21 @@
                 "type": "custom",
                 "transform": "value == 'video'",
                 "required": false
+            },
+            "num_likes": {
+                "path": "content.itemContent.tweet_results.result.legacy.favorite_count",
+                "type": "integer",
+                "required": true
+            },
+            "num_comments": {
+                "path": "content.itemContent.tweet_results.result.legacy.reply_count",
+                "type": "integer",
+                "required": true
+            },
+            "num_reshares": {
+                "path": "content.itemContent.tweet_results.result.legacy.retweet_count",
+                "type": "integer",
+                "required": true
             }
         }
     },
@@ -199,21 +199,6 @@
                 "type": "string",
                 "required": true
             },
-            "num_likes": {
-                "path": "comment.reaction_count",
-                "type": "integer",
-                "required": true
-            },
-            "num_reshares": {
-                "path": "comment.restacks",
-                "type": "integer",
-                "required": true
-            },
-            "num_comments": {
-                "path": "comment.children_count",
-                "type": "integer",
-                "required": true
-            },
             "posted_at": {
                 "path": "comment.date",
                 "type": "string",
@@ -224,6 +209,21 @@
                 "type": "custom",
                 "transform": "value != None",
                 "required": false
+            },
+            "num_likes": {
+                "path": "comment.reaction_count",
+                "type": "integer",
+                "required": true
+            },
+            "num_comments": {
+                "path": "comment.children_count",
+                "type": "integer",
+                "required": true
+            },
+            "num_reshares": {
+                "path": "comment.restacks",
+                "type": "integer",
+                "required": true
             }
         }
     }

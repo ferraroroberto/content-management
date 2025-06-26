@@ -6,6 +6,7 @@ import logging
 import sys
 from pathlib import Path
 import glob
+from supabase_uploader import upload_all_dataframes, configure_logger as configure_supabase_logger
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent))
@@ -38,6 +39,23 @@ def load_mapping_config():
         logger.error(f"❌ Error: Invalid JSON in mapping configuration file at {config_path}")
         return None
 
+def load_config():
+    """Load main configuration from config.json file."""
+    logger.debug("📂 Loading main configuration file")
+    config_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config')
+    config_path = os.path.join(config_dir, 'config.json')
+    
+    try:
+        with open(config_path, 'r') as file:
+            logger.info("✅ Main configuration loaded successfully")
+            return json.load(file)
+    except FileNotFoundError:
+        logger.error(f"❌ Error: Main configuration file not found at {config_path}")
+        return None
+    except json.JSONDecodeError:
+        logger.error(f"❌ Error: Invalid JSON in main configuration file at {config_path}")
+        return None
+
 def get_nested_value(data, path):
     """Extract value from nested dictionary using dot notation path."""
     try:
@@ -63,6 +81,12 @@ def get_nested_value(data, path):
         logger.debug(f"Error accessing path {path}: {str(e)}")
         return None
 
+def convert_boolean_to_integer(value):
+    """Convert boolean values to integers (1 for True, 0 for False)."""
+    if isinstance(value, bool):
+        return 1 if value else 0
+    return value
+
 def extract_field_value(data, field_config):
     """Extract field value based on configuration."""
     path = field_config.get('path')
@@ -78,7 +102,7 @@ def extract_field_value(data, field_config):
     elif field_type == 'boolean_exists':
         # Check if a key exists (for detecting video posts)
         value = get_nested_value(data, path)
-        return value is not None
+        return 1 if value is not None else 0  # Return 1/0 instead of True/False
     elif field_type == 'custom':
         # Handle custom transformations
         value = get_nested_value(data, path)
@@ -88,7 +112,7 @@ def extract_field_value(data, field_config):
                 # Execute the transformation expression
                 # For security, limit to simple expressions
                 result = eval(transform_expr, {"__builtins__": {}}, {"value": value})
-                return result  # This should return a boolean
+                return convert_boolean_to_integer(result)  # Convert boolean result to 1/0
             except Exception as e:
                 logger.error(f"❌ Error applying custom transformation: {e}")
                 return None
@@ -103,8 +127,10 @@ def extract_field_value(data, field_config):
                 return int(value)
             except (ValueError, TypeError):
                 return None
+        elif value is not None and field_type == 'boolean':
+            return convert_boolean_to_integer(value)
                 
-        return value
+        return convert_boolean_to_integer(value)  # Convert any boolean values
 
 def extract_date_from_filename(file_path):
     """Extract date from filename like 'linkedin_posts_2025-06-25.json'."""
@@ -202,6 +228,20 @@ def process_array_data(data, mapping_config, file_date=None):
                     except:
                         logger.debug(f"DEBUG: Unable to serialize record for logging")
                 
+                # Check if this is a Substack first post (missing num_likes)
+                is_substack_first_post = (
+                    data.get('platform', '').lower() == 'substack' and 
+                    data.get('data_type', '').lower() == 'posts' and 
+                    field_name == 'num_likes'
+                )
+                
+                if is_substack_first_post:
+                    # Silently skip this record without warning
+                    logger.debug(f"Skipping Substack first post (record {index+1}) - missing num_likes is expected")
+                else:
+                    # For other records, log the warning as usual
+                    logger.warning(f"⚠️  Required field(s) {', '.join(missing_fields)} not found, skipping record {index+1}")
+                
                 skip_record = True
                 break
             
@@ -210,10 +250,11 @@ def process_array_data(data, mapping_config, file_date=None):
                 # Store directly without keeping the raw value
                 record[field_name] = convert_unix_timestamp(value)
             else:
-                record[field_name] = value
+                # Ensure any boolean values are converted to 1/0
+                record[field_name] = convert_boolean_to_integer(value)
         
         if skip_record:
-            logger.warning(f"⚠️  Required field(s) {', '.join(missing_fields)} not found, skipping record {index+1}")
+            # Skip the warning message as it's already handled above
             continue
         
         # No date filtering here; process all records in the file
@@ -235,7 +276,7 @@ def process_json_file(file_path, mapping_config):
         platform = data.get('platform', '').lower()  # Normalize to lowercase
         data_type = data.get('data_type', '').lower()  # Normalize to lowercase
         
-        # Extract date from filename for filtering only (not to be included in final DataFrame)
+        # Extract date from filename (just for reference, not used for filtering now)
         file_date = extract_date_from_filename(file_path)
         
         # Build platform key for mapping lookup
@@ -251,24 +292,24 @@ def process_json_file(file_path, mapping_config):
         if platform_config.get('type') == 'array':
             records = process_array_data(data, platform_config, file_date)
             
-            # Add metadata to each record (include date, but not file_date in the final records)
+            # Add metadata to each record
             for record in records:
                 record['date'] = date
                 record['platform'] = platform
                 record['data_type'] = data_type
-                # Add file_date as a temporary field for filtering only
-                record['_file_date_temp'] = file_date
             
-            logger.info(f"✅ Extracted {len(records)} records from {os.path.basename(file_path)}")
+            if records:
+                logger.info(f"✅ Extracted {len(records)} records from {os.path.basename(file_path)}")
+            else:
+                logger.warning(f"⚠️ No valid records extracted from {os.path.basename(file_path)}")
+                
             return records
         else:
             # Process single record (existing logic)
             result = {
                 'date': date,
                 'platform': platform,
-                'data_type': data_type,
-                # Add file_date as a temporary field for filtering only
-                '_file_date_temp': file_date
+                'data_type': data_type
             }
             
             field_mappings = platform_config.get('fields', {})
@@ -279,9 +320,11 @@ def process_json_file(file_path, mapping_config):
                 if value is None and field_config.get('required', False):
                     logger.warning(f"⚠️  Required field '{field_name}' not found in {file_path}")
                 
-                result[field_name] = value
+                # Ensure any boolean values are converted to 1/0
+                result[field_name] = convert_boolean_to_integer(value)
             
             logger.debug(f"✅ Extracted data: {result}")
+            logger.info(f"✅ Extracted 1 record from {os.path.basename(file_path)}")
             return [result]  # Return as list for consistency
         
     except Exception as e:
@@ -297,7 +340,7 @@ def get_json_files(results_dir):
 
 def order_dataframe_columns(df, mapping_config):
     """Order DataFrame columns based on mapping configuration."""
-    # Start with required columns in specific order (without file_date)
+    # Start with required columns in specific order
     ordered_columns = ['date', 'platform', 'data_type']
     
     # Get all field names from mapping config in order
@@ -307,18 +350,25 @@ def order_dataframe_columns(df, mapping_config):
             if field_name not in ordered_columns and field_name in df.columns:
                 ordered_columns.append(field_name)
     
-    # Add any remaining columns not in mapping (except _file_date_temp)
+    # Add any remaining columns not in mapping
     for col in df.columns:
-        if col not in ordered_columns and col != '_file_date_temp':
+        if col not in ordered_columns:
             ordered_columns.append(col)
     
     # Reorder DataFrame columns
     return df[ordered_columns]
 
-def process_all_files(mapping_config, results_dir=None, debug_mode=False):
+def process_all_files(mapping_config, main_config=None, debug_mode=False):
     """Process all JSON files in the results directory and create separate DataFrames by data type."""
-    if results_dir is None:
-        results_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'results')
+    if main_config is None:
+        main_config = load_config()
+    
+    # Get raw results directory from config or use default
+    results_dir_relative = main_config.get("folder_results_raw", "results/raw") if main_config else "results/raw"
+    
+    # Create full path for results directory
+    project_root = os.path.dirname(os.path.dirname(__file__))
+    results_dir = os.path.join(project_root, *results_dir_relative.split('/'))
     
     if not os.path.exists(results_dir):
         logger.error(f"❌ Results directory not found: {results_dir}")
@@ -331,10 +381,7 @@ def process_all_files(mapping_config, results_dir=None, debug_mode=False):
         logger.warning("⚠️ No JSON files found in results directory")
         return {}
     
-    # Get current date for filtering
-    from datetime import datetime
-    current_date = datetime.now().strftime('%Y-%m-%d')
-    logger.info(f"📅 Filtering data for current date: {current_date}")
+    logger.info(f"📅 Processing all available data (no date filtering)")
     
     # Organize data by platform and data type
     data_by_platform_type = {}
@@ -368,20 +415,6 @@ def process_all_files(mapping_config, results_dir=None, debug_mode=False):
             logger.warning(f"⚠️ No data extracted for: {key}")
             continue
         
-        # Filter by current date using temporary _file_date_temp field
-        initial_count = len(df)
-        df = df[df['_file_date_temp'] == current_date]
-        filtered_count = len(df)
-        logger.info(f"🔍 Filtered {key} from {initial_count} to {filtered_count} records for date {current_date}")
-        
-        # Remove temporary file_date field
-        df = df.drop(columns=['_file_date_temp'])
-        
-        # Skip if no data after filtering
-        if filtered_count == 0:
-            logger.warning(f"⚠️ No data for {key} after date filtering")
-            continue
-        
         # Order columns based on mapping configuration
         df = order_dataframe_columns(df, mapping_config)
         
@@ -394,11 +427,21 @@ def process_all_files(mapping_config, results_dir=None, debug_mode=False):
     
     return dataframes
 
-def save_dataframes(dataframes, output_format='csv', output_dir=None):
+def save_dataframes(dataframes, main_config=None, output_format='csv'):
     """Save multiple DataFrames to files in specified format."""
-    if output_dir is None:
-        output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'results')
-
+    if main_config is None:
+        main_config = load_config()
+    
+    # Get processed results directory from config or use default
+    output_dir_relative = main_config.get("folder_results_processed", "results/processed") if main_config else "results/processed"
+    
+    # Create full path for output directory
+    project_root = os.path.dirname(os.path.dirname(__file__))
+    output_dir = os.path.join(project_root, *output_dir_relative.split('/'))
+    
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+    
     saved_files = []
     
     for key, df in dataframes.items():
@@ -411,7 +454,7 @@ def save_dataframes(dataframes, output_format='csv', output_dir=None):
             file_path = os.path.join(output_dir, filename)
             df.to_csv(file_path, index=False)
         
-        logger.info(f"💾 Saved {key} DataFrame to {output_format.upper()}: {file_path}")
+        logger.info(f"💾 Saved {key} DataFrame to {output_format.upper()}: {os.path.basename(file_path)}")
         saved_files.append(file_path)
     
     return saved_files
@@ -428,14 +471,18 @@ def main():
     logger.info("🚀 Starting Data Processor")
     logger.info(f"🐞 Debug mode: {'Enabled' if debug_mode else 'Disabled'}")
     
-    # Load mapping configuration
+    # Load configurations
     mapping_config = load_mapping_config()
     if not mapping_config:
         logger.error("❌ Failed to load mapping configuration")
         return
     
+    main_config = load_config()
+    if not main_config:
+        logger.warning("⚠️ Failed to load main configuration, using defaults")
+    
     # Process all JSON files and get DataFrames by data type
-    dataframes = process_all_files(mapping_config, debug_mode=debug_mode)
+    dataframes = process_all_files(mapping_config, main_config, debug_mode=debug_mode)
     
     if not dataframes:
         logger.warning("⚠️ No data to save")
@@ -452,12 +499,29 @@ def main():
             print(f"\n📈 {data_type} DataFrame Info:")
             print(df.info())
     
+    # Upload data to Supabase if enabled
+    supabase_enabled = main_config.get('supabase', {}).get('enable_upload', False)
+    if supabase_enabled:
+        upload_input = input("\nUpload data to Supabase? (y/n) [default: y]: ").lower()
+        upload_to_supabase = upload_input != 'n'  # Default to yes if empty or any input other than 'n'
+        if upload_to_supabase:
+            # Configure Supabase logger to use the same logger
+            configure_supabase_logger(logger)
+            logger.info("📤 Uploading data to Supabase...")
+            
+            # Upload all dataframes
+            success = upload_all_dataframes(dataframes)
+            if success:
+                logger.info("✅ Successfully uploaded all data to Supabase")
+            else:
+                logger.warning("⚠️  Some errors occurred during Supabase upload")
+    
     # Ask for output format
     format_input = input("\nSave as Excel or CSV? (excel/csv) [default: csv]: ").lower()
     output_format = 'excel' if format_input == 'excel' else 'csv'
     
     # Save DataFrames
-    output_files = save_dataframes(dataframes, output_format=output_format)
+    output_files = save_dataframes(dataframes, main_config, output_format=output_format)
     
     logger.info("✅ Data Processor completed")
     logger.info(f"📁 Generated {len(output_files)} output files")

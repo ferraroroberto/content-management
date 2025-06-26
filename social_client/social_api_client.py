@@ -65,7 +65,7 @@ def get_api_data(platform_key, config):
         logger.error(f"❌ Error fetching {platform_key} data: {e}")
         return None
 
-def save_results(platform_key, data):
+def save_results(platform_key, data, config):
     """Save the results to a JSON file in the results directory."""
     if not data:
         logger.warning(f"⚠️ No data to save for {platform_key}")
@@ -78,8 +78,14 @@ def save_results(platform_key, data):
     platform = parts[0]
     data_type = parts[1] if len(parts) > 1 else "data"
     
+    # Get results directory from config or use default
+    results_dir_relative = config.get("folder_results_raw", "results/raw")
+    
+    # Create full path for results directory
+    project_root = os.path.dirname(os.path.dirname(__file__))
+    results_dir = os.path.join(project_root, *results_dir_relative.split('/'))
+    
     # Create results directory if it doesn't exist
-    results_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'results')
     os.makedirs(results_dir, exist_ok=True)
     
     # Add metadata
@@ -107,27 +113,40 @@ def save_results(platform_key, data):
     logger.info(f"✅ Results saved to {file_path}")
     return file_path
 
-def process_all_endpoints(config, debug_mode=False):
-    """Process all API endpoints defined in the config file."""
+def process_all_endpoints(config, debug_mode=False, specific_platform=None):
+    """Process all API endpoints defined in the config file or a specific one if provided."""
     if not config:
         logger.error("❌ Failed to load configuration")
         return
     
+    # Filter out configuration parameters that aren't API endpoints
+    config_endpoints = {k: v for k, v in config.items() if isinstance(v, dict) and 'api_url' in v}
+    
+    # Filter for specific platform if provided
+    if specific_platform:
+        if specific_platform in config_endpoints:
+            config_endpoints = {specific_platform: config_endpoints[specific_platform]}
+            logger.info(f"🎯 Processing only '{specific_platform}' endpoint")
+        else:
+            logger.error(f"❌ Specified platform '{specific_platform}' not found in configuration")
+            logger.info(f"📋 Available platforms: {', '.join(config_endpoints.keys())}")
+            return
+    
     # Count total number of endpoints
-    total_endpoints = len(config.keys())
+    total_endpoints = len(config_endpoints.keys())
     logger.info(f"🔢 Found {total_endpoints} endpoints to process")
     
     # Process each endpoint
     completed = 0
     
-    for platform_key in config.keys():
+    for platform_key in config_endpoints.keys():
         logger.info(f"🚀 Processing {platform_key} ({completed+1}/{total_endpoints})")
         
         # Get data
         data = get_api_data(platform_key, config)
         if data:
             # Save results
-            file_path = save_results(platform_key, data)
+            file_path = save_results(platform_key, data, config)
             logger.info(f"✅ {platform_key} data saved to {file_path}")
         else:
             logger.error(f"❌ Failed to retrieve {platform_key} data")
@@ -164,8 +183,11 @@ def main():
         logger.error("❌ Failed to load configuration")
         return
     
-    # Process all endpoints
-    process_all_endpoints(config, debug_mode)
+    # Ask if user wants to process a specific platform
+    specific_platform = input("Process specific platform? (press Enter for all, or type platform name): ").strip()
+    
+    # Process endpoints
+    process_all_endpoints(config, debug_mode, specific_platform if specific_platform else None)
     
     logger.info("✅ Social API Client completed")
 
