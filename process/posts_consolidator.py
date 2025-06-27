@@ -50,7 +50,6 @@ def read_sql_from_file():
     try:
         with open(file_path, 'r') as f:
             sql_content = f.read()
-        logger.info(f"✅ SQL loaded from file: {os.path.basename(file_path)}")
         return sql_content
     except Exception as e:
         logger.error(f"❌ Error reading SQL file: {e}")

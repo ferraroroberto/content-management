@@ -5,139 +5,139 @@ CREATE TABLE public.posts AS
 WITH
         linkedin_video AS (
             SELECT DISTINCT ON (date)
-                date,
+                date::date as date,
                 post_id,
-                posted_at,
+                posted_at::date as posted_at,
                 num_likes,
                 num_comments,
                 num_reshares
             FROM public.linkedin_posts
             WHERE is_video = 1
-            AND posted_at = date
+            AND posted_at::date = date::date - interval '1 day'
             ORDER BY date, posted_at ASC
         ),
 
         linkedin_non_video AS (
             SELECT DISTINCT ON (date)
-                date,
+                date::date as date,
                 post_id,
-                posted_at,
+                posted_at::date as posted_at,
                 num_likes,
                 num_comments,
                 num_reshares
             FROM public.linkedin_posts
             WHERE is_video = 0
-            AND posted_at = date
+            AND posted_at::date = date::date - interval '1 day'
             ORDER BY date, posted_at ASC
         ),
 
         instagram_video AS (
             SELECT DISTINCT ON (date)
-                date,
+                date::date as date,
                 post_id,
-                posted_at,
+                posted_at::date as posted_at,
                 num_likes,
                 num_comments
             FROM public.instagram_posts
             WHERE is_video = 1
-            AND posted_at = date
+            AND posted_at::date = date::date - interval '1 day'
             ORDER BY date, posted_at ASC
         ),
 
         instagram_non_video AS (
             SELECT DISTINCT ON (date)
-                date,
+                date::date as date,
                 post_id,
-                posted_at,
+                posted_at::date as posted_at,
                 num_likes,
                 num_comments
             FROM public.instagram_posts
             WHERE is_video = 0
-            AND posted_at = date
+            AND posted_at::date = date::date - interval '1 day'
             ORDER BY date, posted_at ASC
         ),
 
         twitter_video AS (
             SELECT DISTINCT ON (date)
-                date,
+                date::date as date,
                 post_id,
-                posted_at,
+                posted_at::date as posted_at,
                 num_likes,
                 num_comments,
                 num_reshares
             FROM public.twitter_posts
             WHERE is_video = 1
-            AND posted_at = date
+            AND posted_at::date = date::date - interval '1 day'
             ORDER BY date, posted_at ASC
         ),
 
         twitter_non_video AS (
             SELECT DISTINCT ON (date)
-                date,
+                date::date as date,
                 post_id,
-                posted_at,
+                posted_at::date as posted_at,
                 num_likes,
                 num_comments,
                 num_reshares
             FROM public.twitter_posts
             WHERE is_video = 0
-            AND posted_at = date
+            AND posted_at::date = date::date - interval '1 day'
             ORDER BY date, posted_at ASC
         ),
 
         substack_video AS (
             SELECT DISTINCT ON (date)
-                date,
+                date::date as date,
                 post_id,
-                posted_at,
+                posted_at::date as posted_at,
                 num_likes,
                 num_comments,
                 num_reshares
             FROM public.substack_posts
             WHERE is_video = 1
-            AND posted_at = date
+            AND posted_at::date = date::date - interval '1 day'
             ORDER BY date, posted_at ASC
         ),
 
         substack_non_video AS (
             SELECT DISTINCT ON (date)
-                date,
+                date::date as date,
                 post_id,
-                posted_at,
+                posted_at::date as posted_at,
                 num_likes,
                 num_comments,
                 num_reshares
             FROM public.substack_posts
             WHERE is_video = 0
-            AND posted_at = date
+            AND posted_at::date = date::date - interval '1 day'
             ORDER BY date, posted_at ASC
         ),
 
         threads_video AS (
             SELECT DISTINCT ON (date)
-                date,
+                date::date as date,
                 post_id,
-                posted_at,
+                posted_at::date as posted_at,
                 num_likes,
                 num_comments,
                 num_reshares
             FROM public.threads_posts
             WHERE is_video = 1
-            AND posted_at = date
+            AND posted_at::date = date::date - interval '1 day'
             ORDER BY date, posted_at ASC
         ),
 
         threads_non_video AS (
             SELECT DISTINCT ON (date)
-                date,
+                date::date as date,
                 post_id,
-                posted_at,
+                posted_at::date as posted_at,
                 num_likes,
                 num_comments,
                 num_reshares
             FROM public.threads_posts
             WHERE is_video = 0
-            AND posted_at = date
+            AND posted_at::date = date::date - interval '1 day'
             ORDER BY date, posted_at ASC
         ),
         
@@ -156,55 +156,68 @@ WITH
         )
 
 SELECT
+    -- Date field
     d.date,
-    lv.post_id as post_id_linkedin_video,
-    lv.posted_at as posted_at_linkedin_video,
-    lv.num_likes as num_likes_linkedin_video,
-    lv.num_comments as num_comments_linkedin_video,
-    lv.num_reshares as num_reshares_linkedin_video,
+        
+    -- Non-video posts from all platforms
     lnv.post_id as post_id_linkedin_no_video,
     lnv.posted_at as posted_at_linkedin_no_video,
     lnv.num_likes as num_likes_linkedin_no_video,
     lnv.num_comments as num_comments_linkedin_no_video,
     lnv.num_reshares as num_reshares_linkedin_no_video,
-    iv.post_id as post_id_instagram_video,
-    iv.posted_at as posted_at_instagram_video,
-    iv.num_likes as num_likes_instagram_video,
-    iv.num_comments as num_comments_instagram_video,
+        
     inv.post_id as post_id_instagram_no_video,
     inv.posted_at as posted_at_instagram_no_video,
     inv.num_likes as num_likes_instagram_no_video,
     inv.num_comments as num_comments_instagram_no_video,
-    tv.post_id as post_id_twitter_video,
-    tv.posted_at as posted_at_twitter_video,
-    tv.num_likes as num_likes_twitter_video,
-    tv.num_comments as num_comments_twitter_video,
-    tv.num_reshares as num_reshares_twitter_video,
+        
     tnv.post_id as post_id_twitter_no_video,
     tnv.posted_at as posted_at_twitter_no_video,
     tnv.num_likes as num_likes_twitter_no_video,
     tnv.num_comments as num_comments_twitter_no_video,
     tnv.num_reshares as num_reshares_twitter_no_video,
-    sv.post_id as post_id_substack_video,
-    sv.posted_at as posted_at_substack_video,
-    sv.num_likes as num_likes_substack_video,
-    sv.num_comments as num_comments_substack_video,
-    sv.num_reshares as num_reshares_substack_video,
+        
     snv.post_id as post_id_substack_no_video,
     snv.posted_at as posted_at_substack_no_video,
     snv.num_likes as num_likes_substack_no_video,
     snv.num_comments as num_comments_substack_no_video,
     snv.num_reshares as num_reshares_substack_no_video,
-    thv.post_id as post_id_threads_video,
-    thv.posted_at as posted_at_threads_video,
-    thv.num_likes as num_likes_threads_video,
-    thv.num_comments as num_comments_threads_video,
-    thv.num_reshares as num_reshares_threads_video,
+        
     thnv.post_id as post_id_threads_no_video,
     thnv.posted_at as posted_at_threads_no_video,
     thnv.num_likes as num_likes_threads_no_video,
     thnv.num_comments as num_comments_threads_no_video,
-    thnv.num_reshares as num_reshares_threads_no_video
+    thnv.num_reshares as num_reshares_threads_no_video,
+
+    -- Video posts from all platforms
+    lv.post_id as post_id_linkedin_video,
+    lv.posted_at as posted_at_linkedin_video,
+    lv.num_likes as num_likes_linkedin_video,
+    lv.num_comments as num_comments_linkedin_video,
+    lv.num_reshares as num_reshares_linkedin_video,
+        
+    iv.post_id as post_id_instagram_video,
+    iv.posted_at as posted_at_instagram_video,
+    iv.num_likes as num_likes_instagram_video,
+    iv.num_comments as num_comments_instagram_video,
+        
+    tv.post_id as post_id_twitter_video,
+    tv.posted_at as posted_at_twitter_video,
+    tv.num_likes as num_likes_twitter_video,
+    tv.num_comments as num_comments_twitter_video,
+    tv.num_reshares as num_reshares_twitter_video,
+        
+    sv.post_id as post_id_substack_video,
+    sv.posted_at as posted_at_substack_video,
+    sv.num_likes as num_likes_substack_video,
+    sv.num_comments as num_comments_substack_video,
+    sv.num_reshares as num_reshares_substack_video,
+        
+    thv.post_id as post_id_threads_video,
+    thv.posted_at as posted_at_threads_video,
+    thv.num_likes as num_likes_threads_video,
+    thv.num_comments as num_comments_threads_video,
+    thv.num_reshares as num_reshares_threads_video
 FROM all_dates d
     LEFT JOIN linkedin_video lv ON d.date = lv.date
     LEFT JOIN linkedin_non_video lnv ON d.date = lnv.date
