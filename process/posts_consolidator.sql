@@ -37,8 +37,7 @@ WITH
                 post_id,
                 posted_at,
                 num_likes,
-                num_comments,
-                num_reshares
+                num_comments
             FROM public.instagram_posts
             WHERE is_video = 1
             AND posted_at = date
@@ -51,8 +50,7 @@ WITH
                 post_id,
                 posted_at,
                 num_likes,
-                num_comments,
-                num_reshares
+                num_comments
             FROM public.instagram_posts
             WHERE is_video = 0
             AND posted_at = date
@@ -173,12 +171,10 @@ SELECT
     iv.posted_at as posted_at_instagram_video,
     iv.num_likes as num_likes_instagram_video,
     iv.num_comments as num_comments_instagram_video,
-    iv.num_reshares as num_reshares_instagram_video,
     inv.post_id as post_id_instagram_no_video,
     inv.posted_at as posted_at_instagram_no_video,
     inv.num_likes as num_likes_instagram_no_video,
     inv.num_comments as num_comments_instagram_no_video,
-    inv.num_reshares as num_reshares_instagram_no_video,
     tv.post_id as post_id_twitter_video,
     tv.posted_at as posted_at_twitter_video,
     tv.num_likes as num_likes_twitter_video,
