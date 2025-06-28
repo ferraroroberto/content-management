@@ -448,9 +448,10 @@ def main():
     print(f"Page ID: {page_id}")
     print(f"Date: {args.date}")
     print(f"Next Page ID: {next_page_id if next_page_id else 'None'}")
-    print("\nExtracted Fields:")
+    print("\nExtracted Fields:\n")
     for field_name, value in extracted_fields.items():
         print(f"  - {field_name}: {value}")
+    print("\n")
     
     # Connect to Supabase
     logger.info("🔌 Connecting to Supabase")
@@ -468,14 +469,15 @@ def main():
     
     # Print Supabase data summary
     print("\n" + "="*60)
-    print("🗄️ SUPABASE DATA SUMMARY")
+    print("🗄️  SUPABASE DATA SUMMARY")
     print("="*60)
     print(f"Posts data found: {'Yes' if posts_data else 'No'}")
     print(f"Profile data found: {'Yes' if profile_data else 'No'}")
-    print("\nMapped Fields:")
+    print("\nMapped Fields:\n")
     for field_name, value in mapped_data.items():
         print(f"  - {field_name}: {value}")
-    
+    print("\n")
+
     # Prepare updates for Notion
     updates = {}
     changes = []
@@ -557,6 +559,8 @@ def main():
             logger.error("❌ Failed to retrieve next page")
     
     print("\n" + "="*60)
+    print("\n")
+
     logger.info("✅ Notion Update Process completed")
 
 if __name__ == "__main__":
