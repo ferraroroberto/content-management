@@ -1,3 +1,0 @@
-2025-06-28 13:42:38,327 - supabase_test_connect - INFO - Connection successful!
-2025-06-28 13:42:38,396 - supabase_test_connect - INFO - Current Time: (datetime.datetime(2025, 6, 28, 11, 42, 36, 960731, tzinfo=datetime.timezone.utc),)
-2025-06-28 13:42:38,397 - supabase_test_connect - INFO - Connection closed.
