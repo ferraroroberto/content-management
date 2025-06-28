@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import psycopg2
 import psycopg2.extras
+import argparse
 from dotenv import load_dotenv
 
 # Add the parent directory to sys.path to allow importing from sibling packages
@@ -18,19 +19,26 @@ if not logger.handlers:
     # Only set up if no handlers exist (i.e., not already configured)
     logger = setup_logger("supabase_uploader", file_logging=False)
 
-def load_db_config():
-    """Load database configuration from environment variables."""
-    logger.debug("📂 Loading database configuration")
+def load_db_config(environment="cloud"):
+    """
+    Load database configuration from environment variables.
+    
+    Args:
+        environment (str): The environment to use, either 'local' or 'cloud'
+    """
+    logger.debug(f"📂 Loading database configuration for {environment} environment")
     
     # Load environment variables from .env file
     load_dotenv()
     
+    env_suffix = f"_{environment}"
+    
     db_config = {
-        "user": os.getenv("user"),
-        "password": os.getenv("password"),
-        "host": os.getenv("host"),
-        "port": os.getenv("port"),
-        "dbname": os.getenv("dbname")
+        "user": os.getenv(f"db_user{env_suffix}"),
+        "password": os.getenv(f"db_password{env_suffix}"),
+        "host": os.getenv(f"db_host{env_suffix}"),
+        "port": os.getenv(f"db_port{env_suffix}"),
+        "dbname": os.getenv(f"db_name{env_suffix}")
     }
     
     # Check if all required configuration exists
@@ -39,13 +47,19 @@ def load_db_config():
         logger.error(f"❌ Database configuration missing: {', '.join(missing_keys)}")
         return None
             
-    logger.info("✅ Database configuration loaded successfully")
+    logger.info(f"✅ Database configuration loaded successfully for {environment} environment")
     return db_config
 
-def get_db_connection(db_config=None):
-    """Get a PostgreSQL database connection."""
+def get_db_connection(db_config=None, environment="cloud"):
+    """
+    Get a PostgreSQL database connection.
+    
+    Args:
+        db_config (dict, optional): Database configuration parameters
+        environment (str, optional): The environment to use if db_config is None
+    """
     if db_config is None:
-        db_config = load_db_config()
+        db_config = load_db_config(environment)
         
     if not db_config:
         return None
@@ -289,14 +303,21 @@ def get_primary_keys(platform, data_type):
     # If no specific rule, use a generic id column based on data_type
     return [f'{data_type.rstrip("s")}_id']
 
-def upload_all_dataframes(dataframes, db_config=None):
-    """Upload all DataFrames to the database."""
+def upload_all_dataframes(dataframes, environment="cloud", db_config=None):
+    """
+    Upload all DataFrames to the database.
+    
+    Args:
+        dataframes (dict): Dictionary of DataFrames to upload
+        environment (str, optional): The database environment to use ('local' or 'cloud')
+        db_config (dict, optional): Database configuration parameters
+    """
     if not dataframes:
         logger.warning("⚠️ No DataFrames to upload")
         return False
     
     # Get database connection
-    connection = get_db_connection(db_config)
+    connection = get_db_connection(db_config, environment)
     if not connection:
         return False
     
@@ -341,13 +362,20 @@ def upload_all_dataframes(dataframes, db_config=None):
 
 def main():
     """Main function for testing the module independently."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Upload data to Supabase database")
+    parser.add_argument("--environment", choices=["local", "cloud"], default="cloud",
+                        help="Database environment to use (default: cloud)")
+    parser.add_argument("--csv", type=str, help="Path to CSV file for testing")
+    args = parser.parse_args()
+    
     # Configure logger
-    logger.info("🚀 Starting Database Uploader Test")
+    logger.info(f"🚀 Starting Database Uploader Test (Environment: {args.environment})")
     
     # Load test DataFrame
     try:
         # Example: load a CSV file
-        csv_path = input("Enter path to CSV file for testing: ")
+        csv_path = args.csv or input("Enter path to CSV file for testing: ")
         df = pd.read_csv(csv_path)
         
         # Get table name from file name
@@ -357,8 +385,11 @@ def main():
         is_posts = 'posts' in table_name.lower()
         primary_keys = get_primary_keys('test', 'posts' if is_posts else 'profile')
         
+        # Load database configuration for the specified environment
+        db_config = load_db_config(args.environment)
+        
         # Upload to database
-        upload_dataframe_to_db(df, table_name, primary_keys)
+        upload_dataframe_to_db(df, table_name, primary_keys, get_db_connection(db_config))
         
     except Exception as e:
         logger.error(f"❌ Test failed: {e}")

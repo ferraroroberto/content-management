@@ -1,4 +1,14 @@
 {
+    "folder_results_raw": "results/raw",
+    "folder_results_processed": "results/processed",
+    "supabase": {
+        "environment": "cloud",
+        "url": "your_supabase_url_here",
+        "key": "your_supabase_key_here",
+        "enable_upload": true,
+        "posts_table": "posts",
+        "profile_table": "profile"
+    },
     "linkedin_profile": {
         "api_url": "https://fresh-linkedin-profile-data.p.rapidapi.com/get-linkedin-profile",
         "api_key": "your_api_key_here",
@@ -76,7 +86,8 @@
         "querystring": {
             "username": "example_username"
         }
-    },    "substack_profile": {
+    },
+    "substack_profile": {
         "api_url": "https://substack-live.p.rapidapi.com/profile/public-profile",
         "api_key": "your_api_key_here",
         "api_host": "substack-live.p.rapidapi.com",
@@ -90,6 +101,85 @@
         "api_host": "substack-live.p.rapidapi.com",
         "querystring": {
             "profileId": "your_profile_id_here"
+        }
+    },
+    "notion": {
+        "api_token": "your_notion_api_token_here",
+        "databases": [
+            {
+                "id": "your_database_id_here",
+                "name": "database_name"
+            }
+        ],
+        "update_fields": [
+            "link LI",
+            "follow LI",
+            "likes LI",
+            "likEnd LI",
+            "cmmt LI",
+            "reshar LI",
+            "link TW",
+            "follow TW",
+            "likes TW",
+            "likEnd TW",
+            "cmmt TW",
+            "reshar TW",
+            "link IG",
+            "follow IG",
+            "likes IG",
+            "likEnd IG",
+            "cmmt IG",
+            "reshar IG",
+            "link TH",
+            "follow TH",
+            "likes TH",
+            "likEnd TH",
+            "cmmt TH",
+            "reshar TH",
+            "link SB",
+            "follow SB",
+            "likes SB",
+            "likEnd SB",
+            "cmmt SB",
+            "reshar SB",
+            "link LI(v)",
+            "link IG(v)",
+            "link TW(v)"
+        ],
+        "update_field_mapping": {
+            "link LI": "posts.post_id_linkedin_no_video",
+            "follow LI": "profile.num_followers_linkedin",
+            "likes LI": "posts.num_likes_linkedin_no_video",
+            "likEnd LI": "posts.num_likes_linkedin_no_video",
+            "cmmt LI": "posts.num_comments_linkedin_no_video",
+            "reshar LI": "posts.num_reshares_linkedin_no_video",
+            "link TW": "posts.post_id_twitter_no_video",
+            "follow TW": "profile.num_followers_twitter",
+            "likes TW": "posts.num_likes_twitter_no_video",
+            "likEnd TW": "posts.num_likes_twitter_no_video",
+            "cmmt TW": "posts.num_comments_twitter_no_video",
+            "reshar TW": "posts.num_reshares_twitter_no_video",
+            "link IG": "posts.post_id_instagram_no_video",
+            "follow IG": "profile.num_followers_instagram",
+            "likes IG": "posts.num_likes_instagram_no_video",
+            "likEnd IG": "posts.num_likes_instagram_no_video",
+            "cmmt IG": "posts.num_comments_instagram_no_video",
+            "reshar IG": null,
+            "link TH": "posts.post_id_threads_no_video",
+            "follow TH": "profile.num_followers_threads",
+            "likes TH": "posts.num_likes_threads_no_video",
+            "likEnd TH": "posts.num_likes_threads_no_video",
+            "cmmt TH": "posts.num_comments_threads_no_video",
+            "reshar TH": "posts.num_reshares_threads_no_video",
+            "link SB": "posts.post_id_substack_no_video",
+            "follow SB": "profile.num_followers_substack",
+            "likes SB": "posts.num_likes_substack_no_video",
+            "likEnd SB": "posts.num_likes_substack_no_video",
+            "cmmt SB": "posts.num_comments_substack_no_video",
+            "reshar SB": "posts.num_reshares_substack_no_video",
+            "link LI(v)": "posts.post_id_linkedin_video",
+            "link IG(v)": "posts.post_id_instagram_video",
+            "link TW(v)": "posts.post_id_twitter_video"
         }
     }
 }

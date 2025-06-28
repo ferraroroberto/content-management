@@ -5,7 +5,7 @@ import argparse
 from pathlib import Path
 import os
 from notion_client import Client
-from datetime import datetime
+from datetime import datetime, timedelta
 import psycopg2
 from dotenv import load_dotenv
 
@@ -95,16 +95,22 @@ def extract_property_value(property_item):
     return None
 
 def search_by_date(notion, database_id, target_date):
-    """Search for a row in the database where the 'date' field matches the target date."""
+    """Search for a row in the database where the 'date' field matches the day before target date."""
     try:
-        logger.debug(f"🔍 Searching for date: {target_date}")
+        # Convert the input date (YYYYMMDD) to a datetime object
+        date_obj = datetime.strptime(target_date, "%Y%m%d")
+        
+        # Calculate previous day
+        prev_date_obj = date_obj - timedelta(days=1)
+        prev_date_str = prev_date_obj.strftime("%Y%m%d")
+        
+        logger.debug(f"🔍 Searching for previous date: {prev_date_str} (day before {target_date})")
         
         # Format the database ID if needed
         formatted_id = format_database_id(database_id)
         
-        # Convert the input date (YYYYMMDD) to ISO format (YYYY-MM-DD)
-        date_obj = datetime.strptime(target_date, "%Y%m%d")
-        iso_date = date_obj.strftime("%Y-%m-%d")
+        # Convert to ISO format (YYYY-MM-DD)
+        iso_date = prev_date_obj.strftime("%Y-%m-%d")
         
         # Query the database with date filter
         response = notion.databases.query(
@@ -120,13 +126,13 @@ def search_by_date(notion, database_id, target_date):
         results = response.get('results', [])
         
         if not results:
-            logger.warning(f"⚠️ No rows found for date: {target_date}")
+            logger.warning(f"⚠️ No rows found for previous date: {prev_date_str}")
             return None
         
         if len(results) > 1:
-            logger.warning(f"⚠️ Multiple rows found for date: {target_date}. Using the first one.")
+            logger.warning(f"⚠️ Multiple rows found for previous date: {prev_date_str}. Using the first one.")
         
-        logger.info(f"✅ Found row for date: {target_date}")
+        logger.info(f"✅ Found row for previous date: {prev_date_str}")
         return results[0]
     
     except Exception as e:
@@ -198,18 +204,22 @@ def get_supabase_data(connection, date_str, posts_table, profile_table):
         date_obj = datetime.strptime(date_str, "%Y%m%d")
         formatted_date = date_obj.strftime("%Y-%m-%d")
         
+        # Calculate the previous day for posts data
+        prev_date_obj = date_obj - timedelta(days=1)
+        formatted_prev_date = prev_date_obj.strftime("%Y-%m-%d")
+        
         cursor = connection.cursor()
         
-        # Get posts data
-        logger.debug(f"🔍 Querying {posts_table} for date: {formatted_date}")
+        # Get posts data from the PREVIOUS day
+        logger.debug(f"🔍 Querying {posts_table} for previous date: {formatted_prev_date}")
         posts_query = f"SELECT * FROM {posts_table} WHERE date = %s LIMIT 1"
-        cursor.execute(posts_query, (formatted_date,))
+        cursor.execute(posts_query, (formatted_prev_date,))
         posts_columns = [desc[0] for desc in cursor.description]
         posts_row = cursor.fetchone()
         posts_data = dict(zip(posts_columns, posts_row)) if posts_row else None
         
-        # Get profile data
-        logger.debug(f"🔍 Querying {profile_table} for date: {formatted_date}")
+        # Get profile data from the CURRENT day
+        logger.debug(f"🔍 Querying {profile_table} for current date: {formatted_date}")
         profile_query = f"SELECT * FROM {profile_table} WHERE date = %s LIMIT 1"
         cursor.execute(profile_query, (formatted_date,))
         profile_columns = [desc[0] for desc in cursor.description]
@@ -219,14 +229,14 @@ def get_supabase_data(connection, date_str, posts_table, profile_table):
         cursor.close()
         
         if posts_data:
-            logger.info(f"✅ Found posts data for date: {formatted_date}")
+            logger.info(f"✅ Found posts data for previous date: {formatted_prev_date}")
         else:
-            logger.warning(f"⚠️ No posts data found for date: {formatted_date}")
+            logger.warning(f"⚠️ No posts data found for previous date: {formatted_prev_date}")
             
         if profile_data:
-            logger.info(f"✅ Found profile data for date: {formatted_date}")
+            logger.info(f"✅ Found profile data for current date: {formatted_date}")
         else:
-            logger.warning(f"⚠️ No profile data found for date: {formatted_date}")
+            logger.warning(f"⚠️ No profile data found for current date: {formatted_date}")
         
         return posts_data, profile_data
         
@@ -420,15 +430,20 @@ def main():
         logger.error("❌ Failed to initialize Notion client")
         return
     
-    # Search for the row with the matching date
+    # Search for the row with the matching date (one day before)
     matched_row = search_by_date(notion, database_id, args.date)
     if matched_row is None:
-        logger.error(f"❌ No row found for date: {args.date}")
+        logger.error(f"❌ No row found for the day before date: {args.date}")
         return
     
     # Extract page_id and properties
     page_id = matched_row.get('id', '')
     properties = matched_row.get('properties', {})
+    
+    # Get previous day date for display
+    date_obj = datetime.strptime(args.date, "%Y%m%d")
+    prev_date_obj = date_obj - timedelta(days=1)
+    prev_date_str = prev_date_obj.strftime("%Y%m%d")
     
     # Extract the 'next' field
     next_relation = properties.get('next', {}).get('relation', [])
@@ -438,15 +453,15 @@ def main():
         logger.warning("⚠️ No 'next' relation found for this row")
     
     # Extract additional fields from config
-    logger.info(f"📋 Extracting fields: {update_fields}")
+    logger.info(f"📋 Number of fields to extract: {len(update_fields)}")
     extracted_fields = extract_fields(matched_row, update_fields)
     
     # Print summary of original row
     print("\n" + "="*60)
-    print("📊 ORIGINAL ROW SUMMARY")
+    print("📊 ORIGINAL ROW SUMMARY (PREVIOUS DAY)")
     print("="*60)
     print(f"Page ID: {page_id}")
-    print(f"Date: {args.date}")
+    print(f"Date: {prev_date_str} (day before {args.date})")
     print(f"Next Page ID: {next_page_id if next_page_id else 'None'}")
     print("\nExtracted Fields:\n")
     for field_name, value in extracted_fields.items():
@@ -471,8 +486,8 @@ def main():
     print("\n" + "="*60)
     print("🗄️  SUPABASE DATA SUMMARY")
     print("="*60)
-    print(f"Posts data found: {'Yes' if posts_data else 'No'}")
-    print(f"Profile data found: {'Yes' if profile_data else 'No'}")
+    print(f"Posts data (previous day): {'Yes' if posts_data else 'No'}")
+    print(f"Profile data (current day): {'Yes' if profile_data else 'No'}")
     print("\nMapped Fields:\n")
     for field_name, value in mapped_data.items():
         print(f"  - {field_name}: {value}")
