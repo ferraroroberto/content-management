@@ -1,6 +1,7 @@
 import json
 import logging
 import sys
+import argparse
 from pathlib import Path
 import os
 from notion_client import Client
@@ -288,13 +289,23 @@ def load_notion_config():
     databases = notion_cfg.get("databases", [])
     return api_token, databases
 
-def main():
-    """Main function to execute the Notion database structure retrieval."""
-    # Ask if debug mode should be enabled
-    debug_input = input("Enable debug mode? (y/n): ").lower()
-    debug_mode = debug_input == 'y'
+def parse_arguments():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description='Retrieve Notion database structure and sample content.')
     
-    # Configure logger with appropriate level
+    # Add arguments for all interactive prompts
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    
+    return parser.parse_args()
+
+def main(args=None):
+    """Main function to execute the Notion database structure retrieval."""
+    if args is None:
+        # Use command-line arguments if available, otherwise parse them
+        args = parse_arguments()
+    
+    # Configure logger with appropriate level based on args
+    debug_mode = args.debug
     configure_logger(debug_mode)
     
     logger.info("🚀 Starting Notion Database Structure Retriever")
