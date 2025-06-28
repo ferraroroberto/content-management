@@ -279,15 +279,33 @@ def save_database_info(database_structure, database_df, output_dir=None):
     return structure_file
 
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "config.json")
+DATABASE_LIST_PATH = os.path.join(os.path.dirname(__file__), "notion_database_list.json")
 
 def load_notion_config():
-    """Load Notion parameters from config.json."""
+    """Load Notion API token from config.json."""
     with open(CONFIG_PATH, "r") as f:
         config = json.load(f)
     notion_cfg = config.get("notion", {})
     api_token = notion_cfg.get("api_token")
-    databases = notion_cfg.get("databases", [])
-    return api_token, databases
+    return api_token
+
+def load_databases_for_replication():
+    """Load databases marked for replication from notion_database_list.json."""
+    try:
+        with open(DATABASE_LIST_PATH, "r") as f:
+            all_databases = json.load(f)
+        
+        # Filter databases with replication = true
+        replication_databases = [db for db in all_databases if db.get("replication", False)]
+        
+        logger.info(f"📋 Found {len(replication_databases)} databases marked for replication out of {len(all_databases)} total databases")
+        return replication_databases
+    except FileNotFoundError:
+        logger.error(f"❌ Database list file not found: {DATABASE_LIST_PATH}")
+        return []
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ Error parsing database list JSON: {e}")
+        return []
 
 def parse_arguments():
     """Parse command-line arguments."""
@@ -311,16 +329,22 @@ def main(args=None):
     logger.info("🚀 Starting Notion Database Structure Retriever")
     logger.info(f"🐞 Debug mode: {'Enabled' if debug_mode else 'Disabled'}")
     
-    # Load Notion config from JSON
-    api_token, databases = load_notion_config()
-    if not api_token or not databases:
-        logger.error("❌ Notion API token or databases not found in config.json")
+    # Load Notion API token from config.json
+    api_token = load_notion_config()
+    if not api_token:
+        logger.error("❌ Notion API token not found in config.json")
+        return
+
+    # Load databases marked for replication
+    databases = load_databases_for_replication()
+    if not databases:
+        logger.error("❌ No databases found for replication")
         return
 
     # Print all database IDs and names for user reference
-    print("\nDatabases found in config.json:")
+    print("\nDatabases marked for replication:")
     for db in databases:
-        print(f"  - ID: {db['id']} | Name: {db.get('name', 'UNKNOWN')}")
+        print(f"  - ID: {db['id']} | Name: {db.get('name', 'UNKNOWN')} | Supabase table: {db.get('supabase_table', 'N/A')}")
     print()
 
     # Initialize Notion client
@@ -329,17 +353,23 @@ def main(args=None):
         logger.error("❌ Failed to initialize Notion client")
         return
 
-    # Iterate over all databases in config
+    # Iterate over all databases marked for replication
     for db in databases:
         database_id = db["id"]
         database_name = db.get("name", "UNKNOWN")
-        logger.info(f"\n=== Processing database: {database_name} (ID: {database_id}) ===")
+        supabase_table = db.get("supabase_table", "")
+        logger.info(f"=== Processing database: {database_name} (ID: {database_id}) ===")
+        if supabase_table:
+            logger.info(f"📋 Supabase table: {supabase_table}")
 
         # Retrieve database structure
         structure = get_database_structure(notion, database_id)
         if structure is None:
             logger.error("❌ Failed to retrieve database structure")
             continue
+
+        # Add supabase table info to structure
+        structure['supabase_table'] = supabase_table
 
         # Print database details
         logger.info(f"📊 Database: {structure.get('title', 'Unknown')}")
@@ -374,6 +404,8 @@ def main(args=None):
         save_database_info(structure, df)
 
         logger.info("✅ Notion Database Structure Retrieval completed for this database")
+
+    logger.info("✅ All replication databases processed successfully")
 
 if __name__ == "__main__":
     main()
