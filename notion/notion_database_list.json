@@ -1,0 +1,331 @@
+[
+    {
+        "id": "67fbcee66711465c852ebf97303787a3",
+        "name": "articles",
+        "url": "https://www.notion.so/robertoferraro/67fbcee66711465c852ebf97303787a3",
+        "replication": true,
+        "supabase_table": "notion_articles"
+    },
+    {
+        "id": "163c4531dea649a7b2eaaf37dd95c68c",
+        "name": "articles database",
+        "url": "https://www.notion.so/robertoferraro/163c4531dea649a7b2eaaf37dd95c68c",
+        "replication": false,
+        "supabase_table": "notion_articles_database"
+    },
+    {
+        "id": "0cf1f74e32754e638cf33f85d3484e2b",
+        "name": "beta testers",
+        "url": "https://www.notion.so/robertoferraro/0cf1f74e32754e638cf33f85d3484e2b",
+        "replication": false,
+        "supabase_table": "notion_beta_testers"
+    },
+    {
+        "id": "fb47feb4fc974def8385e6a865aa68ba",
+        "name": "books",
+        "url": "https://www.notion.so/robertoferraro/fb47feb4fc974def8385e6a865aa68ba",
+        "replication": true,
+        "supabase_table": "notion_books"
+    },
+    {
+        "id": "f724da75ebd3413184af8de92c857619",
+        "name": "books recommendations",
+        "url": "https://www.notion.so/robertoferraro/f724da75ebd3413184af8de92c857619",
+        "replication": true,
+        "supabase_table": "notion_books_recommendations"
+    },
+    {
+        "id": "fe6392688d6a462492c3d56da753f851",
+        "name": "clips",
+        "url": "https://www.notion.so/robertoferraro/fe6392688d6a462492c3d56da753f851",
+        "replication": true,
+        "supabase_table": "notion_clips"
+    },
+    {
+        "id": "efbd603431814079851b969dd674597e",
+        "name": "coaching processes",
+        "url": "https://www.notion.so/robertoferraro/efbd603431814079851b969dd674597e",
+        "replication": false,
+        "supabase_table": "notion_coaching_processes"
+    },
+    {
+        "id": "300b54d881d540578bedfac01baeb890",
+        "name": "coaching sessions",
+        "url": "https://www.notion.so/robertoferraro/300b54d881d540578bedfac01baeb890",
+        "replication": false,
+        "supabase_table": "notion_coaching_sessions"
+    },
+    {
+        "id": "1ddad2a78d864a29bd67e90b2e69dcf7",
+        "name": "collab. articles",
+        "url": "https://www.notion.so/robertoferraro/1ddad2a78d864a29bd67e90b2e69dcf7",
+        "replication": false,
+        "supabase_table": "notion_collab_articles"
+    },
+    {
+        "id": "703f44d6e6c34b8bb6daa979f5f1df98",
+        "name": "collab. contributions",
+        "url": "https://www.notion.so/robertoferraro/703f44d6e6c34b8bb6daa979f5f1df98",
+        "replication": false,
+        "supabase_table": "notion_collab_contributions"
+    },
+    {
+        "id": "4bcd3c2413d247fc95173e3d342355fd",
+        "name": "collaborative topics",
+        "url": "https://www.notion.so/robertoferraro/4bcd3c2413d247fc95173e3d342355fd",
+        "replication": false,
+        "supabase_table": "notion_collaborative_topics"
+    },
+    {
+        "id": "ccbe8e9e71644f24a08d0fa982ccf8ef",
+        "name": "comments",
+        "url": "https://www.notion.so/robertoferraro/ccbe8e9e71644f24a08d0fa982ccf8ef",
+        "replication": true,
+        "supabase_table": "notion_comments"
+    },
+    {
+        "id": "a3cce70b66fe4a3aa5860cc376c4a242",
+        "name": "companies",
+        "url": "https://www.notion.so/robertoferraro/a3cce70b66fe4a3aa5860cc376c4a242",
+        "replication": true,
+        "supabase_table": "notion_companies"
+    },
+    {
+        "id": "569fc5035d6d434796a2e039c66829cd",
+        "name": "concepts",
+        "url": "https://www.notion.so/robertoferraro/569fc5035d6d434796a2e039c66829cd",
+        "replication": true,
+        "supabase_table": "notion_concepts"
+    },
+    {
+        "id": "33a1990d72f949f0983acd55ccd15724",
+        "name": "connections",
+        "url": "https://www.notion.so/robertoferraro/33a1990d72f949f0983acd55ccd15724",
+        "replication": true,
+        "supabase_table": "notion_connections"
+    },
+    {
+        "id": "6e797761887444b3aa8df15bf5c72ab5",
+        "name": "content curation questionnaire",
+        "url": "https://www.notion.so/robertoferraro/6e797761887444b3aa8df15bf5c72ab5",
+        "replication": false,
+        "supabase_table": "notion_content_curation_questionnaire"
+    },
+    {
+        "id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "name": "editorial",
+        "url": "https://www.notion.so/robertoferraro/ee23dec3222e4412baaf0d129d0bda9c",
+        "replication": true,
+        "supabase_table": "notion_editorial"
+    },
+    {
+        "id": "ac63503889a2452b922d57d102438972",
+        "name": "education and autism",
+        "url": "https://www.notion.so/robertoferraro/ac63503889a2452b922d57d102438972",
+        "replication": false,
+        "supabase_table": "notion_education_and_autism"
+    },
+    {
+        "id": "d44e8301bfea44e0a8803314ffeeb807",
+        "name": "episodes",
+        "url": "https://www.notion.so/robertoferraro/d44e8301bfea44e0a8803314ffeeb807",
+        "replication": true,
+        "supabase_table": "notion_episodes"
+    },
+    {
+        "id": "d0b20e242da14c4da711e9771cb1c569",
+        "name": "espacios",
+        "url": "https://www.notion.so/robertoferraro/d0b20e242da14c4da711e9771cb1c569",
+        "replication": false,
+        "supabase_table": "notion_espacios"
+    },
+    {
+        "id": "80b936e9e39c4dc0b48527ed83fad89c",
+        "name": "good times journal",
+        "url": "https://www.notion.so/robertoferraro/80b936e9e39c4dc0b48527ed83fad89c",
+        "replication": false,
+        "supabase_table": "notion_good_times_journal"
+    },
+    {
+        "id": "7f625feec4684d1090d11b300ca520d1",
+        "name": "habitaciones",
+        "url": "https://www.notion.so/robertoferraro/7f625feec4684d1090d11b300ca520d1",
+        "replication": false,
+        "supabase_table": "notion_habitaciones"
+    },
+    {
+        "id": "f7008956ade24505bdc2c7faa9ed7902",
+        "name": "illustrations",
+        "url": "https://www.notion.so/robertoferraro/f7008956ade24505bdc2c7faa9ed7902",
+        "replication": true,
+        "supabase_table": "notion_illustrations"
+    },
+    {
+        "id": "353d844f15fc4fc287562469b25d5e49",
+        "name": "inbox",
+        "url": "https://www.notion.so/robertoferraro/353d844f15fc4fc287562469b25d5e49",
+        "replication": false,
+        "supabase_table": "notion_inbox"
+    },
+    {
+        "id": "586d43057a104aeebac6708b5d231362",
+        "name": "informational interviews",
+        "url": "https://www.notion.so/robertoferraro/586d43057a104aeebac6708b5d231362",
+        "replication": false,
+        "supabase_table": "notion_informational_interviews"
+    },
+    {
+        "id": "2bc5f8dd00f04305a11538ddb0b12c3b",
+        "name": "interactions",
+        "url": "https://www.notion.so/robertoferraro/2bc5f8dd00f04305a11538ddb0b12c3b",
+        "replication": true,
+        "supabase_table": "notion_interactions"
+    },
+    {
+        "id": "eed8d0b6d24f42f186b6eb95d4d71e93",
+        "name": "inventario",
+        "url": "https://www.notion.so/robertoferraro/eed8d0b6d24f42f186b6eb95d4d71e93",
+        "replication": false,
+        "supabase_table": "notion_inventario"
+    },
+    {
+        "id": "9f692bebd6b242b4b43d51525d527601",
+        "name": "job search",
+        "url": "https://www.notion.so/robertoferraro/9f692bebd6b242b4b43d51525d527601",
+        "replication": false,
+        "supabase_table": "notion_job_search"
+    },
+    {
+        "id": "71fed31953b84183a9e77c48493bf9f4",
+        "name": "newsletter",
+        "url": "https://www.notion.so/robertoferraro/71fed31953b84183a9e77c48493bf9f4",
+        "replication": true,
+        "supabase_table": "notion_newsletter"
+    },
+    {
+        "id": "e33b1ce2be7e45d1a7a2be84dead6095",
+        "name": "objects",
+        "url": "https://www.notion.so/robertoferraro/e33b1ce2be7e45d1a7a2be84dead6095",
+        "replication": false,
+        "supabase_table": "notion_objects"
+    },
+    {
+        "id": "80266205c0f34a34ae6b97d65c914884",
+        "name": "one-on-one log",
+        "url": "https://www.notion.so/robertoferraro/80266205c0f34a34ae6b97d65c914884",
+        "replication": false,
+        "supabase_table": "notion_one_on_one_log"
+    },
+    {
+        "id": "6ef6f9e8d5f4463c92402a534937bd6c",
+        "name": "PDG",
+        "url": "https://www.notion.so/robertoferraro/6ef6f9e8d5f4463c92402a534937bd6c",
+        "replication": false,
+        "supabase_table": "notion_pdg"
+    },
+    {
+        "id": "884de9f611464ca69e6028a6cbbafc00",
+        "name": "personal journal",
+        "url": "https://www.notion.so/robertoferraro/884de9f611464ca69e6028a6cbbafc00",
+        "replication": false,
+        "supabase_table": "notion_personal_journal"
+    },
+    {
+        "id": "960d404471f841fc999640c119f753ec",
+        "name": "posts",
+        "url": "https://www.notion.so/robertoferraro/960d404471f841fc999640c119f753ec",
+        "replication": true,
+        "supabase_table": "notion_posts"
+    },
+    {
+        "id": "bd365a50f48c407ab3e4d1bdb18d4c87",
+        "name": "potential contacts",
+        "url": "https://www.notion.so/robertoferraro/bd365a50f48c407ab3e4d1bdb18d4c87",
+        "replication": false,
+        "supabase_table": "notion_potential_contacts"
+    },
+    {
+        "id": "72d073390dac41c78cdccc6043531cb7",
+        "name": "relocation businesses",
+        "url": "https://www.notion.so/robertoferraro/72d073390dac41c78cdccc6043531cb7",
+        "replication": false,
+        "supabase_table": "notion_relocation_businesses"
+    },
+    {
+        "id": "9edada5d872146bf83525294f75b5dd2",
+        "name": "resources",
+        "url": "https://www.notion.so/robertoferraro/9edada5d872146bf83525294f75b5dd2",
+        "replication": false,
+        "supabase_table": "notion_resources"
+    },
+    {
+        "id": "c26406e3cbac46a586ffd649b2b6d507",
+        "name": "retrospective",
+        "url": "https://www.notion.so/robertoferraro/c26406e3cbac46a586ffd649b2b6d507",
+        "replication": false,
+        "supabase_table": "notion_retrospective"
+    },
+    {
+        "id": "0e2be5f714164f5fb484769b022c6a13",
+        "name": "second brain",
+        "url": "https://www.notion.so/robertoferraro/0e2be5f714164f5fb484769b022c6a13",
+        "replication": false,
+        "supabase_table": "notion_second_brain"
+    },
+    {
+        "id": "b6bf2fde084e4200957798dbb5779d07",
+        "name": "skill endorsement",
+        "url": "https://www.notion.so/robertoferraro/b6bf2fde084e4200957798dbb5779d07",
+        "replication": false,
+        "supabase_table": "notion_skill_endorsement"
+    },
+    {
+        "id": "0b4cb6efdd154f94b6d68162c06bf006",
+        "name": "social life",
+        "url": "https://www.notion.so/robertoferraro/0b4cb6efdd154f94b6d68162c06bf006",
+        "replication": false,
+        "supabase_table": "notion_social_life"
+    },
+    {
+        "id": "2c3734f247084f8999201105cb8c0f2b",
+        "name": "tasks",
+        "url": "https://www.notion.so/robertoferraro/2c3734f247084f8999201105cb8c0f2b",
+        "replication": false,
+        "supabase_table": "notion_tasks"
+    },
+    {
+        "id": "85fd6b9aae7b4ceb99c172fe43116c24",
+        "name": "tax and legal",
+        "url": "https://www.notion.so/robertoferraro/85fd6b9aae7b4ceb99c172fe43116c24",
+        "replication": false,
+        "supabase_table": "notion_tax_and_legal"
+    },
+    {
+        "id": "229136fd920044e58d17f505a2c5b822",
+        "name": "trip",
+        "url": "https://www.notion.so/robertoferraro/229136fd920044e58d17f505a2c5b822",
+        "replication": false,
+        "supabase_table": "notion_trip"
+    },
+    {
+        "id": "81a8464d50af40aab88df43048495844",
+        "name": "visual types",
+        "url": "https://www.notion.so/robertoferraro/81a8464d50af40aab88df43048495844",
+        "replication": true,
+        "supabase_table": "notion_visual_types"
+    },
+    {
+        "id": "e91f9870e6914c6da681c1715d118e9c",
+        "name": "visuals learning journal ",
+        "url": "https://www.notion.so/robertoferraro/e91f9870e6914c6da681c1715d118e9c",
+        "replication": false,
+        "supabase_table": "notion_visuals_learning_journal"
+    },
+    {
+        "id": "a49ef53f567e4b8e877fc2bdd90a1d9f",
+        "name": "wins and features",
+        "url": "https://www.notion.so/robertoferraro/a49ef53f567e4b8e877fc2bdd90a1d9f",
+        "replication": true,
+        "supabase_table": "notion_wins_and_features"
+    }
+]
