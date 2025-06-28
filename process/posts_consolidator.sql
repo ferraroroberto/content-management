@@ -101,7 +101,7 @@ WITH
         instagram_video AS (
             SELECT DISTINCT ON (date)
                 date::date as date,
-                post_id,
+                'https://www.instagram.com/p/' || post_id as post_id,
                 posted_at::date as posted_at,
                 num_likes,
                 num_comments
@@ -114,7 +114,7 @@ WITH
         instagram_non_video AS (
             SELECT DISTINCT ON (date)
                 date::date as date,
-                post_id,
+                'https://www.instagram.com/p/' || post_id as post_id,
                 posted_at::date as posted_at,
                 num_likes,
                 num_comments
@@ -127,7 +127,7 @@ WITH
         twitter_video AS (
             SELECT DISTINCT ON (date)
                 date::date as date,
-                post_id,
+                'https://x.com/FerraroRoberto/status/' || post_id as post_id,
                 posted_at::date as posted_at,
                 num_likes,
                 num_comments,
@@ -141,7 +141,7 @@ WITH
         twitter_non_video AS (
             SELECT DISTINCT ON (date)
                 date::date as date,
-                post_id,
+                'https://x.com/FerraroRoberto/status/' || post_id as post_id,
                 posted_at::date as posted_at,
                 num_likes,
                 num_comments,
@@ -155,7 +155,7 @@ WITH
         substack_video AS (
             SELECT DISTINCT ON (date)
                 date::date as date,
-                post_id,
+                'https://substack.com/profile/11567179-roberto-ferraro/note/' || post_id as post_id,
                 posted_at::date as posted_at,
                 num_likes,
                 num_comments,
@@ -169,7 +169,7 @@ WITH
         substack_non_video AS (
             SELECT DISTINCT ON (date)
                 date::date as date,
-                post_id,
+                'https://substack.com/profile/11567179-roberto-ferraro/note/' || post_id as post_id,
                 posted_at::date as posted_at,
                 num_likes,
                 num_comments,
@@ -183,7 +183,7 @@ WITH
         threads_video AS (
             SELECT DISTINCT ON (date)
                 date::date as date,
-                post_id,
+                'https://www.threads.com/@ferraroroberto/post/' || post_id as post_id,
                 posted_at::date as posted_at,
                 num_likes,
                 num_comments,
@@ -197,7 +197,7 @@ WITH
         threads_non_video AS (
             SELECT DISTINCT ON (date)
                 date::date as date,
-                post_id,
+                'https://www.threads.com/@ferraroroberto/post/' || post_id as post_id,
                 posted_at::date as posted_at,
                 num_likes,
                 num_comments,
@@ -225,31 +225,31 @@ WITH
 SELECT
     -- Date field
     d.date,
-        
+    
     -- Non-video posts from all platforms
     lnv.post_id as post_id_linkedin_no_video,
     lnv.posted_at as posted_at_linkedin_no_video,
     lnv.num_likes as num_likes_linkedin_no_video,
     lnv.num_comments as num_comments_linkedin_no_video,
     lnv.num_reshares as num_reshares_linkedin_no_video,
-        
+    
     inv.post_id as post_id_instagram_no_video,
     inv.posted_at as posted_at_instagram_no_video,
     inv.num_likes as num_likes_instagram_no_video,
     inv.num_comments as num_comments_instagram_no_video,
-        
+    
     tnv.post_id as post_id_twitter_no_video,
     tnv.posted_at as posted_at_twitter_no_video,
     tnv.num_likes as num_likes_twitter_no_video,
     tnv.num_comments as num_comments_twitter_no_video,
     tnv.num_reshares as num_reshares_twitter_no_video,
-        
+    
     snv.post_id as post_id_substack_no_video,
     snv.posted_at as posted_at_substack_no_video,
     snv.num_likes as num_likes_substack_no_video,
     snv.num_comments as num_comments_substack_no_video,
     snv.num_reshares as num_reshares_substack_no_video,
-        
+    
     thnv.post_id as post_id_threads_no_video,
     thnv.posted_at as posted_at_threads_no_video,
     thnv.num_likes as num_likes_threads_no_video,
@@ -262,24 +262,24 @@ SELECT
     lv.num_likes as num_likes_linkedin_video,
     lv.num_comments as num_comments_linkedin_video,
     lv.num_reshares as num_reshares_linkedin_video,
-        
+    
     iv.post_id as post_id_instagram_video,
     iv.posted_at as posted_at_instagram_video,
     iv.num_likes as num_likes_instagram_video,
     iv.num_comments as num_comments_instagram_video,
-        
+    
     tv.post_id as post_id_twitter_video,
     tv.posted_at as posted_at_twitter_video,
     tv.num_likes as num_likes_twitter_video,
     tv.num_comments as num_comments_twitter_video,
     tv.num_reshares as num_reshares_twitter_video,
-        
+    
     sv.post_id as post_id_substack_video,
     sv.posted_at as posted_at_substack_video,
     sv.num_likes as num_likes_substack_video,
     sv.num_comments as num_comments_substack_video,
     sv.num_reshares as num_reshares_substack_video,
-        
+    
     thv.post_id as post_id_threads_video,
     thv.posted_at as posted_at_threads_video,
     thv.num_likes as num_likes_threads_video,

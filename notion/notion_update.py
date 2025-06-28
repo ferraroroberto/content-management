@@ -6,10 +6,13 @@ from pathlib import Path
 import os
 from notion_client import Client
 from datetime import datetime
+import psycopg2
+from dotenv import load_dotenv
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent))
 from config.logger_config import setup_logger
+from process.supabase_uploader import get_db_connection
 
 # Set up logger
 logger = None
@@ -169,7 +172,14 @@ def load_notion_config():
     api_token = notion_cfg.get("api_token")
     databases = notion_cfg.get("databases", [])
     update_fields = notion_cfg.get("update_fields", [])
-    return api_token, databases, update_fields
+    update_field_mapping = notion_cfg.get("update_field_mapping", {})
+    
+    # Get Supabase table names
+    supabase_cfg = config.get("supabase", {})
+    posts_table = supabase_cfg.get("posts_table", "posts")
+    profile_table = supabase_cfg.get("profile_table", "profile")
+    
+    return api_token, databases, update_fields, update_field_mapping, posts_table, profile_table
 
 def parse_arguments():
     """Parse command-line arguments."""
@@ -180,6 +190,200 @@ def parse_arguments():
     parser.add_argument('--database-id', type=str, help='Override database ID from config')
     
     return parser.parse_args()
+
+def get_supabase_data(connection, date_str, posts_table, profile_table):
+    """Get data from Supabase for the specified date."""
+    try:
+        # Convert date format from YYYYMMDD to YYYY-MM-DD
+        date_obj = datetime.strptime(date_str, "%Y%m%d")
+        formatted_date = date_obj.strftime("%Y-%m-%d")
+        
+        cursor = connection.cursor()
+        
+        # Get posts data
+        logger.debug(f"🔍 Querying {posts_table} for date: {formatted_date}")
+        posts_query = f"SELECT * FROM {posts_table} WHERE date = %s LIMIT 1"
+        cursor.execute(posts_query, (formatted_date,))
+        posts_columns = [desc[0] for desc in cursor.description]
+        posts_row = cursor.fetchone()
+        posts_data = dict(zip(posts_columns, posts_row)) if posts_row else None
+        
+        # Get profile data
+        logger.debug(f"🔍 Querying {profile_table} for date: {formatted_date}")
+        profile_query = f"SELECT * FROM {profile_table} WHERE date = %s LIMIT 1"
+        cursor.execute(profile_query, (formatted_date,))
+        profile_columns = [desc[0] for desc in cursor.description]
+        profile_row = cursor.fetchone()
+        profile_data = dict(zip(profile_columns, profile_row)) if profile_row else None
+        
+        cursor.close()
+        
+        if posts_data:
+            logger.info(f"✅ Found posts data for date: {formatted_date}")
+        else:
+            logger.warning(f"⚠️ No posts data found for date: {formatted_date}")
+            
+        if profile_data:
+            logger.info(f"✅ Found profile data for date: {formatted_date}")
+        else:
+            logger.warning(f"⚠️ No profile data found for date: {formatted_date}")
+        
+        return posts_data, profile_data
+        
+    except Exception as e:
+        logger.error(f"❌ Error getting Supabase data: {e}")
+        return None, None
+
+def map_supabase_to_notion_fields(posts_data, profile_data, field_mapping):
+    """Map Supabase fields to Notion fields based on the mapping configuration."""
+    mapped_data = {}
+    
+    for notion_field, supabase_field in field_mapping.items():
+        if supabase_field is None:
+            mapped_data[notion_field] = None
+            continue
+            
+        # Parse the table and field name
+        if '.' in supabase_field:
+            table, field = supabase_field.split('.', 1)
+            
+            if table == 'posts' and posts_data and field in posts_data:
+                mapped_data[notion_field] = posts_data[field]
+            elif table == 'profile' and profile_data and field in profile_data:
+                mapped_data[notion_field] = profile_data[field]
+            else:
+                mapped_data[notion_field] = None
+                logger.debug(f"Field {supabase_field} not found in data")
+        else:
+            mapped_data[notion_field] = None
+            logger.warning(f"Invalid field mapping format: {supabase_field}")
+    
+    return mapped_data
+
+def prepare_notion_update(property_type, value):
+    """Prepare the update payload for a Notion property based on its type."""
+    if value is None:
+        return None
+    
+    # Handle datetime objects
+    if isinstance(value, datetime) or hasattr(value, 'isoformat'):
+        # Format as ISO string YYYY-MM-DD
+        try:
+            value_str = value.isoformat().split('T')[0]
+            
+            if property_type == 'date':
+                return {"date": {"start": value_str}}
+            elif property_type == 'number':
+                return {"number": None}  # Cannot convert date to number
+            else:
+                # For other types, use the string representation
+                value = value_str
+        except AttributeError:
+            logger.warning(f"⚠️ Could not format date value: {value}")
+    
+    if property_type == 'number':
+        try:
+            return {"number": float(value) if value is not None else None}
+        except (ValueError, TypeError):
+            logger.warning(f"⚠️ Could not convert value '{value}' of type {type(value).__name__} to number")
+            return {"number": None}
+    elif property_type == 'rich_text':
+        return {"rich_text": [{"text": {"content": str(value)}}] if value else []}
+    elif property_type == 'url':
+        return {"url": str(value) if value else None}
+    elif property_type == 'title':
+        return {"title": [{"text": {"content": str(value)}}] if value else []}
+    elif property_type == 'date':
+        # Handle date type properly
+        if isinstance(value, str):
+            return {"date": {"start": value}}
+        else:
+            return {"date": {"start": str(value)}}
+    else:
+        # Default to rich_text for unknown types
+        return {"rich_text": [{"text": {"content": str(value)}}] if value else []}
+
+def update_notion_page(notion, page_id, updates):
+    """Update a Notion page with the provided field updates."""
+    try:
+        logger.debug(f"📝 Updating Notion page: {page_id}")
+        
+        # Filter out None values
+        properties = {k: v for k, v in updates.items() if v is not None}
+        
+        if not properties:
+            logger.warning("⚠️ No properties to update")
+            return None
+            
+        response = notion.pages.update(
+            page_id=page_id,
+            properties=properties
+        )
+        
+        logger.info(f"✅ Successfully updated Notion page")
+        return response
+        
+    except Exception as e:
+        logger.error(f"❌ Error updating Notion page: {e}")
+        return None
+
+def create_tracking_table(connection):
+    """Create the notion_tracking table if it doesn't exist."""
+    try:
+        cursor = connection.cursor()
+        
+        create_table_query = """
+        CREATE TABLE IF NOT EXISTS notion_tracking (
+            id SERIAL PRIMARY KEY,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            notion_page_id TEXT NOT NULL,
+            notion_field TEXT NOT NULL,
+            notion_value_initial TEXT,
+            notion_value_final TEXT
+        );
+        """
+        
+        cursor.execute(create_table_query)
+        connection.commit()
+        cursor.close()
+        
+        logger.debug("✅ Tracking table created/verified")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Error creating tracking table: {e}")
+        connection.rollback()
+        return False
+
+def log_field_changes(connection, page_id, changes):
+    """Log field changes to the tracking table."""
+    try:
+        cursor = connection.cursor()
+        
+        insert_query = """
+        INSERT INTO notion_tracking 
+        (notion_page_id, notion_field, notion_value_initial, notion_value_final)
+        VALUES (%s, %s, %s, %s);
+        """
+        
+        for change in changes:
+            cursor.execute(insert_query, (
+                page_id,
+                change['field'],
+                str(change['initial']) if change['initial'] is not None else None,
+                str(change['final']) if change['final'] is not None else None
+            ))
+        
+        connection.commit()
+        cursor.close()
+        
+        logger.info(f"✅ Logged {len(changes)} field changes to tracking table")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Error logging changes: {e}")
+        connection.rollback()
+        return False
 
 def main():
     """Main function to execute the Notion update process."""
@@ -195,7 +399,7 @@ def main():
     logger.info(f"📅 Target date: {args.date}")
     
     # Load Notion config from JSON
-    api_token, databases, update_fields = load_notion_config()
+    api_token, databases, update_fields, update_field_mapping, posts_table, profile_table = load_notion_config()
     if not api_token or not databases:
         logger.error("❌ Notion API token or databases not found in config.json")
         return
@@ -247,6 +451,89 @@ def main():
     print("\nExtracted Fields:")
     for field_name, value in extracted_fields.items():
         print(f"  - {field_name}: {value}")
+    
+    # Connect to Supabase
+    logger.info("🔌 Connecting to Supabase")
+    supabase_connection = get_db_connection()
+    if not supabase_connection:
+        logger.error("❌ Failed to connect to Supabase")
+        return
+    
+    # Get data from Supabase
+    logger.info("📊 Fetching data from Supabase")
+    posts_data, profile_data = get_supabase_data(supabase_connection, args.date, posts_table, profile_table)
+    
+    # Map Supabase fields to Notion fields
+    mapped_data = map_supabase_to_notion_fields(posts_data, profile_data, update_field_mapping)
+    
+    # Print Supabase data summary
+    print("\n" + "="*60)
+    print("🗄️ SUPABASE DATA SUMMARY")
+    print("="*60)
+    print(f"Posts data found: {'Yes' if posts_data else 'No'}")
+    print(f"Profile data found: {'Yes' if profile_data else 'No'}")
+    print("\nMapped Fields:")
+    for field_name, value in mapped_data.items():
+        print(f"  - {field_name}: {value}")
+    
+    # Prepare updates for Notion
+    updates = {}
+    changes = []
+    
+    for field_name in update_fields:
+        if field_name in mapped_data:
+            new_value = mapped_data[field_name]
+            old_value = extracted_fields.get(field_name)
+            
+            # Get the property type from the original row
+            prop = properties.get(field_name, {})
+            prop_type = prop.get('type', 'rich_text')
+            
+            # Prepare the update payload
+            update_payload = prepare_notion_update(prop_type, new_value)
+            
+            if update_payload is not None:
+                updates[field_name] = update_payload
+                
+                # Track the change
+                changes.append({
+                    'field': field_name,
+                    'initial': old_value,
+                    'final': new_value
+                })
+    
+    # Update Notion page
+    if updates:
+        logger.info(f"📝 Ready to update {len(updates)} fields in Notion")
+        print("\nPress Enter to continue with the update or Ctrl+C to cancel...")
+        try:
+            input()  # Wait for user to press Enter
+            logger.info(f"📝 Updating {len(updates)} fields in Notion")
+            update_result = update_notion_page(notion, page_id, updates)
+        except KeyboardInterrupt:
+            logger.info("❌ Update cancelled by user")
+            sys.exit(0)
+        
+        if update_result:
+            # Create tracking table if needed
+            create_tracking_table(supabase_connection)
+            
+            # Log changes to Supabase
+            log_field_changes(supabase_connection, page_id, changes)
+            
+            # Print field update summary
+            print("\n" + "="*60)
+            print("📝 FIELD UPDATE SUMMARY")
+            print("="*60)
+            for change in changes:
+                print(f"{change['field']}: {change['initial']} → {change['final']}")
+        else:
+            logger.error("❌ Failed to update Notion page")
+    else:
+        logger.info("ℹ️ No fields to update")
+    
+    # Close Supabase connection
+    supabase_connection.close()
     
     # If there's a next page, retrieve its information
     if next_page_id:
