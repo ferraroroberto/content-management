@@ -139,6 +139,47 @@ def search_by_date(notion, database_id, target_date):
         logger.error(f"❌ Error searching by date: {e}")
         return None
 
+def search_by_current_date(notion, database_id, target_date):
+    """Search for a row in the database where the 'date' field matches the target date."""
+    try:
+        # Convert the input date (YYYYMMDD) to a datetime object
+        date_obj = datetime.strptime(target_date, "%Y%m%d")
+        
+        logger.debug(f"🔍 Searching for current date: {target_date}")
+        
+        # Format the database ID if needed
+        formatted_id = format_database_id(database_id)
+        
+        # Convert to ISO format (YYYY-MM-DD)
+        iso_date = date_obj.strftime("%Y-%m-%d")
+        
+        # Query the database with date filter
+        response = notion.databases.query(
+            database_id=formatted_id,
+            filter={
+                "property": "date",
+                "date": {
+                    "equals": iso_date
+                }
+            }
+        )
+        
+        results = response.get('results', [])
+        
+        if not results:
+            logger.warning(f"⚠️ No rows found for current date: {target_date}")
+            return None
+        
+        if len(results) > 1:
+            logger.warning(f"⚠️ Multiple rows found for current date: {target_date}. Using the first one.")
+        
+        logger.info(f"✅ Found row for current date: {target_date}")
+        return results[0]
+    
+    except Exception as e:
+        logger.error(f"❌ Error searching by current date: {e}")
+        return None
+
 def get_page_by_id(notion, page_id):
     """Retrieve a page by its ID."""
     try:
@@ -177,15 +218,21 @@ def load_notion_config():
     notion_cfg = config.get("notion", {})
     api_token = notion_cfg.get("api_token")
     databases = notion_cfg.get("databases", [])
-    update_fields = notion_cfg.get("update_fields", [])
-    update_field_mapping = notion_cfg.get("update_field_mapping", {})
+    
+    # Load separate field configurations
+    update_fields_followers = notion_cfg.get("update_fields_followers", [])
+    update_fields_posts = notion_cfg.get("update_fields_posts", [])
+    update_field_mapping_followers = notion_cfg.get("update_field_mapping_followers", {})
+    update_field_mapping_posts = notion_cfg.get("update_field_mapping_posts", {})
     
     # Get Supabase table names
     supabase_cfg = config.get("supabase", {})
     posts_table = supabase_cfg.get("posts_table", "posts")
     profile_table = supabase_cfg.get("profile_table", "profile")
     
-    return api_token, databases, update_fields, update_field_mapping, posts_table, profile_table
+    return (api_token, databases, update_fields_followers, update_fields_posts, 
+            update_field_mapping_followers, update_field_mapping_posts, 
+            posts_table, profile_table)
 
 def parse_arguments():
     """Parse command-line arguments."""
@@ -409,7 +456,10 @@ def main():
     logger.info(f"📅 Target date: {args.date}")
     
     # Load Notion config from JSON
-    api_token, databases, update_fields, update_field_mapping, posts_table, profile_table = load_notion_config()
+    (api_token, databases, update_fields_followers, update_fields_posts, 
+     update_field_mapping_followers, update_field_mapping_posts, 
+     posts_table, profile_table) = load_notion_config()
+    
     if not api_token or not databases:
         logger.error("❌ Notion API token or databases not found in config.json")
         return
@@ -430,41 +480,64 @@ def main():
         logger.error("❌ Failed to initialize Notion client")
         return
     
-    # Search for the row with the matching date (one day before)
-    matched_row = search_by_date(notion, database_id, args.date)
-    if matched_row is None:
+    # Search for the row with the matching date (one day before) for POSTS update
+    previous_day_row = search_by_date(notion, database_id, args.date)
+    if previous_day_row is None:
         logger.error(f"❌ No row found for the day before date: {args.date}")
         return
     
-    # Extract page_id and properties
-    page_id = matched_row.get('id', '')
-    properties = matched_row.get('properties', {})
+    # Search for the current day row for FOLLOWERS update
+    current_day_row = search_by_current_date(notion, database_id, args.date)
+    if current_day_row is None:
+        logger.error(f"❌ No row found for current date: {args.date}")
+        return
+    
+    # Extract page_id and properties for both rows
+    previous_page_id = previous_day_row.get('id', '')
+    previous_properties = previous_day_row.get('properties', {})
+    
+    current_page_id = current_day_row.get('id', '')
+    current_properties = current_day_row.get('properties', {})
     
     # Get previous day date for display
     date_obj = datetime.strptime(args.date, "%Y%m%d")
     prev_date_obj = date_obj - timedelta(days=1)
     prev_date_str = prev_date_obj.strftime("%Y%m%d")
     
-    # Extract the 'next' field
-    next_relation = properties.get('next', {}).get('relation', [])
+    # Extract the 'next' field from previous day
+    next_relation = previous_properties.get('next', {}).get('relation', [])
     next_page_id = next_relation[0].get('id', '') if next_relation else None
     
     if not next_page_id:
-        logger.warning("⚠️ No 'next' relation found for this row")
+        logger.warning("⚠️ No 'next' relation found for previous day row")
     
-    # Extract additional fields from config
-    logger.info(f"📋 Number of fields to extract: {len(update_fields)}")
-    extracted_fields = extract_fields(matched_row, update_fields)
+    # Extract fields for previous day (posts fields)
+    logger.info(f"📋 Number of posts fields to extract: {len(update_fields_posts)}")
+    extracted_posts_fields = extract_fields(previous_day_row, update_fields_posts)
     
-    # Print summary of original row
+    # Extract fields for current day (follower fields)
+    logger.info(f"📋 Number of follower fields to extract: {len(update_fields_followers)}")
+    extracted_followers_fields = extract_fields(current_day_row, update_fields_followers)
+    
+    # Print summary of both rows
     print("\n" + "="*60)
-    print("📊 ORIGINAL ROW SUMMARY (PREVIOUS DAY)")
+    print("📊 PREVIOUS DAY ROW SUMMARY (FOR POSTS UPDATE)")
     print("="*60)
-    print(f"Page ID: {page_id}")
-    print(f"Date: {prev_date_str} (day before {args.date})")
-    print(f"Next Page ID: {next_page_id if next_page_id else 'None'}")
-    print("\nExtracted Fields:\n")
-    for field_name, value in extracted_fields.items():
+    print(f"Page ID: {previous_page_id}")
+    print(f"Date: {prev_date_str}")
+    print("\nPosts Fields to Update:\n")
+    for field_name in update_fields_posts:
+        value = extracted_posts_fields.get(field_name)
+        print(f"  - {field_name}: {value}")
+    
+    print("\n" + "="*60)
+    print("📊 CURRENT DAY ROW SUMMARY (FOR FOLLOWERS UPDATE)")
+    print("="*60)
+    print(f"Page ID: {current_page_id}")
+    print(f"Date: {args.date}")
+    print("\nFollower Fields to Update:\n")
+    for field_name in update_fields_followers:
+        value = extracted_followers_fields.get(field_name)
         print(f"  - {field_name}: {value}")
     print("\n")
     
@@ -479,8 +552,9 @@ def main():
     logger.info("📊 Fetching data from Supabase")
     posts_data, profile_data = get_supabase_data(supabase_connection, args.date, posts_table, profile_table)
     
-    # Map Supabase fields to Notion fields
-    mapped_data = map_supabase_to_notion_fields(posts_data, profile_data, update_field_mapping)
+    # Map Supabase fields to Notion fields for both types
+    mapped_posts_data = map_supabase_to_notion_fields(posts_data, profile_data, update_field_mapping_posts)
+    mapped_followers_data = map_supabase_to_notion_fields(posts_data, profile_data, update_field_mapping_followers)
     
     # Print Supabase data summary
     print("\n" + "="*60)
@@ -488,90 +562,126 @@ def main():
     print("="*60)
     print(f"Posts data (previous day): {'Yes' if posts_data else 'No'}")
     print(f"Profile data (current day): {'Yes' if profile_data else 'No'}")
-    print("\nMapped Fields:\n")
-    for field_name, value in mapped_data.items():
+    print("\nMapped Posts Fields:\n")
+    for field_name, value in mapped_posts_data.items():
+        print(f"  - {field_name}: {value}")
+    print("\nMapped Follower Fields:\n")
+    for field_name, value in mapped_followers_data.items():
         print(f"  - {field_name}: {value}")
     print("\n")
 
-    # Prepare updates for Notion
-    updates = {}
-    changes = []
+    # Prepare updates for Notion - POSTS (previous day)
+    posts_updates = {}
+    posts_changes = []
     
-    for field_name in update_fields:
-        if field_name in mapped_data:
-            new_value = mapped_data[field_name]
-            old_value = extracted_fields.get(field_name)
+    for field_name in update_fields_posts:
+        if field_name in mapped_posts_data:
+            new_value = mapped_posts_data[field_name]
+            old_value = extracted_posts_fields.get(field_name)
             
             # Get the property type from the original row
-            prop = properties.get(field_name, {})
+            prop = previous_properties.get(field_name, {})
             prop_type = prop.get('type', 'rich_text')
             
             # Prepare the update payload
             update_payload = prepare_notion_update(prop_type, new_value)
             
             if update_payload is not None:
-                updates[field_name] = update_payload
+                posts_updates[field_name] = update_payload
                 
                 # Track the change
-                changes.append({
+                posts_changes.append({
                     'field': field_name,
                     'initial': old_value,
                     'final': new_value
                 })
     
-    # Update Notion page
-    if updates:
-        logger.info(f"📝 Ready to update {len(updates)} fields in Notion")
+    # Prepare updates for Notion - FOLLOWERS (current day)
+    followers_updates = {}
+    followers_changes = []
+    
+    for field_name in update_fields_followers:
+        if field_name in mapped_followers_data:
+            new_value = mapped_followers_data[field_name]
+            old_value = extracted_followers_fields.get(field_name)
+            
+            # Get the property type from the original row
+            prop = current_properties.get(field_name, {})
+            prop_type = prop.get('type', 'rich_text')
+            
+            # Prepare the update payload
+            update_payload = prepare_notion_update(prop_type, new_value)
+            
+            if update_payload is not None:
+                followers_updates[field_name] = update_payload
+                
+                # Track the change
+                followers_changes.append({
+                    'field': field_name,
+                    'initial': old_value,
+                    'final': new_value
+                })
+    
+    # Update Notion pages
+    if posts_updates or followers_updates:
+        total_updates = len(posts_updates) + len(followers_updates)
+        logger.info(f"📝 Ready to update {total_updates} fields in Notion")
+        print(f"\nReady to update:\n- {len(posts_updates)} posts fields on previous day\n- {len(followers_updates)} follower fields on current day")
         print("\nPress Enter to continue with the update or Ctrl+C to cancel...")
         try:
             input()  # Wait for user to press Enter
-            logger.info(f"📝 Updating {len(updates)} fields in Notion")
-            update_result = update_notion_page(notion, page_id, updates)
-        except KeyboardInterrupt:
-            logger.info("❌ Update cancelled by user")
-            sys.exit(0)
-        
-        if update_result:
-            # Create tracking table if needed
-            create_tracking_table(supabase_connection)
             
-            # Log changes to Supabase
-            log_field_changes(supabase_connection, page_id, changes)
+            # Update posts fields on previous day
+            if posts_updates:
+                logger.info(f"📝 Updating {len(posts_updates)} posts fields on previous day")
+                posts_update_result = update_notion_page(notion, previous_page_id, posts_updates)
+                
+                if posts_update_result:
+                    # Create tracking table if needed
+                    create_tracking_table(supabase_connection)
+                    
+                    # Log changes to Supabase
+                    log_field_changes(supabase_connection, previous_page_id, posts_changes)
+                else:
+                    logger.error("❌ Failed to update posts fields on previous day")
+            
+            # Update follower fields on current day
+            if followers_updates:
+                logger.info(f"📝 Updating {len(followers_updates)} follower fields on current day")
+                followers_update_result = update_notion_page(notion, current_page_id, followers_updates)
+                
+                if followers_update_result:
+                    # Create tracking table if needed
+                    create_tracking_table(supabase_connection)
+                    
+                    # Log changes to Supabase
+                    log_field_changes(supabase_connection, current_page_id, followers_changes)
+                else:
+                    logger.error("❌ Failed to update follower fields on current day")
             
             # Print field update summary
             print("\n" + "="*60)
             print("📝 FIELD UPDATE SUMMARY")
             print("="*60)
-            for change in changes:
-                print(f"{change['field']}: {change['initial']} → {change['final']}")
-        else:
-            logger.error("❌ Failed to update Notion page")
+            
+            if posts_changes:
+                print("\nPOSTS UPDATES (Previous Day):")
+                for change in posts_changes:
+                    print(f"  {change['field']}: {change['initial']} → {change['final']}")
+            
+            if followers_changes:
+                print("\nFOLLOWER UPDATES (Current Day):")
+                for change in followers_changes:
+                    print(f"  {change['field']}: {change['initial']} → {change['final']}")
+                    
+        except KeyboardInterrupt:
+            logger.info("❌ Update cancelled by user")
+            sys.exit(0)
     else:
         logger.info("ℹ️ No fields to update")
     
     # Close Supabase connection
     supabase_connection.close()
-    
-    # If there's a next page, retrieve its information
-    if next_page_id:
-        next_page = get_page_by_id(notion, next_page_id)
-        if next_page:
-            next_properties = next_page.get('properties', {})
-            next_date_prop = next_properties.get('date', {})
-            next_date_value = extract_property_value(next_date_prop)
-            
-            # Extract day field (title) from next page
-            next_day_prop = next_properties.get('day', {})
-            next_day_value = extract_property_value(next_day_prop)
-            
-            print("\n" + "="*60)
-            print("📅 NEXT DAY SUMMARY")
-            print("="*60)
-            print(f"Page ID: {next_page_id}")
-            print(f"Date: {next_date_value}")
-            print(f"Day (title): {next_day_value}")
-        else:
-            logger.error("❌ Failed to retrieve next page")
     
     print("\n" + "="*60)
     print("\n")
