@@ -14,13 +14,14 @@ from process.supabase_uploader import get_db_connection
 # Set up logger
 logger = None
 
-def configure_logger(existing_logger=None):
+def configure_logger(debug_mode=False, existing_logger=None):
     """Set up logger with appropriate level based on debug mode."""
     global logger
     if existing_logger:
         logger = existing_logger
     else:
-        logger = setup_logger("profile_aggregator", file_logging=False)
+        log_level = logging.DEBUG if debug_mode else logging.INFO
+        logger = setup_logger("profile_aggregator", file_logging=False, level=log_level)
     
     return logger
 
@@ -36,6 +37,7 @@ def aggregate_profile_data(connection=None):
     """
     connection_created = False
     if connection is None:
+        logger.debug("🔌 No connection provided, creating a new database connection")
         connection = get_db_connection()
         connection_created = True
     
@@ -48,8 +50,11 @@ def aggregate_profile_data(connection=None):
         
         # List of all platform tables to join
         platforms = ['linkedin', 'instagram', 'twitter', 'substack', 'threads']
+        logger.debug(f"🔍 Processing data for platforms: {', '.join(platforms)}")
         
         # Create the SQL query to join all tables
+        logger.debug("🔧 Building SQL query for aggregation")
+        
         sql = """
         DROP TABLE IF EXISTS profile;
         
@@ -103,30 +108,38 @@ def aggregate_profile_data(connection=None):
         logger.info("🔄 Executing SQL to create aggregated profile table")
         with connection.cursor() as cursor:
             cursor.execute(sql)
+            logger.debug("✓ SQL execution completed")
         
         # Count rows in the new table
         with connection.cursor() as cursor:
             cursor.execute("SELECT COUNT(*) FROM profile")
             count = cursor.fetchone()[0]
+            logger.debug(f"📊 New table contains {count} rows of data")
             
         logger.info(f"✅ Successfully created aggregated profile table with {count} rows")
         return True
         
     except Exception as e:
         logger.error(f"❌ Error aggregating profile data: {e}")
+        logger.debug(f"🔬 Exception details: {type(e).__name__}")
         return False
     finally:
         # Close the connection if we created it
         if connection_created and connection:
             connection.close()
-            logger.debug("Database connection closed")
+            logger.debug("🔌 Database connection closed")
 
 def main():
     """Main function for running the profile aggregator."""
-    # Configure logger
-    configure_logger()
+    # Ask if debug mode should be enabled
+    debug_input = input("Enable debug mode? (y/n): ").lower()
+    debug_mode = debug_input == 'y'
+    
+    # Configure logger with appropriate level
+    configure_logger(debug_mode)
     
     logger.info("🚀 Starting Profile Aggregator")
+    logger.info(f"🐞 Debug mode: {'Enabled' if debug_mode else 'Disabled'}")
     
     # Aggregate profile data
     result = aggregate_profile_data()

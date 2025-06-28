@@ -55,17 +55,12 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
         logger.info("📡 Step 1: Running Social API Client")
         configure_social_logger(debug_mode)
         try:
-            # Override stdin to simulate user input (non-debug mode, all platforms)
-            sys.stdin = open(os.devnull) if debug_mode else None
             run_social_api_client()
             logger.info("✅ Social API Client completed successfully")
         except Exception as e:
             logger.error(f"❌ Error in Social API Client: {e}")
             if debug_mode:
                 raise
-        finally:
-            # Restore stdin
-            sys.stdin = sys.__stdin__
     else:
         logger.info("⏭️ Skipping Social API Client step")
     
@@ -74,17 +69,12 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
         logger.info("🔄 Step 2: Running Data Processor")
         configure_data_processor_logger(debug_mode)
         try:
-            # Override stdin to simulate user input (non-debug mode, upload to Supabase, CSV format)
-            sys.stdin = open(os.devnull) if debug_mode else None
             run_data_processor()
             logger.info("✅ Data Processor completed successfully")
         except Exception as e:
             logger.error(f"❌ Error in Data Processor: {e}")
             if debug_mode:
                 raise
-        finally:
-            # Restore stdin
-            sys.stdin = sys.__stdin__
     else:
         logger.info("⏭️ Skipping Data Processor step")
     
@@ -107,17 +97,12 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
         logger.info("📑 Step 4: Running Posts Consolidator")
         configure_posts_logger(debug_mode)
         try:
-            # Override stdin to simulate user input (non-debug mode)
-            sys.stdin = open(os.devnull) if debug_mode else None
             run_posts_consolidator()
             logger.info("✅ Posts Consolidator completed successfully")
         except Exception as e:
             logger.error(f"❌ Error in Posts Consolidator: {e}")
             if debug_mode:
                 raise
-        finally:
-            # Restore stdin
-            sys.stdin = sys.__stdin__
     else:
         logger.info("⏭️ Skipping Posts Consolidator step")
     
