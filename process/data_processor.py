@@ -10,7 +10,7 @@ import glob
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent))
 from config.logger_config import setup_logger
-from supabase_uploader import upload_all_dataframes
+from process.supabase_uploader import upload_all_dataframes
 
 # Set up logger
 logger = None

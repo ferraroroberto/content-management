@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent))
 from config.logger_config import setup_logger
-from process.supabase_uploader import get_db_connection, load_db_config, configure_logger as configure_supabase_logger
+from process.supabase_uploader import get_db_connection
 
 # Set up logger
 logger = None
@@ -21,9 +21,6 @@ def configure_logger(existing_logger=None):
         logger = existing_logger
     else:
         logger = setup_logger("profile_aggregator", file_logging=False)
-    
-    # Also configure the logger for supabase_uploader
-    configure_supabase_logger(logger)
     
     return logger
 

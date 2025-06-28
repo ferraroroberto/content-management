@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent))
 from config.logger_config import setup_logger
-from process.supabase_uploader import get_db_connection, load_db_config, configure_logger as configure_supabase_logger
+from process.supabase_uploader import get_db_connection
 
 # Set up logger
 logger = None
@@ -19,10 +19,6 @@ def configure_logger(debug_mode=False):
     global logger
     log_level = logging.DEBUG if debug_mode else logging.INFO
     logger = setup_logger("posts_consolidator", file_logging=False, level=log_level)
-    
-    # Also configure the logger for supabase_uploader
-    configure_supabase_logger(logger)
-    
     return logger
 
 def load_config():
