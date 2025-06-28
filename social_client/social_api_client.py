@@ -38,6 +38,31 @@ def load_config():
         logger.error(f"❌ Error: Invalid JSON in configuration file at {config_path}")
         return None
 
+def check_file_exists_for_today(platform_key, config):
+    """Check if a file already exists for the current day for this platform."""
+    # Determine platform and data type from platform_key
+    parts = platform_key.split('_')
+    platform = parts[0]
+    data_type = parts[1] if len(parts) > 1 else "data"
+    
+    # Get results directory from config or use default
+    results_dir_relative = config.get("folder_results_raw", "results/raw")
+    
+    # Create full path for results directory
+    project_root = os.path.dirname(os.path.dirname(__file__))
+    results_dir = os.path.join(project_root, *results_dir_relative.split('/'))
+    
+    # Generate today's filename
+    current_date = datetime.now().strftime('%Y-%m-%d')
+    filename = f"{platform}_{data_type}_{current_date}.json"
+    file_path = os.path.join(results_dir, filename)
+    
+    # Check if file exists
+    exists = os.path.exists(file_path)
+    if exists:
+        logger.info(f"🔄 Found existing file for {platform_key} dated today: {filename}")
+    return exists, file_path
+
 def get_api_data(platform_key, config):
     """Fetch data using the API for the specified platform."""
     if not config or platform_key not in config:
@@ -72,6 +97,12 @@ def save_results(platform_key, data, config):
         return
     
     logger.info(f"💾 Saving {platform_key} data")
+    
+    # Check if a file for today already exists
+    exists, file_path = check_file_exists_for_today(platform_key, config)
+    if exists:
+        logger.info(f"📂 Skipping save: File for {platform_key} already exists for today")
+        return file_path  # Return the existing file path
     
     # Determine platform and data type from platform_key
     parts = platform_key.split('_')
@@ -113,7 +144,7 @@ def save_results(platform_key, data, config):
     logger.info(f"✅ Results saved to {file_path}")
     return file_path
 
-def process_all_endpoints(config, debug_mode=False, specific_platform=None):
+def process_all_endpoints(config, debug_mode=False, specific_platform=None, skip_existing=True):
     """Process all API endpoints defined in the config file or a specific one if provided."""
     if not config:
         logger.error("❌ Failed to load configuration")
@@ -138,9 +169,19 @@ def process_all_endpoints(config, debug_mode=False, specific_platform=None):
     
     # Process each endpoint
     completed = 0
+    skipped = 0
     
     for platform_key in config_endpoints.keys():
-        logger.info(f"🚀 Processing {platform_key} ({completed+1}/{total_endpoints})")
+        logger.info(f"🚀 Processing {platform_key} ({completed+1+skipped}/{total_endpoints})")
+        
+        # Check if file already exists for today
+        if skip_existing:
+            file_exists, file_path = check_file_exists_for_today(platform_key, config)
+            if file_exists:
+                logger.info(f"⏩ Skipping {platform_key} - data already collected today")
+                skipped += 1
+                logger.info(f"📊 Progress: {completed+skipped}/{total_endpoints} processed ({(completed+skipped)/total_endpoints*100:.1f}%) [{skipped} skipped]")
+                continue
         
         # Get data
         data = get_api_data(platform_key, config)
@@ -152,10 +193,10 @@ def process_all_endpoints(config, debug_mode=False, specific_platform=None):
             logger.error(f"❌ Failed to retrieve {platform_key} data")
         
         completed += 1
-        logger.info(f"📊 Progress: {completed}/{total_endpoints} completed ({(completed/total_endpoints)*100:.1f}%)")
+        logger.info(f"📊 Progress: {completed+skipped}/{total_endpoints} processed ({(completed+skipped)/total_endpoints*100:.1f}%) [{skipped} skipped]")
         
         # If in debug mode and not the last endpoint, ask user if they want to continue
-        if debug_mode and completed < total_endpoints:
+        if debug_mode and (completed + skipped) < total_endpoints:
             proceed = input(f"\nContinue to next endpoint? (y/n): ").lower()
             if proceed != 'y':
                 logger.info("⏹️  Processing stopped by user")
@@ -163,7 +204,10 @@ def process_all_endpoints(config, debug_mode=False, specific_platform=None):
             # Add a small delay to prevent rate limiting
             time.sleep(1)
     
-    logger.info(f"✅ Completed processing {completed}/{total_endpoints} endpoints")
+    logger.info(f"✅ Completed processing {completed+skipped}/{total_endpoints} endpoints")
+    if skipped > 0:
+        logger.info(f"🔄 {skipped} endpoints were skipped - data already collected today")
+    logger.info(f"📈 {completed} new data collections performed")
 
 def main():
     """Main function to execute the social API client."""
@@ -183,11 +227,16 @@ def main():
         logger.error("❌ Failed to load configuration")
         return
     
+    # Ask if user wants to skip existing files
+    skip_input = input("Skip platforms with today's data already collected? (y/n, default=y): ").lower()
+    skip_existing = skip_input != 'n'  # Default to True unless explicitly 'n'
+    logger.info(f"⏩ Skip existing: {'Enabled' if skip_existing else 'Disabled'}")
+    
     # Ask if user wants to process a specific platform
     specific_platform = input("Process specific platform? (press Enter for all, or type platform name): ").strip()
     
     # Process endpoints
-    process_all_endpoints(config, debug_mode, specific_platform if specific_platform else None)
+    process_all_endpoints(config, debug_mode, specific_platform if specific_platform else None, skip_existing)
     
     logger.info("✅ Social API Client completed")
 
