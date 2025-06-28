@@ -4,6 +4,7 @@ from datetime import datetime
 import os
 import logging
 import sys
+import argparse
 from pathlib import Path
 import glob
 
@@ -494,13 +495,27 @@ def save_dataframes(dataframes, main_config=None, output_format='csv'):
     
     return saved_files
 
-def main():
+def parse_arguments():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description='Process data from JSON files and create DataFrames.')
+    
+    # Add arguments for all interactive prompts
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    parser.add_argument('--upload', choices=['y', 'n'], default='y', 
+                        help='Upload data to Supabase (if enabled in config)')
+    parser.add_argument('--format', choices=['excel', 'csv'], default='csv',
+                        help='Output format for saving data')
+    
+    return parser.parse_args()
+
+def main(args=None):
     """Main function to execute the data processor."""
-    # Ask if debug mode should be enabled
-    debug_input = input("Enable debug mode? (y/n): ").lower()
-    debug_mode = debug_input == 'y'
+    if args is None:
+        # Use command-line arguments if available, otherwise parse them
+        args = parse_arguments()
     
     # Configure logger with appropriate level
+    debug_mode = args.debug
     configure_logger(debug_mode)
     
     logger.info("🚀 Starting Data Processor")
@@ -537,10 +552,8 @@ def main():
     # Upload data to Supabase if enabled
     supabase_enabled = main_config.get('supabase', {}).get('enable_upload', False)
     if supabase_enabled:
-        upload_input = input("\nUpload data to Supabase? (y/n) [default: y]: ").lower()
-        upload_to_supabase = upload_input != 'n'  # Default to yes if empty or any input other than 'n'
+        upload_to_supabase = args.upload != 'n'  # Default to yes if not explicitly 'n'
         if upload_to_supabase:
-            # No need to configure Supabase logger separately
             logger.info("📤 Uploading data to Supabase...")
             
             # Upload all dataframes
@@ -550,9 +563,8 @@ def main():
             else:
                 logger.warning("⚠️  Some errors occurred during Supabase upload")
     
-    # Ask for output format
-    format_input = input("\nSave as Excel or CSV? (excel/csv) [default: csv]: ").lower()
-    output_format = 'excel' if format_input == 'excel' else 'csv'
+    # Use output format from arguments
+    output_format = args.format
     
     # Save DataFrames
     output_files = save_dataframes(dataframes, main_config, output_format=output_format)

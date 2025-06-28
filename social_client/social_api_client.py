@@ -5,6 +5,7 @@ import os
 import logging
 import sys
 import time
+import argparse
 from pathlib import Path
 
 # Add the parent directory to sys.path to allow importing from sibling packages
@@ -209,13 +210,29 @@ def process_all_endpoints(config, debug_mode=False, specific_platform=None, skip
         logger.info(f"🔄 {skipped} endpoints were skipped - data already collected today")
     logger.info(f"📈 {completed} new data collections performed")
 
-def main():
-    """Main function to execute the social API client."""
-    # Ask if debug mode should be enabled
-    debug_input = input("Enable debug mode? (y/n): ").lower()
-    debug_mode = debug_input == 'y'
+def parse_arguments():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description='Social API Client to fetch data from various platforms.')
     
-    # Configure logger with appropriate level
+    # Add arguments for all interactive prompts
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    parser.add_argument('--skip-existing', action='store_true', default=True, 
+                        help='Skip platforms with today\'s data already collected')
+    parser.add_argument('--no-skip', action='store_false', dest='skip_existing',
+                        help='Do not skip platforms with today\'s data already collected')
+    parser.add_argument('--platform', type=str, default=None,
+                        help='Process specific platform (leave empty for all platforms)')
+    
+    return parser.parse_args()
+
+def main(args=None):
+    """Main function to execute the social API client."""
+    if args is None:
+        # Use command-line arguments if available, otherwise parse them
+        args = parse_arguments()
+    
+    # Configure logger with appropriate level based on args
+    debug_mode = args.debug
     configure_logger(debug_mode)
     
     logger.info("🚀 Starting Social API Client")
@@ -227,16 +244,16 @@ def main():
         logger.error("❌ Failed to load configuration")
         return
     
-    # Ask if user wants to skip existing files
-    skip_input = input("Skip platforms with today's data already collected? (y/n, default=y): ").lower()
-    skip_existing = skip_input != 'n'  # Default to True unless explicitly 'n'
+    # Use arguments instead of prompts
+    skip_existing = args.skip_existing
     logger.info(f"⏩ Skip existing: {'Enabled' if skip_existing else 'Disabled'}")
     
-    # Ask if user wants to process a specific platform
-    specific_platform = input("Process specific platform? (press Enter for all, or type platform name): ").strip()
+    specific_platform = args.platform
+    if specific_platform:
+        logger.info(f"🎯 Targeting specific platform: {specific_platform}")
     
     # Process endpoints
-    process_all_endpoints(config, debug_mode, specific_platform if specific_platform else None, skip_existing)
+    process_all_endpoints(config, debug_mode, specific_platform, skip_existing)
     
     logger.info("✅ Social API Client completed")
 

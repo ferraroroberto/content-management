@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import sys
+import argparse
 from pathlib import Path
 import psycopg2
 from dotenv import load_dotenv
@@ -64,13 +65,23 @@ def execute_sql(connection, sql_content):
         connection.rollback()
         return False
 
-def main():
-    """Main function to execute the posts consolidator."""
-    # Ask if debug mode should be enabled
-    debug_input = input("Enable debug mode? (y/n): ").lower()
-    debug_mode = debug_input == 'y'
+def parse_arguments():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description='Execute SQL to consolidate posts data.')
     
-    # Configure logger with appropriate level
+    # Add arguments for all interactive prompts
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    
+    return parser.parse_args()
+
+def main(args=None):
+    """Main function to execute the posts consolidator."""
+    if args is None:
+        # Use command-line arguments if available, otherwise parse them
+        args = parse_arguments()
+    
+    # Configure logger with appropriate level based on args
+    debug_mode = args.debug
     configure_logger(debug_mode)
     
     logger.info("🚀 Starting Posts Consolidator")
@@ -106,20 +117,6 @@ def main():
     if success:
         logger.info("✅ Posts Consolidator completed successfully")
     else:
-        logger.error("❌ Posts Consolidator failed")
-
-def execute_sql(connection, sql_content):
-    """Execute the SQL on the Supabase database."""
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(sql_content)
-        connection.commit()
-        logger.info("✅ SQL executed successfully")
-        return True
-    except Exception as e:
-        logger.error(f"❌ Error executing SQL: {e}")
-        connection.rollback()
-        return False
         logger.error("❌ Posts Consolidator failed")
 
 if __name__ == "__main__":

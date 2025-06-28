@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+import argparse
 import pandas as pd
 from pathlib import Path
 import psycopg2
@@ -25,6 +26,19 @@ def configure_logger(debug_mode=False, existing_logger=None):
     
     return logger
 
+def read_sql_from_file():
+    """Read the SQL content from the SQL file."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(script_dir, "profile_aggregator.sql")
+    
+    try:
+        with open(file_path, 'r') as f:
+            sql_content = f.read()
+        return sql_content
+    except Exception as e:
+        logger.error(f"❌ Error reading SQL file: {e}")
+        return None
+
 def aggregate_profile_data(connection=None):
     """
     Aggregate data from all profile tables into a single profile table.
@@ -48,61 +62,13 @@ def aggregate_profile_data(connection=None):
     try:
         logger.info("🔄 Starting profile data aggregation")
         
-        # List of all platform tables to join
-        platforms = ['linkedin', 'instagram', 'twitter', 'substack', 'threads']
-        logger.debug(f"🔍 Processing data for platforms: {', '.join(platforms)}")
+        # Read SQL from file
+        logger.debug("📝 Reading SQL from file")
+        sql = read_sql_from_file()
         
-        # Create the SQL query to join all tables
-        logger.debug("🔧 Building SQL query for aggregation")
-        
-        sql = """
-        DROP TABLE IF EXISTS profile;
-        
-        CREATE TABLE profile AS
-        WITH base_dates AS (
-            SELECT DISTINCT date 
-            FROM (
-        """
-        
-        # Add all the UNION clauses to get all unique dates
-        date_queries = []
-        for platform in platforms:
-            date_queries.append(f"SELECT date FROM {platform}_profile")
-        
-        sql += " UNION ".join(date_queries)
-        
-        sql += """
-            ) as all_dates
-        )
-        
-        SELECT 
-            base_dates.date
-        """
-        
-        # Add columns for each platform with appropriate suffixes
-        for platform in platforms:
-            sql += f"""
-            , {platform}_profile.num_followers as num_followers_{platform}
-            """
-        
-        # Add the FROM clause with all the LEFT JOINs
-        sql += """
-        FROM base_dates
-        """
-        
-        # Add LEFT JOIN for each platform
-        for platform in platforms:
-            sql += f"""
-            LEFT JOIN {platform}_profile 
-            ON base_dates.date = {platform}_profile.date 
-            AND {platform}_profile.platform = '{platform}' 
-            AND {platform}_profile.data_type = 'profile'
-            """
-        
-        # Add ORDER BY clause
-        sql += """
-        ORDER BY base_dates.date;
-        """
+        if not sql:
+            logger.error("❌ Failed to read SQL file")
+            return False
         
         # Execute the SQL query
         logger.info("🔄 Executing SQL to create aggregated profile table")
@@ -129,13 +95,53 @@ def aggregate_profile_data(connection=None):
             connection.close()
             logger.debug("🔌 Database connection closed")
 
-def main():
-    """Main function for running the profile aggregator."""
-    # Ask if debug mode should be enabled
-    debug_input = input("Enable debug mode? (y/n): ").lower()
-    debug_mode = debug_input == 'y'
+def parse_arguments():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description='Aggregate profile data from multiple platform tables.')
     
-    # Configure logger with appropriate level
+    # Add arguments for all interactive prompts
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    
+    return parser.parse_args()
+
+def main(args=None):
+    """Main function for running the profile aggregator."""
+    if args is None:
+        # Use command-line arguments if available, otherwise parse them
+        args = parse_arguments()
+    
+    # Configure logger with appropriate level based on args
+    debug_mode = args.debug
+    configure_logger(debug_mode)
+    
+    logger.info("🚀 Starting Profile Aggregator")
+    logger.info(f"🐞 Debug mode: {'Enabled' if debug_mode else 'Disabled'}")
+    
+    # Aggregate profile data
+    result = aggregate_profile_data()
+    
+    if result:
+        logger.info("✅ Profile aggregation completed successfully")
+    else:
+        logger.error("❌ Profile aggregation failed")
+
+def parse_arguments():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description='Aggregate profile data from multiple platform tables.')
+    
+    # Add arguments for all interactive prompts
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    
+    return parser.parse_args()
+
+def main(args=None):
+    """Main function for running the profile aggregator."""
+    if args is None:
+        # Use command-line arguments if available, otherwise parse them
+        args = parse_arguments()
+    
+    # Configure logger with appropriate level based on args
+    debug_mode = args.debug
     configure_logger(debug_mode)
     
     logger.info("🚀 Starting Profile Aggregator")

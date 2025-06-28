@@ -1,7 +1,74 @@
--- SQL to create consolidated posts table
-DROP TABLE IF EXISTS public.posts;
+-- SQL to consolidate posts table while preserving relationships
 
-CREATE TABLE public.posts AS
+-- Create the table if it doesn't exist
+CREATE TABLE IF NOT EXISTS public.posts (
+    date date PRIMARY KEY,
+    -- Non-video posts from all platforms
+    post_id_linkedin_no_video text,
+    posted_at_linkedin_no_video date,
+    num_likes_linkedin_no_video integer,
+    num_comments_linkedin_no_video integer,
+    num_reshares_linkedin_no_video integer,
+    
+    post_id_instagram_no_video text,
+    posted_at_instagram_no_video date,
+    num_likes_instagram_no_video integer,
+    num_comments_instagram_no_video integer,
+    
+    post_id_twitter_no_video text,
+    posted_at_twitter_no_video date,
+    num_likes_twitter_no_video integer,
+    num_comments_twitter_no_video integer,
+    num_reshares_twitter_no_video integer,
+    
+    post_id_substack_no_video text,
+    posted_at_substack_no_video date,
+    num_likes_substack_no_video integer,
+    num_comments_substack_no_video integer,
+    num_reshares_substack_no_video integer,
+    
+    post_id_threads_no_video text,
+    posted_at_threads_no_video date,
+    num_likes_threads_no_video integer,
+    num_comments_threads_no_video integer,
+    num_reshares_threads_no_video integer,
+    
+    -- Video posts from all platforms
+    post_id_linkedin_video text,
+    posted_at_linkedin_video date,
+    num_likes_linkedin_video integer,
+    num_comments_linkedin_video integer,
+    num_reshares_linkedin_video integer,
+    
+    post_id_instagram_video text,
+    posted_at_instagram_video date,
+    num_likes_instagram_video integer,
+    num_comments_instagram_video integer,
+    
+    post_id_twitter_video text,
+    posted_at_twitter_video date,
+    num_likes_twitter_video integer,
+    num_comments_twitter_video integer,
+    num_reshares_twitter_video integer,
+    
+    post_id_substack_video text,
+    posted_at_substack_video date,
+    num_likes_substack_video integer,
+    num_comments_substack_video integer,
+    num_reshares_substack_video integer,
+    
+    post_id_threads_video text,
+    posted_at_threads_video date,
+    num_likes_threads_video integer,
+    num_comments_threads_video integer,
+    num_reshares_threads_video integer
+);
+
+-- Clear existing data while preserving table structure and relationships
+TRUNCATE TABLE public.posts;
+
+-- Insert new data
+INSERT INTO public.posts
 WITH
         linkedin_video AS (
             SELECT DISTINCT ON (date)
@@ -230,8 +297,5 @@ FROM all_dates d
     LEFT JOIN threads_video thv ON d.date = thv.date
     LEFT JOIN threads_non_video thnv ON d.date = thnv.date;
 
--- Add a primary key
-ALTER TABLE public.posts ADD PRIMARY KEY (date);
-
--- Add table comment
+-- Add table comment if it doesn't exist
 COMMENT ON TABLE public.posts IS 'Consolidated posts data from all platforms, separated by video/non-video, with one record per day';
