@@ -251,16 +251,12 @@ def get_supabase_data(connection, date_str, posts_table, profile_table):
         date_obj = datetime.strptime(date_str, "%Y%m%d")
         formatted_date = date_obj.strftime("%Y-%m-%d")
         
-        # Calculate the previous day for posts data
-        prev_date_obj = date_obj - timedelta(days=1)
-        formatted_prev_date = prev_date_obj.strftime("%Y-%m-%d")
-        
         cursor = connection.cursor()
         
-        # Get posts data from the PREVIOUS day
-        logger.debug(f"🔍 Querying {posts_table} for previous date: {formatted_prev_date}")
+        # Get posts data from the CURRENT day (no lag)
+        logger.debug(f"🔍 Querying {posts_table} for current date: {formatted_date}")
         posts_query = f"SELECT * FROM {posts_table} WHERE date = %s LIMIT 1"
-        cursor.execute(posts_query, (formatted_prev_date,))
+        cursor.execute(posts_query, (formatted_date,))
         posts_columns = [desc[0] for desc in cursor.description]
         posts_row = cursor.fetchone()
         posts_data = dict(zip(posts_columns, posts_row)) if posts_row else None
@@ -276,9 +272,9 @@ def get_supabase_data(connection, date_str, posts_table, profile_table):
         cursor.close()
         
         if posts_data:
-            logger.info(f"✅ Found posts data for previous date: {formatted_prev_date}")
+            logger.info(f"✅ Found posts data for current date: {formatted_date}")
         else:
-            logger.warning(f"⚠️ No posts data found for previous date: {formatted_prev_date}")
+            logger.warning(f"⚠️ No posts data found for current date: {formatted_date}")
             
         if profile_data:
             logger.info(f"✅ Found profile data for current date: {formatted_date}")
