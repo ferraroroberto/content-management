@@ -1,6 +1,15 @@
 import psycopg2
 from dotenv import load_dotenv
 import os
+import sys
+from pathlib import Path
+
+# Add the parent directory to sys.path to allow importing from sibling packages
+sys.path.append(str(Path(__file__).parent.parent))
+from config.logger_config import setup_logger
+
+# Set up logger
+logger = setup_logger("supabase_drop_all_tables")
 
 # Load environment variables from .env
 load_dotenv()
@@ -21,7 +30,7 @@ try:
         port=PORT,
         dbname=DBNAME
     )
-    print("Connection successful!")
+    logger.info("Connection successful!")
 
     connection.autocommit = True
     cursor = connection.cursor()
@@ -34,16 +43,16 @@ try:
     tables = cursor.fetchall()
 
     if not tables:
-        print("No tables found in the public schema.")
+        logger.info("No tables found in the public schema.")
     else:
         for (table_name,) in tables:
             drop_query = f'DROP TABLE IF EXISTS public."{table_name}" CASCADE;'
             cursor.execute(drop_query)
-            print(f"Dropped table: {table_name}")
+            logger.info(f"Dropped table: {table_name}")
 
     cursor.close()
     connection.close()
-    print("Connection closed.")
+    logger.info("Connection closed.")
 
 except Exception as e:
-    print(f"Failed to drop tables: {e}")
+    logger.error(f"Failed to drop tables: {e}")

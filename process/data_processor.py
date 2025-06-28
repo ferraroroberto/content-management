@@ -6,11 +6,11 @@ import logging
 import sys
 from pathlib import Path
 import glob
-from supabase_uploader import upload_all_dataframes, configure_logger as configure_supabase_logger
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent))
 from config.logger_config import setup_logger
+from supabase_uploader import upload_all_dataframes
 
 # Set up logger
 logger = None
@@ -540,8 +540,7 @@ def main():
         upload_input = input("\nUpload data to Supabase? (y/n) [default: y]: ").lower()
         upload_to_supabase = upload_input != 'n'  # Default to yes if empty or any input other than 'n'
         if upload_to_supabase:
-            # Configure Supabase logger to use the same logger
-            configure_supabase_logger(logger)
+            # No need to configure Supabase logger separately
             logger.info("📤 Uploading data to Supabase...")
             
             # Upload all dataframes

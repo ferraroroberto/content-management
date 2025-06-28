@@ -1,0 +1,3 @@
+2025-06-28 13:42:47,825 - supabase_test_create_table - INFO - Connection successful!
+2025-06-28 13:42:47,874 - supabase_test_create_table - INFO - Table 'test' created successfully or already exists.
+2025-06-28 13:42:47,874 - supabase_test_create_table - INFO - Connection closed.

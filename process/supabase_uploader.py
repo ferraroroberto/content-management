@@ -12,17 +12,11 @@ from dotenv import load_dotenv
 sys.path.append(str(Path(__file__).parent.parent))
 from config.logger_config import setup_logger
 
-# Set up logger
-logger = None
-
-def configure_logger(existing_logger=None):
-    """Set up logger with appropriate level based on debug mode."""
-    global logger
-    if existing_logger:
-        logger = existing_logger
-    else:
-        logger = setup_logger("supabase_uploader", file_logging=False)
-    return logger
+# Set up logger - will use existing logger if available
+logger = logging.getLogger("supabase_uploader")
+if not logger.handlers:
+    # Only set up if no handlers exist (i.e., not already configured)
+    logger = setup_logger("supabase_uploader", file_logging=False)
 
 def load_db_config():
     """Load database configuration from environment variables."""
@@ -348,8 +342,6 @@ def upload_all_dataframes(dataframes, db_config=None):
 def main():
     """Main function for testing the module independently."""
     # Configure logger
-    configure_logger()
-    
     logger.info("🚀 Starting Database Uploader Test")
     
     # Load test DataFrame
