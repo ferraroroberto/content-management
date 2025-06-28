@@ -24,14 +24,17 @@ if not logger.handlers:
 class NotionSupabaseSync:
     """Sync Notion databases to Supabase PostgreSQL."""
     
-    def __init__(self, config_path: str = None, environment: str = "cloud"):
+    def __init__(self, config_path: str = None, environment: str = "cloud", database_list_path: str = None):
         """Initialize the sync with configuration."""
         self.environment = environment
         self.config = self._load_config(config_path)
         self.notion_token = self.config["notion"]["api_token"]
         self.poll_every = self.config["notion"]["poll_every"]
         self.page_size = self.config["notion"]["page_size"]
-        self.databases = self.config["notion"]["databases"]
+        
+        # Load databases from notion_database_list.json
+        self.databases = self._load_database_list(database_list_path)
+        
         self.headers = {
             "Authorization": f"Bearer {self.notion_token}",
             "Content-Type": "application/json",
@@ -55,6 +58,31 @@ class NotionSupabaseSync:
         
         logger.info("✅ Configuration loaded successfully")
         return config
+    
+    def _load_database_list(self, database_list_path: str = None) -> List[dict]:
+        """Load database list from JSON file and filter by replication status."""
+        if database_list_path is None:
+            database_list_path = Path(__file__).parent / "notion_database_list.json"
+        
+        logger.debug(f"📂 Loading database list from {database_list_path}")
+        
+        if not os.path.exists(database_list_path):
+            logger.error(f"❌ Database list file not found: {database_list_path}")
+            raise FileNotFoundError(f"Database list file not found: {database_list_path}")
+        
+        with open(database_list_path, 'r') as f:
+            all_databases = json.load(f)
+        
+        # Filter databases where replication is true
+        databases_to_sync = [db for db in all_databases if db.get("replication", False)]
+        
+        logger.info(f"✅ Found {len(databases_to_sync)} databases to sync (out of {len(all_databases)} total)")
+        
+        # Log the databases that will be synced
+        for db in databases_to_sync:
+            logger.debug(f"  📊 Will sync: {db['name']} → {db['supabase_table']}")
+        
+        return databases_to_sync
     
     def _notion_api_call(self, endpoint: str, method: str = "GET", data: dict = None) -> dict:
         """Make a Notion API call with rate limiting."""
@@ -527,14 +555,19 @@ class NotionSupabaseSync:
         
         try:
             # Sync each database
+            synced_count = 0
             for db_config in self.databases:
                 try:
+                    logger.info(f"{'='*60}")
+                    logger.info(f"Database {synced_count + 1}/{len(self.databases)}: {db_config['name']}")
+                    logger.info(f"{'='*60}")
                     self.sync_database(db_config, connection, force_full_sync)
+                    synced_count += 1
                 except Exception as e:
                     logger.error(f"❌ Error syncing database {db_config['name']}: {e}")
                     continue
             
-            logger.info("✅ Sync cycle completed")
+            logger.info(f"\n✅ Sync cycle completed - {synced_count}/{len(self.databases)} databases synced successfully")
         finally:
             connection.close()
     
@@ -560,6 +593,7 @@ def main():
     parser.add_argument("--environment", choices=["local", "cloud"], default="cloud",
                         help="Database environment to use (default: cloud)")
     parser.add_argument("--config", type=str, help="Path to configuration file")
+    parser.add_argument("--database-list", type=str, help="Path to database list JSON file")
     parser.add_argument("--once", action="store_true", 
                         help="Run sync once and exit (default: continuous)")
     parser.add_argument("--full-sync", action="store_true",
@@ -571,7 +605,11 @@ def main():
     
     try:
         # Initialize sync
-        sync = NotionSupabaseSync(config_path=args.config, environment=args.environment)
+        sync = NotionSupabaseSync(
+            config_path=args.config, 
+            environment=args.environment,
+            database_list_path=args.database_list
+        )
         
         if args.once:
             # Run single sync cycle

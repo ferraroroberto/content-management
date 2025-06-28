@@ -294,7 +294,7 @@ def main():
         lister.run(output_path=args.output)
     
     except KeyboardInterrupt:
-        logger.info("⏹️ Process stopped by user")
+        logger.info("⏹️  Process stopped by user")
     except Exception as e:
         logger.error(f"❌ Fatal error: {e}")
         raise
