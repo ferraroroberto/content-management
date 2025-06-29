@@ -333,8 +333,10 @@ python social_api_client.py --platform linkedin_profile --debug
 - Add new Notion property type handlers
 - Implement additional aggregation queries
 
-## 📝 License
+## 📝 License and contact
 
 This project is free software for personal use from Roberto Ferraro 😇
+
+https://www.linkedin.com/in/ferraroroberto/
 
 Built with ❤️ for automated social media analytics and reporting
