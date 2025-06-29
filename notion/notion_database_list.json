@@ -1,5 +1,12 @@
 [
     {
+        "id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "name": "editorial",
+        "url": "https://www.notion.so/robertoferraro/ee23dec3222e4412baaf0d129d0bda9c",
+        "replication": true,
+        "supabase_table": "notion_editorial"
+    },
+    {
         "id": "67fbcee66711465c852ebf97303787a3",
         "name": "articles",
         "url": "https://www.notion.so/robertoferraro/67fbcee66711465c852ebf97303787a3",
@@ -110,13 +117,6 @@
         "url": "https://www.notion.so/robertoferraro/6e797761887444b3aa8df15bf5c72ab5",
         "replication": false,
         "supabase_table": "notion_content_curation_questionnaire"
-    },
-    {
-        "id": "ee23dec3222e4412baaf0d129d0bda9c",
-        "name": "editorial",
-        "url": "https://www.notion.so/robertoferraro/ee23dec3222e4412baaf0d129d0bda9c",
-        "replication": true,
-        "supabase_table": "notion_editorial"
     },
     {
         "id": "ac63503889a2452b922d57d102438972",
