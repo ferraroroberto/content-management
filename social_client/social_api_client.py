@@ -65,31 +65,42 @@ def check_file_exists_for_today(platform_key, config):
     return exists, file_path
 
 def get_api_data(platform_key, config):
-    """Fetch data using the API for the specified platform."""
+    """Fetch data using the API for the specified platform with retries and exponential backoff."""
     if not config or platform_key not in config:
         logger.error(f"❌ {platform_key} configuration not found in config file")
         return None
-    
+
     logger.info(f"🔍 Fetching {platform_key} data")
     api_config = config[platform_key]
-    
+
     url = api_config.get('api_url')
     headers = {
         "x-rapidapi-key": api_config.get('api_key'),
         "x-rapidapi-host": api_config.get('api_host')
     }
     querystring = api_config.get('querystring', {})
-    
-    try:
-        logger.debug(f"📡 Making API request to {url}")
-        logger.debug(f"🔑 Using query parameters: {querystring}")
-        response = requests.get(url, headers=headers, params=querystring)
-        response.raise_for_status()  # Raise an exception for bad status codes
-        logger.info(f"✅ Successfully retrieved {platform_key} data")
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        logger.error(f"❌ Error fetching {platform_key} data: {e}")
-        return None
+
+    retries = 5
+    backoff_times = [30, 60, 120, 240, 480]  # seconds
+
+    for attempt in range(retries):
+        try:
+            logger.debug(f"📡 Making API request to {url} (attempt {attempt+1}/{retries})")
+            logger.debug(f"🔑 Using query parameters: {querystring}")
+            response = requests.get(url, headers=headers, params=querystring)
+            response.raise_for_status()  # Raise an exception for bad status codes
+            logger.info(f"✅ Successfully retrieved {platform_key} data")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"❌ Error fetching {platform_key} data (attempt {attempt+1}/{retries}): {e}")
+            # Only backoff if not the last attempt
+            if attempt < retries - 1:
+                wait_time = backoff_times[attempt]
+                logger.info(f"⏳ Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            else:
+                logger.error(f"❌ All {retries} attempts failed for {platform_key}")
+                return None
 
 def save_results(platform_key, data, config):
     """Save the results to a JSON file in the results directory."""
