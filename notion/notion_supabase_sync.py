@@ -619,7 +619,7 @@ def main():
             sync.run_continuous(force_full_sync_first=args.full_sync)
     
     except KeyboardInterrupt:
-        logger.info("⏹️ Sync stopped by user")
+        logger.info("⏹️  Sync stopped by user")
     except Exception as e:
         logger.error(f"❌ Fatal error: {e}")
         raise
