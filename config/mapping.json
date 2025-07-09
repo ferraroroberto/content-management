@@ -131,6 +131,43 @@
             }
         }
     },
+    "threads_posts_threads_api": {
+        "type": "array",
+        "array_path": "data.data.mediaData.edges",
+        "fields": {
+            "post_id": {
+                "path": "node.thread_items.0.post.code",
+                "type": "string",
+                "required": true
+            },
+            "posted_at": {
+                "path": "node.thread_items.0.post.taken_at",
+                "type": "integer",
+                "required": true
+            },
+            "is_video": {
+                "path": "node.thread_items.0.post.media_type",
+                "type": "custom",
+                "transform": "value == 2",
+                "required": true
+            },            
+            "num_likes": {
+                "path": "node.thread_items.0.post.like_count",
+                "type": "integer",
+                "required": true
+            },
+            "num_comments": {
+                "path": "node.thread_items.0.post.text_post_app_info.direct_reply_count",
+                "type": "integer",
+                "required": true
+            },
+            "num_reshares": {
+                "path": "node.thread_items.0.post.text_post_app_info.repost_count",
+                "type": "integer",
+                "required": true
+            }
+        }
+    },
     "twitter_profile": {
         "fields": {
             "num_followers": {

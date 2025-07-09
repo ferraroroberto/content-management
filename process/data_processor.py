@@ -203,11 +203,11 @@ def process_array_data(data, mapping_config, file_date=None):
                 break
         else:
             # If we didn't find the target type, array_data might still be the instructions list
-            logger.warning(f"⚠️ Could not find instruction with type '{target_type}'")
+            logger.warning(f"⚠️  Could not find instruction with type '{target_type}'")
             array_data = []
     
     if not isinstance(array_data, list):
-        logger.warning(f"⚠️ Expected array at path {array_path}, got {type(array_data)}")
+        logger.warning(f"⚠️  Expected array at path {array_path}, got {type(array_data)}")
         return []
     
     field_mappings = mapping_config.get('fields', {})
@@ -291,6 +291,21 @@ def process_array_data(data, mapping_config, file_date=None):
     
     return results
 
+def get_alternative_mapping_keys(platform_key, mapping_config):
+    """Get a list of mapping keys to try, including alternatives with suffixes."""
+    alternatives = []
+    
+    # First try the exact key
+    if platform_key in mapping_config:
+        alternatives.append(platform_key)
+    
+    # Then find all keys that start with platform_key followed by underscore
+    for key in mapping_config.keys():
+        if key.startswith(platform_key + "_") and key != platform_key:
+            alternatives.append(key)
+    
+    return alternatives
+
 def process_json_file(file_path, mapping_config):
     """Process a single JSON file and extract mapped fields."""
     logger.debug(f"📄 Processing file: {file_path}")
@@ -303,6 +318,7 @@ def process_json_file(file_path, mapping_config):
         date = data.get('date')
         platform = data.get('platform', '').lower()  # Normalize to lowercase
         data_type = data.get('data_type', '').lower()  # Normalize to lowercase
+        api_config_used = data.get('api_config_used', '')  # Check if alternative API was used
         
         # Extract date from filename (just for reference, not used for filtering now)
         file_date = extract_date_from_filename(file_path)
@@ -310,53 +326,83 @@ def process_json_file(file_path, mapping_config):
         # Build platform key for mapping lookup
         platform_key = f"{platform}_{data_type}"
         
-        if platform_key not in mapping_config:
-            logger.warning(f"⚠️ No mapping configuration found for {platform_key}")
+        # Get all possible mapping keys to try
+        mapping_keys_to_try = get_alternative_mapping_keys(platform_key, mapping_config)
+        
+        if not mapping_keys_to_try:
+            logger.warning(f"⚠️  No mapping configuration found for {platform_key}")
             return None
         
-        platform_config = mapping_config[platform_key]
-        
-        # Check if this is array data type
-        if platform_config.get('type') == 'array':
-            records = process_array_data(data, platform_config, file_date)
+        # Try each mapping until one succeeds
+        for mapping_attempt, current_mapping_key in enumerate(mapping_keys_to_try):
+            if mapping_attempt > 0:
+                logger.info(f"🔄 Trying alternative mapping: {current_mapping_key}")
             
-            # Add metadata to each record
-            for record in records:
-                record['date'] = convert_to_date_string(date)
-                record['platform'] = platform
-                record['data_type'] = data_type
+            platform_config = mapping_config[current_mapping_key]
             
-            if records:
-                logger.info(f"✅ Extracted {len(records)} records from {os.path.basename(file_path)}")
-            else:
-                logger.warning(f"⚠️ No valid records extracted from {os.path.basename(file_path)}")
+            # Check if this is array data type
+            if platform_config.get('type') == 'array':
+                records = process_array_data(data, platform_config, file_date)
                 
-            return records
-        else:
-            # Process single record (existing logic)
-            result = {
-                'date': convert_to_date_string(date),
-                'platform': platform,
-                'data_type': data_type
-            }
-            
-            field_mappings = platform_config.get('fields', {})
-            
-            for field_name, field_config in field_mappings.items():
-                value = extract_field_value(data, field_config, field_name=field_name)
-                
-                if value is None and field_config.get('required', False):
-                    logger.warning(f"⚠️  Required field '{field_name}' not found in {file_path}")
-                
-                # Convert date fields to 'YYYY-MM-DD'
-                if field_name in ['posted_at', 'date', 'posted']:
-                    result[field_name] = convert_to_date_string(value)
+                # Check if we got valid records
+                if records and len(records) > 0:
+                    # Add metadata to each record
+                    for record in records:
+                        record['date'] = convert_to_date_string(date)
+                        record['platform'] = platform
+                        record['data_type'] = data_type
+                        if api_config_used:
+                            record['api_config_used'] = api_config_used
+                    
+                    logger.info(f"✅ Extracted {len(records)} records from {os.path.basename(file_path)} using mapping: {current_mapping_key}")
+                    return records
                 else:
-                    result[field_name] = convert_boolean_to_integer(value)
-            
-            logger.debug(f"✅ Extracted data: {result}")
-            logger.info(f"✅ Extracted 1 record from {os.path.basename(file_path)}")
-            return [result]  # Return as list for consistency
+                    # Try next mapping if available
+                    if mapping_attempt < len(mapping_keys_to_try) - 1:
+                        logger.warning(f"⚠️  No valid records extracted using {current_mapping_key}, trying next mapping...") 
+                        continue
+                    else:
+                        logger.warning(f"⚠️  No valid records extracted from {os.path.basename(file_path)} after trying all mappings")
+                        return None
+            else:
+                # Process single record (existing logic)
+                result = {
+                    'date': convert_to_date_string(date),
+                    'platform': platform,
+                    'data_type': data_type
+                }
+                if api_config_used:
+                    result['api_config_used'] = api_config_used
+                
+                field_mappings = platform_config.get('fields', {})
+                has_required_fields = True
+                
+                for field_name, field_config in field_mappings.items():
+                    value = extract_field_value(data, field_config, field_name=field_name)
+                    
+                    if value is None and field_config.get('required', False):
+                        has_required_fields = False
+                        logger.warning(f"⚠️  Required field '{field_name}' not found using {current_mapping_key}")
+                        break
+                    
+                    # Convert date fields to 'YYYY-MM-DD'
+                    if field_name in ['posted_at', 'date', 'posted']:
+                        result[field_name] = convert_to_date_string(value)
+                    else:
+                        result[field_name] = convert_boolean_to_integer(value)
+                
+                if has_required_fields:
+                    logger.debug(f"✅ Extracted data: {result}")
+                    logger.info(f"✅ Extracted 1 record from {os.path.basename(file_path)} using mapping: {current_mapping_key}")
+                    return [result]  # Return as list for consistency
+                else:
+                    # Try next mapping if available
+                    if mapping_attempt < len(mapping_keys_to_try) - 1:
+                        logger.warning(f"⚠️  Missing required fields using {current_mapping_key}, trying next mapping...")
+                        continue
+                    else:
+                        logger.warning(f"⚠️  Failed to extract required fields from {os.path.basename(file_path)} after trying all mappings")
+                        return None
         
     except Exception as e:
         logger.error(f"❌ Error processing file {file_path}: {e}")
@@ -409,7 +455,7 @@ def process_all_files(mapping_config, main_config=None, debug_mode=False):
     json_files = get_json_files(results_dir)
     
     if not json_files:
-        logger.warning("⚠️ No JSON files found in results directory")
+        logger.warning("⚠️  No JSON files found in results directory")
         return {}
     
     logger.info(f"📅 Processing all available data (no date filtering)")
@@ -443,7 +489,7 @@ def process_all_files(mapping_config, main_config=None, debug_mode=False):
         df = pd.DataFrame(records)
         
         if df.empty:
-            logger.warning(f"⚠️ No data extracted for: {key}")
+            logger.warning(f"⚠️  No data extracted for: {key}")
             continue
         
         # Order columns based on mapping configuration
@@ -529,13 +575,13 @@ def main(args=None):
     
     main_config = load_config()
     if not main_config:
-        logger.warning("⚠️ Failed to load main configuration, using defaults")
+        logger.warning("⚠️  Failed to load main configuration, using defaults")
     
     # Process all JSON files and get DataFrames by data type
     dataframes = process_all_files(mapping_config, main_config, debug_mode=debug_mode)
     
     if not dataframes:
-        logger.warning("⚠️ No data to save")
+        logger.warning("⚠️  No data to save")
         return
     
     # Display info about each DataFrame
