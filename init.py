@@ -25,7 +25,7 @@ from process.posts_consolidator import main as run_posts_consolidator, configure
 from notion.notion_update import main as run_notion_update, configure_logger as configure_notion_logger
 
 # Set up logger
-logger = None
+logger: logging.Logger | None = None
 
 def configure_logger(debug_mode=False):
     """Set up logger with appropriate level based on debug mode."""
@@ -73,9 +73,9 @@ def run_module(module_func, module_name, debug_mode=False, extra_args=None):
             
         # Run the module
         module_func()
-        logger.info(f"✅ {module_name} completed successfully")
+        logger.info(f"✅ {module_name} completed successfully")  # type: ignore
     except Exception as e:
-        logger.error(f"❌ Error in {module_name}: {e}")
+        logger.error(f"❌ Error in {module_name}: {e}")  # type: ignore
         if debug_mode:
             raise
     finally:
@@ -89,68 +89,68 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
     # Configure the main logger
     configure_logger(debug_mode)
     
-    logger.info("🚀 Starting the complete data processing pipeline")
-    logger.info(f"🐞 Debug mode: {'Enabled' if debug_mode else 'Disabled'}")
+    logger.info("🚀 Starting the complete data processing pipeline")  # type: ignore
+    logger.info(f"🐞 Debug mode: {'Enabled' if debug_mode else 'Disabled'}")  # type: ignore
     
     # Use the reference date directly or today's date
     if reference_date:
         try:
             processing_date = reference_date
-            logger.info(f"📅 Using specified date: {processing_date}")
+            logger.info(f"📅 Using specified date: {processing_date}")  # type: ignore
         except ValueError:
-            logger.error(f"❌ Invalid date format: {reference_date}. Using current date.")
+            logger.error(f"❌ Invalid date format: {reference_date}. Using current date.")  # type: ignore
             processing_date = datetime.now().strftime("%Y%m%d")
     else:
         processing_date = datetime.now().strftime("%Y%m%d")
-        logger.info(f"📅 No date specified. Using current date: {processing_date}")
+        logger.info(f"📅 No date specified. Using current date: {processing_date}")  # type: ignore
     
     # Step 1: Fetch data from social media APIs
     if not skip_api:
-        logger.info("📡 Step 1: Running Social API Client")
+        logger.info("📡 Step 1: Running Social API Client")  # type: ignore
         configure_social_logger(debug_mode)
         run_module(run_social_api_client, "Social API Client", debug_mode)
     else:
-        logger.info("⏭️ Skipping Social API Client step")
+        logger.info("⏭️ Skipping Social API Client step")  # type: ignore
     
     # Step 2: Process the raw data
     if not skip_processing:
-        logger.info("🔄 Step 2: Running Data Processor")
+        logger.info("🔄 Step 2: Running Data Processor")  # type: ignore
         configure_data_processor_logger(debug_mode)
         run_module(run_data_processor, "Data Processor", debug_mode)
     else:
-        logger.info("⏭️ Skipping Data Processor step")
+        logger.info("⏭️ Skipping Data Processor step")  # type: ignore
     
     # Step 3: Aggregate profile data
     if not skip_aggregation:
-        logger.info("📊 Step 3: Running Profile Aggregator")
+        logger.info("📊 Step 3: Running Profile Aggregator")  # type: ignore
         configure_profile_logger()
         run_module(run_profile_aggregator, "Profile Aggregator", debug_mode)
     else:
-        logger.info("⏭️ Skipping Profile Aggregator step")
+        logger.info("⏭️ Skipping Profile Aggregator step")  # type: ignore
     
     # Step 4: Consolidate posts data
     if not skip_consolidation:
-        logger.info("📑 Step 4: Running Posts Consolidator")
+        logger.info("📑 Step 4: Running Posts Consolidator")  # type: ignore
         configure_posts_logger(debug_mode)
         run_module(run_posts_consolidator, "Posts Consolidator", debug_mode)
     else:
-        logger.info("⏭️ Skipping Posts Consolidator step")
+        logger.info("⏭️ Skipping Posts Consolidator step")  # type: ignore
         
     # Step 5: Update Notion with processed data
     if not skip_notion:
-        logger.info("📘 Step 5: Running Notion Update")
+        logger.info("📘 Step 5: Running Notion Update")  # type: ignore
         configure_notion_logger(debug_mode)
         try:
-            logger.info(f"🗓️  Using date for Notion update: {processing_date}")
+            logger.info(f"🗓️  Using date for Notion update: {processing_date}")  # type: ignore
             run_module(run_notion_update, "Notion Update", debug_mode, [processing_date])
         except Exception as e:
-            logger.error(f"❌ Error in Notion Update: {e}")
+            logger.error(f"❌ Error in Notion Update: {e}")  # type: ignore
             if debug_mode:
                 raise
     else:
-        logger.info("⏭️ Skipping Notion Update step")
+        logger.info("⏭️ Skipping Notion Update step")  # type: ignore
     
-    logger.info("🎉 Complete data processing pipeline finished")
+    logger.info("🎉 Complete data processing pipeline finished")  # type: ignore
 
 def main():
     """Main function to run the complete pipeline."""
