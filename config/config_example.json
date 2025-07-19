@@ -10,7 +10,7 @@
         "profile_table": "profile"
     },
     "linkedin_profile": {
-        "api_url": "https://fresh-linkedin-profile-data.p.rapidapi.com/get-linkedin-profile",
+        "api_url": "https://fresh-linkedin-profile-data.p.rapidapi.com/get-profile-public-data",
         "api_key": "your_api_key_here",
         "api_host": "fresh-linkedin-profile-data.p.rapidapi.com",
         "querystring": {
