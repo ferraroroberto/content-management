@@ -2,7 +2,7 @@
 
 The Process module handles data processing, transformation, and database operations for social media analytics data. It takes raw JSON data from various social media platforms, processes it according to mapping configurations, and uploads it to a Supabase PostgreSQL database.
 
-## Overview
+## 🚀 Overview
 
 This module contains several components:
 
@@ -10,9 +10,10 @@ This module contains several components:
 2. **Supabase Uploader** - Handles database connections and data uploads
 3. **Profile Aggregator** - Consolidates profile data from multiple platforms
 4. **Posts Consolidator** - Merges posts data across platforms
-5. **Database Utilities** - Test connections and manage database operations
+5. **Supabase Relations Creator** - Creates relational structure from Notion database relations
+6. **Database Utilities** - Test connections and manage database operations
 
-## Components
+## 📊 Components
 
 ### 📊 data_processor.py
 
@@ -63,15 +64,39 @@ Merges posts data from all platforms:
 - Links posts to their URLs
 - Filters for posts from the previous day
 
+### 🔗 supabase_relations_creator.py
+
+Creates relational structure in Supabase from Notion database relations:
+- Loads Notion database list and relations data from JSON files
+- Creates junction tables for many-to-many relationships
+- Supports both local and cloud database environments
+- Provides dry-run mode for previewing changes
+- Handles table deduplication and cleanup operations
+
+**Key Features:**
+- Automatic junction table creation based on relation configurations
+- Support for self-referential relationships
+- Bidirectional relationship handling with option for deduplication
+- Comprehensive logging with emoji indicators
+- Environment-based configuration management
+- Dry-run mode for safe testing
+
+**Command Line Options:**
+- `--environment`: Choose between local/cloud database (default: cloud)
+- `--dry-run`: Preview changes without executing them
+- `--drop-all`: Remove all tables without recreating them
+- `--debug`: Enable detailed debug logging
+- `--de-duplicate`: Deduplicate junction tables (default: False)
+
 ### 🧪 Database Test Utilities
 
 - `supabase_test_connect.py` - Test database connectivity
 - `supabase_test_create_table.py` - Create test tables
 - `supabase_drop_all_tables.py` - Clean up database
 
-## Setup
+## ⚙️ Setup
 
-### Prerequisites
+### 📋 Prerequisites
 
 - Python 3.x
 - PostgreSQL database (local or Supabase cloud)
@@ -80,7 +105,7 @@ Merges posts data from all platforms:
   pip install pandas psycopg2-binary python-dotenv argparse
   ```
 
-### Environment Configuration
+### 🔧 Environment Configuration
 
 1. Copy `.env_example` to `.env`:
    ```bash
@@ -104,16 +129,16 @@ Merges posts data from all platforms:
    db_name_cloud=postgres
    ```
 
-### Configuration Files
+### 📁 Configuration Files
 
 The process module relies on configuration files in the `../config` directory:
 
 1. **config.json** - Main configuration with API settings and folder paths
 2. **mapping.json** - Field mapping rules for data transformation
 
-## Usage
+## 🚀 Usage
 
-### Basic Data Processing
+### 📊 Basic Data Processing
 
 Process all JSON files and create DataFrames:
 
@@ -121,7 +146,28 @@ Process all JSON files and create DataFrames:
 python data_processor.py
 ```
 
-### Command Line Options
+### 🔗 Creating Database Relations
+
+Create relational structure from Notion database relations:
+
+```bash
+# Preview changes without executing
+python supabase_relations_creator.py --dry-run
+
+# Create relations in cloud environment
+python supabase_relations_creator.py --environment cloud
+
+# Enable debug mode for detailed logging
+python supabase_relations_creator.py --debug
+
+# Deduplicate junction tables
+python supabase_relations_creator.py --de-duplicate
+
+# Drop all tables (use with caution)
+python supabase_relations_creator.py --drop-all
+```
+
+### 📝 Command Line Options
 
 #### data_processor.py
 
@@ -169,7 +215,7 @@ python posts_consolidator.py
 python posts_consolidator.py --debug
 ```
 
-## Data Flow
+## 📊 Data Flow
 
 1. **Input**: Raw JSON files in `results/raw/` directory
    - Format: `{platform}_{datatype}_{YYYY-MM-DD}.json`
@@ -182,22 +228,29 @@ python posts_consolidator.py --debug
 3. **Output**:
    - CSV/Excel files in `results/processed/`
    - Database tables in Supabase
+   - Relational structure with junction tables
 
-## Database Schema
+## 🗄️ Database Schema
 
-### Primary Keys by Data Type
+### 🔑 Primary Keys by Data Type
 
 - **Posts**: `date`, `platform`, `data_type`, `post_id`
 - **Profile**: `date`, `platform`, `data_type`
 - **Comments**: `comment_id`
 - **Insights/Metrics**: `post_id`, `date`
 
-### Aggregated Tables
+### 🔗 Aggregated Tables
 
 - **profile**: Consolidated follower counts across all platforms
 - **posts**: Unified posts data with video/non-video separation
 
-## Error Handling
+### 🔗 Junction Tables
+
+- **{table1}_to_{table2}**: Many-to-many relationships between different tables
+- **{table}_relations**: Self-referential relationships within the same table
+- **Deduplication**: Option to create single junction table for bidirectional relationships
+
+## ❌ Error Handling
 
 The module includes comprehensive error handling:
 
@@ -207,10 +260,11 @@ The module includes comprehensive error handling:
 - Missing required fields
 - Type conversion errors
 - Network timeouts
+- Relation creation failures
 
 All errors are logged with descriptive messages and emoji indicators.
 
-## Logging
+## 📝 Logging
 
 Uses custom logger with:
 - Console output with emoji indicators
@@ -218,7 +272,7 @@ Uses custom logger with:
 - File logging (optional)
 - Progress tracking for batch operations
 
-### Log Indicators:
+### 📊 Log Indicators:
 - 🚀 Starting/Processing
 - ✅ Success
 - ❌ Error
@@ -228,27 +282,37 @@ Uses custom logger with:
 - 🔄 Aggregation operations
 - 📊 Progress updates
 - 🐞 Debug mode
+- 🔗 Relation operations
+- 🗑️ Cleanup operations
 
-## Development
+## 🔧 Development
 
-### Adding New Platforms
+### ➕ Adding New Platforms
 
 1. Update `mapping.json` with field mappings
 2. Ensure raw data follows standard format
 3. Run data processor to test transformation
 4. Verify database table creation
 
-### Extending Functionality
+### 🔗 Adding New Relations
+
+1. Update Notion database relations configuration
+2. Run relations creator in dry-run mode to preview
+3. Execute relations creation
+4. Verify junction table structure
+
+### 🚀 Extending Functionality
 
 The module is designed to be extensible:
 - Add new data types in `get_primary_keys()`
 - Create custom field transformations in mapping
 - Add new aggregation SQL files
 - Implement additional consolidators
+- Extend relation creation logic
 
-## Troubleshooting
+## 🐛 Troubleshooting
 
-### Common Issues
+### ❗ Common Issues
 
 1. **Connection Failed**
    - Check `.env` file exists and has correct credentials
@@ -265,11 +329,17 @@ The module is designed to be extensible:
    - Check for null/missing values
    - Review date format handling
 
-### Debug Mode
+4. **Relation Creation Failures**
+   - Verify Notion database list and relations files exist
+   - Check database IDs match between files
+   - Review junction table naming conflicts
+
+### 🔍 Debug Mode
 
 Enable debug mode for detailed logging:
 ```bash
 python data_processor.py --debug
+python supabase_relations_creator.py --debug
 ```
 
 This provides:
@@ -277,3 +347,5 @@ This provides:
 - Raw data samples
 - SQL queries being executed
 - Detailed error messages
+- Relation creation breakdown
+- Junction table analysis

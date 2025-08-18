@@ -1,23 +1,26 @@
 # Notion Automation Tools
 
-This folder contains a collection of Python scripts for automating various Notion database operations, including syncing with Supabase, updating database entries, and analyzing database structures.
+This folder contains a comprehensive collection of Python scripts for automating various Notion database operations, including syncing with Supabase, updating database entries, analyzing database structures, and managing database relationships.
 
-## Overview
+## 🚀 Overview
 
-The Notion automation suite consists of three main tools:
+The Notion automation suite consists of six main tools:
 
 1. **notion_update.py** - Updates Notion database entries with data from Supabase
 2. **notion_supabase_sync.py** - Continuously syncs Notion databases to Supabase PostgreSQL
 3. **notion_database_structure.py** - Analyzes and exports Notion database structures
+4. **notion_database_list.py** - Lists and manages all Notion databases
+5. **notion_database_relations.py** - Extracts and analyzes database relationships
+6. **notion_unify_data.py** - Executes SQL to unify editorial data into consolidated tables
 
-## Prerequisites
+## 📋 Prerequisites
 
 - Python 3.7+
 - Notion API token
 - PostgreSQL database (Supabase)
 - Required Python packages (see requirements)
 
-## Installation
+## 🔧 Installation
 
 1. Install required packages:
 ```bash
@@ -28,7 +31,7 @@ pip install notion-client psycopg2-binary pandas python-dotenv requests
    - Copy `.env.example` to `.env` and fill in your credentials
    - Update `config/config.json` with your Notion API token and database settings
 
-## Configuration
+## ⚙️ Configuration
 
 ### config.json Structure
 
@@ -76,7 +79,7 @@ This file contains the list of Notion databases to sync. Each database entry inc
 
 Only databases with `"replication": true` will be synced to Supabase.
 
-## Tools Documentation
+## 🛠️ Tools Documentation
 
 ### 1. notion_update.py
 
@@ -162,7 +165,80 @@ python notion_database_structure.py --debug
 - Only processes databases marked for replication
 - Outputs to `database_sample/` directory
 
-## Database Sync Process
+### 4. notion_database_list.py
+
+Lists and manages all Notion databases, creating a comprehensive database inventory.
+
+**Usage:**
+```bash
+python notion_database_list.py [--config CONFIG_PATH] [--debug]
+```
+
+**Arguments:**
+- `--config`: Path to custom configuration file
+- `--debug`: Enable debug logging
+
+**Example:**
+```bash
+python notion_database_list.py --debug
+```
+
+**Features:**
+- Discovers all accessible Notion databases
+- Normalizes database names for PostgreSQL compatibility
+- Creates mapping between database IDs and table names
+- Generates `notion_database_list.json` for sync operations
+- Handles pagination for large numbers of databases
+
+### 5. notion_database_relations.py
+
+Extracts and analyzes database relationships from existing structure files.
+
+**Usage:**
+```bash
+python notion_database_relations.py
+```
+
+**Features:**
+- Processes existing database structure files in `database_sample/`
+- Identifies relation-type properties across databases
+- Maps related database IDs to Supabase table names
+- Generates relationship analysis for data modeling
+- Supports both hyphenated and non-hyphenated UUID formats
+
+### 6. notion_unify_data.py
+
+Executes SQL scripts to unify editorial data into consolidated tables.
+
+**Usage:**
+```bash
+python notion_unify_data.py [--debug]
+```
+
+**Arguments:**
+- `--debug`: Enable debug logging
+
+**Example:**
+```bash
+python notion_unify_data.py --debug
+```
+
+**Features:**
+- Reads SQL from `notion_unify_data.sql` file
+- Executes consolidation queries on Supabase database
+- Handles database connections and transactions
+- Provides detailed logging of SQL execution
+- Supports both local and cloud database environments
+
+## 📊 Database Sample Directory
+
+The `database_sample/` directory contains exported database structures and sample content:
+
+- **Structure files**: `*_structure.json` - Complete database schemas with property definitions
+- **Content files**: `*_content.csv` - Sample data (100 records) from each database
+- **Database coverage**: Includes articles, posts, newsletters, interactions, illustrations, and more
+
+## 🔗 Database Sync Process
 
 The sync process follows these steps:
 
@@ -172,7 +248,7 @@ The sync process follows these steps:
 4. **Incremental Updates**: Only syncs pages modified since last sync (unless `--full-sync` is used)
 5. **Conflict Resolution**: Uses UPSERT operations to handle existing records
 
-## Property Type Mapping
+## 🗂️ Property Type Mapping
 
 | Notion Type | PostgreSQL Type | Notes |
 |-------------|-----------------|-------|
@@ -192,7 +268,7 @@ The sync process follows these steps:
 | people | jsonb | Array of user IDs |
 | files | jsonb | Array of file URLs |
 
-## Tracking and Logging
+## 📈 Tracking and Logging
 
 ### Change Tracking
 
@@ -216,7 +292,7 @@ All scripts use a centralized logging configuration with:
 - Debug mode for detailed information
 - Error tracking with descriptive messages
 
-## Common Issues and Solutions
+## 🚨 Common Issues and Solutions
 
 ### Issue: "No row found for date"
 **Solution**: Ensure the Notion database has entries for the specified date. The date format should be YYYYMMDD.
@@ -230,15 +306,17 @@ All scripts use a centralized logging configuration with:
 ### Issue: "Column type mismatch"
 **Solution**: The sync script automatically handles type conversions. For persistent issues, check the source data format.
 
-## Best Practices
+## 💡 Best Practices
 
 1. **Test First**: Always run with `--debug` flag first to verify operations
 2. **Backup Data**: Ensure database backups before running full syncs
 3. **Monitor Logs**: Check logs regularly for warnings or errors
 4. **Incremental Syncs**: Use incremental syncs for regular updates to minimize API calls
 5. **Database List**: Keep `notion_database_list.json` updated with current database IDs
+6. **Relationship Analysis**: Use `notion_database_relations.py` to understand data dependencies
+7. **Data Unification**: Run `notion_unify_data.py` after major sync operations to consolidate data
 
-## Development
+## 🔧 Development
 
 ### Adding New Property Types
 
@@ -256,10 +334,19 @@ To add new field mappings for `notion_update.py`:
 2. Add field mappings in `update_field_mapping_*` objects
 3. Ensure Supabase tables have the required columns
 
-## License
+### Database Discovery Workflow
+
+1. Run `notion_database_list.py` to discover new databases
+2. Review and edit `notion_database_list.json` to set replication flags
+3. Use `notion_database_structure.py` to analyze new database schemas
+4. Run `notion_database_relations.py` to identify relationships
+5. Execute `notion_supabase_sync.py` to sync data
+6. Use `notion_unify_data.py` to consolidate related data
+
+## 📄 License
 
 This project is part of the automation suite for personal/business use.
 
-## Support
+## 🆘 Support
 
-For issues or questions, please check the logs first and ensure all configuration files are properly set up.
+For issues or questions, please check the logs first and ensure all configuration files are properly set up. The comprehensive logging system provides detailed information for troubleshooting.

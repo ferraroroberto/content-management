@@ -287,7 +287,7 @@ def populate_master_relations_table(connection, database_list, relations_data, t
         logger.error(f"❌ Error populating master relations table: {e}")
         return False
 
-def drop_junction_tables(connection, relations_data, database_list):
+def drop_junction_tables(connection, relations_data, database_list, deduplicate=True):
     """
     Drop all existing junction tables.
     
@@ -295,12 +295,13 @@ def drop_junction_tables(connection, relations_data, database_list):
         connection: Database connection
         relations_data (list): List of relation configurations
         database_list (list): List of database configurations
+        deduplicate (bool): If True, expect deduplicated tables. If False, expect separate tables for each direction.
     """
     try:
         db_mapping = create_database_mapping(database_list)
         junction_tables = set()
         
-        logger.debug("🔍 Collecting junction table names...")
+        logger.debug(f"🔍 Collecting junction table names (deduplicate: {deduplicate})...")
         
         # Collect all junction table names
         for relation_config in relations_data:
@@ -313,15 +314,29 @@ def drop_junction_tables(connection, relations_data, database_list):
                 
                 if origin_info.get('supabase_table') == related_info.get('supabase_table'):
                     junction_name = f"{origin_info.get('supabase_table', 'unknown')}_relations"
+                    junction_tables.add(junction_name)
+                    logger.debug(f"   📋 Junction table: {junction_name}")
                 else:
-                    tables = sorted([
-                        origin_info.get('supabase_table', 'unknown'),
-                        related_info.get('supabase_table', 'unknown')
-                    ])
-                    junction_name = f"{tables[0]}_to_{tables[1]}"
-                
-                junction_tables.add(junction_name)
-                logger.debug(f"   📋 Junction table: {junction_name}")
+                    if deduplicate:
+                        # Original behavior: one table per relationship direction
+                        tables = sorted([
+                            origin_info.get('supabase_table', 'unknown'),
+                            related_info.get('supabase_table', 'unknown')
+                        ])
+                        junction_name = f"{tables[0]}_to_{tables[1]}"
+                        junction_tables.add(junction_name)
+                        logger.debug(f"   📋 Junction table: {junction_name}")
+                    else:
+                        # New behavior: separate tables for each direction
+                        origin_table = origin_info.get('supabase_table', 'unknown')
+                        related_table = related_info.get('supabase_table', 'unknown')
+                        
+                        junction_name_forward = f"{origin_table}_to_{related_table}"
+                        junction_name_reverse = f"{related_table}_to_{origin_table}"
+                        
+                        junction_tables.add(junction_name_forward)
+                        junction_tables.add(junction_name_reverse)
+                        logger.debug(f"   📋 Junction tables: {junction_name_forward}, {junction_name_reverse}")
         
         logger.info(f"📊 Found {len(junction_tables)} unique junction tables")
         
@@ -338,7 +353,7 @@ def drop_junction_tables(connection, relations_data, database_list):
         logger.error(f"❌ Error dropping junction tables: {e}")
         return False
 
-def create_junction_tables(connection, relations_data, database_list):
+def create_junction_tables(connection, relations_data, database_list, deduplicate=True):
     """
     Create all junction tables based on relations data.
     
@@ -346,12 +361,13 @@ def create_junction_tables(connection, relations_data, database_list):
         connection: Database connection
         relations_data (list): List of relation configurations
         database_list (list): List of database configurations
+        deduplicate (bool): If True, create one table per relationship direction. If False, create separate tables for each direction.
     """
     try:
         db_mapping = create_database_mapping(database_list)
         created_tables = []
         
-        logger.debug("🔍 Creating junction tables...")
+        logger.debug(f"🔍 Creating junction tables (deduplicate: {deduplicate})...")
         
         for relation_config in relations_data:
             origin_db_id = relation_config['origin_database_id']
@@ -373,37 +389,81 @@ def create_junction_tables(connection, relations_data, database_list):
                         source_notion_id VARCHAR(255) NOT NULL,
                         target_notion_id VARCHAR(255) NOT NULL,
                         relation_field_name VARCHAR(255) NOT NULL,
-                        source_field_name VARCHAR(255) NOT NULL,
-                        created_at TIMESTAMP DEFAULT NOW(),
-                        UNIQUE(source_notion_id, target_notion_id, relation_field_name, source_field_name)
+                        UNIQUE(source_notion_id, target_notion_id, relation_field_name)
                     );
                     
                     CREATE INDEX IF NOT EXISTS idx_{junction_name}_source ON "{junction_name}"(source_notion_id);
                     CREATE INDEX IF NOT EXISTS idx_{junction_name}_target ON "{junction_name}"(target_notion_id);
                     CREATE INDEX IF NOT EXISTS idx_{junction_name}_field ON "{junction_name}"(relation_field_name);
-                    CREATE INDEX IF NOT EXISTS idx_{junction_name}_source_field ON "{junction_name}"(source_field_name);
                     """
                 else:
-                    # Regular junction table
-                    tables = sorted([origin_table, related_table])
-                    junction_name = f"{tables[0]}_to_{tables[1]}"
-                    
-                    create_sql = f"""
-                    CREATE TABLE IF NOT EXISTS "{junction_name}" (
-                        id SERIAL PRIMARY KEY,
-                        {origin_table}_notion_id VARCHAR(255) NOT NULL,
-                        {related_table}_notion_id VARCHAR(255) NOT NULL,
-                        relation_field_name VARCHAR(255) NOT NULL,
-                        source_field_name VARCHAR(255) NOT NULL,
-                        created_at TIMESTAMP DEFAULT NOW(),
-                        UNIQUE({origin_table}_notion_id, {related_table}_notion_id, relation_field_name, source_field_name)
-                    );
-                    
-                    CREATE INDEX IF NOT EXISTS idx_{junction_name}_origin ON "{junction_name}"({origin_table}_notion_id);
-                    CREATE INDEX IF NOT EXISTS idx_{junction_name}_related ON "{junction_name}"({related_table}_notion_id);
-                    CREATE INDEX IF NOT EXISTS idx_{junction_name}_field ON "{junction_name}"(relation_field_name);
-                    CREATE INDEX IF NOT EXISTS idx_{junction_name}_source_field ON "{junction_name}"(source_field_name);
-                    """
+                    if deduplicate:
+                        # Create one table per relationship direction (original behavior)
+                        tables = sorted([origin_table, related_table])
+                        junction_name = f"{tables[0]}_to_{tables[1]}"
+                        
+                        create_sql = f"""
+                        CREATE TABLE IF NOT EXISTS "{junction_name}" (
+                            id SERIAL PRIMARY KEY,
+                            {origin_table}_notion_id VARCHAR(255) NOT NULL,
+                            relation_field_name VARCHAR(255) NOT NULL,
+                            {related_table}_notion_id VARCHAR(255) NOT NULL,
+                            UNIQUE({origin_table}_notion_id, relation_field_name, {related_table}_notion_id)
+                        );
+                        
+                        CREATE INDEX IF NOT EXISTS idx_{junction_name}_origin ON "{junction_name}"({origin_table}_notion_id);
+                        CREATE INDEX IF NOT EXISTS idx_{junction_name}_related ON "{junction_name}"({related_table}_notion_id);
+                        CREATE INDEX IF NOT EXISTS idx_{junction_name}_field ON "{junction_name}"(relation_field_name);
+                        """
+                    else:
+                        # Create separate tables for each direction
+                        junction_name_forward = f"{origin_table}_to_{related_table}"
+                        junction_name_reverse = f"{related_table}_to_{origin_table}"
+                        
+                        # Forward direction table
+                        create_sql_forward = f"""
+                        CREATE TABLE IF NOT EXISTS "{junction_name_forward}" (
+                            id SERIAL PRIMARY KEY,
+                            {origin_table}_notion_id VARCHAR(255) NOT NULL,
+                            relation_field_name VARCHAR(255) NOT NULL,
+                            {related_table}_notion_id VARCHAR(255) NOT NULL,
+                            UNIQUE({origin_table}_notion_id, relation_field_name, {related_table}_notion_id)
+                        );
+                        
+                        CREATE INDEX IF NOT EXISTS idx_{junction_name_forward}_origin ON "{junction_name_forward}"({origin_table}_notion_id);
+                        CREATE INDEX IF NOT EXISTS idx_{junction_name_forward}_related ON "{junction_name_forward}"({related_table}_notion_id);
+                        CREATE INDEX IF NOT EXISTS idx_{junction_name_forward}_field ON "{junction_name_forward}"(relation_field_name);
+                        """
+                        
+                        # Reverse direction table
+                        create_sql_reverse = f"""
+                        CREATE TABLE IF NOT EXISTS "{junction_name_reverse}" (
+                            id SERIAL PRIMARY KEY,
+                            {related_table}_notion_id VARCHAR(255) NOT NULL,
+                            relation_field_name VARCHAR(255) NOT NULL,
+                            {origin_table}_notion_id VARCHAR(255) NOT NULL,
+                            UNIQUE({related_table}_notion_id, relation_field_name, {origin_table}_notion_id)
+                        );
+                        
+                        CREATE INDEX IF NOT EXISTS idx_{junction_name_reverse}_origin ON "{junction_name_reverse}"({related_table}_notion_id);
+                        CREATE INDEX IF NOT EXISTS idx_{junction_name_reverse}_related ON "{junction_name_reverse}"({origin_table}_notion_id);
+                        CREATE INDEX IF NOT EXISTS idx_{junction_name_reverse}_field ON "{junction_name_reverse}"(relation_field_name);
+                        """
+                        
+                        # Create both tables
+                        with connection.cursor() as cursor:
+                            cursor.execute(create_sql_forward)
+                            cursor.execute(create_sql_reverse)
+                        
+                        if junction_name_forward not in created_tables:
+                            created_tables.append(junction_name_forward)
+                            logger.info(f"✅ Created junction table {junction_name_forward} - {origin_table} -> {related_table} via '{relation['field_name']}'")
+                        
+                        if junction_name_reverse not in created_tables:
+                            created_tables.append(junction_name_reverse)
+                            logger.info(f"✅ Created junction table {junction_name_reverse} - {related_table} -> {origin_table} via '{relation['field_name']}'")
+                        
+                        continue  # Skip the single table creation below
                 
                 with connection.cursor() as cursor:
                     cursor.execute(create_sql)
@@ -419,7 +479,7 @@ def create_junction_tables(connection, relations_data, database_list):
         logger.error(f"❌ Error creating junction tables: {e}")
         return False
 
-def extract_relations_from_source_tables(connection, relations_data, database_list):
+def extract_relations_from_source_tables(connection, relations_data, database_list, deduplicate=True):
     """
     Extract relations from source tables using SQL for bulk operations.
     
@@ -427,6 +487,7 @@ def extract_relations_from_source_tables(connection, relations_data, database_li
         connection: Database connection
         relations_data: Relations configuration data
         database_list: List of database information
+        deduplicate (bool): If True, expect deduplicated tables. If False, expect separate tables for each direction.
     
     Returns:
         bool: True if successful, False otherwise
@@ -486,22 +547,21 @@ def extract_relations_from_source_tables(connection, relations_data, database_li
                     junction_name = f"{origin_table}_relations"
                     # Use SQL to extract and insert all relations at once
                     insert_sql = f"""
-                    INSERT INTO "{junction_name}" (source_notion_id, target_notion_id, relation_field_name, source_field_name)
+                    INSERT INTO "{junction_name}" (source_notion_id, target_notion_id, relation_field_name)
                     SELECT 
                         notion_id as source_notion_id,
                         jsonb_array_elements_text(notion_data_jsonb->%s) as target_notion_id,
-                        %s as relation_field_name,
-                        %s as source_field_name
+                        %s as relation_field_name
                     FROM "{origin_table}"
                     WHERE notion_data_jsonb->%s IS NOT NULL 
                     AND jsonb_typeof(notion_data_jsonb->%s) = 'array'
                     AND jsonb_array_length(notion_data_jsonb->%s) > 0
-                    ON CONFLICT (source_notion_id, target_notion_id, relation_field_name, source_field_name) DO NOTHING
+                    ON CONFLICT (source_notion_id, target_notion_id, relation_field_name) DO NOTHING
                     """
                     
                     try:
                         with connection.cursor() as cursor:
-                            cursor.execute(insert_sql, (field_name, field_name, field_name, field_name, field_name, field_name))
+                            cursor.execute(insert_sql, (field_name, field_name, field_name, field_name, field_name))
                             relations_inserted = cursor.rowcount
                             total_relations += relations_inserted
                             logger.info(f"✅ Inserted {relations_inserted} relations for {field_name} in {junction_name}")
@@ -510,33 +570,61 @@ def extract_relations_from_source_tables(connection, relations_data, database_li
                         continue
                         
                 else:
-                    tables = sorted([origin_table, related_table])
-                    junction_name = f"{tables[0]}_to_{tables[1]}"
-                    
-                    # Use SQL to extract and insert all relations at once
-                    insert_sql = f"""
-                    INSERT INTO "{junction_name}" ({origin_table}_notion_id, {related_table}_notion_id, relation_field_name, source_field_name)
-                    SELECT 
-                        notion_id as {origin_table}_notion_id,
-                        jsonb_array_elements_text(notion_data_jsonb->%s) as {related_table}_notion_id,
-                        %s as relation_field_name,
-                        %s as source_field_name
-                    FROM "{origin_table}"
-                    WHERE notion_data_jsonb->%s IS NOT NULL 
-                    AND jsonb_typeof(notion_data_jsonb->%s) = 'array'
-                    AND jsonb_array_length(notion_data_jsonb->%s) > 0
-                    ON CONFLICT ({origin_table}_notion_id, {related_table}_notion_id, relation_field_name, source_field_name) DO NOTHING
-                    """
-                    
-                    try:
-                        with connection.cursor() as cursor:
-                            cursor.execute(insert_sql, (field_name, field_name, field_name, field_name, field_name, field_name))
-                            relations_inserted = cursor.rowcount
-                            total_relations += relations_inserted
-                            logger.info(f"✅ Inserted {relations_inserted} relations for {field_name} in {junction_name}")
-                    except Exception as e:
-                        logger.error(f"❌ Error inserting relations for {field_name} in {junction_name}: {e}")
-                        continue
+                    if deduplicate:
+                        # Original behavior: one table per relationship direction
+                        tables = sorted([origin_table, related_table])
+                        junction_name = f"{tables[0]}_to_{tables[1]}"
+                        
+                        # Use SQL to extract and insert all relations at once
+                        insert_sql = f"""
+                        INSERT INTO "{junction_name}" ({origin_table}_notion_id, relation_field_name, {related_table}_notion_id)
+                        SELECT 
+                            notion_id as {origin_table}_notion_id,
+                            %s as relation_field_name,
+                            jsonb_array_elements_text(notion_data_jsonb->%s) as {related_table}_notion_id
+                        FROM "{origin_table}"
+                        WHERE notion_data_jsonb->%s IS NOT NULL 
+                        AND jsonb_typeof(notion_data_jsonb->%s) = 'array'
+                        AND jsonb_array_length(notion_data_jsonb->%s) > 0
+                        ON CONFLICT ({origin_table}_notion_id, relation_field_name, {related_table}_notion_id) DO NOTHING
+                        """
+                        
+                        try:
+                            with connection.cursor() as cursor:
+                                cursor.execute(insert_sql, (field_name, field_name, field_name, field_name, field_name))
+                                relations_inserted = cursor.rowcount
+                                total_relations += relations_inserted
+                                logger.info(f"✅ Inserted {relations_inserted} relations for {field_name} in {junction_name}")
+                        except Exception as e:
+                            logger.error(f"❌ Error inserting relations for {field_name} in {junction_name}: {e}")
+                            continue
+                    else:
+                        # New behavior: separate tables for each direction
+                        junction_name_forward = f"{origin_table}_to_{related_table}"
+                        
+                        # Use SQL to extract and insert all relations at once
+                        insert_sql = f"""
+                        INSERT INTO "{junction_name_forward}" ({origin_table}_notion_id, relation_field_name, {related_table}_notion_id)
+                        SELECT 
+                            notion_id as {origin_table}_notion_id,
+                            %s as relation_field_name,
+                            jsonb_array_elements_text(notion_data_jsonb->%s) as {related_table}_notion_id
+                        FROM "{origin_table}"
+                        WHERE notion_data_jsonb->%s IS NOT NULL 
+                        AND jsonb_typeof(notion_data_jsonb->%s) = 'array'
+                        AND jsonb_array_length(notion_data_jsonb->%s) > 0
+                        ON CONFLICT ({origin_table}_notion_id, relation_field_name, {related_table}_notion_id) DO NOTHING
+                        """
+                        
+                        try:
+                            with connection.cursor() as cursor:
+                                cursor.execute(insert_sql, (field_name, field_name, field_name, field_name, field_name))
+                                relations_inserted = cursor.rowcount
+                                total_relations += relations_inserted
+                                logger.info(f"✅ Inserted {relations_inserted} relations for {field_name} in {junction_name_forward}")
+                        except Exception as e:
+                            logger.error(f"❌ Error inserting relations for {field_name} in {junction_name_forward}: {e}")
+                            continue
         
         logger.info(f"✅ Extracted and inserted {total_relations} relations total")
         return True
@@ -547,15 +635,16 @@ def extract_relations_from_source_tables(connection, relations_data, database_li
 
 
 
-def create_all_relations(environment="cloud", db_config=None):
+def create_all_relations(environment="cloud", db_config=None, deduplicate=True):
     """
     Create all relations: master table, junction tables, and populate with data.
     
     Args:
         environment (str): Database environment to use
         db_config (dict, optional): Database configuration
+        deduplicate (bool): If True, create one table per relationship direction. If False, create separate tables for each direction.
     """
-    logger.info("🚀 Starting relations creation process")
+    logger.info(f"🚀 Starting relations creation process (deduplicate: {deduplicate})")
     
     # Get database connection
     connection = get_db_connection(db_config, environment)
@@ -573,7 +662,7 @@ def create_all_relations(environment="cloud", db_config=None):
             return False
         
         # Step 3: Drop existing junction tables
-        if not drop_junction_tables(connection, relations_data, database_list):
+        if not drop_junction_tables(connection, relations_data, database_list, deduplicate):
             return False
         
         # Step 4: Create master relations table
@@ -585,11 +674,11 @@ def create_all_relations(environment="cloud", db_config=None):
             return False
         
         # Step 6: Create junction tables
-        if not create_junction_tables(connection, relations_data, database_list):
+        if not create_junction_tables(connection, relations_data, database_list, deduplicate):
             return False
         
         # Step 7: Extract and populate relations data
-        if not extract_relations_from_source_tables(connection, relations_data, database_list):
+        if not extract_relations_from_source_tables(connection, relations_data, database_list, deduplicate):
             return False
         
         logger.info("✅ Relations creation process completed successfully!")
@@ -603,14 +692,15 @@ def create_all_relations(environment="cloud", db_config=None):
             connection.close()
             logger.debug("Database connection closed")
 
-def drop_all_tables(environment="cloud"):
+def drop_all_tables(environment="cloud", deduplicate=True):
     """
     Drop all tables in the Supabase database.
     
     Args:
         environment (str): Database environment to use
+        deduplicate (bool): If True, expect deduplicated tables. If False, expect separate tables for each direction.
     """
-    logger.info("🚀 Starting drop_all_tables process")
+    logger.info(f"🚀 Starting drop_all_tables process (deduplicate: {deduplicate})")
     
     db_config = load_db_config(environment)
     if not db_config:
@@ -637,10 +727,10 @@ def drop_all_tables(environment="cloud"):
             logger.warning("⚠️ Could not drop notion_relations_master table.")
         
         # Drop all junction tables
-        if not drop_junction_tables(connection, relations_data, database_list):
+        if not drop_junction_tables(connection, relations_data, database_list, deduplicate):
             logger.warning("⚠️ Could not drop junction tables.")
         
-        logger.info("✅ All tables dropped successfully.")
+
         return True
         
     except Exception as e:
@@ -660,6 +750,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Show what would be created without executing")
     parser.add_argument("--drop-all", action="store_true", help="Drop all tables without recreating them")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument("--de-duplicate", action="store_true", help="Deduplicate junction tables (default: False)")
     args = parser.parse_args()
     
     # Configure debug logging if requested
@@ -678,7 +769,7 @@ def main():
     
     if args.drop_all:
         logger.info("🗑️  DROP ALL MODE - Dropping all tables without recreating them")
-        success = drop_all_tables(args.environment)
+        success = drop_all_tables(args.environment, deduplicate=args.de_duplicate)
         if success:
             logger.info("✅ All tables dropped successfully")
         else:
@@ -687,7 +778,7 @@ def main():
         return
     
     if args.dry_run:
-        logger.info("🔍 DRY RUN MODE - No changes will be made to database")
+        logger.info(f"🔍 DRY RUN MODE - No changes will be made to database (deduplicate: {args.de_duplicate})")
         # Load and display what would be created
         database_list, relations_data = load_notion_data()
         if database_list and relations_data:
@@ -719,14 +810,29 @@ def main():
                         # Determine junction table name
                         if origin_table == related_table:
                             junction_name = f"{origin_table}_relations"
+                            junction_tables.add(junction_name)
                         else:
-                            tables = sorted([origin_table, related_table])
-                            junction_name = f"{tables[0]}_to_{tables[1]}"
+                            if args.de_duplicate:
+                                # Original behavior: one table per relationship direction
+                                tables = sorted([origin_table, related_table])
+                                junction_name = f"{tables[0]}_to_{tables[1]}"
+                                junction_tables.add(junction_name)
+                            else:
+                                # New behavior: separate tables for each direction
+                                junction_name_forward = f"{origin_table}_to_{related_table}"
+                                junction_name_reverse = f"{related_table}_to_{origin_table}"
+                                junction_tables.add(junction_name_forward)
+                                junction_tables.add(junction_name_reverse)
                         
-                        junction_tables.add(junction_name)
                         total_relations += 1
                         
-                        logger.debug(f"       🔗 '{relation['field_name']}' -> {related_name} ({related_table}) [Junction: {junction_name}]")
+                        if origin_table == related_table:
+                            logger.debug(f"       🔗 '{relation['field_name']}' -> {related_name} ({related_table}) [Junction: {junction_name}]")
+                        else:
+                            if args.de_duplicate:
+                                logger.debug(f"       🔗 '{relation['field_name']}' -> {related_name} ({related_table}) [Junction: {junction_name}]")
+                            else:
+                                logger.debug(f"       🔗 '{relation['field_name']}' -> {related_name} ({related_table}) [Junctions: {origin_table}_to_{related_table}, {related_table}_to_{origin_table}]")
                 
                 logger.debug(f"📊 SUMMARY:")
                 logger.debug(f"   Total individual relations: {total_relations}")
@@ -756,7 +862,7 @@ def main():
         return
     
     # Execute relations creation
-    success = create_all_relations(args.environment)
+    success = create_all_relations(args.environment, deduplicate=args.de_duplicate)
     
     if success:
         logger.info("✅ Relations creation completed successfully")
