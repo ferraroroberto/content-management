@@ -29,7 +29,7 @@ WITH base_dates AS (
 )
 
 SELECT 
-    base_dates.date
+    base_dates.date::date as date
     , linkedin_profile.num_followers as num_followers_linkedin
     , instagram_profile.num_followers as num_followers_instagram
     , twitter_profile.num_followers as num_followers_twitter
