@@ -1,0 +1,618 @@
+[
+  {
+    "origin_database_id": "67fbcee66711465c852ebf97303787a3",
+    "origin_supabase_table": "notion_articles",
+    "relations": [
+      {
+        "field_name": "author or source",
+        "related_database_id": "33a1990d72f949f0983acd55ccd15724",
+        "related_supabase_table": "notion_connections"
+      },
+      {
+        "field_name": "comments",
+        "related_database_id": "ccbe8e9e71644f24a08d0fa982ccf8ef",
+        "related_supabase_table": "notion_comments"
+      },
+      {
+        "field_name": "illustration",
+        "related_database_id": "f7008956ade24505bdc2c7faa9ed7902",
+        "related_supabase_table": "notion_illustrations"
+      },
+      {
+        "field_name": "news",
+        "related_database_id": "71fed31953b84183a9e77c48493bf9f4",
+        "related_supabase_table": "notion_newsletter"
+      },
+      {
+        "field_name": "editorial SB",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      },
+      {
+        "field_name": "posts",
+        "related_database_id": "960d404471f841fc999640c119f753ec",
+        "related_supabase_table": "notion_posts"
+      },
+      {
+        "field_name": "publish LI",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      }
+    ]
+  },
+  {
+    "origin_database_id": "fb47feb4fc974def8385e6a865aa68ba",
+    "origin_supabase_table": "notion_books",
+    "relations": [
+      {
+        "field_name": "thread LI",
+        "related_database_id": "960d404471f841fc999640c119f753ec",
+        "related_supabase_table": "notion_posts"
+      },
+      {
+        "field_name": "💡 author",
+        "related_database_id": "33a1990d72f949f0983acd55ccd15724",
+        "related_supabase_table": "notion_connections"
+      },
+      {
+        "field_name": "illustrations",
+        "related_database_id": "f7008956ade24505bdc2c7faa9ed7902",
+        "related_supabase_table": "notion_illustrations"
+      },
+      {
+        "field_name": "recommendations",
+        "related_database_id": "f724da75ebd3413184af8de92c857619",
+        "related_supabase_table": "notion_books_recommendations"
+      },
+      {
+        "field_name": "📰 newsletter",
+        "related_database_id": "71fed31953b84183a9e77c48493bf9f4",
+        "related_supabase_table": "notion_newsletter"
+      },
+      {
+        "field_name": "comments",
+        "related_database_id": "ccbe8e9e71644f24a08d0fa982ccf8ef",
+        "related_supabase_table": "notion_comments"
+      }
+    ]
+  },
+  {
+    "origin_database_id": "f724da75ebd3413184af8de92c857619",
+    "origin_supabase_table": "notion_books_recommendations",
+    "relations": [
+      {
+        "field_name": "connection",
+        "related_database_id": "33a1990d72f949f0983acd55ccd15724",
+        "related_supabase_table": "notion_connections"
+      },
+      {
+        "field_name": "book",
+        "related_database_id": "fb47feb4fc974def8385e6a865aa68ba",
+        "related_supabase_table": "notion_books"
+      }
+    ]
+  },
+  {
+    "origin_database_id": "fe6392688d6a462492c3d56da753f851",
+    "origin_supabase_table": "notion_clips",
+    "relations": [
+      {
+        "field_name": "TikTok",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      },
+      {
+        "field_name": "Reels",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      },
+      {
+        "field_name": "episode",
+        "related_database_id": "d44e8301bfea44e0a8803314ffeeb807",
+        "related_supabase_table": "notion_episodes"
+      },
+      {
+        "field_name": "LinkedIn",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      },
+      {
+        "field_name": "comments",
+        "related_database_id": "ccbe8e9e71644f24a08d0fa982ccf8ef",
+        "related_supabase_table": "notion_comments"
+      },
+      {
+        "field_name": "YouTube",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      },
+      {
+        "field_name": "Twitter",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      }
+    ]
+  },
+  {
+    "origin_database_id": "ccbe8e9e71644f24a08d0fa982ccf8ef",
+    "origin_supabase_table": "notion_comments",
+    "relations": [
+      {
+        "field_name": "author or source",
+        "related_database_id": "33a1990d72f949f0983acd55ccd15724",
+        "related_supabase_table": "notion_connections"
+      },
+      {
+        "field_name": "article",
+        "related_database_id": "67fbcee66711465c852ebf97303787a3",
+        "related_supabase_table": "notion_articles"
+      },
+      {
+        "field_name": "book",
+        "related_database_id": "fb47feb4fc974def8385e6a865aa68ba",
+        "related_supabase_table": "notion_books"
+      },
+      {
+        "field_name": "clip",
+        "related_database_id": "fe6392688d6a462492c3d56da753f851",
+        "related_supabase_table": "notion_clips"
+      },
+      {
+        "field_name": "illustration",
+        "related_database_id": "f7008956ade24505bdc2c7faa9ed7902",
+        "related_supabase_table": "notion_illustrations"
+      }
+    ]
+  },
+  {
+    "origin_database_id": "a3cce70b66fe4a3aa5860cc376c4a242",
+    "origin_supabase_table": "notion_companies",
+    "relations": [
+      {
+        "field_name": "connections",
+        "related_database_id": "33a1990d72f949f0983acd55ccd15724",
+        "related_supabase_table": "notion_connections"
+      }
+    ]
+  },
+  {
+    "origin_database_id": "569fc5035d6d434796a2e039c66829cd",
+    "origin_supabase_table": "notion_concepts",
+    "relations": [
+      {
+        "field_name": "visualtypes",
+        "related_database_id": "81a8464d50af40aab88df43048495844",
+        "related_supabase_table": "notion_visual_types"
+      }
+    ]
+  },
+  {
+    "origin_database_id": "33a1990d72f949f0983acd55ccd15724",
+    "origin_supabase_table": "notion_connections",
+    "relations": [
+      {
+        "field_name": "original sources",
+        "related_database_id": "e33b1ce2be7e45d1a7a2be84dead6095",
+        "related_supabase_table": "notion_objects"
+      },
+      {
+        "field_name": "books recommended",
+        "related_database_id": "f724da75ebd3413184af8de92c857619",
+        "related_supabase_table": "notion_books_recommendations"
+      },
+      {
+        "field_name": "comments",
+        "related_database_id": "ccbe8e9e71644f24a08d0fa982ccf8ef",
+        "related_supabase_table": "notion_comments"
+      },
+      {
+        "field_name": "articles",
+        "related_database_id": "67fbcee66711465c852ebf97303787a3",
+        "related_supabase_table": "notion_articles"
+      },
+      {
+        "field_name": "💬 1:1",
+        "related_database_id": "80266205c0f34a34ae6b97d65c914884",
+        "related_supabase_table": "notion_one_on_one_log"
+      },
+      {
+        "field_name": "company",
+        "related_database_id": "a3cce70b66fe4a3aa5860cc376c4a242",
+        "related_supabase_table": "notion_companies"
+      },
+      {
+        "field_name": "tasks",
+        "related_database_id": "2c3734f247084f8999201105cb8c0f2b",
+        "related_supabase_table": "notion_tasks"
+      },
+      {
+        "field_name": "features",
+        "related_database_id": "a49ef53f567e4b8e877fc2bdd90a1d9f",
+        "related_supabase_table": "notion_wins_and_features"
+      },
+      {
+        "field_name": "interactions",
+        "related_database_id": "2bc5f8dd00f04305a11538ddb0b12c3b",
+        "related_supabase_table": "notion_interactions"
+      },
+      {
+        "field_name": "prospect",
+        "related_database_id": "0cf1f74e32754e638cf33f85d3484e2b",
+        "related_supabase_table": "notion_beta_testers"
+      },
+      {
+        "field_name": "podcast episodes",
+        "related_database_id": "d44e8301bfea44e0a8803314ffeeb807",
+        "related_supabase_table": "notion_episodes"
+      },
+      {
+        "field_name": "🎨 illustrations",
+        "related_database_id": "f7008956ade24505bdc2c7faa9ed7902",
+        "related_supabase_table": "notion_illustrations"
+      },
+      {
+        "field_name": "licensed",
+        "related_database_id": "f7008956ade24505bdc2c7faa9ed7902",
+        "related_supabase_table": "notion_illustrations"
+      },
+      {
+        "field_name": "books",
+        "related_database_id": "fb47feb4fc974def8385e6a865aa68ba",
+        "related_supabase_table": "notion_books"
+      },
+      {
+        "field_name": "coaching processes",
+        "related_database_id": "efbd603431814079851b969dd674597e",
+        "related_supabase_table": "notion_coaching_processes"
+      }
+    ]
+  },
+  {
+    "origin_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+    "origin_supabase_table": "notion_editorial",
+    "relations": [
+      {
+        "field_name": "illustration TK",
+        "related_database_id": "f7008956ade24505bdc2c7faa9ed7902",
+        "related_supabase_table": "notion_illustrations"
+      },
+      {
+        "field_name": "illustration TW",
+        "related_database_id": "f7008956ade24505bdc2c7faa9ed7902",
+        "related_supabase_table": "notion_illustrations"
+      },
+      {
+        "field_name": "post LI",
+        "related_database_id": "960d404471f841fc999640c119f753ec",
+        "related_supabase_table": "notion_posts"
+      },
+      {
+        "field_name": "illustration TH",
+        "related_database_id": "f7008956ade24505bdc2c7faa9ed7902",
+        "related_supabase_table": "notion_illustrations"
+      },
+      {
+        "field_name": "illustration BS",
+        "related_database_id": "f7008956ade24505bdc2c7faa9ed7902",
+        "related_supabase_table": "notion_illustrations"
+      },
+      {
+        "field_name": "back",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      },
+      {
+        "field_name": "article SB",
+        "related_database_id": "67fbcee66711465c852ebf97303787a3",
+        "related_supabase_table": "notion_articles"
+      },
+      {
+        "field_name": "illustration IG",
+        "related_database_id": "f7008956ade24505bdc2c7faa9ed7902",
+        "related_supabase_table": "notion_illustrations"
+      },
+      {
+        "field_name": "newsletter LI",
+        "related_database_id": "71fed31953b84183a9e77c48493bf9f4",
+        "related_supabase_table": "notion_newsletter"
+      },
+      {
+        "field_name": "post IG",
+        "related_database_id": "960d404471f841fc999640c119f753ec",
+        "related_supabase_table": "notion_posts"
+      },
+      {
+        "field_name": "illustration LI",
+        "related_database_id": "f7008956ade24505bdc2c7faa9ed7902",
+        "related_supabase_table": "notion_illustrations"
+      },
+      {
+        "field_name": "illustration SB",
+        "related_database_id": "f7008956ade24505bdc2c7faa9ed7902",
+        "related_supabase_table": "notion_illustrations"
+      },
+      {
+        "field_name": "clip IG(v)",
+        "related_database_id": "fe6392688d6a462492c3d56da753f851",
+        "related_supabase_table": "notion_clips"
+      },
+      {
+        "field_name": "next",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      },
+      {
+        "field_name": "clip YT(v)",
+        "related_database_id": "fe6392688d6a462492c3d56da753f851",
+        "related_supabase_table": "notion_clips"
+      },
+      {
+        "field_name": "illustration YT",
+        "related_database_id": "f7008956ade24505bdc2c7faa9ed7902",
+        "related_supabase_table": "notion_illustrations"
+      },
+      {
+        "field_name": "clip TK(v)",
+        "related_database_id": "fe6392688d6a462492c3d56da753f851",
+        "related_supabase_table": "notion_clips"
+      },
+      {
+        "field_name": "clip LI(v)",
+        "related_database_id": "fe6392688d6a462492c3d56da753f851",
+        "related_supabase_table": "notion_clips"
+      },
+      {
+        "field_name": "article LI",
+        "related_database_id": "67fbcee66711465c852ebf97303787a3",
+        "related_supabase_table": "notion_articles"
+      },
+      {
+        "field_name": "clip TW(v)",
+        "related_database_id": "fe6392688d6a462492c3d56da753f851",
+        "related_supabase_table": "notion_clips"
+      },
+      {
+        "field_name": "post SB",
+        "related_database_id": "960d404471f841fc999640c119f753ec",
+        "related_supabase_table": "notion_posts"
+      }
+    ]
+  },
+  {
+    "origin_database_id": "d44e8301bfea44e0a8803314ffeeb807",
+    "origin_supabase_table": "notion_episodes",
+    "relations": [
+      {
+        "field_name": "person",
+        "related_database_id": "33a1990d72f949f0983acd55ccd15724",
+        "related_supabase_table": "notion_connections"
+      },
+      {
+        "field_name": "clips",
+        "related_database_id": "fe6392688d6a462492c3d56da753f851",
+        "related_supabase_table": "notion_clips"
+      },
+      {
+        "field_name": "post",
+        "related_database_id": "960d404471f841fc999640c119f753ec",
+        "related_supabase_table": "notion_posts"
+      },
+      {
+        "field_name": "participants",
+        "related_database_id": "33a1990d72f949f0983acd55ccd15724",
+        "related_supabase_table": "notion_connections"
+      }
+    ]
+  },
+  {
+    "origin_database_id": "f7008956ade24505bdc2c7faa9ed7902",
+    "origin_supabase_table": "notion_illustrations",
+    "relations": [
+      {
+        "field_name": "articles",
+        "related_database_id": "67fbcee66711465c852ebf97303787a3",
+        "related_supabase_table": "notion_articles"
+      },
+      {
+        "field_name": "publish TH",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      },
+      {
+        "field_name": "publishSB",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      },
+      {
+        "field_name": "inspired by",
+        "related_database_id": "33a1990d72f949f0983acd55ccd15724",
+        "related_supabase_table": "notion_connections"
+      },
+      {
+        "field_name": "post",
+        "related_database_id": "960d404471f841fc999640c119f753ec",
+        "related_supabase_table": "notion_posts"
+      },
+      {
+        "field_name": "licensed to",
+        "related_database_id": "33a1990d72f949f0983acd55ccd15724",
+        "related_supabase_table": "notion_connections"
+      },
+      {
+        "field_name": "original sources",
+        "related_database_id": "e33b1ce2be7e45d1a7a2be84dead6095",
+        "related_supabase_table": "notion_objects"
+      },
+      {
+        "field_name": "publishTK",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      },
+      {
+        "field_name": "type",
+        "related_database_id": "81a8464d50af40aab88df43048495844",
+        "related_supabase_table": "notion_visual_types"
+      },
+      {
+        "field_name": "publishBS",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      },
+      {
+        "field_name": "book",
+        "related_database_id": "fb47feb4fc974def8385e6a865aa68ba",
+        "related_supabase_table": "notion_books"
+      },
+      {
+        "field_name": "wins and features",
+        "related_database_id": "a49ef53f567e4b8e877fc2bdd90a1d9f",
+        "related_supabase_table": "notion_wins_and_features"
+      },
+      {
+        "field_name": "publishYT",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      },
+      {
+        "field_name": "publishIG",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      },
+      {
+        "field_name": "publishLI",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      },
+      {
+        "field_name": "comments",
+        "related_database_id": "ccbe8e9e71644f24a08d0fa982ccf8ef",
+        "related_supabase_table": "notion_comments"
+      },
+      {
+        "field_name": "publishTW",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      }
+    ]
+  },
+  {
+    "origin_database_id": "2bc5f8dd00f04305a11538ddb0b12c3b",
+    "origin_supabase_table": "notion_interactions",
+    "relations": [
+      {
+        "field_name": "person",
+        "related_database_id": "33a1990d72f949f0983acd55ccd15724",
+        "related_supabase_table": "notion_connections"
+      }
+    ]
+  },
+  {
+    "origin_database_id": "71fed31953b84183a9e77c48493bf9f4",
+    "origin_supabase_table": "notion_newsletter",
+    "relations": [
+      {
+        "field_name": "post",
+        "related_database_id": "960d404471f841fc999640c119f753ec",
+        "related_supabase_table": "notion_posts"
+      },
+      {
+        "field_name": "articles",
+        "related_database_id": "67fbcee66711465c852ebf97303787a3",
+        "related_supabase_table": "notion_articles"
+      },
+      {
+        "field_name": "book",
+        "related_database_id": "fb47feb4fc974def8385e6a865aa68ba",
+        "related_supabase_table": "notion_books"
+      },
+      {
+        "field_name": "editorial",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      }
+    ]
+  },
+  {
+    "origin_database_id": "960d404471f841fc999640c119f753ec",
+    "origin_supabase_table": "notion_posts",
+    "relations": [
+      {
+        "field_name": "collab contrib",
+        "related_database_id": "703f44d6e6c34b8bb6daa979f5f1df98",
+        "related_supabase_table": "notion_collab_contributions"
+      },
+      {
+        "field_name": "instagram",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      },
+      {
+        "field_name": "editorial SB",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      },
+      {
+        "field_name": "newsletter",
+        "related_database_id": "71fed31953b84183a9e77c48493bf9f4",
+        "related_supabase_table": "notion_newsletter"
+      },
+      {
+        "field_name": "editorial",
+        "related_database_id": "ee23dec3222e4412baaf0d129d0bda9c",
+        "related_supabase_table": "notion_editorial"
+      },
+      {
+        "field_name": "illustration",
+        "related_database_id": "f7008956ade24505bdc2c7faa9ed7902",
+        "related_supabase_table": "notion_illustrations"
+      },
+      {
+        "field_name": "book",
+        "related_database_id": "fb47feb4fc974def8385e6a865aa68ba",
+        "related_supabase_table": "notion_books"
+      },
+      {
+        "field_name": "episode",
+        "related_database_id": "d44e8301bfea44e0a8803314ffeeb807",
+        "related_supabase_table": "notion_episodes"
+      },
+      {
+        "field_name": "article",
+        "related_database_id": "67fbcee66711465c852ebf97303787a3",
+        "related_supabase_table": "notion_articles"
+      }
+    ]
+  },
+  {
+    "origin_database_id": "81a8464d50af40aab88df43048495844",
+    "origin_supabase_table": "notion_visual_types",
+    "relations": [
+      {
+        "field_name": "concept",
+        "related_database_id": "569fc5035d6d434796a2e039c66829cd",
+        "related_supabase_table": "notion_concepts"
+      },
+      {
+        "field_name": "illustrations",
+        "related_database_id": "f7008956ade24505bdc2c7faa9ed7902",
+        "related_supabase_table": "notion_illustrations"
+      }
+    ]
+  },
+  {
+    "origin_database_id": "a49ef53f567e4b8e877fc2bdd90a1d9f",
+    "origin_supabase_table": "notion_wins_and_features",
+    "relations": [
+      {
+        "field_name": "person",
+        "related_database_id": "33a1990d72f949f0983acd55ccd15724",
+        "related_supabase_table": "notion_connections"
+      },
+      {
+        "field_name": "illustration",
+        "related_database_id": "f7008956ade24505bdc2c7faa9ed7902",
+        "related_supabase_table": "notion_illustrations"
+      }
+    ]
+  }
+]
