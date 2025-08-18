@@ -28,6 +28,48 @@ if not logger.handlers:
     # Only set up if no handlers exist (i.e., not already configured)
     logger = setup_logger("supabase_relations_creator", file_logging=False)
 
+def apply_table_policies(connection, table_name):
+    """
+    Apply Row Level Security (RLS) policies to a newly created table.
+    
+    Args:
+        connection: Database connection
+        table_name (str): Name of the table to apply policies to
+    """
+    try:
+        # First, drop any existing policies to avoid conflicts
+        drop_policies_sql = f"""
+        DROP POLICY IF EXISTS anon_select_all ON public."{table_name}";
+        DROP POLICY IF EXISTS anon_insert_all ON public."{table_name}";
+        DROP POLICY IF EXISTS anon_update_all ON public."{table_name}";
+        DROP POLICY IF EXISTS anon_delete_all ON public."{table_name}";
+        """
+        
+        with connection.cursor() as cursor:
+            cursor.execute(drop_policies_sql)
+        
+        # Enable RLS and create new policies
+        policies_sql = f"""
+        -- Enable RLS on the table
+        ALTER TABLE public."{table_name}" ENABLE ROW LEVEL SECURITY;
+        
+        -- Create policies for anon access
+        CREATE POLICY anon_select_all ON public."{table_name}" FOR SELECT TO anon USING (true);
+        CREATE POLICY anon_insert_all ON public."{table_name}" FOR INSERT TO anon WITH CHECK (true);
+        CREATE POLICY anon_update_all ON public."{table_name}" FOR UPDATE TO anon USING (true) WITH CHECK (true);
+        CREATE POLICY anon_delete_all ON public."{table_name}" FOR DELETE TO anon USING (true);
+        """
+        
+        with connection.cursor() as cursor:
+            cursor.execute(policies_sql)
+        
+        logger.debug(f"🔒 Applied RLS policies to table {table_name}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Error applying policies to table {table_name}: {e}")
+        return False
+
 def load_db_config(environment="cloud"):
     """
     Load database configuration from environment variables.
@@ -184,6 +226,9 @@ def create_master_relations_table(connection, table_name="notion_relations_maste
         
         with connection.cursor() as cursor:
             cursor.execute(create_sql)
+        
+        # Apply RLS policies after table creation
+        apply_table_policies(connection, table_name)
         
         logger.info(f"✅ Created master relations table {table_name}")
         return True
@@ -455,6 +500,10 @@ def create_junction_tables(connection, relations_data, database_list, deduplicat
                             cursor.execute(create_sql_forward)
                             cursor.execute(create_sql_reverse)
                         
+                        # Apply RLS policies after table creation
+                        apply_table_policies(connection, junction_name_forward)
+                        apply_table_policies(connection, junction_name_reverse)
+                        
                         if junction_name_forward not in created_tables:
                             created_tables.append(junction_name_forward)
                             logger.info(f"✅ Created junction table {junction_name_forward} - {origin_table} -> {related_table} via '{relation['field_name']}'")
@@ -467,6 +516,9 @@ def create_junction_tables(connection, relations_data, database_list, deduplicat
                 
                 with connection.cursor() as cursor:
                     cursor.execute(create_sql)
+                
+                # Apply RLS policies after table creation
+                apply_table_policies(connection, junction_name)
                 
                 if junction_name not in created_tables:
                     created_tables.append(junction_name)
