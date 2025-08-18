@@ -11,7 +11,8 @@ This module contains several components:
 3. **Profile Aggregator** - Consolidates profile data from multiple platforms
 4. **Posts Consolidator** - Merges posts data across platforms
 5. **Supabase Relations Creator** - Creates relational structure from Notion database relations
-6. **Database Utilities** - Test connections and manage database operations
+6. **Supabase Policy Script** - Applies RLS policies to all database tables
+7. **Database Utilities** - Test connections and manage database operations
 
 ## 📊 Components
 
@@ -87,6 +88,30 @@ Creates relational structure in Supabase from Notion database relations:
 - `--drop-all`: Remove all tables without recreating them
 - `--debug`: Enable detailed debug logging
 - `--de-duplicate`: Deduplicate junction tables (default: False)
+
+### 🔒 supabase_policy_script.py
+
+Applies Row Level Security (RLS) policies to all existing tables in Supabase:
+- Scans all tables in the public schema
+- Enables RLS on tables that don't have it
+- Creates essential policies for anonymous access (SELECT, INSERT, UPDATE, DELETE)
+- Handles existing policies gracefully to avoid conflicts
+- Provides comprehensive reporting on policy application status
+
+**Key Features:**
+- Automatic detection of existing policies and RLS status
+- Smart policy application (only creates what's missing)
+- Force mode to drop and recreate all policies
+- Dry-run mode to preview changes without execution
+- Comprehensive logging with emoji indicators
+- Environment-based configuration management
+- Error handling and recovery for individual table failures
+
+**Command Line Options:**
+- `--environment`: Choose between local/cloud database (default: cloud)
+- `--dry-run`: Preview what would be done without executing
+- `--force`: Drop existing policies before creating new ones
+- `--debug`: Enable detailed debug logging
 
 ### 🧪 Database Test Utilities
 
@@ -165,6 +190,27 @@ python supabase_relations_creator.py --de-duplicate
 
 # Drop all tables (use with caution)
 python supabase_relations_creator.py --drop-all
+```
+
+### 🔒 Applying RLS Policies
+
+Apply Row Level Security policies to all existing tables:
+
+```bash
+# Preview what would be done without executing
+python supabase_policy_script.py --dry-run
+
+# Apply policies to all tables (skips tables that already have policies)
+python supabase_policy_script.py
+
+# Force apply policies (drops existing policies first)
+python supabase_policy_script.py --force
+
+# Use local environment
+python supabase_policy_script.py --environment local
+
+# Enable debug logging
+python supabase_policy_script.py --debug
 ```
 
 ### 📝 Command Line Options
@@ -333,6 +379,12 @@ The module is designed to be extensible:
    - Verify Notion database list and relations files exist
    - Check database IDs match between files
    - Review junction table naming conflicts
+
+5. **Policy Application Issues**
+   - Ensure database user has sufficient privileges
+   - Check for existing policy conflicts
+   - Use dry-run mode to preview changes
+   - Review table permissions and ownership
 
 ### 🔍 Debug Mode
 
