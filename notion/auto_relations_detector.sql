@@ -94,14 +94,14 @@ DECLARE
 BEGIN
     -- For each table, add computed columns for all relation fields
     FOR table_rec IN 
-        SELECT table_name 
-        FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name LIKE 'notion_%'
-        AND table_name IN (
-            SELECT table_name 
-            FROM information_schema.columns 
-            WHERE column_name = 'notion_data_jsonb'
+        SELECT t.table_name 
+        FROM information_schema.tables t
+        WHERE t.table_schema = 'public' 
+        AND t.table_name LIKE 'notion_%'
+        AND t.table_name IN (
+            SELECT c.table_name 
+            FROM information_schema.columns c
+            WHERE c.column_name = 'notion_data_jsonb'
         )
     LOOP
         RAISE NOTICE 'Processing table: %', table_rec.table_name;
@@ -179,14 +179,14 @@ BEGIN
     
     -- Create universal relation views for each table
     FOR table_rec IN 
-        SELECT table_name 
-        FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name LIKE 'notion_%'
-        AND table_name IN (
-            SELECT table_name 
-            FROM information_schema.columns 
-            WHERE column_name = 'notion_data_jsonb'
+        SELECT t.table_name 
+        FROM information_schema.tables t
+        WHERE t.table_schema = 'public' 
+        AND t.table_name LIKE 'notion_%'
+        AND t.table_name IN (
+            SELECT c.table_name 
+            FROM information_schema.columns c
+            WHERE c.column_name = 'notion_data_jsonb'
         )
     LOOP
         view_name := table_rec.table_name || '_universal_relations';
@@ -237,7 +237,7 @@ BEGIN
                 EXECUTE view_sql;
                 RAISE NOTICE 'Created universal relation view: %', view_name;
             EXCEPTION WHEN OTHERS THEN
-                RAISE NOTICE 'Error creating view %: %', view_name, SQLERRM;
+                                        RAISE NOTICE 'Error creating view %: %', view_name, SQLERRM;
             END;
         END IF;
     END LOOP;
@@ -443,14 +443,14 @@ DECLARE
 BEGIN
     -- For each table, create indexes on all array fields
     FOR table_rec IN 
-        SELECT table_name 
-        FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name LIKE 'notion_%'
-        AND table_name IN (
-            SELECT table_name 
-            FROM information_schema.columns 
-            WHERE column_name = 'notion_data_jsonb'
+        SELECT t.table_name 
+        FROM information_schema.tables t
+        WHERE t.table_schema = 'public' 
+        AND t.table_name LIKE 'notion_%'
+        AND t.table_name IN (
+            SELECT c.table_name 
+            FROM information_schema.columns c
+            WHERE c.column_name = 'notion_data_jsonb'
         )
     LOOP
         -- For each relation field, create a GIN index
