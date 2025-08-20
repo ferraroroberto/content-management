@@ -21,3 +21,6 @@ __pycache__/
 # supabase cli
 supabase/.temp/cli-latest
 supabase/.branches/_current_branch
+
+# claude code settings
+.claude/
