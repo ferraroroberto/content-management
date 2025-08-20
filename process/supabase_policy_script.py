@@ -13,6 +13,7 @@ from pathlib import Path
 import sys
 import psycopg2
 import psycopg2.extras
+from psycopg2 import sql
 import argparse
 from dotenv import load_dotenv
 from typing import Dict, List, Any, Optional, Tuple, Set
@@ -112,6 +113,35 @@ def get_all_tables(connection):
         
     except Exception as e:
         logger.error(f"❌ Error getting tables: {e}")
+        return []
+
+def get_all_views(connection):
+    """
+    Get all views in the public schema.
+    
+    Args:
+        connection: Database connection
+        
+    Returns:
+        list: List of view names
+    """
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT viewname 
+                FROM pg_views 
+                WHERE schemaname = 'public'
+                ORDER BY viewname
+                """
+            )
+            views = [row[0] for row in cursor.fetchall()]
+        
+        logger.info(f"📋 Found {len(views)} views in public schema")
+        return views
+        
+    except Exception as e:
+        logger.error(f"❌ Error getting views: {e}")
         return []
 
 def check_table_policies(connection, table_name):
@@ -275,6 +305,57 @@ def apply_policies_to_all_tables(connection, force=False):
         logger.error(f"❌ Error applying policies to all tables: {e}")
         return {'success': False, 'error': str(e)}
 
+def apply_security_invoker_to_all_views(connection):
+    """
+    Apply security_invoker = on to all views in the public schema.
+    
+    This makes views run with the permissions of the querying role so that
+    underlying table RLS applies when accessing data through views.
+    
+    Args:
+        connection: Database connection
+        
+    Returns:
+        dict: Summary of results
+    """
+    try:
+        views = get_all_views(connection)
+        if not views:
+            return {'success': True, 'total_views': 0, 'updated': 0, 'failed': 0}
+        
+        results = {
+            'total_views': len(views),
+            'updated': 0,
+            'failed': 0,
+            'errors': []
+        }
+        
+        logger.info(f"🚀 Applying security_invoker=on to {len(views)} views")
+        
+        for view_name in views:
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        sql.SQL('ALTER VIEW {}.{} SET (security_invoker = on);').format(
+                            sql.Identifier('public'),
+                            sql.Identifier(view_name)
+                        )
+                    )
+                results['updated'] += 1
+            except Exception as e:
+                results['failed'] += 1
+                results['errors'].append(f"{view_name}: {e}")
+                logger.error(f"❌ Error applying security_invoker to view {view_name}: {e}")
+        
+        logger.info(
+            f"✅ security_invoker application completed: updated={results['updated']} failed={results['failed']}"
+        )
+        results['success'] = results['failed'] == 0
+        return results
+    except Exception as e:
+        logger.error(f"❌ Error applying security_invoker to all views: {e}")
+        return {'success': False, 'error': str(e)}
+
 def dry_run_policy_application(connection):
     """
     Show what policies would be applied without actually applying them.
@@ -401,6 +482,15 @@ def main():
                     sys.exit(1)
             else:
                 logger.info("✅ Policy application completed successfully!")
+            
+            # Apply security_invoker to all views
+            view_result = apply_security_invoker_to_all_views(connection)
+            if view_result.get('success') is False:
+                logger.error(f"❌ View security update failed: {view_result.get('error', 'Unknown error')}")
+                sys.exit(1)
+            logger.info(
+                f"✅ View security update completed. Updated {view_result.get('updated', 0)} of {view_result.get('total_views', 0)} views"
+            )
         
     except Exception as e:
         logger.error(f"❌ Unexpected error: {e}")

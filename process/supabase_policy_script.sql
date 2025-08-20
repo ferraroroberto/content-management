@@ -2,7 +2,8 @@
    STEP 1. Grant anon privileges
    ---------------------------------------------------------------------------
    This ensures anon can SELECT, INSERT, UPDATE, DELETE on all *existing*
-   tables and also on all *future* tables in the `public` schema.
+   tables (includes views and foreign tables in GRANT semantics) and also on
+   all *future* tables in the `public` schema.
    ============================================================================ */
 
 -- Allow anon to use the public schema
@@ -18,7 +19,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO anon;
 
 
 /* ============================================================================
-   STEP 2. Generate RLS + policy statements
+   STEP 2. Generate RLS + policy statements (tables) and invoker security (views)
    ---------------------------------------------------------------------------
    The query below outputs one SQL statement per row. For each table in
    the `public` schema, it will produce:
@@ -27,7 +28,16 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO anon;
      - CREATE POLICY anon_insert_all
      - CREATE POLICY anon_update_all
      - CREATE POLICY anon_delete_all
+   For each view in the `public` schema, it will produce:
+     - ALTER VIEW ... SET (security_invoker = on)
    ============================================================================ */
+
+-- Ensure views execute with invoker's privileges so underlying table RLS applies
+SELECT 'ALTER VIEW public.' || viewname || ' SET (security_invoker = on);' AS policy_sql
+FROM pg_views
+WHERE schemaname = 'public'
+
+UNION ALL
 
 SELECT 'ALTER TABLE public.' || tablename || ' ENABLE ROW LEVEL SECURITY;' AS policy_sql
 FROM pg_tables
