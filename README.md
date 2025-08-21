@@ -36,31 +36,38 @@ This automation suite consists of three main modules that work together to creat
 ## 📁 Project Structure
 
 ```
-automation/
-├── reporting/
-│   ├── social_client/         # API data collection
-│   │   ├── social_api_client.py
-│   │   └── README.md
-│   ├── process/               # Data processing & database operations
-│   │   ├── data_processor.py
-│   │   ├── supabase_uploader.py
-│   │   ├── profile_aggregator.py
-│   │   ├── posts_consolidator.py
-│   │   └── README.md
-│   ├── notion/                # Notion integration
-│   │   ├── notion_update.py
-│   │   ├── notion_supabase_sync.py
-│   │   ├── notion_database_structure.py
-│   │   └── README.md
-│   ├── config/                # Configuration files
-│   │   ├── config.json
-│   │   ├── mapping.json
-│   │   ├── logger_config.py
-│   │   └── README.md
-│   └── results/               # Output directories
-│       ├── raw/               # Raw API responses
-│       └── processed/         # Processed data files
-└── README.md
+social-media-automation-suite/
+├── 🚀 launch.py                    # Main application launcher
+├── 🖥️ cli/                         # Command Line Interface
+│   ├── __init__.py                # CLI package initialization
+│   ├── main.py                    # Advanced CLI interface
+│   ├── config.py                  # CLI configuration management
+│   └── README.md                  # CLI documentation
+├── 📡 social_client/               # Social Media API Clients
+│   ├── social_api_client.py       # Multi-platform API client
+│   └── README.md                  # API client documentation
+├── 🔄 process/                     # Data Processing & Database Operations
+│   ├── pipeline.py                # Pipeline orchestrator (moved from init.py)
+│   ├── data_processor.py          # Data transformation engine
+│   ├── supabase_uploader.py       # Database upload operations
+│   ├── profile_aggregator.py      # Profile data aggregation
+│   ├── posts_consolidator.py      # Posts data consolidation
+│   └── README.md                  # Processing documentation
+├── 📘 notion/                      # Notion Integration
+│   ├── notion_update.py           # Notion database updates
+│   ├── notion_supabase_sync.py    # Notion-Supabase synchronization
+│   ├── notion_database_structure.py # Database structure management
+│   └── README.md                  # Notion integration documentation
+├── ⚙️ config/                      # Configuration & Settings
+│   ├── config_example.json        # Example configuration
+│   ├── mapping.json               # Field mapping definitions
+│   ├── logger_config.py           # Logging configuration
+│   └── README.md                  # Configuration documentation
+├── 📚 docs/                       # Additional Documentation
+│   ├── DATA_STRUCTURE_DOCUMENTATION.md
+│   └── SUPABASE_SCHEMA.md
+├── 📦 requirements.txt            # Python dependencies
+└── 📖 README.md                   # This file
 ```
 
 ## 🚀 Quick Start
@@ -100,33 +107,82 @@ automation/
 
 ### Basic Usage
 
-1. **Collect social media data**
-   ```bash
-   cd social_client
-   python social_api_client.py
-   ```
+#### 🚀 **Simple Launcher (Recommended for most users)**
+```bash
+# Run complete pipeline
+python3 launch.py
 
-2. **Process and upload data**
-   ```bash
-   cd ../process
-   python data_processor.py
-   ```
+# Run with debug mode
+python3 launch.py --debug
 
-3. **Aggregate profiles and posts**
-   ```bash
-   python profile_aggregator.py
-   python posts_consolidator.py
-   ```
+# Skip specific steps
+python3 launch.py --skip-api --skip-processing
+```
 
-4. **Sync with Notion (optional)**
-   ```bash
-   cd ../notion
-   python notion_update.py YYYYMMDD
-   ```
+#### 🖥️ **Advanced CLI Interface (For automation and advanced users)**
+```bash
+# Run complete pipeline
+python3 -m cli.main
+
+# Run only specific components
+python3 -m cli.main --api-only
+python3 -m cli.main --process-only
+python3 -m cli.main --notion-only
+
+# Advanced options
+python3 -m cli.main --debug --date 20241201 --quiet
+```
+
+#### 🔧 **Individual Module Execution (For development and testing)**
+```bash
+# Collect social media data
+python3 social_client/social_api_client.py
+
+# Process and upload data
+python3 process/data_processor.py
+
+# Aggregate profiles and posts
+python3 process/profile_aggregator.py
+python3 process/posts_consolidator.py
+
+# Sync with Notion
+python3 notion/notion_update.py 20241201
+```
+
+## 🆕 **New Project Structure (v2.0)**
+
+The project has been reorganized for better maintainability and user experience:
+
+### **What Changed**
+- ✅ **`init.py` → `process/pipeline.py`** - Pipeline orchestrator moved to process domain
+- ✅ **New `launch.py`** - Simple, user-friendly main launcher
+- ✅ **New `cli/` package** - Advanced CLI interface for automation
+- ✅ **Better organization** - Clear separation of concerns
+
+### **Migration Guide**
+If you were using the old `init.py` file:
+```bash
+# Old way (still works)
+python3 init.py
+
+# New way (recommended)
+python3 launch.py
+
+# Advanced CLI (for automation)
+python3 -m cli.main
+```
+
+### **Benefits of New Structure**
+- 🚀 **Clearer entry points** - Know exactly where to start
+- 🖥️ **Better CLI experience** - Advanced options for power users
+- 📁 **Logical organization** - Related functionality grouped together
+- 🔧 **Easier maintenance** - Clear module purposes and dependencies
+
+---
 
 ## 📋 Module Documentation
 
-### [Social Client Module](reporting/social_client/README.md)
+### [Social Client Module](social_client/README.md)
 
 Fetches data from social media APIs:
 - Automatic timestamp-based file naming
