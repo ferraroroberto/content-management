@@ -1,8 +1,9 @@
 # Ignore virtual environment directory
 .venv/
 
-# Ignore docs directory
+# Ignore docs and logs directory
 docs/
+logs/
 
 # Ignore config.json file and .env file in the process directory
 config.json
