@@ -1,6 +1,6 @@
 import json
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import logging
 import sys
@@ -457,15 +457,33 @@ def process_all_files(mapping_config, main_config=None, debug_mode=False):
     if not json_files:
         logger.warning("⚠️  No JSON files found in results directory")
         return {}
+
+    # Get days to process setting
+    days_to_process = main_config.get("days_to_process", 0) if main_config else 0
     
-    logger.info(f"📅 Processing all available data (no date filtering)")
+    # Calculate cutoff date if filtering is enabled
+    cutoff_date = None
+    if days_to_process > 0:
+        cutoff_date = (datetime.now() - timedelta(days=days_to_process)).strftime('%Y-%m-%d')
+        logger.info(f"📅 Date filtering enabled: processing files from {cutoff_date} onwards ({days_to_process} days)")
+    else:
+        logger.info(f"📅 Processing all available data (no date filtering)")
     
     # Organize data by platform and data type
     data_by_platform_type = {}
     processed = 0
+    skipped = 0
     
     for file_path in json_files:
-        logger.info(f"🚀 Processing file {processed+1}/{len(json_files)}: {os.path.basename(file_path)}")
+        # Check date filter
+        if cutoff_date:
+            file_date = extract_date_from_filename(file_path)
+            if file_date and file_date < cutoff_date:
+                logger.debug(f"Skipping old file: {os.path.basename(file_path)} (Date: {file_date})")
+                skipped += 1
+                continue
+
+        logger.info(f"🚀 Processing file {processed+1}/{len(json_files) - skipped}: {os.path.basename(file_path)}")
         
         records = process_json_file(file_path, mapping_config)
         if records:
@@ -480,8 +498,11 @@ def process_all_files(mapping_config, main_config=None, debug_mode=False):
                 data_by_platform_type[key].append(record)
         
         processed += 1
-        logger.info(f"📊 Progress: {processed}/{len(json_files)} files processed ({(processed/len(json_files))*100:.1f}%)")
+        logger.info(f"📊 Progress: {processed}/{len(json_files) - skipped} files processed")
     
+    if skipped > 0:
+        logger.info(f"⏩ Skipped {skipped} files older than {cutoff_date}")
+
     # Create separate DataFrames for each platform and data type
     dataframes = {}
     for key, records in data_by_platform_type.items():
