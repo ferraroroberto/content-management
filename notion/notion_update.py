@@ -94,15 +94,26 @@ def extract_property_value(property_item):
     
     return None
 
+def parse_date(date_str):
+    """Parse date string in either YYYY-MM-DD or YYYYMMDD format."""
+    try:
+        if '-' in date_str:
+            return datetime.strptime(date_str, "%Y-%m-%d")
+        else:
+            return datetime.strptime(date_str, "%Y%m%d")
+    except ValueError as e:
+        logger.error(f"❌ Error parsing date '{date_str}': {e}")
+        raise
+
 def search_by_date(notion, database_id, target_date):
     """Search for a row in the database where the 'date' field matches the day before target date."""
     try:
-        # Convert the input date (YYYYMMDD) to a datetime object
-        date_obj = datetime.strptime(target_date, "%Y%m%d")
+        # Convert the input date to a datetime object
+        date_obj = parse_date(target_date)
         
         # Calculate previous day
         prev_date_obj = date_obj - timedelta(days=1)
-        prev_date_str = prev_date_obj.strftime("%Y%m%d")
+        prev_date_str = prev_date_obj.strftime("%Y-%m-%d")
         
         logger.debug(f"🔍 Searching for previous date: {prev_date_str} (day before {target_date})")
         
@@ -142,8 +153,8 @@ def search_by_date(notion, database_id, target_date):
 def search_by_current_date(notion, database_id, target_date):
     """Search for a row in the database where the 'date' field matches the target date."""
     try:
-        # Convert the input date (YYYYMMDD) to a datetime object
-        date_obj = datetime.strptime(target_date, "%Y%m%d")
+        # Convert the input date to a datetime object
+        date_obj = parse_date(target_date)
         
         logger.debug(f"🔍 Searching for current date: {target_date}")
         
@@ -238,7 +249,7 @@ def parse_arguments():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description='Search and update Notion database entries by date.')
     
-    parser.add_argument('date', type=str, help='Date to search for (format: YYYYMMDD)')
+    parser.add_argument('date', type=str, help='Date to search for (format: YYYY-MM-DD or YYYYMMDD)')
     parser.add_argument('--debug', action='store_true', help='Enable debug mode')
     parser.add_argument('--database-id', type=str, help='Override database ID from config')
     
@@ -247,8 +258,8 @@ def parse_arguments():
 def get_supabase_data(connection, date_str, posts_table, profile_table):
     """Get data from Supabase for the specified date."""
     try:
-        # Convert date format from YYYYMMDD to YYYY-MM-DD
-        date_obj = datetime.strptime(date_str, "%Y%m%d")
+        # Convert date format
+        date_obj = parse_date(date_str)
         formatted_date = date_obj.strftime("%Y-%m-%d")
         
         cursor = connection.cursor()
@@ -496,9 +507,9 @@ def main():
     current_properties = current_day_row.get('properties', {})
     
     # Get previous day date for display
-    date_obj = datetime.strptime(args.date, "%Y%m%d")
+    date_obj = parse_date(args.date)
     prev_date_obj = date_obj - timedelta(days=1)
-    prev_date_str = prev_date_obj.strftime("%Y%m%d")
+    prev_date_str = prev_date_obj.strftime("%Y-%m-%d")
     
     # Extract the 'next' field from previous day
     next_relation = previous_properties.get('next', {}).get('relation', [])

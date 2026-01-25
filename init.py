@@ -95,20 +95,27 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
     # Use the reference date directly or today's date
     if reference_date:
         try:
-            processing_date = reference_date
+            # Normalize date to YYYY-MM-DD
+            if '-' in reference_date:
+                processing_date = reference_date
+            else:
+                processing_date = datetime.strptime(reference_date, "%Y%m%d").strftime("%Y-%m-%d")
             logger.info(f"📅 Using specified date: {processing_date}")  # type: ignore
         except ValueError:
             logger.error(f"❌ Invalid date format: {reference_date}. Using current date.")  # type: ignore
-            processing_date = datetime.now().strftime("%Y%m%d")
+            processing_date = datetime.now().strftime("%Y-%m-%d")
     else:
-        processing_date = datetime.now().strftime("%Y%m%d")
+        processing_date = datetime.now().strftime("%Y-%m-%d")
         logger.info(f"📅 No date specified. Using current date: {processing_date}")  # type: ignore
+    
+    # Prepare common arguments
+    date_args = ['--date', processing_date]
     
     # Step 1: Fetch data from social media APIs
     if not skip_api:
         logger.info("📡 Step 1: Running Social API Client")  # type: ignore
         configure_social_logger(debug_mode)
-        run_module(run_social_api_client, "Social API Client", debug_mode)
+        run_module(run_social_api_client, "Social API Client", debug_mode, extra_args=date_args)
     else:
         logger.info("⏭️ Skipping Social API Client step")  # type: ignore
     
@@ -116,7 +123,7 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
     if not skip_processing:
         logger.info("🔄 Step 2: Running Data Processor")  # type: ignore
         configure_data_processor_logger(debug_mode)
-        run_module(run_data_processor, "Data Processor", debug_mode)
+        run_module(run_data_processor, "Data Processor", debug_mode, extra_args=date_args)
     else:
         logger.info("⏭️ Skipping Data Processor step")  # type: ignore
     

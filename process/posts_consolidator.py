@@ -71,6 +71,7 @@ def parse_arguments():
     
     # Add arguments for all interactive prompts
     parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    parser.add_argument('--date', type=str, help='Reference date (unused in this module)')
     
     return parser.parse_args()
 

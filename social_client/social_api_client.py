@@ -39,8 +39,8 @@ def load_config():
         logger.error(f"❌ Error: Invalid JSON in configuration file at {config_path}")
         return None
 
-def check_file_exists_for_today(platform_key, config):
-    """Check if a file already exists for the current day for this platform."""
+def check_file_exists_for_date(platform_key, config, date_str):
+    """Check if a file already exists for the specified date for this platform."""
     # Determine platform and data type from platform_key
     parts = platform_key.split('_')
     platform = parts[0]
@@ -53,15 +53,14 @@ def check_file_exists_for_today(platform_key, config):
     project_root = os.path.dirname(os.path.dirname(__file__))
     results_dir = os.path.join(project_root, *results_dir_relative.split('/'))
     
-    # Generate today's filename
-    current_date = datetime.now().strftime('%Y-%m-%d')
-    filename = f"{platform}_{data_type}_{current_date}.json"
+    # Generate filename with provided date
+    filename = f"{platform}_{data_type}_{date_str}.json"
     file_path = os.path.join(results_dir, filename)
     
     # Check if file exists
     exists = os.path.exists(file_path)
     if exists:
-        logger.info(f"🔄 Found existing file for {platform_key} dated today: {filename}")
+        logger.info(f"🔄 Found existing file for {platform_key} dated {date_str}: {filename}")
     return exists, file_path
 
 def get_api_data(platform_key, config):
@@ -102,7 +101,7 @@ def get_api_data(platform_key, config):
                 logger.error(f"❌ All {retries} attempts failed for {platform_key}")
                 return None
 
-def save_results(platform_key, data, config):
+def save_results(platform_key, data, config, date_str):
     """Save the results to a JSON file in the results directory."""
     if not data:
         logger.warning(f"⚠️ No data to save for {platform_key}")
@@ -110,10 +109,10 @@ def save_results(platform_key, data, config):
     
     logger.info(f"💾 Saving {platform_key} data")
     
-    # Check if a file for today already exists
-    exists, file_path = check_file_exists_for_today(platform_key, config)
+    # Check if a file for date already exists
+    exists, file_path = check_file_exists_for_date(platform_key, config, date_str)
     if exists:
-        logger.info(f"📂 Skipping save: File for {platform_key} already exists for today")
+        logger.info(f"📂 Skipping save: File for {platform_key} already exists for {date_str}")
         return file_path  # Return the existing file path
     
     # Determine platform and data type from platform_key
@@ -132,16 +131,15 @@ def save_results(platform_key, data, config):
     os.makedirs(results_dir, exist_ok=True)
     
     # Add metadata
-    current_date = datetime.now().strftime('%Y-%m-%d')
     result_data = {
-        "date": current_date,
+        "date": date_str,
         "platform": platform,
         "data_type": data_type,
         "data": data
     }
     
     # Generate filename with date
-    filename = f"{platform}_{data_type}_{current_date}.json"
+    filename = f"{platform}_{data_type}_{date_str}.json"
     file_path = os.path.join(results_dir, filename)
     
     # Check if file already exists and delete it
@@ -156,11 +154,14 @@ def save_results(platform_key, data, config):
     logger.info(f"✅ Results saved to {file_path}")
     return file_path
 
-def process_all_endpoints(config, debug_mode=False, specific_platform=None, skip_existing=True):
+def process_all_endpoints(config, debug_mode=False, specific_platform=None, skip_existing=True, reference_date=None):
     """Process all API endpoints defined in the config file or a specific one if provided."""
     if not config:
         logger.error("❌ Failed to load configuration")
         return
+    
+    if not reference_date:
+        reference_date = datetime.now().strftime('%Y-%m-%d')
     
     # Filter out configuration parameters that aren't API endpoints
     config_endpoints = {k: v for k, v in config.items() if isinstance(v, dict) and 'api_url' in v}
@@ -188,9 +189,9 @@ def process_all_endpoints(config, debug_mode=False, specific_platform=None, skip
         
         # Check if file already exists for today
         if skip_existing:
-            file_exists, file_path = check_file_exists_for_today(platform_key, config)
+            file_exists, file_path = check_file_exists_for_date(platform_key, config, reference_date)
             if file_exists:
-                logger.info(f"⏩ Skipping {platform_key} - data already collected today")
+                logger.info(f"⏩ Skipping {platform_key} - data already collected for {reference_date}")
                 skipped += 1
                 logger.info(f"📊 Progress: {completed+skipped}/{total_endpoints} processed ({(completed+skipped)/total_endpoints*100:.1f}%) [{skipped} skipped]")
                 continue
@@ -199,7 +200,7 @@ def process_all_endpoints(config, debug_mode=False, specific_platform=None, skip
         data = get_api_data(platform_key, config)
         if data:
             # Save results
-            file_path = save_results(platform_key, data, config)
+            file_path = save_results(platform_key, data, config, reference_date)
             logger.info(f"✅ {platform_key} data saved to {file_path}")
         else:
             logger.error(f"❌ Failed to retrieve {platform_key} data")
@@ -218,7 +219,7 @@ def process_all_endpoints(config, debug_mode=False, specific_platform=None, skip
     
     logger.info(f"✅ Completed processing {completed+skipped}/{total_endpoints} endpoints")
     if skipped > 0:
-        logger.info(f"🔄 {skipped} endpoints were skipped - data already collected today")
+        logger.info(f"🔄 {skipped} endpoints were skipped - data already collected for {reference_date}")
     logger.info(f"📈 {completed} new data collections performed")
 
 def parse_arguments():
@@ -234,6 +235,8 @@ def parse_arguments():
     parser.add_argument('--platform', type=str, default=None,
                         help='Process specific platform (leave empty for all platforms)')
     
+    parser.add_argument('--date', type=str, help='Reference date in YYYY-MM-DD format')
+    
     return parser.parse_args()
 
 def main(args=None):
@@ -246,8 +249,14 @@ def main(args=None):
     debug_mode = args.debug
     configure_logger(debug_mode)
     
+    # Set reference date
+    reference_date = args.date
+    if not reference_date:
+        reference_date = datetime.now().strftime('%Y-%m-%d')
+    
     logger.info("🚀 Starting Social API Client")
     logger.info(f"🐞 Debug mode: {'Enabled' if debug_mode else 'Disabled'}")
+    logger.info(f"📅 Reference date: {reference_date}")
     
     # Load configuration
     config = load_config()
@@ -264,7 +273,7 @@ def main(args=None):
         logger.info(f"🎯 Targeting specific platform: {specific_platform}")
     
     # Process endpoints
-    process_all_endpoints(config, debug_mode, specific_platform, skip_existing)
+    process_all_endpoints(config, debug_mode, specific_platform, skip_existing, reference_date)
     
     logger.info("✅ Social API Client completed")
 

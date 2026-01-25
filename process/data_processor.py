@@ -435,7 +435,7 @@ def order_dataframe_columns(df, mapping_config):
     # Reorder DataFrame columns
     return df[ordered_columns]
 
-def process_all_files(mapping_config, main_config=None, debug_mode=False):
+def process_all_files(mapping_config, main_config=None, debug_mode=False, target_date=None):
     """Process all JSON files in the results directory and create separate DataFrames by data type."""
     if main_config is None:
         main_config = load_config()
@@ -463,7 +463,9 @@ def process_all_files(mapping_config, main_config=None, debug_mode=False):
     
     # Calculate cutoff date if filtering is enabled
     cutoff_date = None
-    if days_to_process > 0:
+    if target_date:
+        logger.info(f"📅 Processing only files from date: {target_date}")
+    elif days_to_process > 0:
         cutoff_date = (datetime.now() - timedelta(days=days_to_process)).strftime('%Y-%m-%d')
         logger.info(f"📅 Date filtering enabled: processing files from {cutoff_date} onwards ({days_to_process} days)")
     else:
@@ -476,8 +478,14 @@ def process_all_files(mapping_config, main_config=None, debug_mode=False):
     
     for file_path in json_files:
         # Check date filter
-        if cutoff_date:
-            file_date = extract_date_from_filename(file_path)
+        file_date = extract_date_from_filename(file_path)
+        
+        if target_date:
+            if file_date != target_date:
+                logger.debug(f"Skipping file: {os.path.basename(file_path)} (Date: {file_date} != Target: {target_date})")
+                skipped += 1
+                continue
+        elif cutoff_date:
             if file_date and file_date < cutoff_date:
                 logger.debug(f"Skipping old file: {os.path.basename(file_path)} (Date: {file_date})")
                 skipped += 1
@@ -572,6 +580,7 @@ def parse_arguments():
                         help='Upload data to Supabase (if enabled in config)')
     parser.add_argument('--format', choices=['excel', 'csv'], default='csv',
                         help='Output format for saving data')
+    parser.add_argument('--date', type=str, help='Reference date in YYYY-MM-DD format')
     
     return parser.parse_args()
 
@@ -599,7 +608,7 @@ def main(args=None):
         logger.warning("⚠️  Failed to load main configuration, using defaults")
     
     # Process all JSON files and get DataFrames by data type
-    dataframes = process_all_files(mapping_config, main_config, debug_mode=debug_mode)
+    dataframes = process_all_files(mapping_config, main_config, debug_mode=debug_mode, target_date=args.date)
     
     if not dataframes:
         logger.warning("⚠️  No data to save")
