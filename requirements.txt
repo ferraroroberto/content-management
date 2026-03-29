@@ -7,7 +7,7 @@ pandas
 # For reading/writing Excel files (used by pandas)
 openpyxl
 # For interacting with the Notion API
-notion-client
+notion-client==2.2.1
 # For loading environment variables from .env files
 python-dotenv
 # PostgreSQL database adapter for Python (used for database uploads)
