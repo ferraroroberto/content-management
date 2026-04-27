@@ -527,26 +527,21 @@ def main():
     extracted_followers_fields = extract_fields(current_day_row, update_fields_followers)
     
     # Print summary of both rows
-    print("\n" + "="*60)
-    print("📊 PREVIOUS DAY ROW SUMMARY (FOR POSTS UPDATE)")
-    print("="*60)
-    print(f"Page ID: {previous_page_id}")
-    print(f"Date: {prev_date_str}")
-    print("\nPosts Fields to Update:\n")
+    logger.info("=" * 60)
+    logger.info("PREVIOUS DAY ROW SUMMARY (FOR POSTS UPDATE)")
+    logger.info("Page ID: %s  Date: %s", previous_page_id, prev_date_str)
+    logger.info("Posts Fields to Update:")
     for field_name in update_fields_posts:
         value = extracted_posts_fields.get(field_name)
-        print(f"  - {field_name}: {value}")
-    
-    print("\n" + "="*60)
-    print("📊 CURRENT DAY ROW SUMMARY (FOR FOLLOWERS UPDATE)")
-    print("="*60)
-    print(f"Page ID: {current_page_id}")
-    print(f"Date: {args.date}")
-    print("\nFollower Fields to Update:\n")
+        logger.info("  - %s: %s", field_name, value)
+
+    logger.info("=" * 60)
+    logger.info("CURRENT DAY ROW SUMMARY (FOR FOLLOWERS UPDATE)")
+    logger.info("Page ID: %s  Date: %s", current_page_id, args.date)
+    logger.info("Follower Fields to Update:")
     for field_name in update_fields_followers:
         value = extracted_followers_fields.get(field_name)
-        print(f"  - {field_name}: {value}")
-    print("\n")
+        logger.info("  - %s: %s", field_name, value)
     
     # Connect to Supabase
     logger.info("🔌 Connecting to Supabase")
@@ -564,18 +559,16 @@ def main():
     mapped_followers_data = map_supabase_to_notion_fields(posts_data, profile_data, update_field_mapping_followers)
     
     # Print Supabase data summary
-    print("\n" + "="*60)
-    print("🗄️  SUPABASE DATA SUMMARY")
-    print("="*60)
-    print(f"Posts data (previous day): {'Yes' if posts_data else 'No'}")
-    print(f"Profile data (current day): {'Yes' if profile_data else 'No'}")
-    print("\nMapped Posts Fields:\n")
+    logger.info("=" * 60)
+    logger.info("SUPABASE DATA SUMMARY")
+    logger.info("Posts data (previous day): %s", "Yes" if posts_data else "No")
+    logger.info("Profile data (current day): %s", "Yes" if profile_data else "No")
+    logger.info("Mapped Posts Fields:")
     for field_name, value in mapped_posts_data.items():
-        print(f"  - {field_name}: {value}")
-    print("\nMapped Follower Fields:\n")
+        logger.info("  - %s: %s", field_name, value)
+    logger.info("Mapped Follower Fields:")
     for field_name, value in mapped_followers_data.items():
-        print(f"  - {field_name}: {value}")
-    print("\n")
+        logger.info("  - %s: %s", field_name, value)
 
     # Prepare updates for Notion - POSTS (previous day)
     posts_updates = {}
@@ -632,8 +625,8 @@ def main():
     # Update Notion pages
     if posts_updates or followers_updates:
         total_updates = len(posts_updates) + len(followers_updates)
-        logger.info(f"📝 Ready to update {total_updates} fields in Notion")
-        print(f"\nReady to update:\n- {len(posts_updates)} posts fields on previous day\n- {len(followers_updates)} follower fields on current day")
+        logger.info("Ready to update %d fields in Notion", total_updates)
+        logger.info("Ready to update: %d posts fields on previous day, %d follower fields on current day", len(posts_updates), len(followers_updates))
         print("\nPress Enter to continue with the update or Ctrl+C to cancel...")
         try:
             input()  # Wait for user to press Enter
@@ -667,19 +660,18 @@ def main():
                     logger.error("❌ Failed to update follower fields on current day")
             
             # Print field update summary
-            print("\n" + "="*60)
-            print("📝 FIELD UPDATE SUMMARY")
-            print("="*60)
-            
+            logger.info("=" * 60)
+            logger.info("FIELD UPDATE SUMMARY")
+
             if posts_changes:
-                print("\nPOSTS UPDATES (Previous Day):")
+                logger.info("POSTS UPDATES (Previous Day):")
                 for change in posts_changes:
-                    print(f"  {change['field']}: {change['initial']} → {change['final']}")
-            
+                    logger.info("  %s: %s → %s", change['field'], change['initial'], change['final'])
+
             if followers_changes:
-                print("\nFOLLOWER UPDATES (Current Day):")
+                logger.info("FOLLOWER UPDATES (Current Day):")
                 for change in followers_changes:
-                    print(f"  {change['field']}: {change['initial']} → {change['final']}")
+                    logger.info("  %s: %s → %s", change['field'], change['initial'], change['final'])
                     
         except KeyboardInterrupt:
             logger.info("❌ Update cancelled by user")
@@ -689,9 +681,7 @@ def main():
     
     # Close Supabase connection
     supabase_connection.close()
-    
-    print("\n" + "="*60)
-    print("\n")
+    logger.info("=" * 60)
 
     logger.info("✅ Notion Update Process completed")
 

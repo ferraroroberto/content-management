@@ -342,10 +342,9 @@ def main(args=None):
         return
 
     # Print all database IDs and names for user reference
-    print("\nDatabases marked for replication:")
+    logger.info("Databases marked for replication:")
     for db in databases:
-        print(f"  - ID: {db['id']} | Name: {db.get('name', 'UNKNOWN')} | Supabase table: {db.get('supabase_table', 'N/A')}")
-    print()
+        logger.info("  - ID: %s | Name: %s | Supabase table: %s", db['id'], db.get('name', 'UNKNOWN'), db.get('supabase_table', 'N/A'))
 
     # Initialize Notion client
     notion = init_notion_client(api_token)
@@ -395,10 +394,8 @@ def main(args=None):
             logger.warning("⚠️ Failed to create DataFrame from database content")
         else:
             if debug_mode:
-                print("\n📊 DataFrame Preview:")
-                print(df.head())
-                print("\n📈 DataFrame Info:")
-                print(df.info())
+                logger.debug("DataFrame Preview:\n%s", df.head().to_string())
+                logger.debug("DataFrame Info: %d rows x %d cols", len(df), len(df.columns))
 
         # Save database information
         save_database_info(structure, df)

@@ -620,10 +620,8 @@ def main(args=None):
         logger.info(f"📋 {data_type} Columns: {', '.join(df.columns)}")
         
         if debug_mode:
-            print(f"\n📊 {data_type} DataFrame Preview:")
-            print(df.head())
-            print(f"\n📈 {data_type} DataFrame Info:")
-            print(df.info())
+            logger.debug("%s DataFrame Preview:\n%s", data_type, df.head().to_string())
+            logger.debug("%s DataFrame Info: %d rows x %d cols", data_type, len(df), len(df.columns))
     
     # Upload data to Supabase if enabled
     supabase_enabled = main_config.get('supabase', {}).get('enable_upload', False)
