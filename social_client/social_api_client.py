@@ -6,6 +6,7 @@ import logging
 import sys
 import time
 import argparse
+import msvcrt
 from pathlib import Path
 
 # Add the parent directory to sys.path to allow importing from sibling packages
@@ -14,6 +15,15 @@ from config.logger_config import setup_logger
 
 # Set up logger
 logger = None
+
+def interruptible_sleep(seconds: int) -> bool:
+    """Sleep up to `seconds`, returning True immediately if user presses 'x'."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if msvcrt.kbhit() and msvcrt.getwch().lower() == 'x':
+            return True
+        time.sleep(0.1)
+    return False
 
 def configure_logger(debug_mode=False):
     """Set up logger with appropriate level based on debug mode."""
@@ -88,15 +98,21 @@ def get_api_data(platform_key, config):
             logger.debug(f"🔑 Using query parameters: {querystring}")
             response = requests.get(url, headers=headers, params=querystring)
             response.raise_for_status()  # Raise an exception for bad status codes
+            data = response.json()
             logger.info(f"✅ Successfully retrieved {platform_key} data")
-            return response.json()
+            return data
         except requests.exceptions.RequestException as e:
-            logger.error(f"❌ Error fetching {platform_key} data (attempt {attempt+1}/{retries}): {e}")
+            preview = getattr(e.response, 'content', b'')[:200] if hasattr(e, 'response') else b''
+            logger.error(f"❌ Error fetching {platform_key} data (attempt {attempt+1}/{retries}): {e}{f' | response: {preview}' if preview else ''}")
             # Only backoff if not the last attempt
             if attempt < retries - 1:
                 wait_time = backoff_times[attempt]
+                if attempt == 0:
+                    logger.info("💡 Press 'x' during the wait to skip this endpoint")
                 logger.info(f"⏳ Retrying in {wait_time} seconds...")
-                time.sleep(wait_time)
+                if interruptible_sleep(wait_time):
+                    logger.info(f"⏩ {platform_key} skipped by user")
+                    return None
             else:
                 logger.error(f"❌ All {retries} attempts failed for {platform_key}")
                 return None
