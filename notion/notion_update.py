@@ -645,7 +645,7 @@ def main():
         current_next_id = current_next_relation[0].get('id', '') if current_next_relation else None
 
         if current_next_id == next_day_page_id:
-            logger.info(f"ℹ️ 'next' already points to {next_day_iso}; skipping")
+            logger.info(f"   'next' already points to {next_day_iso}; skipping")
         else:
             next_payload = prepare_notion_update('relation', next_day_page_id)
             if next_payload is not None:
