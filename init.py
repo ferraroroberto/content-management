@@ -6,6 +6,7 @@ Initialization script to run the complete data processing pipeline:
 3. profile_aggregator - Aggregate profile data across platforms
 4. posts_consolidator - Consolidate posts data across platforms
 5. notion_update - Update Notion databases with processed data
+6. substack.daily_pipeline - Publish daily Substack Note + scrape follower count
 """
 
 import os
@@ -23,6 +24,7 @@ from process.data_processor import main as run_data_processor, configure_logger 
 from process.profile_aggregator import main as run_profile_aggregator, configure_logger as configure_profile_logger
 from process.posts_consolidator import main as run_posts_consolidator, configure_logger as configure_posts_logger
 from notion.notion_update import main as run_notion_update, configure_logger as configure_notion_logger
+from substack.daily_pipeline import main as run_substack_daily_pipeline
 
 # Set up logger
 logger: logging.Logger | None = None
@@ -43,6 +45,7 @@ def parse_arguments():
     parser.add_argument('-a', '--skip-aggregation', action='store_true', help='Skip the profile aggregation step')
     parser.add_argument('-c', '--skip-consolidation', action='store_true', help='Skip the posts consolidation step')
     parser.add_argument('-n', '--skip-notion', action='store_true', help='Skip the Notion update step')
+    parser.add_argument('-b', '--skip-substack', action='store_true', help='Skip the Substack daily pipeline (publish Note + scrape followers)')
     parser.add_argument('--date', type=str, help='Reference date in YYYYMMDD format. Will process the day before this date.')
     return parser.parse_args()
 
@@ -82,9 +85,9 @@ def run_module(module_func, module_name, debug_mode=False, extra_args=None):
         # Restore original arguments
         sys.argv = original_argv.copy()
 
-def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False, 
+def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
                 skip_aggregation=False, skip_consolidation=False, skip_notion=False,
-                reference_date=None):
+                skip_substack=False, reference_date=None):
     """Run the complete data processing pipeline."""
     # Configure the main logger
     configure_logger(debug_mode)
@@ -156,7 +159,19 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
                 raise
     else:
         logger.info("⏭️ Skipping Notion Update step")  # type: ignore
-    
+
+    # Step 6: Publish Substack Note + scrape follower count
+    if not skip_substack:
+        logger.info("📰 Step 6: Running Substack Daily Pipeline")  # type: ignore
+        try:
+            run_module(run_substack_daily_pipeline, "Substack Daily Pipeline", debug_mode, extra_args=date_args)
+        except Exception as e:
+            logger.error(f"❌ Error in Substack Daily Pipeline: {e}")  # type: ignore
+            if debug_mode:
+                raise
+    else:
+        logger.info("⏭️ Skipping Substack Daily Pipeline step")  # type: ignore
+
     logger.info("🎉 Complete data processing pipeline finished")  # type: ignore
 
 def main():
@@ -170,6 +185,7 @@ def main():
         skip_aggregation=args.skip_aggregation,
         skip_consolidation=args.skip_consolidation,
         skip_notion=args.skip_notion,
+        skip_substack=args.skip_substack,
         reference_date=args.date
     )
 
