@@ -363,6 +363,11 @@ def prepare_notion_update(property_type, value):
             return {"date": {"start": value}}
         else:
             return {"date": {"start": str(value)}}
+    elif property_type == 'relation':
+        if value in (None, ""):
+            return {"relation": []}
+        ids = value if isinstance(value, list) else [value]
+        return {"relation": [{"id": str(i)} for i in ids]}
     else:
         # Default to rich_text for unknown types
         return {"rich_text": [{"text": {"content": str(value)}}] if value else []}
@@ -614,14 +619,47 @@ def main():
             
             if update_payload is not None:
                 followers_updates[field_name] = update_payload
-                
+
                 # Track the change
                 followers_changes.append({
                     'field': field_name,
                     'initial': old_value,
                     'final': new_value
                 })
-    
+
+    # Determine the 'next' relation for the current day row (points to tomorrow)
+    next_day_obj = date_obj + timedelta(days=1)
+    next_day_iso = next_day_obj.strftime("%Y-%m-%d")
+    logger.debug(f"🔍 Looking up next-day row for {next_day_iso}")
+    next_day_response = notion.databases.query(
+        database_id=format_database_id(database_id),
+        filter={"property": "date", "date": {"equals": next_day_iso}},
+    )
+    next_day_results = next_day_response.get('results', [])
+
+    if not next_day_results:
+        logger.warning(f"⚠️ No row found for next day ({next_day_iso}); 'next' will be skipped")
+    else:
+        next_day_page_id = next_day_results[0].get('id', '')
+        current_next_relation = current_properties.get('next', {}).get('relation', [])
+        current_next_id = current_next_relation[0].get('id', '') if current_next_relation else None
+
+        if current_next_id == next_day_page_id:
+            logger.info(f"ℹ️ 'next' already points to {next_day_iso}; skipping")
+        else:
+            next_payload = prepare_notion_update('relation', next_day_page_id)
+            if next_payload is not None:
+                followers_updates['next'] = next_payload
+                followers_changes.append({
+                    'field': 'next',
+                    'initial': current_next_id,
+                    'final': next_day_page_id,
+                })
+                logger.info(
+                    "📅 Will set 'next' relation: %s → %s (%s)",
+                    current_next_id or '(empty)', next_day_page_id, next_day_iso,
+                )
+
     # Update Notion pages
     if posts_updates or followers_updates:
         total_updates = len(posts_updates) + len(followers_updates)
