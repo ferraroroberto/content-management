@@ -186,5 +186,23 @@
             "link IG(v)": "posts.post_id_instagram_video",
             "link TW(v)": "posts.post_id_twitter_video"
         }
+    },
+    "substack": {
+        "handle": "your_substack_handle",
+        "publish_url": "https://your-publication.substack.com/publish/home",
+        "profile_url": "https://substack.com/@your_substack_handle",
+        "stats_audience_url": "https://your-publication.substack.com/publish/stats?utm_source=menu&view=subscribers",
+        "user_data_dir": "substack/chrome_user_data",
+        "illustrations_folder": "C:/path/to/illustrations",
+        "editorial_db_id": "your_editorial_database_id_here",
+        "notion_columns": {
+            "title_day": "day",
+            "text_body": "text SB",
+            "image_filename": "ill (copy)",
+            "post_url": "link SB",
+            "follower_count": "follow SB"
+        },
+        "headless": false,
+        "dry_run_default": false
     }
 }

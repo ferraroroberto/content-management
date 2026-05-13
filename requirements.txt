@@ -12,3 +12,5 @@ notion-client==2.2.1
 python-dotenv
 # PostgreSQL database adapter for Python (used for database uploads)
 psycopg2-binary
+# Browser automation for the Substack pipeline (note posting + follower scraping)
+playwright

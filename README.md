@@ -95,6 +95,12 @@ automation/
 │   │   ├── notion_supabase_sync.py
 │   │   ├── notion_database_structure.py
 │   │   └── README.md
+│   ├── substack/              # Playwright automation (Notes + followers)
+│   │   ├── daily_pipeline.py
+│   │   ├── post_substack_note.py
+│   │   ├── update_substack_followers.py
+│   │   ├── bootstrap_session.py
+│   │   └── README.md
 │   ├── config/                # Configuration files
 │   │   ├── config.json
 │   │   ├── mapping.json
@@ -104,6 +110,30 @@ automation/
 │       ├── raw/               # Raw API responses
 │       └── processed/         # Processed data files
 └── README.md
+```
+
+### Substack automation (Notes + followers)
+
+The `substack/` package automates two daily steps that the public Substack API
+does not expose: publishing a Note and reading the total-followers count. Both
+steps run through Playwright with a persisted browser session. See
+[`substack/README.md`](substack/README.md) for the full CLI and configuration
+reference.
+
+The package drives **real Chrome** (already installed on your machine) against
+a dedicated, project-local profile directory — your normal Chrome profile is
+not touched.
+
+One-time setup after `pip install -r requirements.txt`:
+
+```powershell
+& .\.venv\Scripts\python.exe -m substack.bootstrap_session
+```
+
+Daily run:
+
+```powershell
+& .\.venv\Scripts\python.exe -m substack.daily_pipeline
 ```
 
 ## 🚀 Quick Start
