@@ -252,7 +252,9 @@ def parse_arguments():
     parser.add_argument('date', type=str, help='Date to search for (format: YYYY-MM-DD or YYYYMMDD)')
     parser.add_argument('--debug', action='store_true', help='Enable debug mode')
     parser.add_argument('--database-id', type=str, help='Override database ID from config')
-    
+    parser.add_argument('-y', '--yes', action='store_true',
+                        help='Auto-confirm the update prompt (skip the "Press Enter to continue" wait)')
+
     return parser.parse_args()
 
 def get_supabase_data(connection, date_str, posts_table, profile_table):
@@ -665,9 +667,12 @@ def main():
         total_updates = len(posts_updates) + len(followers_updates)
         logger.info("Ready to update %d fields in Notion", total_updates)
         logger.info("Ready to update: %d posts fields on previous day, %d follower fields on current day", len(posts_updates), len(followers_updates))
-        print("\nPress Enter to continue with the update or Ctrl+C to cancel...")
         try:
-            input()  # Wait for user to press Enter
+            if args.yes:
+                logger.info("✅ Auto-confirm enabled (--yes); proceeding with update")
+            else:
+                print("\nPress Enter to continue with the update or Ctrl+C to cancel...")
+                input()  # Wait for user to press Enter
             
             # Update posts fields on previous day
             if posts_updates:

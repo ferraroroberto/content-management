@@ -46,6 +46,8 @@ def parse_arguments():
     parser.add_argument('-c', '--skip-consolidation', action='store_true', help='Skip the posts consolidation step')
     parser.add_argument('-n', '--skip-notion', action='store_true', help='Skip the Notion update step')
     parser.add_argument('-b', '--skip-substack', action='store_true', help='Skip the Substack daily pipeline (publish Note + scrape followers)')
+    parser.add_argument('-y', '--yes', action='store_true',
+                        help='Auto-confirm interactive prompts in sub-steps (e.g. Notion update). Use this for unattended/scheduled runs.')
     parser.add_argument('--date', type=str, help='Reference date in YYYYMMDD format. Will process the day before this date.')
     return parser.parse_args()
 
@@ -87,7 +89,7 @@ def run_module(module_func, module_name, debug_mode=False, extra_args=None):
 
 def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
                 skip_aggregation=False, skip_consolidation=False, skip_notion=False,
-                skip_substack=False, reference_date=None):
+                skip_substack=False, reference_date=None, auto_confirm=False):
     """Run the complete data processing pipeline."""
     # Configure the main logger
     configure_logger(debug_mode)
@@ -152,7 +154,10 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
         configure_notion_logger(debug_mode)
         try:
             logger.info(f"🗓️  Using date for Notion update: {processing_date}")  # type: ignore
-            run_module(run_notion_update, "Notion Update", debug_mode, [processing_date])
+            notion_extra_args = [processing_date]
+            if auto_confirm:
+                notion_extra_args.append('--yes')
+            run_module(run_notion_update, "Notion Update", debug_mode, notion_extra_args)
         except Exception as e:
             logger.error(f"❌ Error in Notion Update: {e}")  # type: ignore
             if debug_mode:
@@ -186,7 +191,8 @@ def main():
         skip_consolidation=args.skip_consolidation,
         skip_notion=args.skip_notion,
         skip_substack=args.skip_substack,
-        reference_date=args.date
+        reference_date=args.date,
+        auto_confirm=args.yes,
     )
 
 if __name__ == "__main__":
