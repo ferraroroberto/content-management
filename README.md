@@ -1,281 +1,205 @@
 # Social Media Automation Suite
 
-A comprehensive Python-based automation system for collecting, processing, and analyzing social media data across multiple platforms. This suite integrates with various APIs to fetch social media metrics, processes the data, stores it in a PostgreSQL database (Supabase), and syncs with Notion for reporting and analysis.
+Two pipelines, one repo:
 
-## 🚀 Overview
+- **Reporting** (`reporting/`, `reporting_pipeline.py`) — pulls daily
+  metrics from social media APIs, processes through Supabase, syncs to
+  Notion, and runs the daily Substack Note.
+- **Planning** (`planning/`, `planning_pipeline.py`) — schedules next
+  week's (or weeks') content on LinkedIn, Instagram (+ Meta planner story
+  + post), Twitter, and Threads, driving each platform's native scheduler
+  via real Chrome with a dedicated profile. The Instagram step also
+  clones captions/illustrations into the TW/TH/SB Notion columns so the
+  other planners and the daily Substack run can consume them.
 
-This automation suite consists of three main modules that work together to create a complete social media analytics pipeline:
+Both pipelines read from the same Notion editorial database. Each per-folder
+README has its own mermaid flowchart, CLI table, gotchas, and validated
+selector list — this README is the orientation map.
 
-1. **Social Client** - Fetches data from social media platform APIs
-2. **Process** - Transforms and uploads data to PostgreSQL/Supabase
-3. **Notion** - Syncs data with Notion databases for reporting
+```mermaid
+flowchart TB
+    subgraph Reporting[" Reporting pipeline — reporting_pipeline.py "]
+        direction LR
+        R1[social APIs<br/>RapidAPI] --> R2[data_processor]
+        R2 --> R3[(Supabase<br/>PostgreSQL)]
+        R3 --> R4[profile + posts aggregation]
+        R4 --> R5[notion_update<br/>daily numbers]
+        R5 --> R6[substack daily_pipeline<br/>Note + followers]
+    end
 
-## 📊 Supported Platforms
+    subgraph Planning[" Planning pipeline — planning_pipeline.py "]
+        direction LR
+        P0[Notion editorial DB<br/>WIP-LI ticked] --> P1[planning.linkedin]
+        P0 --> P2[planning.instagram<br/>clone_to_other_platforms<br/>+ Meta planner]
+        P2 -.->|TW/TH/SB columns| P3
+        P2 -.->|TW/TH/SB columns| P4
+        P2 -.->|SB columns| R6
+        P3[planning.twitter] --> P5[results/planning/<br/>summary.md]
+        P4[planning.threads] --> P5
+        P1 --> P5
+    end
 
-- LinkedIn (Profile & Posts)
-- Instagram (Profile & Posts)
-- Twitter/X (Profile & Posts)
-- Threads (Profile & Posts)
-- Substack (Profile & Posts)
-
-## 🏗️ Architecture
-
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Social APIs    │────▶│ Data Processing │────▶│    Supabase     │
-│   (RapidAPI)    │     │   & Transform   │     │   PostgreSQL    │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-                                                          │
-                                                          ▼
-                                                 ┌─────────────────┐
-                                                 │     Notion      │
-                                                 │   Databases     │
-                                                 └─────────────────┘
-```
-
-## 📈 Data Flow & Processing
-
-### Complete Data Pipeline
-
-1. **Data Collection** 📥
-   - Raw JSON data fetched from social media APIs via RapidAPI
-   - Daily collection frequency with smart caching
-   - Raw responses stored in `results/raw/` directory
-   - Skip existing data to avoid duplicate API calls
-
-2. **Data Processing** 🔄
-   - JSON data transformed using configurable field mappings
-   - Automatic type conversion and validation
-   - Required fields validated before processing
-   - Error handling for missing or invalid data
-
-3. **Database Storage** 💾
-   - Processed data uploaded to PostgreSQL (Supabase)
-   - Automatic table creation based on DataFrame structure
-   - Batch processing for large datasets
-   - Upsert logic (update existing, insert new)
-
-4. **Data Aggregation** 📊
-   - Profile data consolidated across platforms
-   - Posts data aggregated by content type (video vs non-video)
-   - One record per day with all platform data
-   - Optimized for time-series analysis
-
-5. **Reporting & Sync** 📋
-   - Data synced to Notion databases for visualization
-   - Bidirectional sync capabilities
-   - Change tracking and comprehensive logging
-   - Support for all Notion property types
-
-### Data Collection Process
-
-- **Frequency**: Daily automated collection
-- **Platforms**: LinkedIn, Instagram, Twitter/X, Threads, Substack
-- **Data Types**: Profile information and recent posts performance
-- **Storage**: Raw JSON files with metadata
-- **Validation**: Field mapping and type conversion
-- **Quality**: Comprehensive error handling and logging
-
-## 📁 Project Structure
-
-```
-automation/
-├── reporting/
-│   ├── social_client/         # API data collection
-│   │   ├── social_api_client.py
-│   │   └── README.md
-│   ├── process/               # Data processing & database operations
-│   │   ├── data_processor.py
-│   │   ├── supabase_uploader.py
-│   │   ├── profile_aggregator.py
-│   │   ├── posts_consolidator.py
-│   │   └── README.md
-│   ├── notion/                # Notion integration
-│   │   ├── notion_update.py
-│   │   ├── notion_supabase_sync.py
-│   │   ├── notion_database_structure.py
-│   │   └── README.md
-│   ├── substack/              # Playwright automation (Notes + followers)
-│   │   ├── daily_pipeline.py
-│   │   ├── post_substack_note.py
-│   │   ├── update_substack_followers.py
-│   │   ├── bootstrap_session.py
-│   │   └── README.md
-│   ├── config/                # Configuration files
-│   │   ├── config.json
-│   │   ├── mapping.json
-│   │   ├── logger_config.py
-│   │   └── README.md
-│   └── results/               # Output directories
-│       ├── raw/               # Raw API responses
-│       └── processed/         # Processed data files
-└── README.md
+    Reporting -.daily.-> X((cron))
+    Planning -.weekly.-> X
 ```
 
-### Substack automation (Notes + followers)
+## Supported platforms
 
-The `substack/` package automates two daily steps that the public Substack API
-does not expose: publishing a Note and reading the total-followers count. Both
-steps run through Playwright with a persisted browser session. See
-[`substack/README.md`](substack/README.md) for the full CLI and configuration
-reference.
+LinkedIn · Instagram · Twitter/X · Threads · Substack (Note + scraped
+follower count). All five have a Notion editorial column set; four have a
+native-scheduler driver under `planning/`.
 
-The package drives **real Chrome** (already installed on your machine) against
-a dedicated, project-local profile directory — your normal Chrome profile is
-not touched.
+## Project structure
 
-One-time setup after `pip install -r requirements.txt`:
+```
+reporting/                            # repo root
+├── planning/                         # weekly publishing — drives platform schedulers
+│   ├── linkedin/                     # LinkedIn weekly post scheduler
+│   ├── instagram/                    # Meta planner (story + post) + IG→TW/TH/SB clone step
+│   ├── twitter/                      # X /home composer scheduler
+│   ├── threads/                      # threads.com composer + calendar scheduler
+│   └── substack/                     # Substack Note publisher + followers scraper
+├── reporting/                        # daily numbers — APIs → Supabase → Notion
+│   ├── social_client/                # RapidAPI fetchers
+│   ├── process/                      # transform, upload to Supabase, aggregate
+│   └── notion/                       # editorial helpers + Notion sync
+├── config/                           # config.json, mapping.json, logger_config, chrome_launch
+├── results/                          # outputs — planning summaries + raw API JSON
+├── logs/                             # per-module .log files
+├── docs/                             # retrospective changelogs (gitignored locally)
+├── planning_pipeline.py              # orchestrator: LI → IG → TW → TH (--all-wip)
+├── reporting_pipeline.py             # orchestrator: APIs → Supabase → Notion → Substack
+├── launch_planning.bat               # planning launcher (Windows CMD)
+└── launch_reporting.bat              # reporting launcher (Windows CMD)
+```
+
+### Per-folder READMEs
+
+Each folder has a README with a consistent shape: workflow mermaid, CLI table,
+Notion field map (where relevant), validated selectors (planning packages),
+gotchas, files.
+
+- **Planning** —
+  [`planning/linkedin/README.md`](planning/linkedin/README.md) ·
+  [`planning/instagram/README.md`](planning/instagram/README.md) ·
+  [`planning/twitter/README.md`](planning/twitter/README.md) ·
+  [`planning/threads/README.md`](planning/threads/README.md) ·
+  [`planning/substack/README.md`](planning/substack/README.md)
+- **Reporting** —
+  [`reporting/social_client/README.md`](reporting/social_client/README.md) ·
+  [`reporting/process/README.md`](reporting/process/README.md) ·
+  [`reporting/notion/README.md`](reporting/notion/README.md)
+- **Shared** — [`config/README.md`](config/README.md)
+
+## The two launchers
+
+The launchers are the user entrypoints. They wrap the two orchestrators with
+the venv interpreter and keep the CMD window open at the end so you can
+inspect the output.
+
+| Launcher                  | Pipeline   | Default mode  | Cron-friendly arg |
+|---------------------------|------------|---------------|-------------------|
+| `launch_reporting.bat`    | Reporting  | interactive   | `auto`            |
+| `launch_planning.bat`     | Planning   | dry-run       | `live`, `auto`    |
 
 ```powershell
-& .\.venv\Scripts\python.exe -m substack.bootstrap_session
+# One-shot, daily numbers pipeline (today's date, no prompts)
+.\launch_reporting.bat auto
+
+# Walk every WIP planning row across LI → IG → TW → TH (LIVE), no pause at end
+.\launch_planning.bat live auto
 ```
 
-Daily run:
+## Planning pipeline — overview
 
-```powershell
-& .\.venv\Scripts\python.exe -m substack.daily_pipeline
+```mermaid
+flowchart LR
+    A[Notion editorial DB<br/>WIP-* checkboxes] --> B[planning_pipeline.py<br/>--all-wip]
+    B --> L[planning.linkedin<br/>schedule_linkedin_posts]
+    L --> I[planning.instagram<br/>schedule_instagram_posts<br/>story + post]
+    I --> T[planning.twitter<br/>schedule_twitter_posts]
+    T --> H[planning.threads<br/>schedule_threads_posts]
+    H --> S[results/planning/<br/>YYYY-MM-DD-summary.md]
+    S --> R[stdout + on-disk report]
 ```
 
-## 🚀 Quick Start
+- Each platform is run with `--all-wip` — no date filter, so you can plan
+  one, two, or three weeks in a single run.
+- **Continue-on-error across platforms** — a LinkedIn failure does not
+  stop IG / TW / TH. Every failure is captured in the final markdown
+  summary.
+- On a successful LIVE schedule for a row, the corresponding
+  `Work in Progress <P>` checkbox is unticked in Notion so re-runs are
+  idempotent no-ops.
+- Each platform package owns its own dedicated Chrome profile under
+  `planning/<P>/chrome_user_data/` (gitignored). One-time bootstrap per
+  platform: `python -m planning.<P>.bootstrap_session`.
+
+## Reporting pipeline — overview
+
+```mermaid
+flowchart LR
+    A[RapidAPI<br/>5 platforms] --> B[reporting.social_client]
+    B --> C[results/raw/<br/>JSON dump]
+    C --> D[reporting.process.data_processor]
+    D --> E[(Supabase<br/>PostgreSQL)]
+    E --> F[reporting.process<br/>profile_aggregator<br/>posts_consolidator]
+    F --> G[reporting.notion.notion_update<br/>daily numbers]
+    G --> H[planning.substack.daily_pipeline<br/>Note + follower scrape]
+```
+
+- Idempotent upserts: re-running for the same date is a no-op.
+- All six steps run as one script (`reporting_pipeline.py`) with
+  per-step `--skip-*` flags for partial reruns.
+
+## Quick Start
 
 ### Prerequisites
 
-- Python 3.7+
+- Python 3.11+ (tested on 3.14)
 - PostgreSQL database (local or Supabase cloud)
 - API keys for social media platforms (via RapidAPI)
-- Notion API token (for Notion integration)
+- Notion API token
+- Real Chrome (used by planning Playwright drivers, channel="chrome")
 
 ### Installation
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd automation/reporting
-   ```
+```powershell
+git clone <repository-url>
+cd reporting
 
-2. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
+# Create venv and install
+python -m venv .venv
+& .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 
-3. **Configure environment**
-   ```bash
-   # Copy example configurations
-   cp config/config_example.json config/config.json
-   cp process/.env_example process/.env
-   
-   # Edit config files with your credentials
-   ```
+# Configure
+Copy-Item config\config_example.json config\config.json
+# edit config\config.json with API keys, Notion token, DB credentials
 
-4. **Set up database**
-   - Create a Supabase project or set up local PostgreSQL
-   - Update database credentials in `.env` file
-
-### Basic Usage
-
-1. **Collect social media data**
-   ```bash
-   cd social_client
-   python social_api_client.py
-   ```
-
-2. **Process and upload data**
-   ```bash
-   cd ../process
-   python data_processor.py
-   ```
-
-3. **Aggregate profiles and posts**
-   ```bash
-   python profile_aggregator.py
-   python posts_consolidator.py
-   ```
-
-4. **Sync with Notion (optional)**
-   ```bash
-   cd ../notion
-   python notion_update.py YYYYMMDD
-   ```
-
-## 📋 Module Documentation
-
-### [Social Client Module](reporting/social_client/README.md)
-
-Fetches data from social media APIs:
-- Automatic timestamp-based file naming
-- Skip existing data to avoid duplicate API calls
-- Debug mode for troubleshooting
-- Progress tracking and comprehensive logging
-
-**Key Features:**
-- 🚀 Multi-platform support
-- 💾 JSON output with metadata
-- 🔄 Smart caching
-- 🐞 Debug mode
-
-### [Process Module](reporting/process/README.md)
-
-Handles data transformation and database operations:
-- Field mapping based on configuration
-- Automatic type conversion
-- Database table creation
-- Batch processing for large datasets
-
-**Key Components:**
-- 📊 `data_processor.py` - Main processing engine
-- 📤 `supabase_uploader.py` - Database interface
-- 🔄 `profile_aggregator.py` - Consolidates follower counts
-- 📝 `posts_consolidator.py` - Merges posts data
-
-### [Notion Module](reporting/notion/README.md)
-
-Integrates with Notion for reporting:
-- Bidirectional sync with Supabase
-- Automatic schema detection
-- Change tracking and logging
-- Support for all Notion property types
-
-**Key Tools:**
-- 📝 `notion_update.py` - Updates Notion with Supabase data
-- 🔄 `notion_supabase_sync.py` - Continuous database sync
-- 📊 `notion_database_structure.py` - Schema analysis
-
-### [Configuration](reporting/config/README.md)
-
-Central configuration management:
-- API credentials and endpoints
-- Field mapping rules
-- Database settings
-- Logging configuration
-
-## 🔄 Typical Workflow
-
-### Daily Data Collection
-
-```bash
-# 1. Fetch latest social media data
-cd reporting/social_client
-python social_api_client.py
-
-# 2. Process and upload to database
-cd ../process
-python data_processor.py
-
-# 3. Aggregate data
-python profile_aggregator.py
-python posts_consolidator.py
-
-# 4. Update Notion (if needed)
-cd ../notion
-python notion_update.py $(date +%Y%m%d)
+# One-time per-platform browser session bootstrap (interactive login):
+& .\.venv\Scripts\python.exe -m planning.linkedin.bootstrap_session
+& .\.venv\Scripts\python.exe -m planning.instagram.bootstrap_session
+& .\.venv\Scripts\python.exe -m planning.twitter.bootstrap_session
+& .\.venv\Scripts\python.exe -m planning.threads.bootstrap_session
+& .\.venv\Scripts\python.exe -m planning.substack.bootstrap_session
 ```
 
-### Continuous Notion Sync
+### Daily reporting run
 
-```bash
-# Run continuous sync in background
-cd reporting/notion
-python notion_supabase_sync.py
+```powershell
+.\launch_reporting.bat auto
+# OR per-step:
+& .\.venv\Scripts\python.exe reporting_pipeline.py --date 20260517 --yes
+& .\.venv\Scripts\python.exe reporting_pipeline.py --date 20260517 --yes --skip-substack
+```
+
+### Weekly planning run
+
+```powershell
+# After filling the Notion IG side and ticking WIP-IG / WIP-LI for next week:
+.\launch_planning.bat live auto
+# Dry-run rehearsal (no posts scheduled):
+.\launch_planning.bat
 ```
 
 ## 📊 Data Schema & Structure
@@ -577,18 +501,18 @@ python notion_supabase_sync.py --config custom_config.json
 
 ### Debug Commands
 
-```bash
+```powershell
 # Test database connection
-cd reporting/process
-python supabase_test_connect.py
+& .\.venv\Scripts\python.exe -m reporting.process.supabase_test_connect
 
 # Analyze Notion database structure
-cd ../notion
-python notion_database_structure.py --debug
+& .\.venv\Scripts\python.exe -m reporting.notion.notion_database_structure --debug
 
 # Process single platform
-cd ../social_client
-python social_api_client.py --platform linkedin_profile --debug
+& .\.venv\Scripts\python.exe -m reporting.social_client.social_api_client --platform linkedin_profile --debug
+
+# Smoke-test one planning scheduler (dry-run, no posts written)
+& .\.venv\Scripts\python.exe -m planning.twitter.schedule_twitter_posts --all-wip --dry-run --debug
 ```
 
 ## 📈 Performance Optimization

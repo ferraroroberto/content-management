@@ -7,16 +7,16 @@ logs/
 
 # Ignore config.json file and .env file in the process directory
 config.json
-process/.env
+reporting/process/.env
 
 # Per-platform dedicated Chrome user-data directories (cookies, profile) — never commit.
 # These are SEPARATE profiles created by each platform's bootstrap script; they have
 # nothing to do with the user's regular ~/Chrome User Data profile.
-substack/chrome_user_data/
-linkedin/chrome_user_data/
-twitter/chrome_user_data/
-threads/chrome_user_data/
-instagram/chrome_user_data/
+planning/substack/chrome_user_data/
+planning/linkedin/chrome_user_data/
+planning/twitter/chrome_user_data/
+planning/threads/chrome_user_data/
+planning/instagram/chrome_user_data/
 
 # Ignore contents of results directory but keep the directory itself
 results/*
@@ -26,11 +26,17 @@ results/*
 __pycache__/
 
 # Ignore Notion sample DB
-/notion/database_sample
+/reporting/notion/database_sample
 
-# supabase cli
+# supabase cli state
 supabase/.temp/cli-latest
 supabase/.branches/_current_branch
+
+# claude code settings
+.claude/
+
+# temp files
+/tmp
 
 # claude code settings
 .claude/
