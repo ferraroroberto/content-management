@@ -4,7 +4,7 @@ Two entrypoints:
 
 * ``run_batch(write=True)`` — walk every non-skipped tab in your Chrome,
   classify + summarise + write each article, close the tab on success.
-* ``archive.newsletter.dry_run`` (CLI) — single-tab variant for testing.
+* ``newsletter.dry_run`` (CLI) — single-tab variant for testing.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -27,10 +27,10 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 from config.logger_config import setup_logger  # noqa: E402
-from archive.newsletter import (  # noqa: E402
+from newsletter import (  # noqa: E402
     author_resolver, chrome_tabs, classifier, extractor, notion_io, summarizer,
 )
-from archive.newsletter.cache import CacheState  # noqa: E402
+from newsletter.cache import CacheState  # noqa: E402
 
 
 def load_config() -> Dict[str, Any]:

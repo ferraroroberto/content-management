@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 
-from archive.newsletter import llm
+from newsletter import llm
 
 logger = logging.getLogger("newsletter_archive.classifier")
 

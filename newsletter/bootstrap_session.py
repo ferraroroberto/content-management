@@ -1,12 +1,12 @@
 """One-time interactive bootstrap for the newsletter-archive Chrome profile.
 
-Launches Chrome against ``archive/newsletter/chrome_user_data/`` and opens
-Gmail so you can sign in. Press Enter once you're logged into Gmail (and any
-other newsletter sources you'd like a persistent session for). The profile is
+Launches Chrome against ``newsletter/chrome_user_data/`` and opens Gmail so
+you can sign in. Press Enter once you're logged into Gmail (and any other
+newsletter sources you'd like a persistent session for). The profile is
 written to disk on close; future ``bootstrap_chrome.bat`` runs reuse it.
 
 Usage:
-    .venv\\Scripts\\python -m archive.newsletter.bootstrap_session
+    .venv\\Scripts\\python -m newsletter.bootstrap_session
 
 Pattern mirrors ``planning/linkedin/bootstrap_session.py`` and friends.
 """
@@ -16,7 +16,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 

@@ -13,15 +13,19 @@ Three pipelines, one repo:
   with a dedicated profile. The Instagram step also clones captions /
   illustrations into the TW/TH/SB Notion columns so the other planners
   and the daily Substack run can consume them.
-- **Archive — newsletter article archive** (`archive/newsletter/`) —
-  walks the open article tabs in a CDP-attached real Chrome, extracts
-  each article (readability-lxml), classifies the topic and produces a
-  3-line summary via the local-llm-hub (Gemini Flash), resolves the
-  author against the connections DB (exact / fuzzy / LLM-pick-primary /
-  `(not classified)` fallback — never invents), assigns to the next
-  future newsletter with room (`< 8` per topic), writes a Notion article
-  page, and closes the tab. End state: only Gmail (and other skipped
-  utility tabs) remain.
+- **Newsletter** (`newsletter/`, `newsletter_pipeline.py`) — the full
+  weekly newsletter workflow as one orchestrated run. Step 1 archives
+  the open article tabs in a CDP-attached real Chrome into Notion
+  (readability-lxml extraction → Gemini-Lite topic + 3-line summary →
+  author resolved against the connections DB with exact / fuzzy /
+  LLM-pick-primary / `(not classified)` fallback — never invents → first
+  future newsletter row with `< 8` per topic → write + close tab). Step
+  2 normalises article titles to sentence case while preserving a
+  whitelist of proper names (spaCy PERSON entities optional). Step 3
+  strips tracking query params from each URL except for video / tweet
+  domains. Step 4 prompts for the newsletter number and emits the
+  ready-to-paste HTML at `results/newsletter/N{NNN}.html`, opens it in
+  the browser, and copies the must-read line to the clipboard.
 
 Both pipelines read from the same Notion editorial database. Each per-folder
 README has its own mermaid flowchart, CLI table, gotchas, and validated
@@ -76,16 +80,19 @@ reporting/                            # repo root
 │   ├── social_client/                # RapidAPI fetchers
 │   ├── process/                      # transform, upload to Supabase, aggregate
 │   └── notion/                       # editorial helpers + Notion sync
-├── archive/                          # incoming-content archive pipelines
-│   └── newsletter/                   # Chrome tabs → Notion articles (with author + newsletter bucket)
+├── newsletter/                       # weekly newsletter pipeline (archive + normalize + build)
+│                                     # archive=chrome tabs → notion; normalize_names + normalize_url
+│                                     # rewrite titles + clean URLs; build_newsletter renders HTML
 ├── config/                           # config.json, mapping.json, logger_config, chrome_launch
 ├── results/                          # outputs — planning summaries + raw API JSON
 ├── logs/                             # per-module .log files
 ├── docs/                             # retrospective changelogs (gitignored locally)
 ├── planning_pipeline.py              # orchestrator: LI → IG → TW → TH (--all-wip)
 ├── reporting_pipeline.py             # orchestrator: APIs → Supabase → Notion → Substack
+├── newsletter_pipeline.py            # orchestrator: archive → normalize → build HTML
 ├── launch_planning.bat               # planning launcher (Windows CMD)
-└── launch_reporting.bat              # reporting launcher (Windows CMD)
+├── launch_reporting.bat              # reporting launcher (Windows CMD)
+└── launch_newsletter.bat             # newsletter launcher (Windows CMD)
 ```
 
 ### Per-folder READMEs
@@ -105,20 +112,21 @@ gotchas, files.
   [`reporting/social_client/README.md`](reporting/social_client/README.md) ·
   [`reporting/process/README.md`](reporting/process/README.md) ·
   [`reporting/notion/README.md`](reporting/notion/README.md)
-- **Archive** —
-  [`archive/newsletter/README.md`](archive/newsletter/README.md)
+- **Newsletter** —
+  [`newsletter/README.md`](newsletter/README.md)
 - **Shared** — [`config/README.md`](config/README.md)
 
-## The two launchers
+## The three launchers
 
-The launchers are the user entrypoints. They wrap the two orchestrators with
-the venv interpreter and keep the CMD window open at the end so you can
-inspect the output.
+The launchers are the user entrypoints. They wrap the three orchestrators
+with the venv interpreter and keep the CMD window open at the end so you
+can inspect the output.
 
 | Launcher                  | Pipeline   | Default mode  | Cron-friendly arg |
 |---------------------------|------------|---------------|-------------------|
 | `launch_reporting.bat`    | Reporting  | interactive   | `auto`            |
 | `launch_planning.bat`     | Planning   | dry-run       | `live`, `auto`    |
+| `launch_newsletter.bat`   | Newsletter | interactive   | n/a (interactive) |
 
 ```powershell
 # One-shot, daily numbers pipeline (today's date, no prompts)

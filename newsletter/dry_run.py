@@ -1,9 +1,9 @@
 """Single-article dry-run / live-run entrypoint.
 
 Examples:
-    python -m archive.newsletter.dry_run --first-non-gmail-tab --no-write
-    python -m archive.newsletter.dry_run --single-url https://elenaverna.com/p/ic-work-is-the-new-career-flex
-    python -m archive.newsletter.dry_run --first-non-gmail-tab           # writes to Notion + closes tab
+    python -m newsletter.dry_run --first-non-gmail-tab --no-write
+    python -m newsletter.dry_run --single-url https://elenaverna.com/p/ic-work-is-the-new-career-flex
+    python -m newsletter.dry_run --first-non-gmail-tab           # writes to Notion + closes tab
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import logging
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -25,8 +25,8 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 from config.logger_config import setup_logger  # noqa: E402
-from archive.newsletter import chrome_tabs, notion_io  # noqa: E402
-from archive.newsletter.pipeline import load_config, process_url  # noqa: E402
+from newsletter import chrome_tabs, notion_io  # noqa: E402
+from newsletter.pipeline import load_config, process_url  # noqa: E402
 
 
 def main() -> int:

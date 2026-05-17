@@ -29,8 +29,8 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-from archive.newsletter import llm
-from archive.newsletter.cache import CacheState, Connection, normalize_name
+from newsletter import llm
+from newsletter.cache import CacheState, Connection, normalize_name
 
 logger = logging.getLogger("newsletter_archive.author_resolver")
 

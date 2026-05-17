@@ -252,6 +252,14 @@
             "innovation": "n innov",
             "leadership and management": "n leader"
         },
-        "author_fallback_name": "(not classified)"
+        "author_fallback_name": "(not classified)",
+        "url_preserve_domains": [
+            "youtube.com",
+            "www.youtube.com",
+            "youtu.be",
+            "vimeo.com",
+            "twitter.com",
+            "x.com"
+        ]
     }
 }

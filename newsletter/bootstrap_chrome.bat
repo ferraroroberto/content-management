@@ -16,7 +16,7 @@ REM user-data-dir (Chrome 136+ refuses to bind the debug port
 REM against the default profile dir for security reasons), and
 REM polls until the port responds.
 REM
-REM The dedicated profile lives in archive\newsletter\chrome_user_data\
+REM The dedicated profile lives in newsletter\chrome_user_data\
 REM (gitignored). First time you run this, you'll need to sign into
 REM Gmail in the new Chrome window if you want to click newsletter
 REM article links from email — the session will then persist.
@@ -60,7 +60,7 @@ if !errorlevel! equ 0 (
     echo.
     echo Chrome debug port is UP on http://127.0.0.1:9222
     echo Open your newsletter article tabs in the new Chrome window, then run:
-    echo     .venv\Scripts\python -m archive.newsletter.dry_run --first-non-gmail-tab --no-write
+    echo     .venv\Scripts\python -m newsletter.dry_run --first-non-gmail-tab --no-write
     exit /b 0
 )
 if !TRIES! geq 10 (

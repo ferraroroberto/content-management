@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from archive.newsletter import llm
+from newsletter import llm
 
 PROMPT_TEMPLATE = """Summarize the article below in exactly 3 lines of plain text.
 No bullets, no numbering, no preamble — three sentences on three separate lines.

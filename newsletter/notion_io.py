@@ -10,7 +10,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, TypeVar
 from notion_client import Client
 from notion_client.errors import APIResponseError, HTTPResponseError, RequestTimeoutError
 
-from archive.newsletter.cache import CacheState, Connection, canonicalize_url
+from newsletter.cache import CacheState, Connection, canonicalize_url
 
 logger = logging.getLogger("newsletter_archive.notion_io")
 
