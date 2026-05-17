@@ -4,6 +4,16 @@ Plays back the weekly LinkedIn-scheduling routine via Playwright + real Chrome. 
 
 **This is a planner, not a bot.** No likes, comments, follows, or DMs are automated. The script only schedules the user's own pre-written, already-illustrated posts.
 
+Three routes are dispatched off each WIP-LI row purely on the editorial relation pattern (no read of the linked post page's `type` property):
+
+| illustration LI | article LI | post LI | newsletter | Route |
+|---|---|---|---|---|
+| set | empty | any | any | **ILL** — photo + IG-derived caption (original flow) |
+| set | set | set | any | **POST** — photo + caption from posts-DB body, with `@mention` resolution |
+| empty | empty | set | empty | **CAROUSEL** — Add a document (PDF) + caption from posts-DB body |
+| empty | empty | set | set | skip — newsletter is a separate manual process |
+| else | | | | skip with log |
+
 ---
 
 ## Workflow
@@ -11,31 +21,42 @@ Plays back the weekly LinkedIn-scheduling routine via Playwright + real Chrome. 
 ```mermaid
 flowchart TD
     Mark([weekly setup in Notion:<br/>user ticks <b>Work in Progress LI</b><br/>on the editorial rows<br/>they want scheduled])
-    Run[<b>run:</b><br/>python -m planning.linkedin.schedule_linkedin_posts<br/>--week-start YYYY-MM-DD --live]
-    Filter{For each day,<br/>WIP-LI = true<br/>AND illustration LI set<br/>AND article LI empty?}
-    Skip[skip<br/>e.g. article days,<br/>days not in scope]
-    Illust[Follow <b>illustration LI</b> relation →<br/>read <b>illustration</b> name + <b>ALT text</b><br/>from the illustration row]
-    Caption[Follow illustration's <b>publishIG</b> relation →<br/>find earliest publish date →<br/>read THAT editorial row's <b>text IG</b><br/><i>canonical first-publication caption</i>]
-    Image[Resolve image path:<br/>illustrations_folder / illustration.png]
-    Browser[<b>Launch real Chrome</b> via Playwright<br/>persistent profile, no automation banners,<br/>navigator.webdriver = undefined]
-    UI[Drive LinkedIn UI:<br/>Feed → Photo → upload image<br/>→ ALT button → fill alt text → Add<br/>→ Next → type caption<br/>→ Schedule clock → pick date in calendar<br/>→ open time typeahead → pick the time<br/><i>Mon-Fri: 6:30 AM · Sat-Sun: 8:00 AM</i><br/>→ Next → Schedule]
-    Verify{Composer dialog<br/>closed within 20s?}
-    Untick[Set <b>Work in Progress LI = false</b><br/>on the editorial row<br/><i>so the next run does not reschedule</i>]
-    Fail[Save failure screenshot to<br/>results/linkedin/]
-    Done([✅ scheduled on<br/>the row's own date,<br/>Europe/Madrid])
+    Run[<b>run:</b><br/>python -m planning.linkedin.schedule_linkedin_posts<br/>--all-wip --live]
+    Classify{Classify route<br/>from relation pattern}
+    SkipNL[skip<br/>newsletter rows<br/>or unmatched patterns]
 
-    Mark --> Run
-    Run --> Filter
-    Filter -->|no| Skip
-    Filter -->|yes| Illust
-    Illust --> Caption
-    Caption --> Image
-    Image --> Browser
-    Browser --> UI
-    UI --> Verify
+    subgraph ILL ["ILL — photo + IG caption"]
+        I1[Follow <b>illustration LI</b> → <b>publishIG</b> →<br/>earliest editorial row's <b>text IG</b>]
+        I2[Feed → Photo → upload → ALT → Next →<br/>type caption → Schedule]
+    end
+    subgraph POST ["POST — photo + post body"]
+        P1[Read <b>post LI</b> page body<br/>(code block) →<br/>cache to <b>textLI</b>]
+        P2[Photo + ALT same as ILL,<br/>caption typed with<br/><b>@mention typeahead resolution</b>]
+        P3{Caption ≤ 3000 chars?}
+    end
+    subgraph CAR ["CAROUSEL — PDF document"]
+        C1[Read <b>post LI</b> body + title]
+        C2[Fuzzy-match folder under<br/>thread/books + thread/monographic →<br/>locate single PDF]
+        C3[Feed → Start a post → More →<br/>Add a document → upload PDF →<br/>title → Done → caption → Schedule]
+        C4[Wait for background<br/>PDF upload to settle]
+    end
+
+    Verify{Composer dialog<br/>closed within 20s?}
+    Untick[Set <b>Work in Progress LI = false</b><br/>on the editorial row]
+    Fail[Save failure screenshot to<br/>results/linkedin/]
+    Done([✅ scheduled, Europe/Madrid])
+
+    Mark --> Run --> Classify
+    Classify -->|none| SkipNL
+    Classify -->|ILL| I1 --> I2
+    Classify -->|POST| P3 -->|yes| P1 --> P2
+    P3 -->|no| Fail
+    Classify -->|CAROUSEL| C1 --> C2 --> C3 --> C4
+    I2 --> Verify
+    P2 --> Verify
+    C4 --> Verify
     Verify -->|no| Fail
-    Verify -->|yes| Untick
-    Untick --> Done
+    Verify -->|yes| Untick --> Done
 ```
 
 ---
@@ -85,11 +106,7 @@ Screenshots, success/failure artifacts, and per-row dry-run images land in `resu
 
 ## What gets scheduled, what doesn't
 
-A row in `--week-start`'s 7-day range is **in scope** when ALL of:
-
-1. `Work in Progress LI` checkbox = true
-2. `illustration LI` relation is non-empty
-3. `article LI` relation is empty (article days are a future Phase 2; not in this script)
+A row is **in scope** when `Work in Progress LI = true` and it classifies into one of the three routes (ILL / POST / CAROUSEL — see the table at the top of this README). Rows that don't match any route — for example "article LI only" rows or rows with no relations at all — are silently skipped with a log line.
 
 In-scope rows are scheduled in local time (Europe/Madrid) on the row's own date:
 
@@ -113,7 +130,7 @@ The `link LI` column is also checked (rows where it's populated are skipped unle
 
 ## Notion fields used
 
-All field names come from `config/config.json` `linkedin.editorial_columns` and `linkedin.illustration_columns` — never hardcoded in the script.
+All field names come from `config/config.json` `linkedin.editorial_columns`, `linkedin.illustration_columns`, and `linkedin.posts_columns` — never hardcoded in the script.
 
 **Editorial DB (`ee23dec3...`):**
 
@@ -121,10 +138,34 @@ All field names come from `config/config.json` `linkedin.editorial_columns` and 
 |------|--------|------|---------|
 | `title_day` | `day` | title | Row's day in `YYYYMMDD`. |
 | `wip_checkbox` | `Work in Progress LI` | checkbox | The scope marker; auto-unticked after live schedule. |
-| `illustration_rel` | `illustration LI` | relation | Points to the source illustration row. |
-| `article_rel` | `article LI` | relation | If non-empty, row is skipped (article days = Phase 2). |
+| `illustration_rel` | `illustration LI` | relation | Points to the source illustration row. Used by ILL + POST routes. |
+| `article_rel` | `article LI` | relation | Presence promotes ILL → POST route. |
+| `post_rel` | `post LI` | relation | Points to the posts-DB page holding the body for POST + CAROUSEL routes. |
+| `newsletter_rel` | `newsletter` | relation | Presence disables the CAROUSEL route (newsletter rows are skipped). |
 | `post_url` | `link LI` | url | Idempotency check; not written by this script. |
-| `caption_text` | `text IG` | rich_text | The per-day Instagram caption. Read on the earliest `publishIG`-related row to get the canonical first-publication caption. |
+| `caption_text` | `text IG` | rich_text | Per-day IG caption — used as the ILL route's caption source (via the illustration's earliest `publishIG` row). |
+
+**Posts DB (`960d4044...`)** — POST + CAROUSEL routes:
+
+| role | column | type | purpose |
+|------|--------|------|---------|
+| (page body) | n/a | heading + `code` block sections | A sequence of heading + `code` block pairs. Only the **first `code` block on the page** is used — see "Page body convention" below. |
+| `caption_li` | `textLI` | rich_text | Cache of the first-code-block text. Written through on first read (chunked into ≤2000-char segments since Notion's per-segment limit is 2000). Auto-invalidated and re-read if the cached value exceeds LI's 3000-char post limit (i.e. left over from a pre-Phase 2 reader). |
+
+### Page body convention (posts DB)
+
+A LI posts-DB page is organised as a stack of heading + `code` block pairs:
+
+| heading | `code` block contents | scheduler picks it up? |
+|---------|-----------------------|:---:|
+| `text` | the canonical LI caption you want scheduled | ✅ (first `code` block) |
+| `text (old)` | a previous draft kept for reference | ❌ |
+| `source` | citation / podcast link / attribution | ❌ |
+| `article` etc. | any other helper section | ❌ |
+
+`planning/linkedin/linkedin_posts_body.py::first_code_block_text` walks `blocks.children.list` and returns the text of the **first** `code` block it sees. Anything after that is ignored. This is why the canonical caption must live under the `text` heading at the top of the page — re-ordering the sections changes what gets scheduled.
+
+The shared `reporting.notion.editorial.get_page_body_text` is **not** used here — it concatenates every text-bearing block on the page, which on a posts page yields `text` + `text (old)` + `source` glued together (2-3× the intended caption, easily over LI's 3000-char hard limit). The clips DB uses `get_page_body_text` because clip pages have only one `code` block; posts pages have several, so they need the first-code-block reader.
 
 **Illustrations DB (`f700...`):**
 
@@ -163,16 +204,20 @@ What it does:
 | file | what it does |
 |------|--------------|
 | `bootstrap_session.py` | One-time interactive login. Opens real Chrome at LinkedIn's sign-in page; after you log in, pressing Enter saves the session to the persistent profile. |
-| `linkedin_session.py` | `LinkedInSession` context manager: launches the persistent-profile real-Chrome session and exposes `page` + a `screenshot_failure()` helper. Equivalent to `substack/substack_session.py`. |
-| `schedule_linkedin_posts.py` | The scheduler. Queries Notion, follows relations, drives the UI, writes back the WIP-LI untick. |
+| `linkedin_session.py` | `LinkedInSession` context manager: launches the persistent-profile real-Chrome session and exposes `page` + a `screenshot_failure()` helper. |
+| `linkedin_composer.py` | Shared composer helpers (`fill_caption_with_mentions`, `wait_for_upload_complete`) used by photo + post + carousel + video flows. Lives here (not in `videos/`) because it's an LI-composer concern, not video-only. |
+| `linkedin_posts_body.py` | Loads the LI long caption off a posts-DB page (preferring the `textLI` cache, falling back to the page body, write-through chunked into ≤2000-char rich_text segments). Also pre-flights LI's 3000-char post limit. |
+| `linkedin_carousel_pdf.py` | Pure fuzzy folder matcher: maps a post title like `LI - failure and success 04` to a PDF under `thread/books` + `thread/monographic` via `SequenceMatcher` (min ratio 0.6). |
+| `schedule_linkedin_posts.py` | The scheduler. Queries Notion, classifies each row into ILL / POST / CAROUSEL, drives the appropriate UI, writes back the WIP-LI untick. |
 | `chrome_user_data/` | (auto-created, gitignored) The dedicated Chrome profile. |
 | `README.md` | This file. |
 
 Cross-module dependencies:
 
-- `notion/editorial.py` — shared Notion helper used by every platform (`get_row_by_day`, `query_rows_by_filter`, `get_field`, `set_field`, `retrieve_page`).
+- `reporting/notion/editorial.py` — shared Notion helper (`query_rows_by_filter`, `get_field`, `set_field`, `retrieve_page`, `get_page_body_text` — the last includes `code` blocks).
 - `config/chrome_launch.py` — shared stealth launch flags.
 - `config/logger_config.py` — shared logger setup.
+- `planning/videos/videos_linkedin.py` — re-exports `linkedin_composer` helpers for backward compatibility; otherwise no dependency in either direction.
 
 ---
 
@@ -182,7 +227,7 @@ LinkedIn's class names are obfuscated (`_6e37ba57`, `_876da3c4`, …) and rotate
 
 | step | selector |
 |------|----------|
-| Open post + file picker | `page.get_by_role("button", name=/^photo$/i)` on the feed |
+| Open post + file picker (ILL / POST) | `page.get_by_role("button", name=/^photo$/i)` on the feed |
 | Upload image | `input[type="file"]` (first; appears in DOM after "Photo" click) |
 | Open ALT dialog | `[role="dialog"] >> get_by_role("button", name=/alternative text/i)` |
 | ALT textarea | `textarea[placeholder*="describe this image" i]` |
@@ -195,6 +240,19 @@ LinkedIn's class names are obfuscated (`_6e37ba57`, `_876da3c4`, …) and rotate
 | Schedule sub-dialog → composer | `[role="dialog"] button:has-text("Next")` |
 | Final Schedule button | `[role="dialog"] >> get_by_role("button", name="Schedule", exact=True)` |
 | Success signal | The composer dialog disappears within ~20s |
+
+**CAROUSEL-only — Add a document flow:**
+
+| step | selector |
+|------|----------|
+| Open empty composer (no Photo) | `page.get_by_role("button", name=/start a post/i)` (fallback: `/create a post/i`) |
+| Expand secondary actions | `[role="dialog"] >> get_by_role("button", name=/^more$/i)` |
+| Open Share-a-document dialog | `[role="dialog"] >> get_by_role("button", name=/add a document/i)` |
+| Push PDF | fast path: `input[type="file"]`; fallback: `page.expect_file_chooser()` + click `/choose file/i` |
+| Wait for PDF processing | `Done` button stays `disabled`/`aria-disabled` while LI processes — poll until clickable |
+| Fill document title | `[role="dialog"] input[name*="title" i]` / `[aria-label*="title" i]` / `[placeholder*="title" i]` / `input[type="text"]` (first hit wins) |
+| Close document dialog (Done) | `[role="dialog"] >> get_by_role("button", name=/^done$/i)` |
+| Background upload settle | `planning.linkedin.linkedin_composer.wait_for_upload_complete` — explicit signal fast path + 60s fallback (same as videos) |
 
 ---
 
@@ -249,15 +307,27 @@ text_block_types = {
 
 If you forget `code`, the API call comes back with `0 chars` and looks like a Notion API limitation — it isn't. The body text is there; you just filtered it out.
 
-### Caching pattern (clip page → `TextLI` property)
+### Caching pattern (clip page → `TextLI` property, posts page → `textLI` property)
 
-The videos orchestrator reads the body on every clip resolution. To avoid the per-run cost and to make the LI caption directly visible in the Notion DB UI, the orchestrator also writes the resolved body into a dedicated `TextLI` rich_text *property* on the clip page. Logic:
+The videos orchestrator and the LI posts/carousel routes both read body content on every row resolution. To avoid the per-run cost and to make the caption directly visible in the Notion DB UI, the resolved text is also written into a dedicated `TextLI` (clips DB) / `textLI` (posts DB) rich_text *property*. Logic:
 
-1. Read `TextLI` property — if non-empty, use it (cheap).
-2. Otherwise fetch the body via `get_page_body_text` and use that.
-3. If the body was non-empty, write it back into `TextLI` so the next read is free.
+1. Read the cache property — if non-empty and ≤ LI's 3000-char limit, use it (cache hit).
+2. Otherwise read the source text and use that.
+3. If the source was non-empty, write it back into the cache property so the next read is free.
 
-See `planning/videos/videos_session.py::load_clip_payload` for the canonical implementation. The same pattern applies to the LinkedIn posts DB: store the long-form caption as a code block in the page body, then cache to a `TextLI` rich_text property for convenience.
+The two packages use different source readers:
+- **Clips DB** (videos): `get_page_body_text` — concatenates every text-bearing block (the clip page has only one `code` block).
+- **Posts DB** (LI POST / CAROUSEL): `first_code_block_text` — returns only the first `code` block (the posts page has several; see "Page body convention" above).
+
+The posts DB caption can run close to LI's 3000-char limit, above Notion's 2000-char-per-rich_text-segment limit. `planning/linkedin/linkedin_posts_body.py::_write_rich_text_multi_segment` chunks the body on newline boundaries when possible, then writes a multi-segment payload directly via `notion.pages.update` (bypassing the shared `set_field` which would build a single oversized segment).
+
+**Stale-cache invalidation:** if the cached `textLI` value is over LI's 3000-char limit, it's treated as stale (only an earlier reader that didn't apply the first-code-block rule could have written it). The scheduler logs `🧹 Stale textLI cache ... — invalidating and re-reading body.`, re-reads the first `code` block, and overwrites the cache. No manual cache-clear required.
+
+### Pre-flight: LinkedIn's 3000-char post limit
+
+LinkedIn enforces a hard limit of **3000 characters** for a regular post's text body. The composer disables the final Schedule button when the typed text exceeds this — you'd otherwise discover the failure only after the scheduler has typed thousands of characters into a doomed composer.
+
+`assert_caption_within_linkedin_limit(payload)` runs as the first action of the POST / CAROUSEL routes (after `load_post_payload`) and fails the row with a clear message before opening the LI UI. Resolution: trim the first `code` block in the Notion posts DB; the stale-cache invalidator handles the rest on the next run.
 
 ---
 
@@ -265,7 +335,7 @@ See `planning/videos/videos_session.py::load_clip_payload` for the canonical imp
 
 LinkedIn renders an `@Name` mention as a blue, clickable link to the person's profile. You can't get this by typing the literal `@Hannah Wilson` into the composer — it stays as plain text. You have to drive LinkedIn's mention typeahead: type `@`, type the name letter-by-letter slowly enough for the dropdown to populate (~80ms per char), then click the matching suggestion before continuing.
 
-### Implementation (`planning/videos/videos_linkedin.py::_fill_caption_with_mentions`)
+### Implementation (`planning/linkedin/linkedin_composer.py::fill_caption_with_mentions`)
 
 1. Scan the caption with a strict regex: `r"@([A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*)*)"`. This matches `@Hannah Wilson`, `@Hannah`, `@RobertoFerraro`, etc., and intentionally STOPS at punctuation, lowercase, or newline. Periods/apostrophes inside names (`@O'Connor`) are NOT supported — extend the regex if needed.
 2. For each match:
@@ -287,13 +357,28 @@ LinkedIn renders an `@Name` mention as a blue, clickable link to the person's pr
 
 Watch the LinkedIn Scheduled posts sheet after a LIVE run. A resolved mention appears in **blue** with a profile link; an unresolved mention shows as black `@Name` text. If you see unresolved mentions in production, either (a) LinkedIn rolled out a new typeahead class, or (b) the network was slow and the 6s wait timed out. The first fix is to add the new selector; the second is to bump the timeout in `_click_mention_suggestion`.
 
+### Quirk: mention chip eats the following space
+
+Committing a mention chip (clicking the typeahead suggestion) **absorbs the immediately-following keystroke when that keystroke is a SPACE**. The visible symptom is "@FirstName LastName" fused with the next word into a single blue chip: `Michelle Kemptonsays`, `Mireia Mujika Irustapodcast`.
+
+`fill_caption_with_mentions` compensates: after a successful chip click it peeks at the next source character and, when it's whitespace (space/tab) or alphanumeric, types one space and advances past the source whitespace if any. Newlines and punctuation pass through untouched — observed against:
+
+| source char after `@Name` | what the user sees in LI before fix | what `fill_caption_with_mentions` does now |
+|---|---|---|
+| `" "` (space) | `Kemptonsays` (space eaten, fused) | injects a space, advances past the source space |
+| alphanumeric (defensive — source missed a space) | `Kemptonsays` | injects a space |
+| `"\n"` (newline) | `Wilson\n\nShe shared` (works correctly) | no compensation needed |
+| punctuation (`.`, `,`, …) | unverified — assume no fusion | no compensation (avoids `Name .`) |
+
+This applies to the videos LI flow as well, since both flows use the same `fill_caption_with_mentions` in `planning/linkedin/linkedin_composer.py`. Video captions historically had newline-after-mention which is why this bug was invisible there; with the fix in place, a future video caption with a word right after the mention will render correctly.
+
 ---
 
 ## Waiting for the post-Schedule upload-complete signal
 
-When you click the final Schedule button, LinkedIn **closes the composer immediately** but the video upload is still running in the background. If your Playwright context tears down before the upload finishes, the scheduled post is created with **no media** and clicking through to it in the Scheduled posts sheet shows *"Something went wrong, please try reloading the page"*. This is invisible to the caller — the `_wait_composer_clears` check passes, the driver returns `LIVE`, and you discover the failure only when you look at LinkedIn the next morning.
+When you click the final Schedule button, LinkedIn **closes the composer immediately** but background media uploads (video uploads for the videos package, document/PDF uploads for the CAROUSEL route) keep running. If your Playwright context tears down before the upload finishes, the scheduled post is created with **no media** and clicking through to it in the Scheduled posts sheet shows *"Something went wrong, please try reloading the page"*. This is invisible to the caller — the `_wait_composer_clears` check passes, the driver returns `LIVE`, and you discover the failure only when you look at LinkedIn the next morning.
 
-### Implementation (`planning/videos/videos_linkedin.py::_wait_for_upload_complete`)
+### Implementation (`planning/linkedin/linkedin_composer.py::wait_for_upload_complete`)
 
 Order of attempts:
 

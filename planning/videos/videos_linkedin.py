@@ -22,6 +22,10 @@ from typing import Optional
 from playwright.sync_api import Page, TimeoutError as PWTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from planning.linkedin.linkedin_composer import (  # noqa: E402
+    fill_caption_with_mentions,
+    wait_for_upload_complete,
+)
 from planning.linkedin.linkedin_session import (  # noqa: E402
     LinkedInSession,
     LoginRequiredError,
@@ -39,123 +43,11 @@ from planning.videos.videos_session import ClipPayload  # noqa: E402
 logger = logging.getLogger("videos_linkedin")
 
 
-# A LinkedIn mention starts at "@" and runs through one or more capitalized
-# tokens separated by single spaces. We intentionally STOP at the first
-# non-letter (punctuation, newline, lowercase) so "@Hannah Wilson. " resolves
-# the mention "Hannah Wilson" and leaves the period + space as literal text.
-# Periods/apostrophes inside names (e.g. "@O'Connor") are NOT supported by
-# this regex; extend if you hit a real case.
-_MENTION_RE = re.compile(r"@([A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*)*)")
-
-# Selector candidates for the LinkedIn mention typeahead dropdown, in
-# specificity order. LinkedIn's UI varies across rollouts; the generic
-# fallbacks at the bottom catch builds that drop the testid / aria hooks.
-_MENTION_DROPDOWN_SELECTORS = (
-    'div.mentions-typeahead-content [role="option"]',
-    'div[data-test-id="mentions-typeahead"] [role="option"]',
-    '[aria-label*="mention" i] [role="option"]',
-    '.artdeco-typeahead__results-list li',
-    '[role="listbox"] [role="option"]',
-)
-
-
-def _click_mention_suggestion(page: Page, name: str, *, timeout_ms: int = 6000) -> bool:
-    """Wait for the LI mention typeahead and click the matching option.
-
-    Strategy: poll the candidate selectors above until at least one returns
-    a visible option list, then pick the first item whose visible text
-    contains the typed name (case-insensitive). If no name match within
-    the first five items, click the topmost (LinkedIn's typeahead ranks
-    relevant matches first). Returns True on click, False on timeout.
-    """
-    deadline = page.evaluate("() => Date.now()") + timeout_ms
-    name_lower = name.lower()
-    while page.evaluate("() => Date.now()") < deadline:
-        for sel in _MENTION_DROPDOWN_SELECTORS:
-            try:
-                items = page.locator(sel)
-                count = items.count()
-                if count == 0:
-                    continue
-                # Prefer an item whose text contains the typed name.
-                for i in range(min(count, 6)):
-                    item = items.nth(i)
-                    try:
-                        text = (item.inner_text(timeout=400) or "").lower()
-                    except Exception:
-                        continue
-                    if name_lower in text:
-                        try:
-                            item.click(timeout=2000)
-                            return True
-                        except Exception:
-                            continue
-                # No name match in the first six — click the top-ranked.
-                try:
-                    items.first.click(timeout=2000)
-                    return True
-                except Exception:
-                    continue
-            except Exception:
-                continue
-        page.wait_for_timeout(200)
-    return False
-
-
-def _fill_caption_with_mentions(page: Page, caption: str) -> None:
-    """Type the caption into the LI composer, resolving every @mention.
-
-    For each ``@CapitalizedName`` (or ``@First Last``) in the caption:
-      1. Type the literal text up to the @.
-      2. Type @, then the name letter-by-letter (typeahead populates per
-         keystroke; ~80ms delay per char is enough for LinkedIn to fetch).
-      3. Click the matching suggestion in the dropdown.
-      4. Resume typing the tail.
-
-    If a mention can't be resolved (no dropdown, no matching suggestion),
-    the @<name> stays as literal text and a warning is logged — we don't
-    fail the whole row over one missing mention.
-    """
-    if not caption:
-        return
-    editor = page.locator('div[role="textbox"][contenteditable="true"]')
-    try:
-        editor.first.wait_for(state="visible", timeout=10000)
-        editor.first.click()
-    except Exception as err:
-        raise RuntimeError(f"Could not focus the LinkedIn caption editor: {err}")
-
-    pos = 0
-    mention_count = 0
-    resolved_count = 0
-    for m in _MENTION_RE.finditer(caption):
-        if m.start() > pos:
-            page.keyboard.type(caption[pos:m.start()], delay=4)
-        mention_count += 1
-        name = m.group(1)
-        # Type @ first, then the name letter-by-letter with a small delay so
-        # LinkedIn's typeahead has time to query as we type.
-        page.keyboard.type("@", delay=20)
-        page.wait_for_timeout(250)
-        page.keyboard.type(name, delay=80)
-        page.wait_for_timeout(400)
-        clicked = _click_mention_suggestion(page, name)
-        if clicked:
-            resolved_count += 1
-            logger.info("🔗 Resolved LinkedIn mention @%s", name)
-        else:
-            logger.warning(
-                "⚠️ Could not resolve LinkedIn mention @%s — left as literal text. "
-                "The composer may still show the unresolved @<name>.", name,
-            )
-        pos = m.end()
-    if pos < len(caption):
-        page.keyboard.type(caption[pos:], delay=4)
-    if mention_count:
-        logger.info("📝 Caption typed (%d mentions, %d resolved).",
-                    mention_count, resolved_count)
-    else:
-        logger.debug("📝 Caption typed (%d chars, no mentions).", len(caption))
+# Re-exported for backward compatibility with any caller that imported these
+# names from videos_linkedin in the past. New code should import directly
+# from ``planning.linkedin.linkedin_composer``.
+_fill_caption_with_mentions = fill_caption_with_mentions
+_wait_for_upload_complete = wait_for_upload_complete
 
 
 @dataclass
@@ -239,128 +131,6 @@ def _click_video_next(page: Page) -> None:
         page.locator('[role="dialog"] button:has-text("Next")').first.click(timeout=10000)
     except Exception as err:
         raise RuntimeError(f"Could not click 'Next' in the video editor: {err}")
-
-
-# After clicking the final Schedule, LinkedIn closes the composer immediately
-# but keeps uploading the video in the background. If we tear down the
-# Playwright context before the upload finishes, the scheduled post is created
-# with no media attached and the user sees "Something went wrong" when opening
-# the scheduled-post detail. The signals LinkedIn uses for the background
-# upload vary across rollouts; we hunt several of them defensively, then fall
-# back to a fixed conservative wait if none is found.
-_UPLOAD_IN_PROGRESS_SELECTORS = (
-    'div[aria-label*="upload" i]:not([aria-label*="complete" i])',
-    'div[role="status"]:has-text("Uploading")',
-    'div[role="alert"]:has-text("upload" i)',
-    'div:has-text("don\'t close")',
-    'div:has-text("Don\'t close")',
-    'div:has-text("Do not close")',
-    'div:has-text("video is uploading")',
-    'div:has-text("Uploading your video")',
-    # The post-schedule toast widget LI shows at the bottom-left of the feed.
-    'div.global-alert',
-    '[data-test-global-alert-id]',
-)
-
-_UPLOAD_COMPLETE_TEXT_RE = re.compile(
-    r"(upload\s*complete|video\s*uploaded|successfully\s*scheduled|post\s*scheduled|"
-    r"your\s*post\s*will\s*be\s*published)",
-    re.I,
-)
-
-
-def _upload_in_progress_visible(page: Page) -> bool:
-    for sel in _UPLOAD_IN_PROGRESS_SELECTORS:
-        try:
-            if page.locator(sel).count() > 0:
-                return True
-        except Exception:
-            continue
-    return False
-
-
-def _wait_for_upload_complete(page: Page, *, timeout_ms: int = 420000) -> bool:
-    """Block until LI's background video upload signals completion.
-
-    Strategy:
-      1. Settle for ~2s post-Schedule so the toast/banner has a chance to mount.
-      2. If an explicit "upload complete" / "post scheduled" text appears, return.
-      3. Otherwise, if an in-progress indicator was at any point visible, poll
-         until it disappears (then add a 3s safety buffer).
-      4. If no indicator EVER showed (LI may have already finished by the time
-         we looked), fall back to a 60s safety wait — better than tearing down
-         immediately and orphaning a partially-uploaded video.
-
-    ``timeout_ms`` is the hard cap on the in-progress polling loop (default 7
-    minutes) — long enough for a 30-50 MB clip on a slow uplink.
-    """
-    page.wait_for_timeout(2000)
-
-    # Fast path: explicit "complete" text already visible.
-    try:
-        if page.get_by_text(_UPLOAD_COMPLETE_TEXT_RE).count() > 0:
-            logger.info("✅ LI upload-complete signal already visible — proceeding.")
-            page.wait_for_timeout(2000)
-            return True
-    except Exception:
-        pass
-
-    saw_in_progress = _upload_in_progress_visible(page)
-    if not saw_in_progress:
-        # Look for a few more seconds in case the toast is slow to mount.
-        for _ in range(8):  # ~4s
-            page.wait_for_timeout(500)
-            if _upload_in_progress_visible(page):
-                saw_in_progress = True
-                break
-            try:
-                if page.get_by_text(_UPLOAD_COMPLETE_TEXT_RE).count() > 0:
-                    logger.info("✅ LI upload-complete signal appeared during settle.")
-                    page.wait_for_timeout(2000)
-                    return True
-            except Exception:
-                pass
-
-    if not saw_in_progress:
-        logger.info(
-            "ℹ️ No LI upload-in-progress indicator detected; holding the browser "
-            "open for 60s as a safety buffer so a slow background upload can finish."
-        )
-        page.wait_for_timeout(60000)
-        return True
-
-    logger.info(
-        "⏳ LI background video upload in progress — polling for completion "
-        "(max %ds). Browser will stay open until done.", timeout_ms // 1000,
-    )
-    deadline = page.evaluate("() => Date.now()") + timeout_ms
-    last_log = 0
-    while page.evaluate("() => Date.now()") < deadline:
-        # Explicit success text wins immediately.
-        try:
-            if page.get_by_text(_UPLOAD_COMPLETE_TEXT_RE).count() > 0:
-                logger.info("✅ LI upload-complete text detected.")
-                page.wait_for_timeout(3000)
-                return True
-        except Exception:
-            pass
-        if not _upload_in_progress_visible(page):
-            logger.info("✅ LI upload-in-progress indicator gone; upload likely complete.")
-            page.wait_for_timeout(3000)
-            return True
-        now = page.evaluate("() => Date.now()")
-        if now - last_log > 15000:
-            logger.info("⏳ ...still uploading (%ds elapsed).",
-                        (now - (deadline - timeout_ms)) // 1000)
-            last_log = now
-        page.wait_for_timeout(2000)
-
-    logger.warning(
-        "⚠️ LI upload-complete signal not received within %ds. "
-        "The scheduled post MAY be incomplete — verify in Scheduled posts.",
-        timeout_ms // 1000,
-    )
-    return False
 
 
 def schedule_one_video(

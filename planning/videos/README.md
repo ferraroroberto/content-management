@@ -77,10 +77,12 @@ attach helper. See:
   decorative and intercepted by a styled `<div>` overlay; clicking it
   errors out). Then `_wait_for_video_ready` polls the `Next` button's
   enabled-state for up to 180s (LI transcoding window). The caption is
-  typed via `_fill_caption_with_mentions`, which detects every
-  `@CapitalizedName` (or `@First Last`) in the body and resolves it
-  through LinkedIn's typeahead dropdown (see Gotchas). After the final
-  Schedule click, `_wait_for_upload_complete` keeps the browser open
+  typed via `fill_caption_with_mentions` (imported from
+  `planning/linkedin/linkedin_composer.py` — shared with the LinkedIn
+  POST + CAROUSEL flows), which detects every `@CapitalizedName` (or
+  `@First Last`) in the body and resolves it through LinkedIn's
+  typeahead dropdown (see Gotchas). After the final Schedule click,
+  `wait_for_upload_complete` (same shared module) keeps the browser open
   until LinkedIn's background video upload settles (also see Gotchas).
 - Instagram (Meta planner): `planning/instagram/schedule_instagram_posts.py`
   — same `Schedule post` menu, same FileChooser-intercept upload (accepts
@@ -161,15 +163,29 @@ attach helper. See:
   background upload still has a chance to land. Bump the fixed hold (or
   add a new candidate selector) if you ever see "Something went wrong"
   on a row the driver reported `LI:LIVE`. The mention-resolution helper
-  (`_fill_caption_with_mentions`) types each `@Name` literal then waits
-  for LI's typeahead and clicks the matching person via a list of
-  candidate selectors (`div.mentions-typeahead-content [role="option"]`,
+  (`fill_caption_with_mentions`, shared via
+  `planning/linkedin/linkedin_composer.py`) types each `@Name` literal
+  then waits for LI's typeahead and clicks the matching person via a
+  list of candidate selectors (`div.mentions-typeahead-content [role="option"]`,
   `[data-test-id="mentions-typeahead"] [role="option"]`,
   `[aria-label*="mention" i] [role="option"]`,
   `.artdeco-typeahead__results-list li`, generic
   `[role="listbox"] [role="option"]`). Failure to resolve a mention
   doesn't fail the row — the `@<Name>` stays as literal text and a
   warning is logged.
+- **Mention chip eats the following space (validated 2026-05-17).**
+  Clicking the LI typeahead suggestion absorbs the immediately-following
+  SPACE keystroke, fusing the next word into the chip
+  (`@Michelle Kempton says` → `Kemptonsays`). This bug was invisible
+  in the videos flow until now because the canonical clip captions had
+  a `\n\n` immediately after each `@Name` (newlines are NOT absorbed,
+  only spaces are). `fill_caption_with_mentions` now peeks at the next
+  source char and types one compensating space when it's whitespace or
+  alphanumeric — newlines and punctuation pass through untouched. A
+  future video caption with `@Name word` (no newline) will render
+  correctly with no code change needed in `videos_linkedin.py`. See
+  `planning/linkedin/README.md` *"Quirk: mention chip eats the
+  following space"* for the full table of source-char → behaviour.
 - **Sentinel post URL.** After a LIVE schedule the orchestrator writes
   `https://scheduled.local/<platform>/<day>` into `link <P>(v)`. This is
   intentional and gets overwritten by the data-collection pipeline once the

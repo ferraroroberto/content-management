@@ -131,17 +131,26 @@ flowchart LR
 
 The weekly **video** package shares one Notion clip page across all four
 scheduled platforms (LI/IG/TW/TH) plus the daily Substack pipeline's video-day
-branch, and demonstrates three patterns reusable for any future long-form
-LinkedIn scheduling work (e.g. posts-DB-driven long-form posts): reading
-post body text from a single Notion `code` block (caching the result into a
-`TextLI` rich_text property), resolving `@FirstName Last` mentions through
-LinkedIn's typeahead dropdown, and waiting for LinkedIn's background
-video-upload to settle after the composer closes. See
-[`planning/videos/README.md`](planning/videos/README.md) and the *"Reading
-post body text from Notion"*, *"Resolving @mentions"*, *"Waiting for the
-post-Schedule upload-complete signal"* sections in
+branch, and demonstrates three patterns now reused by the LinkedIn POST +
+CAROUSEL routes as well: reading post body text from a single Notion `code`
+block (caching the result into a `textLI` rich_text property, chunked across
+≤2000-char segments for posts that exceed Notion's per-segment limit),
+resolving `@FirstName Last` mentions through LinkedIn's typeahead dropdown,
+and waiting for LinkedIn's background media upload (video or document/PDF)
+to settle after the composer closes. The shared helpers live in
+[`planning/linkedin/linkedin_composer.py`](planning/linkedin/linkedin_composer.py).
+See [`planning/videos/README.md`](planning/videos/README.md) and the
+*"Reading post body text from Notion"*, *"Resolving @mentions"*, *"Waiting
+for the post-Schedule upload-complete signal"* sections in
 [`planning/linkedin/README.md`](planning/linkedin/README.md) for the
 canonical write-ups.
+
+The LinkedIn scheduler dispatches three routes off each WIP-LI row's
+Notion relation pattern (no read of a `type` property required):
+illustration-only (ILL), illustration + article + post body (POST), and
+post-only with a PDF located by fuzzy folder match (CAROUSEL). Newsletter
+rows are skipped (separate manual process). Full table + selectors in
+[`planning/linkedin/README.md`](planning/linkedin/README.md).
 
 - Each platform is run with `--all-wip` — no date filter, so you can plan
   one, two, or three weeks in a single run.

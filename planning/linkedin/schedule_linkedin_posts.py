@@ -1,8 +1,24 @@
 """Schedule next week's LinkedIn posts from the Notion editorial database.
 
-Phase 1 scope: rows where ``Work in Progress LI`` is checked, ``illustration LI``
-is non-empty, and ``article LI`` is empty. Each such row gets one illustration
-post scheduled for 06:30 (browser local TZ) on the row's own date.
+Three coexisting routes are dispatched off the WIP-LI rows based purely on
+the editorial-row relation pattern (no read of the linked post page's type):
+
+* ``ILL``  — ``illustration LI`` set AND ``article LI`` empty.
+             The original photo-with-caption flow: caption is read from the
+             illustration's earliest ``publishIG`` row (text IG).
+* ``POST`` — ``illustration LI`` set AND ``article LI`` set AND
+             ``post LI`` set. Same UI as ILL but the caption comes from the
+             linked posts-DB page body (cached into ``textLI``) and is typed
+             with ``@mention`` resolution via the LI typeahead.
+* ``CAROUSEL`` — ``illustration LI`` empty AND ``article LI`` empty AND
+             ``post LI`` set AND no ``newsletter`` relation. A different UI
+             entirely: feed → Start a post → More → Add a document → upload
+             the PDF located via fuzzy folder match under
+             ``<thread_root>/<books|monographic>/``, set the document title,
+             type the caption (with mentions), then schedule.
+
+Newsletter rows (any ``newsletter`` relation) are skipped — newsletter
+posting is a separate manual / parallel process.
 
 This is a planner, not a bot. No interactions with other users are automated:
 no likes, no comments, no follows. The script only places my own pre-written
@@ -27,7 +43,7 @@ import sys
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from playwright.sync_api import Page, TimeoutError as PWTimeoutError
 
@@ -39,6 +55,19 @@ from planning.linkedin.linkedin_session import (  # noqa: E402
     load_linkedin_config,
     load_notion_token,
 )
+from planning.linkedin.linkedin_carousel_pdf import (  # noqa: E402
+    CarouselDoc,
+    locate_pdf,
+)
+from planning.linkedin.linkedin_composer import (  # noqa: E402
+    fill_caption_with_mentions,
+    wait_for_upload_complete,
+)
+from planning.linkedin.linkedin_posts_body import (  # noqa: E402
+    PostPayload,
+    assert_caption_within_linkedin_limit,
+    load_post_payload,
+)
 from reporting.notion.editorial import (  # noqa: E402
     get_field,
     get_property_type,
@@ -48,6 +77,8 @@ from reporting.notion.editorial import (  # noqa: E402
     set_field,
 )
 from reporting.notion.notion_update import format_database_id  # noqa: E402
+
+Route = Literal["ILL", "POST", "CAROUSEL"]
 
 logger = logging.getLogger("linkedin_schedule")
 
@@ -104,8 +135,11 @@ def _resolve_schedule_time(cfg: dict, d: date) -> tuple[int, int]:
 class ScheduleRow:
     page_id: str
     day: date
-    illustration_page_id: str
+    route: Route
+    illustration_page_id: Optional[str]
+    post_page_id: Optional[str]
     article_relation_count: int
+    newsletter_relation_count: int
     existing_post_url: Optional[str]
 
     @property
@@ -118,6 +152,28 @@ class IllustrationData:
     image_filename: str
     alt_text: str
     caption_text: str
+
+
+def _classify_route(
+    illust_count: int,
+    article_count: int,
+    post_count: int,
+    newsletter_count: int,
+) -> Optional[Route]:
+    """Return the route for the given relation counts, or None to skip.
+
+    Pure function — encapsulates the three-way branch documented at the
+    top of the module. The caller logs the skip reason.
+    """
+    if illust_count and not article_count:
+        # Existing route: illustration alone (post LI may or may not be set;
+        # the caption still comes from text IG of the earliest publishIG row).
+        return "ILL"
+    if illust_count and article_count and post_count:
+        return "POST"
+    if not illust_count and not article_count and post_count and not newsletter_count:
+        return "CAROUSEL"
+    return None
 
 
 # ---------- Notion query ----------
@@ -139,6 +195,8 @@ def fetch_wip_li_rows(
     illust_col = editorial_columns["illustration_rel"]
     article_col = editorial_columns["article_rel"]
     post_url_col = editorial_columns["post_url"]
+    post_rel_col = editorial_columns.get("post_rel")
+    newsletter_col = editorial_columns.get("newsletter_rel")
 
     rows: list[ScheduleRow] = []
 
@@ -164,11 +222,24 @@ def fetch_wip_li_rows(
             day_label = date_to_day_title(row_day)
             illust_rels = props.get(illust_col, {}).get("relation", []) or []
             article_rels = props.get(article_col, {}).get("relation", []) or []
-            if not illust_rels:
-                logger.info("⏭️  %s: WIP-LI but illustration LI is empty — skipping (illustration-only Phase 1).", day_label)
-                continue
-            if article_rels:
-                logger.info("⏭️  %s: has article LI — Phase 2 scope, skipping.", day_label)
+            post_rels = (
+                props.get(post_rel_col, {}).get("relation", []) or []
+                if post_rel_col else []
+            )
+            newsletter_rels = (
+                props.get(newsletter_col, {}).get("relation", []) or []
+                if newsletter_col else []
+            )
+            route = _classify_route(
+                len(illust_rels), len(article_rels), len(post_rels), len(newsletter_rels),
+            )
+            if route is None:
+                logger.info(
+                    "⏭️  %s: no matching route "
+                    "(illust=%d article=%d post=%d newsletter=%d) — skipping.",
+                    day_label, len(illust_rels), len(article_rels),
+                    len(post_rels), len(newsletter_rels),
+                )
                 continue
             existing_url = None
             url_prop = props.get(post_url_col, {})
@@ -178,8 +249,11 @@ def fetch_wip_li_rows(
                 ScheduleRow(
                     page_id=r["id"],
                     day=row_day,
-                    illustration_page_id=illust_rels[0]["id"],
+                    route=route,
+                    illustration_page_id=illust_rels[0]["id"] if illust_rels else None,
+                    post_page_id=post_rels[0]["id"] if post_rels else None,
                     article_relation_count=len(article_rels),
+                    newsletter_relation_count=len(newsletter_rels),
                     existing_post_url=existing_url,
                 )
             )
@@ -534,9 +608,214 @@ def _close_dialogs(page: Page) -> None:
         pass
 
 
+# ---------- CAROUSEL UI helpers ----------
+
+def _click_more(page: Page) -> None:
+    """Click the composer's 'More' button to reveal the secondary actions row.
+
+    The first row of composer icons shows Photo / Video / Event / +More; the
+    'Add a document' button only appears after expanding 'More'.
+    """
+    try:
+        page.locator('[role="dialog"]').get_by_role(
+            "button", name=re.compile(r"^more$", re.I)
+        ).first.click(timeout=10000)
+    except Exception as err:
+        raise RuntimeError(f"Could not click 'More' on the composer: {err}")
+
+
+def _click_add_a_document(page: Page) -> None:
+    """Click 'Add a document' from the expanded composer actions row.
+
+    After 'More', the secondary tray exposes Document among the icons; the
+    visible label reads exactly 'Add a document'.
+    """
+    try:
+        page.locator('[role="dialog"]').get_by_role(
+            "button", name=re.compile(r"add a document", re.I)
+        ).first.click(timeout=10000)
+    except Exception as err:
+        raise RuntimeError(f"Could not click 'Add a document': {err}")
+
+
+def _share_document_choose_file(page: Page, pdf_path: Path) -> None:
+    """Push the PDF into the 'Share a document' dialog's Choose-file button.
+
+    Strategy:
+      1. Fast path: if any ``input[type=file]`` accepting application/pdf is
+         already attached, push the file at it directly.
+      2. Otherwise click 'Choose file' and intercept the native file chooser
+         via ``expect_file_chooser``.
+    """
+    # Wait briefly for the Share-a-document dialog to mount.
+    page.wait_for_timeout(800)
+
+    inp = page.locator('input[type="file"]')
+    try:
+        if inp.count() > 0:
+            inp.first.wait_for(state="attached", timeout=5000)
+            inp.first.set_input_files(str(pdf_path))
+            return
+    except Exception:
+        pass
+
+    try:
+        with page.expect_file_chooser(timeout=10000) as fc_info:
+            page.locator('[role="dialog"]').get_by_role(
+                "button", name=re.compile(r"choose file", re.I)
+            ).first.click(timeout=5000)
+        fc_info.value.set_files(str(pdf_path))
+    except Exception as err:
+        raise RuntimeError(f"Could not push PDF to 'Share a document' dialog: {err}")
+
+
+def _wait_for_pdf_upload(page: Page, *, timeout_ms: int = 180000) -> None:
+    """Wait for the Share-a-document dialog's PDF processing to complete.
+
+    The 'Done' button is disabled until LinkedIn finishes processing the PDF
+    (the dialog shows a thin progress bar under the file row). We poll the
+    Done button until clickable; bail with a clear error on timeout.
+    """
+    deadline = page.evaluate("() => Date.now()") + timeout_ms
+    while page.evaluate("() => Date.now()") < deadline:
+        try:
+            done_btn = page.locator('[role="dialog"]').get_by_role(
+                "button", name=re.compile(r"^done$", re.I)
+            ).first
+            if done_btn.count():
+                disabled = done_btn.get_attribute("disabled")
+                aria_dis = done_btn.get_attribute("aria-disabled")
+                if not disabled and (aria_dis is None or aria_dis.lower() == "false"):
+                    return
+        except Exception:
+            pass
+        page.wait_for_timeout(1000)
+    raise RuntimeError("PDF processing did not finish within the timeout window.")
+
+
+def _fill_document_title(page: Page, doc_title: str) -> None:
+    """Fill the 'Document title' input in the Share-a-document dialog.
+
+    Selector list defensive against LI rollouts: textbox role + several
+    placeholder/aria fallbacks. The dialog itself scopes the search so a
+    rogue caption editor on the page can't win.
+    """
+    if not doc_title:
+        raise RuntimeError("Empty document title — refusing to submit.")
+    candidates = (
+        '[role="dialog"] input[name*="title" i]',
+        '[role="dialog"] input[aria-label*="title" i]',
+        '[role="dialog"] input[placeholder*="title" i]',
+        '[role="dialog"] input[type="text"]',
+    )
+    for sel in candidates:
+        try:
+            loc = page.locator(sel).first
+            if loc.count():
+                loc.wait_for(state="visible", timeout=3000)
+                loc.fill(doc_title)
+                return
+        except Exception:
+            continue
+    raise RuntimeError("Could not locate the Document title input.")
+
+
+def _click_document_done(page: Page) -> None:
+    """Click 'Done' in the Share-a-document dialog → returns to composer with PDF attached."""
+    try:
+        page.locator('[role="dialog"]').get_by_role(
+            "button", name=re.compile(r"^done$", re.I)
+        ).first.click(timeout=10000)
+    except Exception as err:
+        raise RuntimeError(f"Could not click 'Done' on the document dialog: {err}")
+
+
+def _click_start_a_post(page: Page) -> None:
+    """Click the feed's 'Start a post' share box to open the composer.
+
+    The carousel route doesn't use the Photo button — it needs a clean
+    empty composer to access the secondary actions row via 'More' → 'Add
+    a document'. LI's share box exposes a button with accessible name
+    matching 'Start a post' (case-insensitive).
+    """
+    candidates = (
+        re.compile(r"start a post", re.I),
+        re.compile(r"create a post", re.I),
+    )
+    for pattern in candidates:
+        try:
+            btn = page.get_by_role("button", name=pattern).first
+            if btn.count():
+                btn.click(timeout=5000)
+                return
+        except Exception:
+            continue
+    raise RuntimeError("Could not click 'Start a post' on the LinkedIn feed.")
+
+
 # ---------- Per-row driver ----------
 
-def schedule_one_row(
+def _finalize_schedule(
+    page: Page,
+    out_dir: Path,
+    day_label: str,
+    *,
+    wait_for_upload: bool = False,
+) -> str:
+    """Shared tail of every route: Next → final Schedule → wait composer closes.
+
+    ``wait_for_upload`` adds the explicit-signal-or-60s-fallback wait used
+    for media-attached posts (CAROUSEL PDFs), borrowing the videos pattern.
+    """
+    _click_schedule_next(page)
+    page.wait_for_timeout(1500)
+
+    pre_shot = out_dir / f"{day_label}-live-pre.png"
+    try:
+        page.screenshot(path=str(pre_shot), full_page=False)
+    except Exception:
+        pass
+
+    composer_locator = page.locator(
+        '[role="dialog"]:has(div[role="textbox"][contenteditable="true"])'
+    )
+    pre_count = composer_locator.count()
+
+    _click_final_schedule(page)
+
+    deadline = page.evaluate("() => Date.now()") + 20000
+    while page.evaluate("() => Date.now()") < deadline:
+        if composer_locator.count() < pre_count:
+            break
+        page.wait_for_timeout(400)
+    else:
+        shot = out_dir / f"{day_label}-live-FAIL.png"
+        page.screenshot(path=str(shot), full_page=False)
+        raise RuntimeError(
+            f"Composer did not close within 20s after clicking Schedule — "
+            f"post likely NOT scheduled. See {shot}"
+        )
+
+    page.wait_for_timeout(1500)
+    if wait_for_upload:
+        # CRITICAL for PDF posts: LI closes the composer immediately but
+        # keeps uploading the document in the background. Without waiting,
+        # the scheduled post can end up media-less ("Something went wrong").
+        try:
+            wait_for_upload_complete(page)
+        except Exception as err:
+            logger.warning("⚠️ %s: upload-complete wait raised %s — continuing.", day_label, err)
+
+    shot = out_dir / f"{day_label}-live-after.png"
+    try:
+        page.screenshot(path=str(shot), full_page=False)
+    except Exception:
+        pass
+    logger.info("✅ LIVE %s: scheduled (composer closed). Screenshot → %s", day_label, shot)
+    return f"{day_label}: LIVE scheduled"
+
+
+def schedule_one_illustration_row(
     session: LinkedInSession,
     cfg: dict,
     row: ScheduleRow,
@@ -544,15 +823,19 @@ def schedule_one_row(
     image_path: Path,
     *,
     dry_run: bool,
+    use_mention_resolution: bool = False,
 ) -> str:
-    """Return a one-line status string for the row."""
+    """ILL and POST routes share the photo+caption flow; only the caption
+    source and mention-resolution differ.
+
+    ``use_mention_resolution=True`` swaps the plain ``_fill_caption`` for
+    the videos-package mention-aware typer (POST route caption may contain
+    ``@FirstName Last`` references that must resolve through LI's typeahead).
+    """
     page = session.page
     day_label = row.day_title
 
-    try:
-        session.goto_with_login_check(cfg["feed_url"])
-    except LoginRequiredError:
-        raise
+    session.goto_with_login_check(cfg["feed_url"])
 
     # Clicking 'Photo' on the feed opens BOTH the post dialog and the file
     # picker (the <input type="file"> appears in the DOM) — one click, no
@@ -566,7 +849,10 @@ def schedule_one_row(
     page.wait_for_timeout(1000)
     _click_next_after_photo_editor(page)
     page.wait_for_timeout(2500)
-    _fill_caption(page, illust.caption_text)
+    if use_mention_resolution:
+        fill_caption_with_mentions(page, illust.caption_text)
+    else:
+        _fill_caption(page, illust.caption_text)
     page.wait_for_timeout(800)
     _open_schedule_dialog(page)
     page.wait_for_timeout(1500)
@@ -579,56 +865,122 @@ def schedule_one_row(
     if dry_run:
         shot = out_dir / f"{day_label}-dryrun.png"
         page.screenshot(path=str(shot), full_page=False)
-        logger.info("✅ DRY-RUN %s: schedule dialog ready, screenshot → %s (NOT scheduled)", day_label, shot)
+        logger.info("✅ DRY-RUN %s: schedule dialog ready, screenshot → %s (NOT scheduled)",
+                    day_label, shot)
         _close_dialogs(page)
         return f"{day_label}: DRY-RUN OK"
 
-    _click_schedule_next(page)
+    return _finalize_schedule(page, out_dir, day_label, wait_for_upload=False)
+
+
+def schedule_one_carousel_row(
+    session: LinkedInSession,
+    cfg: dict,
+    row: ScheduleRow,
+    doc: CarouselDoc,
+    caption: str,
+    *,
+    dry_run: bool,
+) -> str:
+    """CAROUSEL route: feed → Start a post → More → Add a document → upload
+    → title → Done → caption (with mentions) → Schedule.
+    """
+    page = session.page
+    day_label = row.day_title
+
+    session.goto_with_login_check(cfg["feed_url"])
+
+    _click_start_a_post(page)
     page.wait_for_timeout(1500)
+    _click_more(page)
+    page.wait_for_timeout(800)
+    _click_add_a_document(page)
+    page.wait_for_timeout(1200)
+    _share_document_choose_file(page, doc.pdf_path)
+    _wait_for_pdf_upload(page)
+    _fill_document_title(page, doc.doc_title)
+    page.wait_for_timeout(400)
+    _click_document_done(page)
+    page.wait_for_timeout(2500)
 
-    # Capture composer state BEFORE clicking the final Schedule, for debugging.
-    pre_shot = out_dir / f"{day_label}-live-pre.png"
-    try:
-        page.screenshot(path=str(pre_shot), full_page=False)
-    except Exception:
-        pass
+    if not caption:
+        raise RuntimeError("Carousel caption is empty — refusing to schedule.")
+    fill_caption_with_mentions(page, caption)
+    page.wait_for_timeout(800)
 
-    # Snapshot how many composer dialogs are open right now — we'll wait for
-    # that count to drop after the Schedule click, which is the success signal.
-    composer_locator = page.locator(
-        '[role="dialog"]:has(div[role="textbox"][contenteditable="true"])'
-    )
-    pre_count = composer_locator.count()
-
-    _click_final_schedule(page)
-
-    try:
-        # Success = the composer dialog disappears (post is scheduled and modal
-        # closes). Polling rather than a single wait_for handles cases where
-        # LinkedIn briefly re-renders before unmounting.
-        deadline = page.evaluate("() => Date.now()") + 20000
-        while page.evaluate("() => Date.now()") < deadline:
-            if composer_locator.count() < pre_count:
-                break
-            page.wait_for_timeout(400)
-        else:
-            shot = out_dir / f"{day_label}-live-FAIL.png"
-            page.screenshot(path=str(shot), full_page=False)
-            raise RuntimeError(
-                f"Composer did not close within 20s after clicking Schedule — "
-                f"post likely NOT scheduled. See {shot}"
-            )
-    except RuntimeError:
-        raise
-
+    _open_schedule_dialog(page)
     page.wait_for_timeout(1500)
-    shot = out_dir / f"{day_label}-live-after.png"
-    try:
+    hour, minute = _resolve_schedule_time(cfg, row.day)
+    _set_schedule_datetime(page, row.day, hour, minute)
+
+    out_dir = Path(__file__).resolve().parent.parent.parent / "results" / "linkedin"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if dry_run:
+        shot = out_dir / f"{day_label}-carousel-dryrun.png"
         page.screenshot(path=str(shot), full_page=False)
-    except Exception:
-        pass
-    logger.info("✅ LIVE %s: scheduled (composer closed). Screenshot → %s", day_label, shot)
-    return f"{day_label}: LIVE scheduled"
+        logger.info("✅ DRY-RUN %s CAROUSEL: schedule dialog ready, screenshot → %s (NOT scheduled)",
+                    day_label, shot)
+        _close_dialogs(page)
+        return f"{day_label}: DRY-RUN OK"
+
+    return _finalize_schedule(page, out_dir, day_label, wait_for_upload=True)
+
+
+def schedule_one_row(
+    session: LinkedInSession,
+    cfg: dict,
+    row: ScheduleRow,
+    notion,
+    *,
+    dry_run: bool,
+) -> str:
+    """Dispatch to the per-route scheduler. Returns a one-line status string.
+
+    Resolves all per-route inputs (illustration data, post body, PDF) here
+    so the route helpers stay narrowly focused on the LI UI itself.
+    """
+    if row.route == "ILL":
+        illust = fetch_illustration(notion, row.illustration_page_id, cfg)
+        logger.info("🖼️ %s ILL: filename=%s alt_len=%d caption_len=%d",
+                    row.day_title, illust.image_filename,
+                    len(illust.alt_text), len(illust.caption_text))
+        image_path = resolve_image_path(cfg["illustrations_folder"], illust.image_filename)
+        return schedule_one_illustration_row(
+            session, cfg, row, illust, image_path,
+            dry_run=dry_run, use_mention_resolution=False,
+        )
+
+    if row.route == "POST":
+        illust = fetch_illustration(notion, row.illustration_page_id, cfg)
+        image_path = resolve_image_path(cfg["illustrations_folder"], illust.image_filename)
+        payload = load_post_payload(notion, row.post_page_id, cfg["posts_columns"])
+        assert_caption_within_linkedin_limit(payload)
+        # Override the illustration's text-IG caption with the post body.
+        illust = IllustrationData(
+            image_filename=illust.image_filename,
+            alt_text=illust.alt_text,
+            caption_text=payload.caption,
+        )
+        logger.info("🖼️📝 %s POST: illustration=%s post=%r caption_len=%d",
+                    row.day_title, illust.image_filename, payload.title, len(payload.caption))
+        return schedule_one_illustration_row(
+            session, cfg, row, illust, image_path,
+            dry_run=dry_run, use_mention_resolution=True,
+        )
+
+    if row.route == "CAROUSEL":
+        payload = load_post_payload(notion, row.post_page_id, cfg["posts_columns"])
+        assert_caption_within_linkedin_limit(payload)
+        doc = locate_pdf(payload.title, cfg["carousel"])
+        logger.info("📎 %s CAROUSEL: post=%r pdf=%s doc_title=%r caption_len=%d",
+                    row.day_title, payload.title, doc.pdf_path.name,
+                    doc.doc_title, len(payload.caption))
+        return schedule_one_carousel_row(
+            session, cfg, row, doc, payload.caption, dry_run=dry_run,
+        )
+
+    raise RuntimeError(f"Unknown route on row {row.day_title}: {row.route!r}")
 
 
 # ---------- Main ----------
@@ -698,8 +1050,8 @@ def main() -> tuple[int, list[dict]]:
 
     logger.info("📋 %d in-scope row(s):", len(rows))
     for r in rows:
-        logger.info("   - %s (page=%s, link LI=%s)",
-                    r.day_title, r.page_id, r.existing_post_url or "(empty)")
+        logger.info("   - %s route=%s (page=%s, link LI=%s)",
+                    r.day_title, r.route, r.page_id, r.existing_post_url or "(empty)")
 
     # Filter on existing post_url unless --force.
     if not args.force:
@@ -717,12 +1069,8 @@ def main() -> tuple[int, list[dict]]:
     with LinkedInSession(cfg) as session:
         for row in rows:
             try:
-                illust = fetch_illustration(notion, row.illustration_page_id, cfg)
-                logger.info("🖼️ %s: filename=%s alt_len=%d caption_len=%d",
-                            row.day_title, illust.image_filename,
-                            len(illust.alt_text), len(illust.caption_text))
-                image_path = resolve_image_path(cfg["illustrations_folder"], illust.image_filename)
-                status = schedule_one_row(session, cfg, row, illust, image_path, dry_run=dry_run)
+                logger.info("🛤️ %s: route=%s", row.day_title, row.route)
+                status = schedule_one_row(session, cfg, row, notion, dry_run=dry_run)
                 statuses.append(status)
                 if dry_run:
                     results.append({"day": row.day_title, "status": "DRY", "detail": status})
