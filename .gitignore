@@ -9,10 +9,14 @@ logs/
 config.json
 process/.env
 
-# Substack dedicated Chrome user-data directory (cookies, profile) — never commit.
-# This is a SEPARATE profile created by the bootstrap script; it has nothing to
-# do with the user's regular ~/Chrome User Data profile.
+# Per-platform dedicated Chrome user-data directories (cookies, profile) — never commit.
+# These are SEPARATE profiles created by each platform's bootstrap script; they have
+# nothing to do with the user's regular ~/Chrome User Data profile.
 substack/chrome_user_data/
+linkedin/chrome_user_data/
+twitter/chrome_user_data/
+threads/chrome_user_data/
+instagram/chrome_user_data/
 
 # Ignore contents of results directory but keep the directory itself
 results/*
@@ -30,3 +34,6 @@ supabase/.branches/_current_branch
 
 # claude code settings
 .claude/
+
+# temp files
+/tmp
