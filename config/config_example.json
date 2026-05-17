@@ -204,5 +204,31 @@
         },
         "headless": false,
         "dry_run_default": false
+    },
+    "videos": {
+        "editorial_db_id": "your_editorial_database_id_here",
+        "editorial_columns": {
+            "title_day": "day",
+            "date": "date",
+            "wip_checkbox": "work in progress Vd",
+            "clip_rel_li": "clip LI(v)",
+            "clip_rel_ig": "clip IG(v)",
+            "clip_rel_tw": "clip TW(v)",
+            "post_url_li": "link LI(v)",
+            "post_url_ig": "link IG(v)",
+            "post_url_tw": "link TW(v)",
+            "post_url_sb": "link SB"
+        },
+        "clip_columns": {
+            "caption_text": "Text",
+            "caption_li": "TextLI",
+            "clip_pc": "clipPC",
+            "file_pc": "filePC"
+        },
+        "post_hour_local": 19,
+        "post_minute_local": 0,
+        "schedule_timezone": "Europe/Madrid",
+        "headless": false,
+        "dry_run_default": true
     }
 }

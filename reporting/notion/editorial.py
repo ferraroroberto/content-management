@@ -122,6 +122,55 @@ def retrieve_page(notion: Client, page_id: str) -> dict:
     return notion.pages.retrieve(page_id=page_id)
 
 
+def get_page_body_text(notion: Client, page_id: str) -> str:
+    """Read all top-level rich-text blocks from a page body and join with newlines.
+
+    Used by the video planner to extract the LinkedIn long-caption that lives
+    as the clip page's body content (not as a property). Walks
+    ``blocks.children.list`` with pagination and concatenates the rich_text of
+    every block type that exposes one (paragraph, heading_*, quote, callout,
+    bulleted/numbered_list_item, to_do). Inert blocks (divider, image,
+    embed, child_page, ...) are silently skipped.
+    """
+    text_block_types = {
+        "paragraph",
+        "heading_1",
+        "heading_2",
+        "heading_3",
+        "quote",
+        "callout",
+        "bulleted_list_item",
+        "numbered_list_item",
+        "to_do",
+        "toggle",
+        # The clip pages store the LinkedIn long caption inside a single
+        # ``code`` block (language="plain text") to preserve whitespace and
+        # newlines verbatim. Without this, the API call returns no body text
+        # and the LI driver fails the strict empty-body check.
+        "code",
+    }
+    out: list[str] = []
+    cursor: Optional[str] = None
+    while True:
+        kwargs: dict = {"block_id": page_id, "page_size": 100}
+        if cursor:
+            kwargs["start_cursor"] = cursor
+        response = notion.blocks.children.list(**kwargs)
+        for block in response.get("results", []):
+            btype = block.get("type")
+            if btype not in text_block_types:
+                continue
+            rich = block.get(btype, {}).get("rich_text", []) or []
+            piece = "".join(seg.get("plain_text", "") for seg in rich)
+            out.append(piece)
+        if not response.get("has_more"):
+            break
+        cursor = response.get("next_cursor")
+        if not cursor:
+            break
+    return "\n".join(out)
+
+
 __all__ = [
     "init_notion_client",
     "get_row_by_day",
@@ -130,4 +179,5 @@ __all__ = [
     "get_property_type",
     "set_field",
     "retrieve_page",
+    "get_page_body_text",
 ]

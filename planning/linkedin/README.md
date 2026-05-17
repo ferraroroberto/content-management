@@ -222,6 +222,113 @@ From a logged-in LinkedIn tab:
 
 ---
 
+## Reading post body text from Notion (the code-block trick)
+
+LinkedIn's long-form captions don't fit into a Notion `rich_text` *property* — they're multi-paragraph, contain emoji, blank lines, and trailing URLs that must survive verbatim. The convention used across this repo's clips and (upcoming) posts databases is:
+
+**The full caption lives inside the Notion page body as a single block of type `code` (language = "plain text").**
+
+Why a code block and not a paragraph?
+
+- Notion's paragraph renderer collapses consecutive whitespace and treats blank lines inconsistently.
+- A code block preserves whitespace, emoji, and line breaks **exactly** as typed.
+- The block's `rich_text` array always has one segment whose `plain_text` is the entire caption — no concatenation, no transforms.
+
+### How to read it via the Notion API
+
+`reporting.notion.editorial.get_page_body_text(notion, page_id) -> str` walks `blocks.children.list` with pagination and joins the `rich_text` of every block type that exposes one. The relevant set is:
+
+```python
+text_block_types = {
+    "paragraph", "heading_1", "heading_2", "heading_3",
+    "quote", "callout",
+    "bulleted_list_item", "numbered_list_item", "to_do", "toggle",
+    "code",   # <-- critical for clip / post body captions
+}
+```
+
+If you forget `code`, the API call comes back with `0 chars` and looks like a Notion API limitation — it isn't. The body text is there; you just filtered it out.
+
+### Caching pattern (clip page → `TextLI` property)
+
+The videos orchestrator reads the body on every clip resolution. To avoid the per-run cost and to make the LI caption directly visible in the Notion DB UI, the orchestrator also writes the resolved body into a dedicated `TextLI` rich_text *property* on the clip page. Logic:
+
+1. Read `TextLI` property — if non-empty, use it (cheap).
+2. Otherwise fetch the body via `get_page_body_text` and use that.
+3. If the body was non-empty, write it back into `TextLI` so the next read is free.
+
+See `planning/videos/videos_session.py::load_clip_payload` for the canonical implementation. The same pattern applies to the LinkedIn posts DB: store the long-form caption as a code block in the page body, then cache to a `TextLI` rich_text property for convenience.
+
+---
+
+## Resolving @mentions in the composer
+
+LinkedIn renders an `@Name` mention as a blue, clickable link to the person's profile. You can't get this by typing the literal `@Hannah Wilson` into the composer — it stays as plain text. You have to drive LinkedIn's mention typeahead: type `@`, type the name letter-by-letter slowly enough for the dropdown to populate (~80ms per char), then click the matching suggestion before continuing.
+
+### Implementation (`planning/videos/videos_linkedin.py::_fill_caption_with_mentions`)
+
+1. Scan the caption with a strict regex: `r"@([A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*)*)"`. This matches `@Hannah Wilson`, `@Hannah`, `@RobertoFerraro`, etc., and intentionally STOPS at punctuation, lowercase, or newline. Periods/apostrophes inside names (`@O'Connor`) are NOT supported — extend the regex if needed.
+2. For each match:
+   - Type the literal text up to the `@`.
+   - Type `@` with a 20ms delay.
+   - Type the name with **80ms per character** (LinkedIn's typeahead is async — too fast and the dropdown never appears).
+   - Wait for the dropdown via `_click_mention_suggestion(page, name)`, which polls these selector candidates in order:
+     ```
+     div.mentions-typeahead-content [role="option"]
+     div[data-test-id="mentions-typeahead"] [role="option"]
+     [aria-label*="mention" i] [role="option"]
+     .artdeco-typeahead__results-list li
+     [role="listbox"] [role="option"]
+     ```
+   - Click the first option whose visible text contains the typed name (case-insensitive). If no option in the top 6 matches, click the top-ranked. If no dropdown appears within 6s, log a warning and leave `@<name>` as literal text — **don't fail the row**.
+3. Type the tail.
+
+### Verification
+
+Watch the LinkedIn Scheduled posts sheet after a LIVE run. A resolved mention appears in **blue** with a profile link; an unresolved mention shows as black `@Name` text. If you see unresolved mentions in production, either (a) LinkedIn rolled out a new typeahead class, or (b) the network was slow and the 6s wait timed out. The first fix is to add the new selector; the second is to bump the timeout in `_click_mention_suggestion`.
+
+---
+
+## Waiting for the post-Schedule upload-complete signal
+
+When you click the final Schedule button, LinkedIn **closes the composer immediately** but the video upload is still running in the background. If your Playwright context tears down before the upload finishes, the scheduled post is created with **no media** and clicking through to it in the Scheduled posts sheet shows *"Something went wrong, please try reloading the page"*. This is invisible to the caller — the `_wait_composer_clears` check passes, the driver returns `LIVE`, and you discover the failure only when you look at LinkedIn the next morning.
+
+### Implementation (`planning/videos/videos_linkedin.py::_wait_for_upload_complete`)
+
+Order of attempts:
+
+1. **Fast path** — if any of these texts is already visible, return immediately: `upload complete`, `video uploaded`, `successfully scheduled`, `post scheduled`, `your post will be published`.
+2. **In-progress poll** — hunt for any of these in-progress indicators:
+   ```
+   div[aria-label*="upload" i]:not([aria-label*="complete" i])
+   div[role="status"]:has-text("Uploading")
+   div[role="alert"]:has-text("upload" i)
+   div:has-text("don't close")
+   div:has-text("Don't close")
+   div:has-text("Do not close")
+   div:has-text("video is uploading")
+   div:has-text("Uploading your video")
+   div.global-alert
+   [data-test-global-alert-id]
+   ```
+   If at least one appears, poll until they all disappear (cap 7 minutes), then add a 3-second safety buffer.
+3. **Fallback** — if no indicator ever appears (LinkedIn may have already finished or use a selector not on the list), hold the browser open for a fixed **60 seconds** before tearing down.
+
+### Why two layers
+
+Real LinkedIn behavior varies per rollout and per browser instance. Sometimes the toast shows for 30+ seconds; sometimes it never appears at all (small video on a fast uplink). Implementing only the explicit-signal path causes silent failures when the toast is missing; implementing only the fixed hold wastes time on small files. The two-layer approach handles both.
+
+### Diagnosing a future failure
+
+If a row that the driver reported `LI:LIVE` ends up with "Something went wrong" in the Scheduled posts sheet:
+
+1. Open LinkedIn manually, click Photo → upload a small video → Schedule → watch the bottom-left corner.
+2. Inspect the upload-progress toast / banner with DevTools. The class names will be obfuscated but `role`, `aria-label`, and the inner text should be stable enough to selectorize.
+3. Add the new selector to `_UPLOAD_IN_PROGRESS_SELECTORS` and/or the success text to `_UPLOAD_COMPLETE_TEXT_RE` in `planning/videos/videos_linkedin.py`.
+4. If the toast genuinely doesn't show on your account, bump the 60-second fallback to 90/120 seconds.
+
+---
+
 ## Replication template for other platforms
 
 `substack/` already exists. `twitter/`, `threads/`, `instagram/` need the same shape:

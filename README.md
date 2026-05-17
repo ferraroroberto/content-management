@@ -7,10 +7,12 @@ Two pipelines, one repo:
   Notion, and runs the daily Substack Note.
 - **Planning** (`planning/`, `planning_pipeline.py`) — schedules next
   week's (or weeks') content on LinkedIn, Instagram (+ Meta planner story
-  + post), Twitter, and Threads, driving each platform's native scheduler
-  via real Chrome with a dedicated profile. The Instagram step also
-  clones captions/illustrations into the TW/TH/SB Notion columns so the
-  other planners and the daily Substack run can consume them.
+  + post), Twitter, Threads, and the weekly **video** clip (cross-platform
+  LI/IG/TW/TH at 19:00 Madrid + a Substack video Note posted by the daily
+  pipeline). Each platform's native scheduler is driven via real Chrome
+  with a dedicated profile. The Instagram step also clones captions /
+  illustrations into the TW/TH/SB Notion columns so the other planners
+  and the daily Substack run can consume them.
 
 Both pipelines read from the same Notion editorial database. Each per-folder
 README has its own mermaid flowchart, CLI table, gotchas, and validated
@@ -58,7 +60,9 @@ reporting/                            # repo root
 │   ├── instagram/                    # Meta planner (story + post) + IG→TW/TH/SB clone step
 │   ├── twitter/                      # X /home composer scheduler
 │   ├── threads/                      # threads.com composer + calendar scheduler
-│   └── substack/                     # Substack Note publisher + followers scraper
+│   ├── substack/                     # Substack Note publisher + followers scraper
+│   │                                 # (with a video-day branch for the weekly clip)
+│   └── videos/                       # weekly cross-platform video orchestrator
 ├── reporting/                        # daily numbers — APIs → Supabase → Notion
 │   ├── social_client/                # RapidAPI fetchers
 │   ├── process/                      # transform, upload to Supabase, aggregate
@@ -84,7 +88,8 @@ gotchas, files.
   [`planning/instagram/README.md`](planning/instagram/README.md) ·
   [`planning/twitter/README.md`](planning/twitter/README.md) ·
   [`planning/threads/README.md`](planning/threads/README.md) ·
-  [`planning/substack/README.md`](planning/substack/README.md)
+  [`planning/substack/README.md`](planning/substack/README.md) ·
+  [`planning/videos/README.md`](planning/videos/README.md)
 - **Reporting** —
   [`reporting/social_client/README.md`](reporting/social_client/README.md) ·
   [`reporting/process/README.md`](reporting/process/README.md) ·
@@ -119,9 +124,24 @@ flowchart LR
     L --> I[planning.instagram<br/>schedule_instagram_posts<br/>story + post]
     I --> T[planning.twitter<br/>schedule_twitter_posts]
     T --> H[planning.threads<br/>schedule_threads_posts]
-    H --> S[results/planning/<br/>YYYY-MM-DD-summary.md]
+    H --> V[planning.videos<br/>schedule_videos_posts<br/>LI+IG+TW+TH at 19:00]
+    V --> S[results/planning/<br/>YYYY-MM-DD-summary.md]
     S --> R[stdout + on-disk report]
 ```
+
+The weekly **video** package shares one Notion clip page across all four
+scheduled platforms (LI/IG/TW/TH) plus the daily Substack pipeline's video-day
+branch, and demonstrates three patterns reusable for any future long-form
+LinkedIn scheduling work (e.g. posts-DB-driven long-form posts): reading
+post body text from a single Notion `code` block (caching the result into a
+`TextLI` rich_text property), resolving `@FirstName Last` mentions through
+LinkedIn's typeahead dropdown, and waiting for LinkedIn's background
+video-upload to settle after the composer closes. See
+[`planning/videos/README.md`](planning/videos/README.md) and the *"Reading
+post body text from Notion"*, *"Resolving @mentions"*, *"Waiting for the
+post-Schedule upload-complete signal"* sections in
+[`planning/linkedin/README.md`](planning/linkedin/README.md) for the
+canonical write-ups.
 
 - Each platform is run with `--all-wip` — no date filter, so you can plan
   one, two, or three weeks in a single run.
@@ -182,6 +202,7 @@ Copy-Item config\config_example.json config\config.json
 & .\.venv\Scripts\python.exe -m planning.twitter.bootstrap_session
 & .\.venv\Scripts\python.exe -m planning.threads.bootstrap_session
 & .\.venv\Scripts\python.exe -m planning.substack.bootstrap_session
+# planning.videos reuses the four sister sessions above — no separate bootstrap.
 ```
 
 ### Daily reporting run

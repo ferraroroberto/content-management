@@ -19,6 +19,7 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from planning.substack.post_substack_note import post_note  # noqa: E402
+from planning.substack.post_substack_video_note import post_video_note_if_applicable  # noqa: E402
 from planning.substack.substack_session import (  # noqa: E402
     SubstackSession,
     configure_logger,
@@ -48,9 +49,11 @@ def main() -> int:
     for name in (
         "substack_daily_pipeline",
         "substack_post_note",
+        "substack_post_video_note",
         "substack_update_followers",
         "substack_session",
         "substack_notion_editorial",
+        "videos_session",
     ):
         configure_logger(name, debug=args.debug)
     cfg = load_substack_config()
@@ -65,16 +68,34 @@ def main() -> int:
         if args.skip_post:
             logger.info("⏭️ Skipping step 1 (post Note).")
         else:
+            # On weekly-video days the editorial row's ``Work in Progress
+            # Video`` checkbox is set AND ``clip SB(v)`` is populated. In
+            # that case the daily Note is REPLACED by a video Note (same
+            # composer, video toolbar icon, .mp4 from the clip's
+            # clipPC/filePC). The image Note is paused for the day.
             try:
-                rc_post = post_note(
-                    cfg, target_day,
-                    dry_run=args.dry_run,
-                    force=args.force,
-                    session=session,
+                video_rc = post_video_note_if_applicable(
+                    target_day,
+                    dry_run=args.dry_run, force=args.force, session=session,
                 )
             except Exception as err:
-                logger.exception("❌ Step 1 raised: %s", err)
-                rc_post = 99
+                logger.exception("❌ Video-day branch raised: %s", err)
+                video_rc = 99
+
+            if video_rc is not None:
+                logger.info("📹 Video day handled by video-note branch (rc=%d). Skipping image Note.", video_rc)
+                rc_post = video_rc
+            else:
+                try:
+                    rc_post = post_note(
+                        cfg, target_day,
+                        dry_run=args.dry_run,
+                        force=args.force,
+                        session=session,
+                    )
+                except Exception as err:
+                    logger.exception("❌ Step 1 raised: %s", err)
+                    rc_post = 99
 
         if args.skip_followers:
             logger.info("⏭️ Skipping step 2 (followers).")

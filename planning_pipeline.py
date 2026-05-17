@@ -43,6 +43,7 @@ from planning.linkedin.schedule_linkedin_posts import main as run_linkedin  # no
 from planning.instagram.schedule_instagram_posts import main as run_instagram  # noqa: E402
 from planning.twitter.schedule_twitter_posts import main as run_twitter  # noqa: E402
 from planning.threads.schedule_threads_posts import main as run_threads  # noqa: E402
+from planning.videos.schedule_videos_posts import main as run_videos  # noqa: E402
 
 
 logger: Optional[logging.Logger] = None
@@ -90,6 +91,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--skip-instagram", action="store_true")
     p.add_argument("--skip-twitter",   action="store_true")
     p.add_argument("--skip-threads",   action="store_true")
+    p.add_argument("--skip-videos",    action="store_true")
     return p.parse_args()
 
 
@@ -259,6 +261,7 @@ def main() -> int:
         ("Instagram", run_instagram, args.skip_instagram),
         ("Twitter",   run_twitter,   args.skip_twitter),
         ("Threads",   run_threads,   args.skip_threads),
+        ("Videos",    run_videos,    args.skip_videos),
     ]:
         results.append(_run_platform(name, fn, scheduler_args, skip))
 
