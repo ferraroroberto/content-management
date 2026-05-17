@@ -23,7 +23,7 @@
             "include_volunteers": "false",
             "include_projects": "false",
             "include_patents": "false",
-            "include_courses": "false", 
+            "include_courses": "false",
             "include_organizations": "false",
             "include_profile_status": "false",
             "include_company_public_url": "false"
@@ -230,5 +230,28 @@
         "schedule_timezone": "Europe/Madrid",
         "headless": false,
         "dry_run_default": true
+    },
+    "newsletter_archive": {
+        "articles_db_id": "67fbcee66711465c852ebf97303787a3",
+        "connections_db_id": "33a1990d72f949f0983acd55ccd15724",
+        "newsletter_db_id": "71fed31953b84183a9e77c48493bf9f4",
+        "chrome_debug_port": 9222,
+        "skip_url_substrings": [
+            "mail.google.com",
+            "notion.so",
+            "chrome://",
+            "about:",
+            "localhost"
+        ],
+        "llm_hub_base_url": "http://127.0.0.1:8000",
+        "llm_model": "gemini_lite",
+        "fuzzy_author_threshold": 88,
+        "newsletter_category_cap": 8,
+        "topic_to_rollup": {
+            "personal development": "n persdev",
+            "innovation": "n innov",
+            "leadership and management": "n leader"
+        },
+        "author_fallback_name": "(not classified)"
     }
 }

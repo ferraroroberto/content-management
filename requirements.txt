@@ -14,3 +14,9 @@ python-dotenv
 psycopg2-binary
 # Browser automation for the Substack pipeline (note posting + follower scraping)
 playwright
+# Article body extraction (readability) for archive.newsletter
+readability-lxml
+# Required HTML cleaner backend for newer readability-lxml versions
+lxml_html_clean
+# Fuzzy name matching for archive.newsletter author cache
+rapidfuzz

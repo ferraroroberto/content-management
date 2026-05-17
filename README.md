@@ -1,6 +1,6 @@
 # Social Media Automation Suite
 
-Two pipelines, one repo:
+Three pipelines, one repo:
 
 - **Reporting** (`reporting/`, `reporting_pipeline.py`) — pulls daily
   metrics from social media APIs, processes through Supabase, syncs to
@@ -13,6 +13,15 @@ Two pipelines, one repo:
   with a dedicated profile. The Instagram step also clones captions /
   illustrations into the TW/TH/SB Notion columns so the other planners
   and the daily Substack run can consume them.
+- **Archive — newsletter article archive** (`archive/newsletter/`) —
+  walks the open article tabs in a CDP-attached real Chrome, extracts
+  each article (readability-lxml), classifies the topic and produces a
+  3-line summary via the local-llm-hub (Gemini Flash), resolves the
+  author against the connections DB (exact / fuzzy / LLM-pick-primary /
+  `(not classified)` fallback — never invents), assigns to the next
+  future newsletter with room (`< 8` per topic), writes a Notion article
+  page, and closes the tab. End state: only Gmail (and other skipped
+  utility tabs) remain.
 
 Both pipelines read from the same Notion editorial database. Each per-folder
 README has its own mermaid flowchart, CLI table, gotchas, and validated
@@ -67,6 +76,8 @@ reporting/                            # repo root
 │   ├── social_client/                # RapidAPI fetchers
 │   ├── process/                      # transform, upload to Supabase, aggregate
 │   └── notion/                       # editorial helpers + Notion sync
+├── archive/                          # incoming-content archive pipelines
+│   └── newsletter/                   # Chrome tabs → Notion articles (with author + newsletter bucket)
 ├── config/                           # config.json, mapping.json, logger_config, chrome_launch
 ├── results/                          # outputs — planning summaries + raw API JSON
 ├── logs/                             # per-module .log files
@@ -94,6 +105,8 @@ gotchas, files.
   [`reporting/social_client/README.md`](reporting/social_client/README.md) ·
   [`reporting/process/README.md`](reporting/process/README.md) ·
   [`reporting/notion/README.md`](reporting/notion/README.md)
+- **Archive** —
+  [`archive/newsletter/README.md`](archive/newsletter/README.md)
 - **Shared** — [`config/README.md`](config/README.md)
 
 ## The two launchers
