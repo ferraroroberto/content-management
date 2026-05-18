@@ -34,6 +34,18 @@ CLASS_BADGE = {
 }
 
 
+# pandas turns SQL nulls into float('nan') when loading via supabase-py → DataFrame.
+# `NaN or default` short-circuits to NaN (NaN is truthy), so the old `x or ""`
+# idiom rendered literal "nan" or, for list columns, blew up with TypeError on
+# iteration. These helpers normalise — use them on every DataFrame.cell read.
+def _s(val, default: str = "") -> str:
+    return val if isinstance(val, str) and val else default
+
+
+def _list(val) -> list:
+    return val if isinstance(val, list) else []
+
+
 # ---------- Data layer (cached) ----------
 
 @st.cache_resource
@@ -130,14 +142,14 @@ def _act_whitelist(platform: str, account_url: str) -> None:
 def _render_comment_card(row: dict, *, tab: str) -> None:
     cid = row["comment_id"]
     platform = row["platform"]
-    commenter_url = row.get("commenter_url") or ""
-    display_name = row.get("display_name") or "(unknown)"
-    text = row.get("text") or ""
-    post_url = row.get("post_url") or ""
-    suggested_reply = row.get("suggested_reply") or ""
-    classification = row.get("classification") or "unknown"
+    commenter_url = _s(row.get("commenter_url"))
+    display_name = _s(row.get("display_name"), "(unknown)")
+    text = _s(row.get("text"))
+    post_url = _s(row.get("post_url"))
+    suggested_reply = _s(row.get("suggested_reply"))
+    classification = _s(row.get("classification"), "unknown")
     confidence = row.get("confidence")
-    reasons = row.get("verdict_reasons") or []
+    reasons = _list(row.get("verdict_reasons"))
 
     badge = {"human": "🧑 human", "ai": "🤖 ai", "unknown": "❓ unknown"}.get(classification, classification)
     conf_str = f" · {confidence:.2f}" if isinstance(confidence, (int, float)) else ""
@@ -160,10 +172,9 @@ def _render_comment_card(row: dict, *, tab: str) -> None:
 
         st.write(text or "_(no text extracted)_")
 
-        my_reply = row.get("my_reply_text")
-        if isinstance(my_reply, str) and my_reply.strip():
-            my_when = row.get("my_replied_at")
-            when_str = my_when if isinstance(my_when, str) and my_when.strip() else ""
+        my_reply = _s(row.get("my_reply_text"))
+        if my_reply:
+            when_str = _s(row.get("my_replied_at"))
             with st.container(border=True):
                 st.caption(f"✅ you already replied {when_str}".rstrip())
                 st.write(my_reply)
@@ -315,7 +326,7 @@ def _render_drill_down(account_url: str, comments_df: pd.DataFrame, platform: st
     if not cdf.empty:
         match = cdf[cdf["account_url"] == account_url]
         if not match.empty:
-            commenter_cls = match.iloc[0].get("classification") or "unknown"
+            commenter_cls = _s(match.iloc[0].get("classification"), "unknown")
     badge = CLASS_BADGE.get(commenter_cls, commenter_cls)
     st.subheader(f"selected: {name}")
     st.markdown(f"{badge} · {len(rows)} comment(s) · [open profile ↗]({account_url})")
@@ -328,15 +339,15 @@ def _render_drill_down(account_url: str, comments_df: pd.DataFrame, platform: st
                 posted_str = posted[:10]
             elif hasattr(posted, "strftime"):
                 posted_str = posted.strftime("%Y-%m-%d")
-            post_url = r.get("post_url") or ""
+            post_url = _s(r.get("post_url"))
             head = f"▸ **{posted_str}**" if posted_str else "▸"
             if post_url:
                 head += f"  ·  [open post ↗]({post_url})"
             st.markdown(head)
-            st.write(r.get("text") or "_(no text)_")
+            st.write(_s(r.get("text"), "_(no text)_"))
 
-            my_reply = r.get("my_reply_text")
-            if isinstance(my_reply, str) and my_reply.strip():
+            my_reply = _s(r.get("my_reply_text"))
+            if my_reply:
                 st.caption("you replied:")
                 st.write(my_reply)
 

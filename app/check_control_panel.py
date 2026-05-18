@@ -23,7 +23,11 @@ sys.path.append(str(REPO_ROOT))
 
 from config.chrome_launch import STEALTH_INIT_SCRIPT, stealth_launch_kwargs  # noqa: E402
 
-APP_URL = "http://localhost:8502"
+import os
+
+# Default to 8501 (what `launch_app.bat` uses). Override with APP_URL env var
+# when running parallel to the standalone review_app for dev.
+APP_URL = os.environ.get("APP_URL", "http://localhost:8501")
 
 
 def _force_utf8_stdout() -> None:
@@ -46,6 +50,27 @@ def _fail(label: str, detail: str = "") -> None:
 
 def _shot(page, out_dir: Path, label: str) -> None:
     page.screenshot(path=str(out_dir / f"{label}.png"), full_page=True)
+
+
+def _assert_no_traceback(page, label: str) -> bool:
+    """Scan ONLY Streamlit's exception widgets for Python errors. Body-text
+    scanning gives false positives — log panels of past runs contain
+    'Traceback:' as data, and st.tabs keeps all sub-tab content in the DOM."""
+    try:
+        excs = page.locator("[data-testid='stException']")
+        count = excs.count()
+    except Exception:
+        count = 0
+    if count > 0:
+        snippet = ""
+        try:
+            snippet = excs.first.inner_text()[:200]
+        except Exception:
+            pass
+        _fail(f"no python error on {label}", f"stException widget rendered: {snippet!r}")
+        return False
+    _pass(f"no python error on {label}")
+    return True
 
 
 def _click_tab(page, label: str) -> bool:
@@ -143,15 +168,35 @@ def run() -> int:
         else:
             _fail("engagement run sub-tab", "")
             fails += 1
-        # Click the commenters sub-tab and confirm it renders
+        if not _assert_no_traceback(page, "engagement-run sub-tab"):
+            fails += 1
+
+        # AI triage sub-tab — exercises cards with cascade-classified rows
+        # (the NaN verdict_reasons bug lived here).
+        _click_tab(page, "AI triage")
+        page.wait_for_timeout(1500)
+        _shot(page, out_dir, "06-engagement-ai")
+        if not _assert_no_traceback(page, "engagement AI sub-tab"):
+            fails += 1
+
+        # Real-comments sub-tab — also renders cards, same risk surface.
+        _click_tab(page, "real comments")
+        page.wait_for_timeout(1500)
+        _shot(page, out_dir, "07-engagement-real")
+        if not _assert_no_traceback(page, "engagement real sub-tab"):
+            fails += 1
+
+        # Commenters sub-tab
         _click_tab(page, "commenters")
         page.wait_for_timeout(1500)
-        _shot(page, out_dir, "06-engagement-commenters")
+        _shot(page, out_dir, "08-engagement-commenters")
         body = page.inner_text("body")
         if "commenter(s)" in body.lower() and "sorted by total desc" in body.lower():
             _pass("commenters sub-tab renders (data reused from engagement.ui)")
         else:
             _fail("commenters sub-tab", "")
+            fails += 1
+        if not _assert_no_traceback(page, "engagement commenters sub-tab"):
             fails += 1
 
         print("\n📱 step 6 — custom .streamlit/config.toml theme is applied")
