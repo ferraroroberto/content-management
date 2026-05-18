@@ -163,9 +163,29 @@ def set_commenter_classification(platform: str, account_url: str, classification
         sb.table("commenters").update(payload).eq("platform", platform).eq("account_url", account_url).execute()
 
 
+def _pick_thanks_reply(display_name: Optional[str]) -> Optional[str]:
+    """Inline canned-reply generator — mirrors engagement.classify.rules._pick_reply
+    but inlined here to avoid a circular import (rules.py already imports from client.py)."""
+    import json as _json
+    import random as _random
+    from pathlib import Path as _Path
+    first = (display_name or "there").strip().split()[0] if display_name else "there"
+    try:
+        phrases_path = _Path(__file__).resolve().parent.parent / "classify" / "phrases.json"
+        with open(phrases_path, "r", encoding="utf-8") as fp:
+            templates = _json.load(fp).get("reply_templates", {}).get("like_and_thanks", [])
+        return _random.choice(templates).format(first_name=first) if templates else f"Thanks {first}! 🙏"
+    except Exception:
+        return f"Thanks {first}! 🙏"
+
+
 def cascade_blacklist_pending(platform: str, account_url: str) -> int:
-    """When a commenter is blacklisted, reclassify their pending comments as ai/like_and_thanks."""
+    """When a commenter is blacklisted: reclassify their pending comments as
+    ai/like_and_thanks AND auto-approve them with a canned reply pre-filled.
+    User explicitly trusts blacklist → no need to click 'approve' on each."""
     sb = supabase_client()
+    commenter = fetch_commenter(platform, account_url)
+    reply = _pick_thanks_reply((commenter or {}).get("display_name"))
     res = (
         sb.table("comments")
         .update(
@@ -173,12 +193,79 @@ def cascade_blacklist_pending(platform: str, account_url: str) -> int:
                 "classification": "ai",
                 "verdict_source": "blacklist_cascade",
                 "suggested_action": "like_and_thanks",
+                "suggested_reply": reply,
                 "confidence": 1.0,
+                "status": "approved",
+                "decided_at": "now()",
             }
         )
         .eq("platform", platform)
         .eq("commenter_url", account_url)
         .eq("status", "pending")
+        .execute()
+    )
+    return len(res.data or [])
+
+
+def migrate_fallback_ids_to_urn(platform: str, new_comments: list[dict]) -> int:
+    """Promote legacy `fallback:<hash>` comment_ids to the new LinkedIn URN
+    when the scraper now extracts one. Matches on (commenter_url, text-prefix)
+    so the existing row keeps its classification + status + suggested_reply +
+    any user action — the upsert that follows only touches scrape fields.
+    Without this, a re-scrape would orphan classified rows and create
+    duplicates keyed by URN.
+    """
+    sb = supabase_client()
+    # Map: (commenter_url, text-prefix) → URN for everything new that has one.
+    new_by_key: dict[tuple[str, str], str] = {}
+    for c in new_comments:
+        cid = c.get("comment_id") or ""
+        if not cid.startswith("urn:li:comment:"):
+            continue
+        key = ((c.get("commenter_url") or ""), (c.get("text") or "")[:200])
+        new_by_key.setdefault(key, cid)
+    if not new_by_key:
+        return 0
+
+    fallback_rows = (
+        sb.table("comments")
+        .select("comment_id,commenter_url,text")
+        .eq("platform", platform)
+        .like("comment_id", "fallback:%")
+        .execute()
+        .data
+        or []
+    )
+
+    migrated = 0
+    for fb in fallback_rows:
+        key = ((fb.get("commenter_url") or ""), (fb.get("text") or "")[:200])
+        new_urn = new_by_key.get(key)
+        if not new_urn or new_urn == fb["comment_id"]:
+            continue
+        try:
+            sb.table("comments").update({"comment_id": new_urn}).eq(
+                "platform", platform
+            ).eq("comment_id", fb["comment_id"]).execute()
+            migrated += 1
+        except Exception as err:
+            logger.warning("migrate %s → %s failed: %s", fb["comment_id"], new_urn, err)
+    if migrated:
+        logger.info("🔁 migrated %d fallback ids → URN", migrated)
+    return migrated
+
+
+def mark_replied_as_ignored(platform: str = "linkedin") -> int:
+    """Comments where I've already replied don't need to be in the triage inbox.
+    Flip pending → ignored. Only touches rows the user hasn't explicitly acted on
+    (status='pending'); approved/rejected/etc. survive."""
+    sb = supabase_client()
+    res = (
+        sb.table("comments")
+        .update({"status": "ignored", "decided_at": "now()"})
+        .eq("platform", platform)
+        .eq("status", "pending")
+        .not_.is_("my_reply_text", "null")
         .execute()
     )
     return len(res.data or [])
@@ -231,4 +318,6 @@ __all__ = [
     "set_commenter_classification",
     "cascade_blacklist_pending",
     "cascade_whitelist_pending",
+    "mark_replied_as_ignored",
+    "migrate_fallback_ids_to_urn",
 ]

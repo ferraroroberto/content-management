@@ -202,18 +202,23 @@ def classify_pending(platform: str = "linkedin") -> dict:
 
         classification_new, conf, src, reasons, action, reply = verdict
         counts[classification_new] += 1
-        updates.append(
-            {
-                "platform": c["platform"],
-                "comment_id": c["comment_id"],
-                "classification": classification_new,
-                "confidence": conf,
-                "verdict_source": src,
-                "verdict_reasons": reasons,
-                "suggested_action": action,
-                "suggested_reply": reply,
-            }
-        )
+        payload = {
+            "platform": c["platform"],
+            "comment_id": c["comment_id"],
+            "classification": classification_new,
+            "confidence": conf,
+            "verdict_source": src,
+            "verdict_reasons": reasons,
+            "suggested_action": action,
+            "suggested_reply": reply,
+        }
+        # Blacklist-classified comments auto-approve — same policy as
+        # cascade_blacklist_pending so the manual-click and the rescan
+        # paths give identical state. User trusts the blacklist.
+        if src == "blacklist":
+            payload["status"] = "approved"
+            payload["decided_at"] = "now()"
+        updates.append(payload)
 
     # Apply updates one row at a time (PostgREST has no batch-update-by-pk).
     # ~hundreds of rows max per run, so individual updates are fine.

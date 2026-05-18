@@ -35,6 +35,8 @@ sys.path.append(str(REPO_ROOT))
 from config.logger_config import setup_logger  # noqa: E402
 from engagement.db.client import (  # noqa: E402
     load_config,
+    mark_replied_as_ignored,
+    migrate_fallback_ids_to_urn,
     upsert_commenters,
     upsert_comments,
 )
@@ -246,9 +248,21 @@ _JS_EXTRACT_COMMENTS = r"""
         }
         const postedAt = parseRelative(rel);
 
-        const ck = link.getAttribute('componentkey')
-                 || (block.closest && block.closest('[componentkey]') && block.closest('[componentkey]').getAttribute('componentkey'))
-                 || '';
+        // The LinkedIn URN lives on the OUTERMOST per-comment ancestor as
+        // componentkey="replaceableComment_urn:li:comment:(urn:li:ugcPost:NNN,COMMENTID)".
+        // That URN lets us build a permalink (...?commentUrn=...) so links go
+        // straight to the comment instead of the post. Inner componentkeys are
+        // just per-element UUIDs — useless for permalinks.
+        let ck = '';
+        const urnAncestor = block.closest && block.closest('[componentkey^="replaceableComment_"]');
+        if (urnAncestor) {
+            ck = urnAncestor.getAttribute('componentkey') || '';
+        }
+        if (!ck) {
+            ck = link.getAttribute('componentkey')
+              || (block.closest && block.closest('[componentkey]') && block.closest('[componentkey]').getAttribute('componentkey'))
+              || '';
+        }
 
         return {
             account_url: href,
@@ -395,15 +409,19 @@ def _parse_relative_time(text: str, now: Optional[datetime] = None) -> Optional[
     return (now - delta).isoformat()
 
 
-_URN_RE = re.compile(r"urn:li:comment:\(([^)]+)\)")
+_URN_RE = re.compile(r"urn:li:comment:\(.+?\)")
 
 
-def _extract_comment_id(article_html_attr: Optional[str], fallback_seed: str) -> str:
-    if article_html_attr:
-        m = _URN_RE.search(article_html_attr)
+def _extract_comment_id(component_key: Optional[str], fallback_seed: str) -> str:
+    """Prefer the LinkedIn URN from the `replaceableComment_<URN>` componentkey
+    (gives us a stable id + lets ui.py build a comment permalink). Fall back to
+    a hash so re-scrapes still upsert idempotently when URN can't be found."""
+    if component_key:
+        # Strip the JS-side prefix if it leaked through, then regex-match the URN.
+        ck = component_key.replace("replaceableComment_", "", 1)
+        m = _URN_RE.search(ck)
         if m:
-            return f"urn:li:comment:({m.group(1)})"
-    # fallback: hash of post_url + commenter + first 80 chars of text
+            return m.group(0)
     import hashlib
     return "fallback:" + hashlib.sha1(fallback_seed.encode("utf-8", errors="replace")).hexdigest()[:24]
 
@@ -633,8 +651,26 @@ def run(days: int, *, headless: bool = False, dry_run: bool = False, limit: Opti
         )
         logger.info("📝 dry-run output → %s", out_path)
     else:
+        # Promote legacy fallback:<hash> comment_ids to the new URN so user-set
+        # classifications and statuses carry over to the URN-keyed row that
+        # the upsert is about to write. Idempotent — only runs where a new URN
+        # exists AND a matching fallback row is present.
+        migrate_fallback_ids_to_urn(platform="linkedin", new_comments=persistable_comments)
         upsert_commenters(list(all_commenters.values()))
         upsert_comments(persistable_comments)
+        # Auto-mark "I already replied" rows as ignored so the triage inbox
+        # only contains comments that actually need my attention.
+        flipped = mark_replied_as_ignored(platform="linkedin")
+        if flipped:
+            logger.info("✓ auto-marked %d already-replied row(s) as ignored", flipped)
+        # Chain: apply the rule classifier so new comments from whitelist/
+        # blacklist commenters get cascaded immediately (no manual click).
+        try:
+            from engagement.classify.rules import classify_pending  # late import
+            res = classify_pending(platform="linkedin")
+            logger.info("🧮 post-scrape classify: %s", res)
+        except Exception as err:  # never let classify failure mask scrape success
+            logger.warning("post-scrape classify failed: %s", err)
 
     return {"posts": len(posts), "comments": len(persistable_comments), "commenters": len(all_commenters)}
 

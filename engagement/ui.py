@@ -12,6 +12,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import pandas as pd
 import streamlit as st
@@ -44,6 +45,18 @@ def _s(val, default: str = "") -> str:
 
 def _list(val) -> list:
     return val if isinstance(val, list) else []
+
+
+def _comment_link(post_url: str, comment_id: str) -> str:
+    """Build a permalink that opens the post AND scrolls to this specific
+    comment. Works when comment_id is a real LinkedIn URN; falls back to the
+    plain post URL for legacy fallback:<hash> rows from before URN extraction."""
+    if not post_url:
+        return ""
+    if not isinstance(comment_id, str) or not comment_id.startswith("urn:li:comment:"):
+        return post_url
+    sep = "&" if "?" in post_url else "?"
+    return f"{post_url}{sep}commentUrn={quote(comment_id, safe='')}"
 
 
 # ---------- Data layer (cached) ----------
@@ -161,8 +174,10 @@ def _render_comment_card(row: dict, *, tab: str) -> None:
             if commenter_url:
                 st.markdown(f"[open profile ↗]({commenter_url})")
         with head_cols[1]:
-            if post_url:
-                st.markdown(f"on post: [open ↗]({post_url})")
+            link = _comment_link(post_url, cid)
+            if link:
+                label = "open comment ↗" if link != post_url else "open post ↗"
+                st.markdown(f"on post: [{label}]({link})")
             if row.get("posted_at"):
                 st.caption(f"commented {row['posted_at']}")
         with head_cols[2]:
@@ -340,9 +355,12 @@ def _render_drill_down(account_url: str, comments_df: pd.DataFrame, platform: st
             elif hasattr(posted, "strftime"):
                 posted_str = posted.strftime("%Y-%m-%d")
             post_url = _s(r.get("post_url"))
+            comment_id = _s(r.get("comment_id"))
+            link = _comment_link(post_url, comment_id)
             head = f"▸ **{posted_str}**" if posted_str else "▸"
-            if post_url:
-                head += f"  ·  [open post ↗]({post_url})"
+            if link:
+                label = "open comment ↗" if link != post_url else "open post ↗"
+                head += f"  ·  [{label}]({link})"
             st.markdown(head)
             st.write(_s(r.get("text"), "_(no text)_"))
 
