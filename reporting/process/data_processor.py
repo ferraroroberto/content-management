@@ -26,7 +26,7 @@ def configure_logger(debug_mode=False):
 def load_mapping_config():
     """Load mapping configuration from mapping.json file."""
     logger.debug("📂 Loading mapping configuration file")
-    config_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config')
+    config_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config')
     config_path = os.path.join(config_dir, 'mapping.json')
     
     try:
@@ -43,7 +43,7 @@ def load_mapping_config():
 def load_config():
     """Load main configuration from config.json file."""
     logger.debug("📂 Loading main configuration file")
-    config_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config')
+    config_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config')
     config_path = os.path.join(config_dir, 'config.json')
     
     try:

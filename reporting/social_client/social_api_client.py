@@ -35,7 +35,7 @@ def configure_logger(debug_mode=False):
 def load_config():
     """Load configuration from config.json file."""
     logger.debug("📂 Loading configuration file")
-    config_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config')
+    config_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config')
     config_path = os.path.join(config_dir, 'config.json')
     
     try:
