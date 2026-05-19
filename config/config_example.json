@@ -217,7 +217,7 @@
             "post_url_li": "link LI(v)",
             "post_url_ig": "link IG(v)",
             "post_url_tw": "link TW(v)",
-            "post_url_sb": "link SB"
+            "post_url_sb": "link SB(v)"
         },
         "clip_columns": {
             "caption_text": "Text",

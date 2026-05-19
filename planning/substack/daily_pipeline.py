@@ -68,11 +68,21 @@ def main() -> int:
         if args.skip_post:
             logger.info("⏭️ Skipping step 1 (post Note).")
         else:
-            # On weekly-video days the editorial row's ``Work in Progress
-            # Video`` checkbox is set AND ``clip SB(v)`` is populated. In
-            # that case the daily Note is REPLACED by a video Note (same
-            # composer, video toolbar icon, .mp4 from the clip's
-            # clipPC/filePC). The image Note is paused for the day.
+            # Substack publishes both flows independently on a video day:
+            # the image/text Note writes to ``link SB`` and the video Note
+            # writes to ``link SB(v)``. Each call has its own idempotency
+            # check, so re-running is safe.
+            try:
+                rc_image = post_note(
+                    cfg, target_day,
+                    dry_run=args.dry_run,
+                    force=args.force,
+                    session=session,
+                )
+            except Exception as err:
+                logger.exception("❌ Image Note branch raised: %s", err)
+                rc_image = 99
+
             try:
                 video_rc = post_video_note_if_applicable(
                     target_day,
@@ -82,20 +92,12 @@ def main() -> int:
                 logger.exception("❌ Video-day branch raised: %s", err)
                 video_rc = 99
 
-            if video_rc is not None:
-                logger.info("📹 Video day handled by video-note branch (rc=%d). Skipping image Note.", video_rc)
-                rc_post = video_rc
+            if video_rc is None:
+                logger.info("🖼️ Not a video day — only image Note ran (rc=%d).", rc_image)
+                rc_post = rc_image
             else:
-                try:
-                    rc_post = post_note(
-                        cfg, target_day,
-                        dry_run=args.dry_run,
-                        force=args.force,
-                        session=session,
-                    )
-                except Exception as err:
-                    logger.exception("❌ Step 1 raised: %s", err)
-                    rc_post = 99
+                logger.info("📹 Video day — image rc=%d, video rc=%d.", rc_image, video_rc)
+                rc_post = rc_image or video_rc
 
         if args.skip_followers:
             logger.info("⏭️ Skipping step 2 (followers).")
