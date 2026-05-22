@@ -1,8 +1,9 @@
 # Ignore virtual environment directory
 .venv/
 
-# Ignore docs and logs directory
-docs/
+# Track docs/*.md changelogs; ignore heavy media/binary docs (videos, .docx)
+docs/*
+!docs/*.md
 logs/
 
 # Ignore config.json file and .env file in the process directory
