@@ -27,6 +27,21 @@ from playwright.sync_api import Page
 logger = logging.getLogger("linkedin_composer")
 
 
+# ---------- Feed-entry click timeout ----------
+
+# The first feed-action of each Playwright session was timing out on the
+# Photo / Video / "Start a post" buttons (issue #27). LinkedIn redirects
+# ``/feed/`` to ``/`` for logged-in users and re-renders the share-box client-
+# side; the 10 s default we were using wasn't enough for cold sessions, but
+# subsequent rows always succeeded within ~1 s because the share box is
+# already mounted. A longer click timeout is exactly the right tolerance
+# because Playwright's ``.click()`` internally polls for actionability
+# (attached + visible + stable + receives events) and returns the instant
+# the button is clickable — so the cost on a warm session is essentially
+# zero, and only the cold first click pays.
+FEED_ENTRY_CLICK_TIMEOUT_MS = 30000
+
+
 # ---------- Mention resolution ----------
 
 # A LinkedIn mention starts at "@" and runs through one or more capitalized

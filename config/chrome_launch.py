@@ -55,16 +55,27 @@ def stealth_launch_kwargs(user_data_dir: str, *, headless: bool = False) -> dict
       that would otherwise pop up on a fresh profile.
     * ``viewport`` — pinned to 1280×900 so screenshots and selector
       assumptions stay stable across runs.
+    * ``locale="en-US"`` + ``--lang=en-US`` — force the browser locale so
+      every site renders in English. Without this, sites localize from the
+      OS / account locale (Spanish on this machine), which breaks every
+      English ``get_by_role`` and accessible-name selector in the planning
+      drivers (see issue #27). LinkedIn additionally honors a per-account
+      UI language setting; if a profile was bootstrapped while logged in to
+      a Spanish-language account, the account setting wins and must be
+      flipped to English manually once (Settings → Account preferences →
+      Language).
     """
     return {
         "user_data_dir": user_data_dir,
         "channel": "chrome",
         "headless": headless,
+        "locale": "en-US",
         "args": [
             "--disable-blink-features=AutomationControlled",
             "--disable-features=Translate",
             "--no-default-browser-check",
             "--no-first-run",
+            "--lang=en-US",
         ],
         "ignore_default_args": [
             "--enable-automation",

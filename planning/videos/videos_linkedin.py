@@ -12,7 +12,6 @@ all imported from the sister package — no duplication.
 from __future__ import annotations
 
 import logging
-import re
 import sys
 from dataclasses import dataclass
 from datetime import date
@@ -23,9 +22,11 @@ from playwright.sync_api import Page, TimeoutError as PWTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from planning.linkedin.linkedin_composer import (  # noqa: E402
+    FEED_ENTRY_CLICK_TIMEOUT_MS,
     fill_caption_with_mentions,
     wait_for_upload_complete,
 )
+from planning.linkedin.linkedin_labels import VIDEO_BTN_RE  # noqa: E402
 from planning.linkedin.linkedin_session import (  # noqa: E402
     LinkedInSession,
     LoginRequiredError,
@@ -70,9 +71,16 @@ def _click_video_button(page: Page) -> None:
     Mirrors ``_click_add_photo`` from the photo flow but targets the
     ``Video`` button. Same DOM shape — a ``<p>Video</p>`` text node inside a
     ``<div role="button">`` wrapper.
+
+    The longer ``FEED_ENTRY_CLICK_TIMEOUT_MS`` absorbs the cold-start race on
+    the first feed action of a freshly-navigated session (issue #27); warm
+    calls still return in ~1 s because ``.click()`` returns the instant the
+    button is actionable.
     """
     try:
-        page.get_by_role("button", name=re.compile(r"^video$", re.I)).first.click(timeout=10000)
+        page.get_by_role("button", name=VIDEO_BTN_RE).first.click(
+            timeout=FEED_ENTRY_CLICK_TIMEOUT_MS,
+        )
     except Exception as err:
         raise RuntimeError(f"Could not click 'Video' on the LinkedIn feed: {err}")
 
@@ -113,7 +121,7 @@ def _wait_for_video_ready(page: Page, timeout_ms: int = 180000) -> None:
     deadline = page.evaluate("() => Date.now()") + timeout_ms
     while page.evaluate("() => Date.now()") < deadline:
         try:
-            next_btn = page.locator('[role="dialog"] button:has-text("Next")').first
+            next_btn = page.locator('[role="dialog"] button:has-text("Next"), [role="dialog"] button:has-text("Siguiente")').first
             if next_btn.count():
                 disabled = next_btn.get_attribute("disabled")
                 aria_dis = next_btn.get_attribute("aria-disabled")
@@ -128,7 +136,7 @@ def _wait_for_video_ready(page: Page, timeout_ms: int = 180000) -> None:
 def _click_video_next(page: Page) -> None:
     """Click 'Next' in the video editor → goes to the composer."""
     try:
-        page.locator('[role="dialog"] button:has-text("Next")').first.click(timeout=10000)
+        page.locator('[role="dialog"] button:has-text("Next"), [role="dialog"] button:has-text("Siguiente")').first.click(timeout=10000)
     except Exception as err:
         raise RuntimeError(f"Could not click 'Next' in the video editor: {err}")
 
