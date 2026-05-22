@@ -225,33 +225,35 @@ Cross-module dependencies:
 
 LinkedIn's class names are obfuscated (`_6e37ba57`, `_876da3c4`, …) and rotate — never anchor on classes. These role/text-based selectors are the validated ones; full details in the `reference_linkedin_composer_selectors` memory entry.
 
+> **Locale-aware:** every user-facing accessible name below is defined as an EN | ES regex union in [`linkedin_labels.py`](linkedin_labels.py) — `PHOTO_BTN_RE`, `VIDEO_BTN_RE`, `START_POST_RE`, `ALT_TEXT_BTN_RE`, `ADD_BTN_RE`, `MORE_BTN_RE`, `ADD_DOCUMENT_BTN_RE`, `CHOOSE_FILE_BTN_RE`, `DONE_BTN_RE`, `SCHEDULE_POST_BTN_RE`, `NEXT_MONTH_BTN_RE`, `NEXT_BTN_RE`, `FINAL_SCHEDULE_BTN_RE`, `DISCARD_BTN_RE`, plus the calendar / time-picker candidate helpers. When LinkedIn ships a new wording or adds a third language, extend the union in that file — do **not** re-inline a `re.compile` at the call site. The English example shown below is the EN branch only.
+
 | step | selector |
 |------|----------|
-| Open post + file picker (ILL / POST) | `page.get_by_role("button", name=/^photo$/i)` on the feed |
+| Open post + file picker (ILL / POST) | `page.get_by_role("button", name=PHOTO_BTN_RE)` on the feed (e.g. EN `^photo$` / ES `^foto$`) |
 | Upload image | `input[type="file"]` (first; appears in DOM after "Photo" click) |
-| Open ALT dialog | `[role="dialog"] >> get_by_role("button", name=/alternative text/i)` |
-| ALT textarea | `textarea[placeholder*="describe this image" i]` |
-| Close ALT dialog (Add) | `[role="dialog"] >> get_by_role("button", name=/^add$/i).last` |
-| Editor → composer (Next) | `[role="dialog"] button:has-text("Next")` |
+| Open ALT dialog | `[role="dialog"] >> get_by_role("button", name=ALT_TEXT_BTN_RE)` |
+| ALT textarea | `textarea[placeholder*="describe this image" i], textarea[placeholder*="imagen" i], [role='dialog'] textarea` (first hit wins) |
+| Close ALT dialog (Add) | `[role="dialog"] >> get_by_role("button", name=ADD_BTN_RE).last` |
+| Editor → composer (Next) | `[role="dialog"] button:has-text("Next"), [role="dialog"] button:has-text("Siguiente")` |
 | Caption editor | `div[role="textbox"][contenteditable="true"]` (then `page.keyboard.type(...)`) |
-| Open Schedule dialog | `get_by_role("button", name=/^schedule post$/i)` |
-| Set date | Click `input[name="artdeco-date"]` → click calendar day by aria-label like `Monday, May 18, 2026.` |
-| Set time | Click `input[name="timepicker"]` → wait for `.artdeco-typeahead__results-list:not([data-count="0"])` → click `li:has-text("<H>:<MM> <AM/PM>")` (e.g. `6:30 AM` Mon-Fri, `8:00 AM` Sat-Sun) |
-| Schedule sub-dialog → composer | `[role="dialog"] button:has-text("Next")` |
-| Final Schedule button | `[role="dialog"] >> get_by_role("button", name="Schedule", exact=True)` |
+| Open Schedule dialog | `get_by_role("button", name=SCHEDULE_POST_BTN_RE)` |
+| Set date | Click `input[name="artdeco-date"]` → click calendar day by `calendar_day_aria_re(target)` (EN `Monday, May 18, 2026.` / ES `lunes, 18 de mayo de 2026.`) |
+| Set time | Click `input[name="timepicker"]` → wait for `.artdeco-typeahead__results-list:not([data-count="0"])` → click `li:has-text(<cand>)` for `<cand>` in `time_picker_candidates(hour, minute)` (EN `6:30 AM` / ES 24h `06:30` / ES 12h `6:30 a. m.`) |
+| Schedule sub-dialog → composer | `[role="dialog"] button:has-text("Next"), [role="dialog"] button:has-text("Siguiente")` |
+| Final Schedule button | `[role="dialog"] >> get_by_role("button", name=FINAL_SCHEDULE_BTN_RE)` (anchored on `^schedule$` / `^programar$` so it never re-opens the clock-icon's schedule sub-dialog) |
 | Success signal | The composer dialog disappears within ~20s |
 
 **CAROUSEL-only — Add a document flow:**
 
 | step | selector |
 |------|----------|
-| Open empty composer (no Photo) | `page.get_by_role("button", name=/start a post/i)` (fallback: `/create a post/i`) |
-| Expand secondary actions | `[role="dialog"] >> get_by_role("button", name=/^more$/i)` |
-| Open Share-a-document dialog | `[role="dialog"] >> get_by_role("button", name=/add a document/i)` |
-| Push PDF | fast path: `input[type="file"]`; fallback: `page.expect_file_chooser()` + click `/choose file/i` |
-| Wait for PDF processing | `Done` button stays `disabled`/`aria-disabled` while LI processes — poll until clickable |
-| Fill document title | `[role="dialog"] input[name*="title" i]` / `[aria-label*="title" i]` / `[placeholder*="title" i]` / `input[type="text"]` (first hit wins) |
-| Close document dialog (Done) | `[role="dialog"] >> get_by_role("button", name=/^done$/i)` |
+| Open empty composer (no Photo) | `page.get_by_role("button", name=START_POST_RE)` (EN `start a post` / `create a post` / ES `empieza una publicación` / `crea una publicación`) |
+| Expand secondary actions | `[role="dialog"] >> get_by_role("button", name=MORE_BTN_RE)` |
+| Open Share-a-document dialog | `[role="dialog"] >> get_by_role("button", name=ADD_DOCUMENT_BTN_RE)` |
+| Push PDF | fast path: `input[type="file"]`; fallback: `page.expect_file_chooser()` + click `CHOOSE_FILE_BTN_RE` |
+| Wait for PDF processing | `DONE_BTN_RE` button stays `disabled`/`aria-disabled` while LI processes — poll until clickable |
+| Fill document title | `[role="dialog"] input[name*="title" i]` / `[aria-label*="title" i]` / `[aria-label*="título" i]` / `[placeholder*="title" i]` / `[placeholder*="título" i]` / `input[type="text"]` (first hit wins) |
+| Close document dialog (Done) | `[role="dialog"] >> get_by_role("button", name=DONE_BTN_RE)` |
 | Background upload settle | `planning.linkedin.linkedin_composer.wait_for_upload_complete` — explicit signal fast path + 60s fallback (same as videos) |
 
 ---
@@ -262,8 +264,10 @@ LinkedIn's class names are obfuscated (`_6e37ba57`, `_876da3c4`, …) and rotate
 - **`get_by_role("button", name="Schedule")` is dangerous without `exact=True`** — without it, the matcher also hits the small `aria-label="Schedule post"` clock icon, which just re-opens the schedule dialog.
 - **The time picker is a typeahead combobox.** Typing "6:30 AM" silently selects whichever option was first highlighted (often 12:30 AM). Always click the matching `<li>` from the dropdown.
 - **There is no standalone URL for the scheduled-posts list.** Every `/scheduled-posts/`-style URL 404s. The list is a modal sheet reachable only via the post composer's Schedule dialog → "View all scheduled posts" → Discard the in-progress draft.
-- **Carousel "Next" buttons on the feed** behind the modal have `aria-label="Next"` but empty visible text. Scope to `[role="dialog"] button:has-text("Next")` so they don't win the `.first` race.
+- **Carousel "Next" buttons on the feed** behind the modal have `aria-label="Next"` but empty visible text. Scope to `[role="dialog"] button:has-text("Next"), [role="dialog"] button:has-text("Siguiente")` so they don't win the `.first` race.
 - **Don't trust a fixed `wait_for_timeout` + screenshot as success confirmation.** The composer briefly stays open while LinkedIn renders the schedule, then unmounts. Wait for the dialog to actually disappear.
+- **LinkedIn's account-level UI language wins over `Accept-Language`.** If the connected LI account is set to Spanish (Settings → Account preferences → Site Preferences → Language), every page renders in Spanish no matter what `locale="en-US"` and `--lang=en-US` are doing at the Chrome layer — even mid-session LI can flip back after an action. The selectors in [`linkedin_labels.py`](linkedin_labels.py) cover both languages; if you see a brand-new Spanish wording that doesn't match, extend the alternation there, not at the call site.
+- **First feed action of a fresh session needs a longer click timeout.** LinkedIn redirects `/feed/` → `/` for logged-in users and re-renders the share box client-side; the cold-start race used to time the original 10 s `.click()` out (issue #27). The shared constant `linkedin_composer.FEED_ENTRY_CLICK_TIMEOUT_MS` (30 s) is what every feed-entry helper (`_click_add_photo`, `_click_video_button`, `_click_start_a_post`) uses; warm calls still return in ~1 s because `.click()` returns the instant the button is actionable.
 
 ---
 
