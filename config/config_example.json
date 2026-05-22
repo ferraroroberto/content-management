@@ -261,5 +261,15 @@
             "twitter.com",
             "x.com"
         ]
+    },
+    "engagement": {
+        "default_days": 3,
+        "phrases_path": "engagement/classify/phrases.json",
+        "platforms_enabled": ["linkedin"],
+        "linkedin": {
+            "expand_max_clicks": 30,
+            "expand_settle_ms": 1200,
+            "page_settle_ms": 2500
+        }
     }
 }

@@ -23,3 +23,10 @@ rapidfuzz
 # Entity detection (PERSON) for newsletter.normalize_names — falls back to
 # the whitelist heuristic if spaCy or its model isn't available.
 spacy
+# Supabase REST/PostgREST client for the engagement pipeline (CRUD without psycopg2).
+# Pinned to 2.10.x because storage3>=0.10 transitively pulls pyiceberg, which
+# has no wheel for Python 3.14 and requires MSVC to build from source. We
+# don't use Supabase Storage so the older client is fine.
+supabase==2.10.0
+# Streamlit review UI for the engagement pipeline.
+streamlit
