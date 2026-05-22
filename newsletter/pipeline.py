@@ -28,7 +28,8 @@ for _stream in (sys.stdout, sys.stderr):
 
 from config.logger_config import setup_logger  # noqa: E402
 from newsletter import (  # noqa: E402
-    author_resolver, chrome_tabs, classifier, extractor, notion_io, summarizer,
+    author_resolver, chrome_tabs, classifier, extractor, llm, notion_io,
+    summarizer,
 )
 from newsletter.cache import CacheState  # noqa: E402
 
@@ -53,6 +54,15 @@ def process_url(
     logger.info("📝 Title: %s", art.title)
     logger.info("✍️  Byline (raw): %s", art.author or "<none>")
     logger.info("📄 Body length: %d chars", len(art.body_text))
+
+    # An empty/near-empty body (e.g. a binary PDF that didn't extract) can't
+    # be classified or summarised — skip the LLM steps, leave the tab open.
+    min_body = archive_cfg.get("min_body_chars", 200)
+    if len(art.body_text) < min_body:
+        logger.warning("⏭️  Body too short (%d < %d chars) — skipping LLM "
+                        "steps, leaving tab open: %s",
+                        len(art.body_text), min_body, url)
+        return False
 
     topic = classifier.classify(
         base_url=archive_cfg["llm_hub_base_url"],
@@ -149,6 +159,17 @@ def run_batch(*, write: bool, debug: bool = False) -> int:
         logger.error("❌ config.json is missing the 'newsletter_archive' section")
         return 1
     archive_cfg = cfg["newsletter_archive"]
+
+    # Pre-flight: a dead or wedged hub should fail in seconds — before the
+    # slow Notion cache hydration (minutes) and the Chrome connection.
+    if not llm.health_check(
+        base_url=archive_cfg["llm_hub_base_url"],
+        model=archive_cfg["llm_model"],
+    ):
+        logger.error("❌ LLM hub unreachable/unresponsive at %s — aborting "
+                     "before cache hydration", archive_cfg["llm_hub_base_url"])
+        return 1
+
     client = notion_io.init_client(cfg["notion"]["api_token"])
 
     cache = notion_io.hydrate_cache(
@@ -157,6 +178,12 @@ def run_batch(*, write: bool, debug: bool = False) -> int:
         connections_db_id=archive_cfg["connections_db_id"],
         fuzzy_threshold=archive_cfg["fuzzy_author_threshold"],
     )
+
+    failure_limit = archive_cfg.get("consecutive_failure_limit", 3)
+    archived = skipped = 0
+    failed_urls: list[str] = []
+    consecutive = 0
+    aborted = False
 
     browser = chrome_tabs.connect(archive_cfg["chrome_debug_port"])
     try:
@@ -174,14 +201,39 @@ def run_batch(*, write: bool, debug: bool = False) -> int:
                     url=t.url, page=t.page, archive_cfg=archive_cfg,
                     client=client, cache=cache, write=write, logger=logger,
                 )
-                if write and created:
-                    t.page.close()
-                    logger.info("🗑️  Closed tab")
+                if created:
+                    archived += 1
+                    if write:
+                        t.page.close()
+                        logger.info("🗑️  Closed tab")
+                else:
+                    # Duplicate or empty-body skip — not an error.
+                    skipped += 1
+                consecutive = 0
             except Exception:
                 logger.exception("❌ Failed on tab %s — leaving it open", t.url)
+                failed_urls.append(t.url)
+                consecutive += 1
+                if consecutive >= failure_limit:
+                    aborted = True
+                    logger.error(
+                        "🛑 Aborting — %d consecutive failures (limit %d). "
+                        "The LLM hub is likely down; remaining tabs left open.",
+                        consecutive, failure_limit,
+                    )
+                    break
     finally:
         chrome_tabs.close_browser(browser)
 
+    logger.info("📊 %d archived, %d skipped, %d failed",
+                archived, skipped, len(failed_urls))
+    if failed_urls:
+        logger.info("❌ Failed URLs (left open for re-run):")
+        for u in failed_urls:
+            logger.info("   • %s", u)
+
+    if aborted:
+        return 1
     logger.info("🎉 Done")
     return 0
 
