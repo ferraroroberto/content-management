@@ -175,17 +175,17 @@ def render_status_badge(name: str) -> None:
 
 def render_log_panel(name: str, *, height: int = 380, autorefresh_secs: float = 1.0) -> None:
     """Render the rolling log tail. While the subprocess is alive, sleep + rerun
-    once so the user sees a live stream without clicking refresh."""
+    once so the user sees a live stream without clicking refresh.
+
+    Uses a scrollable container + st.code (display element, not a widget) so
+    the body actually updates on every rerun. A keyed st.text_area caches its
+    first-render value in session_state and ignores subsequent `value=` args,
+    which left the panel stuck on "(no output yet)" while the deque filled up.
+    """
     lines = list(_get_lines(name))
     body = "\n".join(lines) if lines else "(no output yet)"
-    st.text_area(
-        f"log — {name}",
-        value=body,
-        height=height,
-        key=f"_proc_{name}_textarea",
-        label_visibility="collapsed",
-        disabled=True,
-    )
+    with st.container(height=height, border=True, autoscroll=True):
+        st.code(body, language=None, wrap_lines=False)
     cols = st.columns([1, 1, 6])
     with cols[0]:
         st.button("🛑 stop", key=f"_proc_{name}_stop", on_click=stop_pipeline, args=(name,), disabled=not is_running(name))
