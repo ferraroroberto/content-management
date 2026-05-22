@@ -188,12 +188,31 @@ def create_connection(client: Client, *, connections_db_id: str, name: str,
 
 
 def _chunk_rich_text(text: str, limit: int = NOTION_RICH_TEXT_LIMIT) -> List[Dict[str, Any]]:
+    """Split ``text`` into rich-text segments Notion will accept.
+
+    Notion's 2000-char limit counts UTF-16 code units, not Python code
+    points — an astral character (emoji etc.) is one ``len()`` char but
+    two UTF-16 units. Slicing by ``len()`` therefore lets a 2000-char
+    chunk holding one emoji reach 2001 units and get rejected. We size
+    chunks by UTF-16 width instead.
+    """
     if not text:
         return [{"type": "text", "text": {"content": ""}}]
-    return [
-        {"type": "text", "text": {"content": text[i : i + limit]}}
-        for i in range(0, len(text), limit)
-    ]
+    chunks: List[str] = []
+    current: List[str] = []
+    current_len = 0
+    for ch in text:
+        ch_len = 2 if ord(ch) > 0xFFFF else 1
+        if current_len + ch_len > limit:
+            chunks.append("".join(current))
+            current = [ch]
+            current_len = ch_len
+        else:
+            current.append(ch)
+            current_len += ch_len
+    if current:
+        chunks.append("".join(current))
+    return [{"type": "text", "text": {"content": c}} for c in chunks]
 
 
 def _body_to_blocks(body_text: str, *, max_blocks: int = NOTION_BLOCK_LIMIT - 1) -> List[Dict[str, Any]]:
