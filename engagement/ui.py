@@ -48,15 +48,25 @@ def _list(val) -> list:
 
 
 def _comment_link(post_url: str, comment_id: str) -> str:
-    """Build a permalink that opens the post AND scrolls to this specific
-    comment. Works when comment_id is a real LinkedIn URN; falls back to the
-    plain post URL for legacy fallback:<hash> rows from before URN extraction."""
+    """Build a permalink that opens the post AND scrolls to this specific comment.
+
+    The stored comment_id is `urn:li:comment:(<post-urn>,<comment-num>)`. LinkedIn
+    ignores `?commentUrn=` for that form — the query param it actually honours is
+    `?dashCommentUrn=urn:li:fsd_comment:(<comment-num>,<post-urn>)`: the same two
+    halves, reversed, re-wrapped as `fsd_comment`. Falls back to the plain post URL
+    for legacy fallback:<hash> rows or any URN we can't parse."""
     if not post_url:
         return ""
-    if not isinstance(comment_id, str) or not comment_id.startswith("urn:li:comment:"):
+    prefix = "urn:li:comment:("
+    if not isinstance(comment_id, str) or not comment_id.startswith(prefix):
         return post_url
+    inner = comment_id[len(prefix):]
+    if not inner.endswith(")") or "," not in inner:
+        return post_url
+    post_urn, comment_num = inner[:-1].rsplit(",", 1)
+    dash_urn = f"urn:li:fsd_comment:({comment_num},{post_urn})"
     sep = "&" if "?" in post_url else "?"
-    return f"{post_url}{sep}commentUrn={quote(comment_id, safe='')}"
+    return f"{post_url}{sep}dashCommentUrn={quote(dash_urn, safe='')}"
 
 
 # ---------- Data layer (cached) ----------
@@ -152,7 +162,7 @@ def _act_whitelist(platform: str, account_url: str) -> None:
 
 # ---------- Card renderer (shared by real + ai tabs) ----------
 
-def _render_comment_card(row: dict, *, tab: str) -> None:
+def _render_comment_card(row: dict, *, tab: str, commenter_cls: dict[str, str] | None = None) -> None:
     cid = row["comment_id"]
     platform = row["platform"]
     commenter_url = _s(row.get("commenter_url"))
@@ -161,29 +171,36 @@ def _render_comment_card(row: dict, *, tab: str) -> None:
     post_url = _s(row.get("post_url"))
     suggested_reply = _s(row.get("suggested_reply"))
     classification = _s(row.get("classification"), "unknown")
+    status = _s(row.get("status"))
     confidence = row.get("confidence")
     reasons = _list(row.get("verdict_reasons"))
 
     badge = {"human": "🧑 human", "ai": "🤖 ai", "unknown": "❓ unknown"}.get(classification, classification)
     conf_str = f" · {confidence:.2f}" if isinstance(confidence, (int, float)) else ""
+    cls = (commenter_cls or {}).get(commenter_url, "unknown")
+    commenter_badge = CLASS_BADGE.get(cls, "")
 
     with st.container(border=True):
-        head_cols = st.columns([3, 2, 2])
-        with head_cols[0]:
-            st.markdown(f"**{display_name}**  \n{badge}{conf_str}")
-            if commenter_url:
-                st.markdown(f"[open profile ↗]({commenter_url})")
-        with head_cols[1]:
-            link = _comment_link(post_url, cid)
-            if link:
-                label = "open comment ↗" if link != post_url else "open post ↗"
-                st.markdown(f"on post: [{label}]({link})")
-            if row.get("posted_at"):
-                st.caption(f"commented {row['posted_at']}")
-        with head_cols[2]:
-            if reasons:
-                rules_fired = ", ".join(sorted({r.get("rule", "?") for r in reasons}))
-                st.caption(f"rules: {rules_fired}")
+        # Single-line header: name · verdict · commenter class · links · status.
+        link = _comment_link(post_url, cid)
+        head = [f"**{display_name}**", f"{badge}{conf_str}"]
+        if commenter_badge:
+            head.append(commenter_badge)
+        if commenter_url:
+            head.append(f"[profile ↗]({commenter_url})")
+        if link:
+            head.append(f"[{'comment ↗' if link != post_url else 'post ↗'}]({link})")
+        if status and status != "pending":
+            head.append(f"`{status}`")
+        st.markdown(" · ".join(head))
+
+        meta = []
+        if row.get("posted_at"):
+            meta.append(f"commented {row['posted_at']}")
+        if reasons:
+            meta.append("rules: " + ", ".join(sorted({r.get("rule", "?") for r in reasons})))
+        if meta:
+            st.caption(" · ".join(meta))
 
         st.write(text or "_(no text extracted)_")
 
@@ -197,35 +214,43 @@ def _render_comment_card(row: dict, *, tab: str) -> None:
         if suggested_reply:
             st.code(suggested_reply, language=None)
 
-        btn_cols = st.columns(6)
+        # Build the action list, then give it exactly that many columns so the
+        # buttons sit on one tight row with no empty gap.
         key_base = f"{tab}-{platform}-{cid}"
+        actions: list[tuple] = []
         if tab == "ai":
-            btn_cols[0].button("✅ approve", key=f"{key_base}-approve", width="stretch",
-                               on_click=_act_approve, args=(platform, cid))
-            btn_cols[1].button("🚫 reject", key=f"{key_base}-reject", width="stretch",
-                               on_click=_act_reject, args=(platform, cid))
-            btn_cols[2].button("🧑 surface", key=f"{key_base}-surface", width="stretch",
-                               on_click=_act_surface, args=(platform, cid))
+            actions.append(("✅ approve", f"{key_base}-approve", _act_approve, (platform, cid), False))
+            actions.append(("🚫 reject", f"{key_base}-reject", _act_reject, (platform, cid), False))
+            actions.append(("🧑 surface", f"{key_base}-surface", _act_surface, (platform, cid), False))
         else:
-            btn_cols[0].button("✓ mark read", key=f"{key_base}-ignore", width="stretch",
-                               on_click=_act_ignore, args=(platform, cid))
-            btn_cols[1].button("🤖 mark AI", key=f"{key_base}-reject", width="stretch",
-                               on_click=_act_reject, args=(platform, cid))
-        btn_cols[4].button("⬇️ whitelist commenter", key=f"{key_base}-wl", width="stretch",
-                           on_click=_act_whitelist, args=(platform, commenter_url), disabled=not commenter_url)
-        btn_cols[5].button("⛔ blacklist commenter", key=f"{key_base}-bl", width="stretch",
-                           on_click=_act_blacklist, args=(platform, commenter_url), disabled=not commenter_url)
+            actions.append(("✓ mark read", f"{key_base}-ignore", _act_ignore, (platform, cid), False))
+            actions.append(("🤖 mark AI", f"{key_base}-reject", _act_reject, (platform, cid), False))
+        actions.append(("⬇️ whitelist", f"{key_base}-wl", _act_whitelist, (platform, commenter_url), not commenter_url))
+        actions.append(("⛔ blacklist", f"{key_base}-bl", _act_blacklist, (platform, commenter_url), not commenter_url))
+
+        for col, (label, key, handler, args, disabled) in zip(st.columns(len(actions)), actions):
+            col.button(label, key=key, width="stretch", on_click=handler, args=args, disabled=disabled)
 
 
 # ---------- Sidebar + tab renderers ----------
 
-def render_sidebar_metrics() -> None:
-    """Engagement-specific sidebar block. Callers wrap with `with st.sidebar:`."""
+def render_sidebar_metrics(*, horizontal: bool = False) -> None:
+    """Engagement-specific metrics block. `horizontal=True` lays the 4 counts
+    across one row (for the engagement-tab expander); the default vertical layout
+    suits the standalone review_app sidebar. Callers wrap with `with st.sidebar:`."""
     counts = _load_classification_counts()
-    st.metric("pending", counts.get("pending", 0))
-    st.metric("approved", counts.get("approved", 0))
-    st.metric("sent", counts.get("sent", 0))
-    st.metric("rejected + ignored", counts.get("rejected", 0) + counts.get("ignored", 0))
+    items = [
+        ("pending", counts.get("pending", 0)),
+        ("approved", counts.get("approved", 0)),
+        ("sent", counts.get("sent", 0)),
+        ("rejected + ignored", counts.get("rejected", 0) + counts.get("ignored", 0)),
+    ]
+    if horizontal:
+        for col, (label, val) in zip(st.columns(len(items)), items):
+            col.metric(label, val)
+    else:
+        for label, val in items:
+            st.metric(label, val)
 
 
 def render_sidebar_filters(*, key_suffix: str = "") -> tuple[str | None, str]:
@@ -242,8 +267,28 @@ def render_sidebar_filters(*, key_suffix: str = "") -> tuple[str | None, str]:
     return platform, search
 
 
+_ALL_STATUSES = ("pending", "approved", "sent", "rejected", "ignored")
+
+
+def _view_filter(key: str) -> tuple[str, ...]:
+    """Render the `pending / all` view radio; return the status tuple to load."""
+    view = st.radio(
+        "show", ["pending", "all"], horizontal=True, key=key,
+        help="'all' also shows comments you've already marked read / AI / approved.",
+    )
+    return ("pending",) if view == "pending" else _ALL_STATUSES
+
+
+def _commenter_class_map(platform: str | None) -> dict[str, str]:
+    cdf = _load_all_commenters(platform)
+    if cdf.empty:
+        return {}
+    return dict(zip(cdf["account_url"], cdf["classification"]))
+
+
 def render_real_tab(platform: str | None, search: str) -> None:
-    df = _load_comments(("pending",), platform)
+    statuses = _view_filter("real-view-filter")
+    df = _load_comments(statuses, platform)
     if not df.empty:
         df = df[df["classification"] == "human"]
         if search:
@@ -252,15 +297,17 @@ def render_real_tab(platform: str | None, search: str) -> None:
                 | df["display_name"].fillna("").str.lower().str.contains(search)
             ]
     if df.empty:
-        st.info("inbox clear — no real comments waiting.")
+        st.info("inbox clear — no real comments match the current view.")
         return
-    st.caption(f"{len(df)} real comment(s) awaiting your personal reply")
+    cmap = _commenter_class_map(platform)
+    st.caption(f"{len(df)} real comment(s) — {statuses[0] if len(statuses) == 1 else 'all statuses'}")
     for _, row in df.iterrows():
-        _render_comment_card(row.to_dict(), tab="real")
+        _render_comment_card(row.to_dict(), tab="real", commenter_cls=cmap)
 
 
 def render_ai_tab(platform: str | None, search: str) -> None:
-    df = _load_comments(("pending",), platform)
+    statuses = _view_filter("ai-view-filter")
+    df = _load_comments(statuses, platform)
     if not df.empty:
         df = df[df["classification"].isin(["ai", "unknown"])]
         if search:
@@ -270,11 +317,12 @@ def render_ai_tab(platform: str | None, search: str) -> None:
             ]
         df = df.sort_values(["classification", "confidence"], ascending=[True, False])
     if df.empty:
-        st.info("triage clear — no AI-flagged comments waiting.")
+        st.info("triage clear — no AI-flagged comments match the current view.")
         return
-    st.caption(f"{len(df)} comment(s) to triage")
+    cmap = _commenter_class_map(platform)
+    st.caption(f"{len(df)} comment(s) — {statuses[0] if len(statuses) == 1 else 'all statuses'}")
     for _, row in df.iterrows():
-        _render_comment_card(row.to_dict(), tab="ai")
+        _render_comment_card(row.to_dict(), tab="ai", commenter_cls=cmap)
 
 
 # ---------- Commenters analysis ----------

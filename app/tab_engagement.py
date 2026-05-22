@@ -84,9 +84,9 @@ def run() -> None:
     # Engagement-specific filters at the top so the user has them visible
     # without the sidebar getting cluttered for the other pipeline tabs.
     with st.expander("🛡️ engagement filters + counts", expanded=False):
-        col_metrics, col_filters = st.columns([1, 1])
+        col_metrics, col_filters = st.columns([3, 2])
         with col_metrics:
-            render_sidebar_metrics()
+            render_sidebar_metrics(horizontal=True)
         with col_filters:
             platform, search = render_sidebar_filters(key_suffix="-engagement-tab")
 
