@@ -245,6 +245,8 @@
         ],
         "llm_hub_base_url": "http://127.0.0.1:8000",
         "llm_model": "gemini_lite",
+        "consecutive_failure_limit": 3,
+        "min_body_chars": 200,
         "fuzzy_author_threshold": 88,
         "newsletter_category_cap": 8,
         "topic_to_rollup": {
