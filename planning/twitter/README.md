@@ -53,7 +53,6 @@ Default mode (no `--live` / `--dry-run`) is governed by
 | Image filename source | `illustration TW` → illustrations DB → `illustration` |
 | Caption | `text TW` |
 | Already-posted guard (`--force` to override) | `link TW` |
-| Skip-marker (Phase-2 LinkedIn scope) | `article LI` |
 
 All TW columns are pre-populated by
 `instagram/clone_to_other_platforms.py` from the IG side of the editorial

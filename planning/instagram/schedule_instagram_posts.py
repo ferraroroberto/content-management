@@ -133,7 +133,6 @@ def fetch_wip_ig_rows(notion, db_id: str, ed_cols: dict, days: Optional[list[dat
     thread_col = ed_cols["thread_checkbox"]
     post_col = ed_cols["post_rel"]
     post_url_col = ed_cols["post_url"]
-    article_col = ed_cols["article_rel"]
 
     rows: list[ScheduleRow] = []
 
@@ -154,11 +153,6 @@ def fetch_wip_ig_rows(notion, db_id: str, ed_cols: dict, days: Optional[list[dat
             row_day = default_day or _row_day(r)
             if row_day is None:
                 logger.warning("⚠️  Skipping row %s: unparseable day title.", r.get("id"))
-                continue
-            title = date_to_day_title(row_day)
-            article_rels = props.get(article_col, {}).get("relation", []) or []
-            if article_rels:
-                logger.info("⏭️  %s: has article LI — Phase 2 scope (LinkedIn), skipping IG too.", title)
                 continue
             illust_rels = props.get(illust_col, {}).get("relation", []) or []
             post_rels = props.get(post_col, {}).get("relation", []) or []
@@ -251,9 +245,24 @@ def resolve_post_payload(notion, cfg: dict, row: ScheduleRow) -> PostPayload:
                 f"{row.day_title}: thread post has no illustration relations."
             )
         paths: list[Path] = []
+        missing = 0
         for rel in illust_rels:
             fname = _illustration_filename(notion, rel["id"], illust_cols)
-            paths.append(_resolve_image_path(folder, fname))
+            try:
+                paths.append(_resolve_image_path(folder, fname))
+            except FileNotFoundError as err:
+                missing += 1
+                logger.warning("⚠️  %s: carousel illustration missing, skipping: %s", row.day_title, err)
+        if missing:
+            logger.info(
+                "🖼️ %s: carousel built with %d/%d images (%d missing illustration(s) skipped).",
+                row.day_title, len(paths), len(illust_rels), missing,
+            )
+        if len(paths) < 2:
+            raise RuntimeError(
+                f"{row.day_title}: carousel has only {len(paths)} surviving illustration(s) "
+                f"(IG requires at least 2)."
+            )
         return PostPayload(image_paths=paths, caption=row.text_ig)
 
     if not row.illustration_ig_ids:
@@ -822,6 +831,39 @@ def _click_action_button(page: Page, name: str, exact: bool = True) -> None:
         page.get_by_role("button", name=pattern).last.click(timeout=10000)
     except Exception as err:
         raise RuntimeError(f"Could not click action button '{name}': {err}")
+
+
+def wait_action_button_enabled(
+    page: Page, name: str, *, exact: bool = True, timeout_ms: int = 90000,
+    poll_ms: int = 500,
+) -> None:
+    """Wait until the composer's action button is no longer ``aria-disabled``.
+
+    Meta's composer keeps Schedule / Share now ``aria-disabled="true"`` while
+    the uploaded media is still transcoding server-side. Videos in particular
+    can take well over the 6 s fixed sleep the drivers used to wait — once
+    they're past that, the button enables and the click succeeds instantly.
+    Raises ``RuntimeError`` if the button stays disabled past ``timeout_ms``.
+    """
+    pattern = re.compile(rf"^{re.escape(name)}$", re.I) if exact else re.compile(name, re.I)
+    btn = page.get_by_role("button", name=pattern).last
+    deadline = page.evaluate("() => Date.now()") + timeout_ms
+    last_state = None
+    while page.evaluate("() => Date.now()") < deadline:
+        try:
+            disabled = btn.get_attribute("aria-disabled")
+        except Exception:
+            disabled = None
+        if disabled in (None, "false"):
+            return
+        if disabled != last_state:
+            logger.debug("⏳ '%s' button still aria-disabled=%s, polling…", name, disabled)
+            last_state = disabled
+        page.wait_for_timeout(poll_ms)
+    raise RuntimeError(
+        f"Action button '{name}' stayed aria-disabled after {timeout_ms} ms — "
+        f"media upload likely did not finish."
+    )
 
 
 def _wait_composer_closes(page: Page, planner_url: str, *, timeout_ms: int = 25000) -> bool:
