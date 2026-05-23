@@ -87,8 +87,12 @@ attach helper. See:
 - Instagram (Meta planner): `planning/instagram/schedule_instagram_posts.py`
   — same `Schedule post` menu, same FileChooser-intercept upload (accepts
   .mp4), same `Set date and time` toggle + split hours/minutes/meridiem.
-  Extra 6-second wait after upload before filling the caption to let
-  Meta's transcoder catch up.
+  After upload the driver waits a short 2-second head-start, fills the
+  caption + date/time, then **polls the Schedule button's
+  `aria-disabled` attribute** (via `wait_action_button_enabled`, shared
+  helper in the IG planner module) for up to 90 s before clicking.
+  Meta keeps the Schedule control disabled until the .mp4 finishes
+  server-side transcoding; a fixed sleep is not reliable.
 - Twitter (X): `planning/twitter/schedule_twitter_posts.py` — same
   `SideNav_NewTweet_Button`, same `fileInput` (accepts .mp4 directly),
   same `scheduleOption` + 6 native selects.

@@ -36,6 +36,7 @@ from planning.instagram.schedule_instagram_posts import (  # noqa: E402
     _wait_composer_closes,
     dismiss_meta_verified_modal,
     return_to_planner,
+    wait_action_button_enabled,
 )
 from planning.videos.videos_session import ClipPayload  # noqa: E402
 
@@ -70,7 +71,9 @@ def schedule_one_video(
     # Meta's "Add photo/video" accepts .mp4 — give the same helper a list of one.
     _upload_files(page, [row.payload.video_path])
     # Video transcoding in Meta's composer takes noticeably longer than images.
-    page.wait_for_timeout(6000)
+    # Give it a head-start before we poll, so we don't spin on a button that's
+    # been re-rendered by the upload mid-attach.
+    page.wait_for_timeout(2000)
     _fill_post_text(page, row.payload.caption_short)
     _ensure_set_date_toggle_on(page)
     _set_all_visible_date_time(
@@ -88,6 +91,10 @@ def schedule_one_video(
         _cancel_composer(page)
         return "IG:DRY"
 
+    # Wait for Meta's transcode to finish — the Schedule button is
+    # ``aria-disabled="true"`` while the upload is still being processed.
+    # 90 s is comfortably above the typical short-clip transcode time.
+    wait_action_button_enabled(page, "Schedule", timeout_ms=90000)
     _click_action_button(page, "Schedule")
     if not _wait_composer_closes(page, ig_cfg["feed_url"], timeout_ms=30000):
         shot = out_dir / f"{label}-ig-FAIL.png"

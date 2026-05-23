@@ -14,8 +14,8 @@ flowchart TD
     Clone[<b>run:</b><br/>python -m planning.instagram.clone_to_other_platforms<br/>--week-start YYYY-MM-DD --live]
     CloneDo[For each WIP-IG day:<br/>• non-thread: copy illustration IG + text IG + repost IG<br/>• thread: derive first illustration from <b>post IG</b>,<br/>  derive canonical caption via <b>publishIG</b><br/>• write to TW/TH/SB columns (no WIP for SB)<br/>• back-fill Sunday IG row: illustration IG + template text IG]
     Run[<b>run:</b><br/>python -m planning.instagram.schedule_instagram_posts<br/>--week-start YYYY-MM-DD --live]
-    Filter{For each day,<br/>WIP IG = true<br/>AND article LI empty?}
-    Skip[skip<br/>article days,<br/>days not in scope]
+    Filter{For each day,<br/>WIP IG = true?}
+    Skip[skip<br/>days not in scope]
     Resolve[Resolve story = 1 image,<br/>post = 1 image OR 10 images<br/>caption = text IG]
     Browser[<b>Launch real Chrome</b> via Playwright<br/>persistent profile, no automation banners]
     Story[Hover day cell → <b>Schedule ▾</b> →<br/><b>Schedule story</b> → upload 1 image →<br/>FB+IG default-checked at 10:00 → Save]
@@ -94,12 +94,14 @@ Screenshots, success/failure artifacts, and per-row dry-run images land in `resu
 - `thread <P>` is never replicated. Only IG has thread-posts.
 - Idempotency: target platforms whose row already has illustration OR a non-empty caption are skipped unless `--force`.
 
-**Scheduling on Meta** runs for each day where `Work in Progress IG = true` AND `article LI` is empty (article days are LinkedIn's Phase 2, out of scope for IG):
+**Scheduling on Meta** runs for each day where `Work in Progress IG = true`:
 
 - **Story at 10:00** (Europe/Madrid): one image (the day's first illustration), Facebook + Instagram both default-checked.
 - **Feed Post at 15:00**: one image on regular days, 10 images on Sunday-thread days. Caption = the row's `text IG`.
 
-Days with nothing checked are silently skipped.
+Days with nothing checked are silently skipped. The presence of `article LI` (a LinkedIn-article day) no longer suppresses IG — the IG and LI sides are scheduled independently off their own `Work in Progress <P>` flags.
+
+If a Sunday carousel is missing one or more illustration files on disk, the missing entries are logged and skipped and the carousel goes up with the survivors (IG accepts 2 – 10 images per post). If fewer than 2 survive, the day fails honestly.
 
 ### Idempotency — running twice is safe
 
@@ -123,7 +125,6 @@ All field names come from `config/config.json` `instagram.editorial_columns` / `
 | `title_day` | `day` | title | Row's day in `YYYYMMDD`. |
 | `wip_checkbox` | `Work in Progress IG` | checkbox | The scope marker; auto-unticked after live schedule. |
 | `illustration_rel` | `illustration IG` | relation | Source illustration (single). Back-filled on Sunday from `post IG`. |
-| `article_rel` | `article LI` | relation | If non-empty, row is skipped (LinkedIn-article scope). |
 | `post_url` | `link IG` | url | Idempotency check; not written by this script. |
 | `caption_text` | `text IG` | rich_text | The per-day caption typed into the post composer. |
 | `repost_checkbox` | `repost IG` | checkbox | Replicated to TW/TH/SB by the clone step. |

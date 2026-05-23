@@ -113,7 +113,6 @@ def fetch_wip_th_rows(notion, db_id: str, ed_cols: dict, days: Optional[list[dat
     illust_col = ed_cols["illustration_rel"]
     text_col = ed_cols["caption_text"]
     post_url_col = ed_cols["post_url"]
-    article_col = ed_cols["article_rel"]
 
     rows: list[ScheduleRow] = []
 
@@ -134,11 +133,6 @@ def fetch_wip_th_rows(notion, db_id: str, ed_cols: dict, days: Optional[list[dat
             row_day = default_day or _row_day(r)
             if row_day is None:
                 logger.warning("⚠️  Skipping row %s: unparseable day title.", r.get("id"))
-                continue
-            title = date_to_day_title(row_day)
-            article_rels = props.get(article_col, {}).get("relation", []) or []
-            if article_rels:
-                logger.info("⏭️  %s: has article LI — Phase 2 scope (LinkedIn), skipping.", title)
                 continue
             illust_rels = props.get(illust_col, {}).get("relation", []) or []
             text_rt = props.get(text_col, {}).get("rich_text", []) or []

@@ -55,7 +55,6 @@ Default mode (no `--live` / `--dry-run`) is governed by
 | Image filename source | `illustration TH` → illustrations DB → `illustration` |
 | Caption | `text TH` |
 | Already-posted guard (`--force` to override) | `link TH` |
-| Skip-marker (Phase-2 LinkedIn scope) | `article LI` |
 
 All TH columns are pre-populated by `instagram/clone_to_other_platforms.py`
 from the IG side of the editorial DB. The scheduler only **reads** these
