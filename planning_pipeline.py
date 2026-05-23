@@ -1,6 +1,12 @@
 #!/usr/bin/env python
-"""Planning pipeline: schedule every Notion WIP row across LinkedIn, Instagram,
-Twitter, and Threads.
+"""Planning pipeline: clone IG → TW/TH/SB, then schedule every Notion WIP row
+across LinkedIn, Instagram, Twitter, and Threads.
+
+Step 0 (clone): ``planning.instagram.clone_to_other_platforms`` mirrors the
+IG editorial plan onto Threads / Twitter / Substack rows (captions +
+illustrations) and ticks the per-platform WIP checkbox so the downstream
+schedulers can pick them up. A clone failure does NOT block the platform
+schedulers — captured in the summary.
 
 The four platform schedulers each pick up their own WIP-* rows (no date
 filter — supports multi-week planning runs), schedule through the respective
@@ -15,7 +21,9 @@ into the respective platforms' native schedulers.
 
 CLI:
     python planning_pipeline.py [--dry-run | --live] [--debug] [--force]
+        [--skip-clone]
         [--skip-linkedin] [--skip-instagram] [--skip-twitter] [--skip-threads]
+        [--skip-videos]
 """
 from __future__ import annotations
 
@@ -39,6 +47,7 @@ from typing import Callable, Optional
 
 sys.path.append(str(Path(__file__).parent))
 from config.logger_config import setup_logger  # noqa: E402
+from planning.instagram.clone_to_other_platforms import main as run_clone  # noqa: E402
 from planning.linkedin.schedule_linkedin_posts import main as run_linkedin  # noqa: E402
 from planning.instagram.schedule_instagram_posts import main as run_instagram  # noqa: E402
 from planning.twitter.schedule_twitter_posts import main as run_twitter  # noqa: E402
@@ -86,7 +95,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--debug", action="store_true",
                   help="Enable debug logging (passes through to each scheduler).")
     p.add_argument("--force", action="store_true",
-                  help="Passes through: schedule even if link <P> is already populated.")
+                  help="Passes through: schedule even if link <P> is already populated. "
+                       "Also passed to clone (overwrite populated TW/TH/SB targets).")
+    p.add_argument("--skip-clone",     action="store_true",
+                  help="Skip the IG → TW/TH/SB clone step.")
     p.add_argument("--skip-linkedin",  action="store_true")
     p.add_argument("--skip-instagram", action="store_true")
     p.add_argument("--skip-twitter",   action="store_true")
@@ -106,6 +118,59 @@ def _build_scheduler_args(args: argparse.Namespace) -> list[str]:
     if args.force:
         out.append("--force")
     return out
+
+
+def _build_clone_args(args: argparse.Namespace) -> list[str]:
+    # Clone uses --week-start (defaults to next Monday), which matches what the
+    # platform schedulers operate on. No --all-wip equivalent — week-default is right.
+    out: list[str] = []
+    if args.live:
+        out.append("--live")
+    elif args.dry_run:
+        out.append("--dry-run")
+    if args.debug:
+        out.append("--debug")
+    if args.force:
+        out.append("--force")
+    return out
+
+
+def _run_clone(args: argparse.Namespace) -> PlatformResult:
+    """Run the IG → TW/TH/SB clone as step 0. Failures do NOT block schedulers."""
+    assert logger is not None
+    if args.skip_clone:
+        logger.info("⏭️  Skipping Clone (per --skip-clone).")
+        return PlatformResult(name="Clone", skipped=True)
+
+    logger.info("━━━━━━━━━━ Clone (IG → TW/TH/SB) ━━━━━━━━━━")
+    clone_args = _build_clone_args(args)
+    orig_argv = sys.argv.copy()
+    sys.argv = [orig_argv[0]] + clone_args
+    start = time.monotonic()
+    try:
+        exit_code = run_clone()
+    except SystemExit as exc:
+        code = exc.code if isinstance(exc.code, int) else 99
+        duration = time.monotonic() - start
+        logger.error("❌ Clone exited via SystemExit(%s) — continuing to schedulers.", code)
+        return PlatformResult(name="Clone", exit_code=code, rows=[], duration_s=duration,
+                              error=f"SystemExit({code})")
+    except Exception as exc:  # noqa: BLE001 — orchestrator MUST swallow
+        duration = time.monotonic() - start
+        logger.exception("❌ Clone raised — continuing to schedulers.")
+        return PlatformResult(name="Clone", exit_code=99, rows=[], duration_s=duration,
+                              error=str(exc))
+    finally:
+        sys.argv = orig_argv
+
+    duration = time.monotonic() - start
+    if exit_code == 0:
+        logger.info("✅ Clone finished in %s.", _fmt_duration(duration))
+        return PlatformResult(name="Clone", exit_code=0, rows=[], duration_s=duration)
+    logger.error("❌ Clone finished with exit code %s in %s — continuing to schedulers.",
+                 exit_code, _fmt_duration(duration))
+    return PlatformResult(name="Clone", exit_code=exit_code, rows=[], duration_s=duration,
+                          error=f"exit code {exit_code}")
 
 
 def _run_platform(
@@ -254,8 +319,10 @@ def main() -> int:
         mode_label = "per-platform config default"
     logger.info("🚀 Planning pipeline starting (%s)", mode_label)
 
-    scheduler_args = _build_scheduler_args(args)
     results: list[PlatformResult] = []
+    results.append(_run_clone(args))
+
+    scheduler_args = _build_scheduler_args(args)
     for name, fn, skip in [
         ("LinkedIn",  run_linkedin,  args.skip_linkedin),
         ("Instagram", run_instagram, args.skip_instagram),
