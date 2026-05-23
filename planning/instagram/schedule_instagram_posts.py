@@ -448,51 +448,217 @@ def _open_day_schedule_menu(page: Page, d: date, action: str) -> None:
     page.wait_for_timeout(1000)
 
 
+_ADD_MEDIA_BTN_SELECTOR = (
+    'div[role="button"]:has-text("Add photo/video"), '
+    'button:has-text("Add photo/video"), '
+    'div[role="button"]:has-text("Añadir foto/vídeo"), '
+    'button:has-text("Añadir foto/vídeo"), '
+    'div[role="button"]:has-text("Añadir foto"), '
+    'button:has-text("Añadir foto"), '
+    '[data-surface*="upload_button"]'
+)
+
+# Some Meta planner builds open an intermediate dialog instead of a native
+# file chooser when "Add photo/video" is clicked — the file picker only fires
+# after a second click on an "Upload from computer" affordance inside that
+# dialog. We accept EN + ES wordings to survive locale flips (see issue #28).
+_UPLOAD_FROM_COMPUTER_SELECTOR = (
+    'div[role="dialog"] div[role="button"]:has-text("Upload from computer"), '
+    'div[role="dialog"] button:has-text("Upload from computer"), '
+    'div[role="dialog"] div[role="button"]:has-text("Upload"), '
+    'div[role="dialog"] button:has-text("Upload"), '
+    'div[role="dialog"] div[role="button"]:has-text("Subir desde el ordenador"), '
+    'div[role="dialog"] button:has-text("Subir desde el ordenador"), '
+    'div[role="dialog"] div[role="button"]:has-text("Subir"), '
+    'div[role="dialog"] button:has-text("Subir")'
+)
+
+
+def _dump_upload_debug(page: Page, tag: str) -> Path:
+    """Save a screenshot + log the visible buttons in any open dialog.
+
+    Called from ``_upload_files`` when an upload strategy fails so the next
+    triage doesn't need a live debug session. The returned path is included
+    in the raised exception message.
+    """
+    out_dir = Path(__file__).resolve().parent.parent.parent / "results" / "instagram"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    shot = out_dir / f"{ts}-upload-debug-{tag}.png"
+    try:
+        page.screenshot(path=str(shot), full_page=False)
+    except Exception as err:
+        logger.debug("Could not save upload debug screenshot: %s", err)
+        return shot
+    try:
+        # Dump up to 12 visible button-like elements in the latest dialog so
+        # the log line tells us what affordances Meta is offering at the
+        # moment of failure.
+        visible_buttons = page.evaluate(
+            r"""
+            () => {
+                const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
+                const root = dialogs.length ? dialogs[dialogs.length - 1] : document;
+                const buttons = Array.from(root.querySelectorAll('div[role="button"], button'));
+                return buttons
+                    .filter(b => {
+                        const r = b.getBoundingClientRect();
+                        return r.width > 0 && r.height > 0;
+                    })
+                    .slice(0, 12)
+                    .map(b => (b.innerText || b.getAttribute('aria-label') || '').trim().slice(0, 60));
+            }
+            """
+        )
+        logger.debug(
+            "🔎 Upload-debug (%s) — visible buttons in latest dialog: %s",
+            tag, visible_buttons,
+        )
+    except Exception as err:
+        logger.debug("Could not enumerate dialog buttons: %s", err)
+    return shot
+
+
 def _upload_files(page: Page, paths: list[Path]) -> None:
     """Get files into the Meta composer.
 
-    Meta's "Add photo/video" button does NOT pre-mount an addressable
-    ``input[type=file]``; it opens the OS file picker via a real click
-    handler. The Playwright-idiomatic way to intercept that is
-    ``page.expect_file_chooser`` — wrap the button click, then push the
-    files through the resulting FileChooser.
+    Meta's "Add photo/video" affordance has shipped in two shapes:
 
-    Fallback: if no file chooser is opened (different composer build), try
-    ``set_input_files`` on whatever ``input[type=file]`` Meta does attach.
+    1. **Direct file chooser** (story path, older post path): clicking it
+       opens the OS file picker; ``page.expect_file_chooser`` intercepts
+       the FileChooser event and we push files via ``set_files``.
+    2. **Intermediate dialog** (current post path on most accounts, issue
+       #28): clicking it opens a media dialog whose "Upload from computer"
+       button is what actually triggers the file chooser.
+
+    We try (1) first; if no FileChooser appears within 8 s, we look for the
+    "Upload from computer" button inside the newly-opened dialog and try
+    (2). If neither produces a FileChooser, we fall back to any attached
+    ``input[type=file]`` (8 s wait). Each leg logs which one ran, and on
+    final failure we save a debug screenshot + dump the visible dialog
+    buttons so the next regression triages from artefacts, not a live DOM
+    session (AC #5).
     """
     file_paths = [str(p) for p in paths]
 
-    add_btn = page.locator(
-        'div[role="button"]:has-text("Add photo/video"), '
-        'button:has-text("Add photo/video"), '
-        '[data-surface*="upload_button"]'
-    ).first
+    add_btn = page.locator(_ADD_MEDIA_BTN_SELECTOR).first
     try:
         add_btn.wait_for(state="visible", timeout=12000)
     except Exception as err:
         raise RuntimeError(f"'Add photo/video' button never appeared: {err}")
 
+    # Diagnostic: dump the add-button's outer HTML so we can see whether
+    # Meta wired a click handler or expects a pre-mounted input[type=file]
+    # behind it. Cheap; only logged at DEBUG.
     try:
-        with page.expect_file_chooser(timeout=15000) as fc_info:
-            try:
-                add_btn.click(timeout=5000)
-            except Exception:
-                # Pointer-events block: bypass via force.
-                add_btn.click(force=True, timeout=5000)
-        fc_info.value.set_files(file_paths)
-        logger.debug("📤 %d file(s) sent via FileChooser.", len(file_paths))
-    except Exception:
-        # Fallback: maybe an input is already attached.
-        inp = page.locator('input[type="file"]').last
-        try:
-            inp.wait_for(state="attached", timeout=4000)
-            inp.set_input_files(file_paths)
-            logger.debug("📤 %d file(s) sent via existing input[type=file].", len(file_paths))
-        except Exception as err:
-            raise RuntimeError(f"Could not upload files {paths!r}: {err}")
+        outer = add_btn.evaluate("el => el.outerHTML")
+        logger.debug("🔎 Add-media button outerHTML (first 600 chars): %s",
+                     (outer or "")[:600])
+    except Exception as err:
+        logger.debug("Could not snapshot add-media button HTML: %s", err)
 
-    # Wait for the preview thumbnails to render.
-    page.wait_for_timeout(3000 + 1500 * len(paths))
+    # --- Leg 0: pre-mounted hidden input[type=file] (Meta planner often uses
+    #            a label-wrapped <input> where the visible button is decorative).
+    pre_inp = page.locator('input[type="file"]').last
+    if pre_inp.count() > 0:
+        try:
+            pre_inp.set_input_files(file_paths, timeout=4000)
+            logger.debug(
+                "📤 Leg 0: %d file(s) sent via pre-mounted input[type=file] "
+                "(no Add-photo/video click needed).",
+                len(file_paths),
+            )
+            page.wait_for_timeout(3000 + 1500 * len(paths))
+            return
+        except Exception as err:
+            logger.debug("Leg 0 (pre-mounted input[type=file]): %s", err)
+
+    # --- Leg 1: click 'Add photo/video' and hope for a direct file chooser ---
+    # Meta's post composer sometimes leaves the button without a hydrated
+    # click handler for a short window after the sub-modal closes (issue #28).
+    # Settle, click, and on miss retry once via a JS-native click — that
+    # bypasses any React handler-binding race a Playwright dispatch hits.
+    page.wait_for_timeout(1500)
+
+    def _try_click_for_chooser(click_fn) -> Optional[object]:
+        try:
+            with page.expect_file_chooser(timeout=6000) as fc_info:
+                click_fn()
+            return fc_info.value
+        except Exception as err:
+            logger.debug("Add-photo/video click → no FileChooser: %s", err)
+            return None
+
+    def _playwright_click() -> None:
+        try:
+            add_btn.click(timeout=5000)
+        except Exception:
+            # Pointer-events block: bypass via force.
+            add_btn.click(force=True, timeout=5000)
+
+    def _js_click() -> None:
+        # Dispatched directly on the DOM node — bypasses Playwright's overlay
+        # / pointer-events checks and any half-bound React handler.
+        add_btn.evaluate("el => el.click()")
+
+    leg1_chooser = _try_click_for_chooser(_playwright_click)
+    if leg1_chooser is None:
+        # Re-find: the previous click may have changed the DOM even if no
+        # chooser fired. Then JS-click the freshly resolved element.
+        page.wait_for_timeout(600)
+        add_btn = page.locator(_ADD_MEDIA_BTN_SELECTOR).first
+        leg1_chooser = _try_click_for_chooser(_js_click)
+
+    if leg1_chooser is not None:
+        leg1_chooser.set_files(file_paths)
+        logger.debug("📤 Leg 1: %d file(s) sent via direct FileChooser.", len(file_paths))
+        page.wait_for_timeout(3000 + 1500 * len(paths))
+        return
+
+    # --- Leg 2: intermediate dialog — click 'Upload from computer' inside it ---
+    leg2_chooser = None
+    upload_btn = page.locator(_UPLOAD_FROM_COMPUTER_SELECTOR).first
+    try:
+        upload_btn.wait_for(state="visible", timeout=5000)
+    except Exception as err:
+        logger.debug("Leg 2 ('Upload from computer' button not present): %s", err)
+    else:
+        try:
+            with page.expect_file_chooser(timeout=8000) as fc_info:
+                try:
+                    upload_btn.click(timeout=5000)
+                except Exception:
+                    upload_btn.click(force=True, timeout=5000)
+            leg2_chooser = fc_info.value
+        except Exception as err:
+            logger.debug("Leg 2 (FileChooser after Upload-from-computer): %s", err)
+
+    if leg2_chooser is not None:
+        leg2_chooser.set_files(file_paths)
+        logger.debug(
+            "📤 Leg 2: %d file(s) sent via FileChooser after intermediate dialog.",
+            len(file_paths),
+        )
+        page.wait_for_timeout(3000 + 1500 * len(paths))
+        return
+
+    # --- Leg 3: an input[type=file] is already attached somewhere ---
+    inp = page.locator('input[type="file"]').last
+    try:
+        inp.wait_for(state="attached", timeout=8000)
+        inp.set_input_files(file_paths)
+        logger.debug("📤 Leg 3: %d file(s) sent via attached input[type=file].", len(file_paths))
+        page.wait_for_timeout(3000 + 1500 * len(paths))
+        return
+    except Exception as err:
+        logger.debug("Leg 3 (attached input[type=file]): %s", err)
+        shot = _dump_upload_debug(page, "all-legs-failed")
+        raise RuntimeError(
+            f"Could not upload files {paths!r}: all three upload strategies "
+            f"failed (direct FileChooser, intermediate dialog → 'Upload from "
+            f"computer', attached input[type=file]). Last error from leg 3: "
+            f"{err}. Debug screenshot: {shot}"
+        )
 
 
 # Meta renders date and time controls as ``div[role="button"]`` with the
