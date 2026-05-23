@@ -270,18 +270,37 @@ def resolve_source(notion, cfg: dict, row: IgRow) -> CloneSource:
     template_text = cfg.get("sunday_template_text", "")
 
     if not row.thread_ig:
-        # Regular day — IG row already carries everything we need.
         if not row.illustration_ig_ids:
             raise RuntimeError(
                 f"{row.day_title}: non-thread day but illustration IG is empty."
             )
-        if not row.text_ig:
-            raise RuntimeError(
-                f"{row.day_title}: non-thread day but text IG is empty."
+        illust_id = row.illustration_ig_ids[0]
+        if row.text_ig:
+            caption = row.text_ig
+            ig_back_text: Optional[str] = None
+        else:
+            # Repost (or any non-thread row where `text IG` is empty): derive
+            # the canonical caption from the illustration's publishIG chain
+            # (earliest first-publication row's `text IG`, with the
+            # `text IG to copy` formula as fallback). Same rule the LinkedIn
+            # scheduler and the Sunday-thread branch below use.
+            caption = _canonical_caption_from_publish_ig(
+                notion, illust_id, illust_cols, ed_cols
             )
+            if not caption:
+                raise RuntimeError(
+                    f"{row.day_title}: text IG is empty and no canonical "
+                    "caption could be derived from the illustration's "
+                    "publishIG chain."
+                )
+            # Back-fill the IG row's own `text IG` with the canonical caption
+            # so downstream readers (Meta planner, manual review) see the
+            # actual text instead of an empty field.
+            ig_back_text = caption
         return CloneSource(
-            illustration_id=row.illustration_ig_ids[0],
-            caption_text=row.text_ig,
+            illustration_id=illust_id,
+            caption_text=caption,
+            ig_row_text=ig_back_text,
         )
 
     # Thread day (Sunday).
@@ -339,7 +358,9 @@ def apply_to_targets(
     ed_cols = ig_cfg["editorial_columns"]
     statuses: list[str] = []
 
-    # IG row back-fill (Sunday only; only when fields are currently empty).
+    # IG row back-fill: Sunday template text + first thread illustration; OR
+    # canonical caption derived for non-thread repost days. Only the fields
+    # surfaced by resolve_source are written — empty source fields are no-ops.
     ig_updates: dict = {}
     if source.ig_row_illustration_id:
         ig_updates[ed_cols["illustration_rel"]] = prepare_notion_update(

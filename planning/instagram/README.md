@@ -56,8 +56,11 @@ The bootstrap uses the same stealth flags as every other platform (see `config/c
 
 ## Daily / weekly use
 
+The clone now runs automatically as **step 0** of `planning_pipeline.py` (see issue #32), so the per-script invocations below are only needed for ad-hoc / single-step runs. Pass `--skip-clone` to the orchestrator to opt out.
+
 ```powershell
-# 1) Clone IG plan to TW/TH/SB columns (Notion-only; safe to run repeatedly)
+# 1) Clone IG plan to TW/TH/SB columns (Notion-only; safe to run repeatedly).
+#    Skip if you're running planning_pipeline.py — it does this automatically.
 & .\.venv\Scripts\python.exe -m planning.instagram.clone_to_other_platforms --week-start 2026-05-25 --dry-run
 & .\.venv\Scripts\python.exe -m planning.instagram.clone_to_other_platforms --week-start 2026-05-25 --live
 
@@ -211,6 +214,7 @@ Meta's class names are obfuscated and rotate — never anchor on classes. These 
 - **Composer opens at a separate URL (`/composer/...`)** — between days the script navigates back to `feed_url` (the content_calendar) and re-dismisses the upsell modal.
 - **WIP IG is unticked only when BOTH the story AND the post succeed for the day.** Partial failures keep WIP set so the next run retries the same day cleanly. If a day's story succeeded but the post failed mid-run, a re-run will re-schedule a duplicate story — delete the duplicate manually in Meta's planner before the rerun, or accept it.
 - **Notion relation order is preserved by the API.** "First thread illustration" = `post IG → illustration → [0]`. If Meta or Notion ever shuffle relations, fall back to sorting by `created_time` or by `publishIG`-implied first publish date.
+- **Repost days have empty `text IG` by design** (issue #32). The canonical caption lives on the illustration's earliest `publishIG` row's `text IG` field (with the `text IG to copy` formula as last-ditch fallback). The clone resolves this via `_canonical_caption_from_publish_ig` in `clone_to_other_platforms.py` — same helper the LinkedIn scheduler and the Sunday-thread branch use. The derived caption is also back-filled to the IG row's own `text IG` so a manual reader of the editorial DB sees real text instead of an empty cell. Never error on "non-thread day but text IG is empty" — fall through to the publishIG derivation first.
 
 ---
 
