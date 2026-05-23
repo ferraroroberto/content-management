@@ -46,3 +46,7 @@ supabase/.branches/_current_branch
 
 # temp files
 /tmp
+
+# Local sklearn classifier artifact (user-specific, trained from accumulated labels).
+engagement/classify/local_model.joblib
+engagement/classify/local_model.json

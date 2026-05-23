@@ -265,7 +265,7 @@
         ]
     },
     "engagement": {
-        "default_days": 3,
+        "default_days": 5,
         "phrases_path": "engagement/classify/phrases.json",
         "platforms_enabled": ["linkedin"],
         "linkedin": {

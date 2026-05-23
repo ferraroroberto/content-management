@@ -30,3 +30,8 @@ spacy
 supabase==2.10.0
 # Streamlit review UI for the engagement pipeline.
 streamlit
+# Local sklearn classifier (Phase 2a) trained on accumulated whitelist/blacklist
+# labels; runs as a layered pass after rules.py on rows the rules left as 'unknown'.
+# Lower bound = 1.5 (ColumnTransformer + StratifiedKFold API stability); no upper
+# bound — 1.8 is the first release with Python 3.14 wheels for this venv.
+scikit-learn>=1.5

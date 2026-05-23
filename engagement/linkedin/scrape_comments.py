@@ -1,7 +1,8 @@
 """Scrape comments from my own LinkedIn posts into Supabase.
 
 Pipeline:
-1. Read editorial DB rows where `date >= today - days` AND `link LI` is set.
+1. Read editorial DB rows where `date >= today - (days-1)` AND `link LI` is
+   set — i.e. a window of N total calendar days including today.
 2. For each post URL, open in the planning/linkedin chrome_user_data session.
 3. Click "Load more comments" until exhausted, expand replies.
 4. Extract per-comment: commenter URL, display name, text, posted_at.
@@ -72,13 +73,15 @@ def _yyyymmdd(d: datetime) -> str:
 
 
 def fetch_recent_li_posts(days: int) -> list[dict]:
-    """Return [{post_url, posted_at, day_yyyymmdd}, ...] for the last N days where `link LI` is set."""
+    """Return [{post_url, posted_at, day_yyyymmdd}, ...] for the last `days`
+    calendar days **including today** where `link LI` is set. `days=1` means
+    just today; `days=5` means today + the four prior days."""
     li_cfg = load_linkedin_config()
     notion = init_notion_client(load_config()["notion"]["api_token"])
     db_id = li_cfg["editorial_db_id"]
     columns = li_cfg["editorial_columns"]
     today = datetime.now(timezone.utc).date()
-    earliest = today - timedelta(days=days)
+    earliest = today - timedelta(days=max(0, days - 1))
 
     title_col = columns["title_day"]
     link_col = columns["post_url"]
@@ -106,7 +109,7 @@ def fetch_recent_li_posts(days: int) -> list[dict]:
                 "day": title or "",
             }
         )
-    logger.info("📰 found %d LI posts in last %d day(s)", len(out), days)
+    logger.info("📰 found %d LI posts in last %d day(s) including today", len(out), days)
     return out
 
 
@@ -689,7 +692,7 @@ def main() -> None:  # pragma: no cover
     logging.getLogger().setLevel(logging.DEBUG if args.debug else logging.INFO)
 
     cfg = load_config().get("engagement", {})
-    days = args.days if args.days is not None else cfg.get("default_days", 3)
+    days = args.days if args.days is not None else cfg.get("default_days", 5)
     result = run(days=days, headless=args.headless, dry_run=args.dry_run, limit=args.limit)
     print(json.dumps(result, indent=2))
 

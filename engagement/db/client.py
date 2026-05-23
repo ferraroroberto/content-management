@@ -271,6 +271,50 @@ def mark_replied_as_ignored(platform: str = "linkedin") -> int:
     return len(res.data or [])
 
 
+def fetch_labeled_training_set(platform: str) -> list[dict]:
+    """Return every comment whose commenter has an explicit whitelist/blacklist
+    label, with the label attached as `_label` (1=ai, 0=human). Used by
+    `engagement.classify.local_model.train()`.
+
+    Done in two queries because the `comments` ↔ `commenters` relationship is
+    not modeled as a PostgREST foreign key (composite PK + denormalised text
+    URLs), so embedded selects aren't available.
+    """
+    sb = supabase_client()
+    labeled = (
+        sb.table("commenters")
+        .select("account_url,classification")
+        .eq("platform", platform)
+        .in_("classification", ["whitelist", "blacklist"])
+        .execute()
+        .data
+        or []
+    )
+    if not labeled:
+        return []
+    label_for = {row["account_url"]: row["classification"] for row in labeled}
+    rows = (
+        sb.table("comments")
+        .select("*")
+        .eq("platform", platform)
+        .in_("commenter_url", list(label_for.keys()))
+        .execute()
+        .data
+        or []
+    )
+    out: list[dict] = []
+    for r in rows:
+        cls = label_for.get(r.get("commenter_url"))
+        if cls == "blacklist":
+            r["_label"] = 1
+        elif cls == "whitelist":
+            r["_label"] = 0
+        else:
+            continue
+        out.append(r)
+    return out
+
+
 def cascade_whitelist_pending(platform: str, account_url: str) -> int:
     sb = supabase_client()
     res = (
@@ -320,4 +364,5 @@ __all__ = [
     "cascade_whitelist_pending",
     "mark_replied_as_ignored",
     "migrate_fallback_ids_to_urn",
+    "fetch_labeled_training_set",
 ]
