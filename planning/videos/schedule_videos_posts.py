@@ -510,9 +510,16 @@ def main() -> tuple[int, list[dict]]:
         _record_driver_results(rows, platform, driver_results)
 
         # Write sentinel link <P>(v) for any LIVE row so re-runs skip it.
+        # Tag-along platforms (TH) have no link column by design — `_set_post_url`
+        # would log a misleading "Role 'post_url_th' not present" warning every
+        # successful TH run. Skip the write for them; the WIP-Vd untick logic
+        # already gates tag-along platforms on the LIVE driver status alone
+        # (see issue #29 + planning/videos/README.md).
         if not dry_run:
             for entry in driver_results:
                 if entry["status"] != "LIVE":
+                    continue
+                if platform in PLATFORMS_TAG_ALONG:
                     continue
                 # Find the matching state.
                 state = next((s for s in rows if s.day_title == entry["day"]), None)
