@@ -270,6 +270,76 @@ def render_sidebar_filters(*, key_suffix: str = "") -> tuple[str | None, str]:
 _ALL_STATUSES = ("pending", "approved", "sent", "rejected", "ignored")
 
 
+# Per-tab user-manual legends explaining what each action button does and the
+# side-effects (status changes / cascade behaviour). Rendered just below the
+# tabs, above the show filter, so the meaning of the row-level buttons is
+# always one glance away.
+_REAL_LEGEND = """**What each action does:**
+
+- **✓ mark read** — You've read this comment and don't need to reply. Status moves to `ignored`; the row disappears from "show pending" but stays in "show all".
+- **🤖 mark AI** — Wrong verdict, this is actually AI noise. Status moves to `rejected`; the row leaves this tab.
+- **⬇️ whitelist** — Trust this commenter. All their pending comments get reclassified as human and stay surfaced here; future comments by them bypass the AI check.
+- **⛔ blacklist** — Distrust this commenter. All their pending comments are auto-approved with the canned "thanks @first_name" reply (ready to copy-paste in the AI triage tab); future comments by them get the same treatment automatically."""
+
+_AI_LEGEND = """**What each action does:**
+
+- **✅ approve** — The canned reply is good. Status moves to `approved`; copy the reply from the code block above the buttons and paste it into LinkedIn's native composer yourself.
+- **🚫 reject** — Don't leave any reply. Status moves to `rejected`; the row leaves this tab.
+- **🧑 surface** — Wrong verdict, this is actually a real human comment. Reclassifies as human and moves it to the real-comments tab for your personal reply.
+- **⬇️ whitelist** — Trust this commenter. Same effect as in the real-comments tab: pending comments are reclassified as human and surfaced there; future comments bypass the AI check.
+- **⛔ blacklist** — Distrust this commenter. Their pending comments are auto-approved with the canned thanks reply; future ones the same."""
+
+
+def _render_legend(body: str) -> None:
+    """Per-tab user-manual block. Wrapped in an expander so the cards aren't
+    pushed off-screen on small viewports."""
+    with st.expander("ℹ️ what each action does", expanded=False):
+        st.markdown(body)
+
+
+_COMMENTERS_EXPLAINER = """\
+### What this tab is for
+
+A per-commenter pivot view of everyone who's commented on your posts. The point is to **spot patterns over time** that you can't see one comment at a time: who comments daily, who only fires within minutes of every new post, who comments dozens of times but never publishes their own content.
+
+These patterns drive the whitelist / blacklist labels that feed back into both classifier layers:
+
+- **Whitelist hits** short-circuit the classifier — all their pending + future comments stay flagged human.
+- **Blacklist hits** also short-circuit — pending comments get auto-approved with the canned thanks reply.
+- **Both labels** are the training set for the local sklearn model (Phase 2a). Every whitelist commenter contributes their comments as negative (human) examples; every blacklist commenter contributes positives (AI). Retrain after marking a batch.
+
+---
+
+### How to read the table
+
+- **Rows** = commenters. The filter chips at the top scope by `classification` (whitelist / blacklist / unknown).
+- **Columns** = `commenter` · `class` · `total` · then one column per day for the last N days (newest left, dd/mm format).
+- **Totals** are across *all* time, not just the visible day window — so a commenter who hammered you a month ago still sticks out.
+- **Sort** = by total desc, so the heaviest commenters come first.
+- The `days` selector (top right) just changes the daily-column window; it doesn't filter the rows.
+
+**Click a row** to drill into that commenter's individual comments, sorted newest first, with your already-posted replies shown inline (when present). Click again on the same row to deselect.
+
+---
+
+### Signals worth eyeballing
+
+- **Heavy total + no comments-per-day variance** — likely a template-driven bot. The same person who comments on *every* one of your posts within minutes is rarely engaging organically.
+- **Sub-2-minute timestamps repeated across posts** — the rules classifier already catches single-comment cases, but seeing the pattern across many posts is the real signal.
+- **Identical text across multiple commenters** — open both rows; if the texts match verbatim, you've found a coordinated network. Blacklist all of them.
+- **Whitelist drift** — a commenter you whitelisted six months ago who now only leaves generic praise. Demoting (set classification back to unknown via the action buttons in the per-comment cards) un-trusts them without going as far as blacklist.
+
+---
+
+### Technical details
+
+- Data comes from a single Supabase select per table: `comments` (limit 5000, ordered by `posted_at desc`) and `commenters` (limit 5000, ordered by `last_seen desc`). Both are cached for 30 seconds in Streamlit (`@st.cache_data(ttl=30)`); the **🔄 refresh data** button in the engagement filters expander busts the cache.
+- The pivot is built in-memory with pandas — no SQL pivot, no Postgres-side window functions. `_build_commenter_pivot` does `pivot_table(index='commenter_url', columns='day', values='comment_id', aggfunc='count')` then joins on `commenters` for the `classification` + `display_name` columns. Missing days get zero-filled so the day columns are stable.
+- Selection state is managed by `st.dataframe(on_select='rerun', selection_mode='single-row')` — Streamlit's native row-pick API, no callback ceremony.
+- The drill-down rebuilds the comment list from the same in-memory DataFrame, so it doesn't re-query Supabase when you click. Switching tabs *does* trigger a fresh load (within the 30s TTL).
+"""
+
+
 def _view_filter(key: str) -> tuple[str, ...]:
     """Render the `pending / all` view radio; return the status tuple to load."""
     view = st.radio(
@@ -287,6 +357,7 @@ def _commenter_class_map(platform: str | None) -> dict[str, str]:
 
 
 def render_real_tab(platform: str | None, search: str) -> None:
+    _render_legend(_REAL_LEGEND)
     statuses = _view_filter("real-view-filter")
     df = _load_comments(statuses, platform)
     if not df.empty:
@@ -306,6 +377,7 @@ def render_real_tab(platform: str | None, search: str) -> None:
 
 
 def render_ai_tab(platform: str | None, search: str) -> None:
+    _render_legend(_AI_LEGEND)
     statuses = _view_filter("ai-view-filter")
     df = _load_comments(statuses, platform)
     if not df.empty:
@@ -419,6 +491,9 @@ def _render_drill_down(account_url: str, comments_df: pd.DataFrame, platform: st
 
 
 def render_commenters_tab(platform: str | None, search: str) -> None:
+    with st.expander("📚 how to use this tab", expanded=False):
+        st.markdown(_COMMENTERS_EXPLAINER)
+
     comments_df = _load_all_comments(platform)
     commenters_df = _load_all_commenters(platform)
 

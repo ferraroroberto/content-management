@@ -186,11 +186,75 @@ def render_log_panel(name: str, *, height: int = 380, autorefresh_secs: float = 
     body = "\n".join(lines) if lines else "(no output yet)"
     with st.container(height=height, border=True, autoscroll=True):
         st.code(body, language=None, wrap_lines=False)
-    cols = st.columns([1, 1, 6])
-    with cols[0]:
+    with st.container(horizontal=True, gap="small"):
         st.button("🛑 stop", key=f"_proc_{name}_stop", on_click=stop_pipeline, args=(name,), disabled=not is_running(name))
-    with cols[1]:
         st.button("🧹 clear", key=f"_proc_{name}_clear", on_click=clear_log, args=(name,), disabled=is_running(name))
     if is_running(name):
+        time.sleep(autorefresh_secs)
+        st.rerun()
+
+
+def render_combined_status_badge(names: list[str]) -> None:
+    """One badge for a group of pipelines that share a UI section. Shows which
+    pipeline is currently running (if any) and the worst exit code from the
+    last completed runs (a single nonzero exit wins)."""
+    running = [n for n in names if is_running(n)]
+    if running:
+        meta = _get_meta(running[0])
+        st.info(f"⏳ {running[0]} running  ·  started {meta.get('started_at', '')}")
+        return
+    codes = [exit_code(n) for n in names]
+    if all(c is None for c in codes):
+        st.caption("idle  ·  no run yet this session")
+    elif any(c is not None and c != 0 for c in codes):
+        failed = [n for n, c in zip(names, codes) if c not in (None, 0)]
+        st.error(f"❌ last run failed: {', '.join(failed)}")
+    else:
+        st.success("✅ last run finished cleanly")
+
+
+def render_combined_log_panel(
+    names: list[str],
+    *,
+    height: int = 480,
+    autorefresh_secs: float = 1.0,
+) -> None:
+    """One scrollable panel that concatenates the logs of multiple pipelines.
+
+    Each pipeline's lines are already framed by `$ ...` / `# started ...` /
+    `# exit code ...` markers from `start_pipeline`, so concatenation alone is
+    enough — no extra section headers needed. A blank line is inserted between
+    deques only when both have content, to keep the boundary visible.
+
+    Stop/clear act on whichever pipeline is currently running (only one at a
+    time in this group), or clear all deques.
+    """
+    parts: list[str] = []
+    for n in names:
+        block = "\n".join(_get_lines(n))
+        if block:
+            parts.append(block)
+    body = "\n\n".join(parts) if parts else "(no output yet)"
+    with st.container(height=height, border=True, autoscroll=True):
+        st.code(body, language=None, wrap_lines=False)
+
+    running_now = next((n for n in names if is_running(n)), None)
+    any_running = running_now is not None
+
+    def _clear_all() -> None:
+        for n in names:
+            clear_log(n)
+
+    with st.container(horizontal=True, gap="small"):
+        st.button(
+            "🛑 stop", key=f"_proc_combined_{'+'.join(names)}_stop",
+            on_click=stop_pipeline, args=(running_now,) if running_now else (names[0],),
+            disabled=not any_running,
+        )
+        st.button(
+            "🧹 clear", key=f"_proc_combined_{'+'.join(names)}_clear",
+            on_click=_clear_all, disabled=any_running,
+        )
+    if any_running:
         time.sleep(autorefresh_secs)
         st.rerun()

@@ -7,14 +7,16 @@ Fourth pipeline in this repo (sibling to `planning/`, `reporting/`, `newsletter/
 
 **Never auto-sends.** Every action is staged for explicit approval. See issue [#20](https://github.com/ferraroroberto/reporting/issues/20) for the full design + the public-repo defense-mechanism disclaimer.
 
-## Phase 1 MVP — what's here
+## What's here
 
-- LinkedIn only.
+- LinkedIn only (other platforms = Phase 4).
 - Scraper that reads my recent posts from the Notion editorial DB (where `link LI` is set) and walks each one in the existing `planning/linkedin/chrome_user_data` session.
-- Rules-only classifier (whitelist / blacklist / generic-praise / short / no-personal-token / emoji-only / exact-text-duplicate / sub-2-min-after-post). Tunable via `engagement/classify/phrases.json`.
+- **Layered classifier**:
+  1. **Rules** (Phase 1) — whitelist / blacklist / generic-praise / short / no-personal-token / emoji-only / exact-text-duplicate / sub-2-min-after-post. Tunable via `engagement/classify/phrases.json`.
+  2. **Local sklearn model** (Phase 2a) — logistic regression on TF-IDF (word 1-2 + char_wb 3-5) plus six per-comment scalars, trained on accumulated commenter-level whitelist/blacklist labels. Called only on rows the rules layer left as `unknown`. Lossless when not trained yet — pipeline behaves identically to rules-only.
 - Two Supabase tables (`commenters` + `comments`) — see `engagement/db/schema.sql`.
 - Streamlit review app — `engagement/review_app.py`.
-- No auto-posting worker yet. Approved rows sit in Supabase; you paste the suggested reply manually (one click via `st.code`'s built-in copy button). Phase 2 will add a Playwright send worker.
+- **No auto-posting worker, ever.** Approved rows sit in Supabase; you copy the suggested reply via `st.code`'s built-in copy button and paste it into LinkedIn's native composer yourself. The originally-planned Phase 2b send worker is permanently out of scope on TOS grounds (see issue [#20](https://github.com/ferraroroberto/reporting/issues/20)).
 
 ## Workflow
 
@@ -23,7 +25,10 @@ flowchart LR
     A[Notion editorial DB<br/>link LI set<br/>date >= today - N] --> B[engagement.linkedin.scrape_comments]
     B --> C[(Supabase<br/>comments + commenters)]
     C --> D[engagement.classify.rules]
-    D --> C
+    D --> L{score &lt; threshold?}
+    L -- yes --> M[engagement.classify.local_model<br/>logreg, P(AI)]
+    L -- no --> C
+    M --> C
     C --> E[engagement.review_app<br/>Streamlit]
     E -.approve.-> C
     E -.blacklist/whitelist.-> C
@@ -33,9 +38,11 @@ flowchart LR
 
 | Command | Purpose |
 |---|---|
-| `python -m engagement.linkedin.scrape_comments --days 3` | Scrape last 3 days of LI comments → Supabase. Headful by default. |
-| `python -m engagement.linkedin.scrape_comments --days 1 --limit 1 --dry-run` | Smoke test against 1 post; writes `results/engagement/dryrun-*.json` instead of upserting. |
-| `python -m engagement.classify.rules` | Re-classify all `pending` `unknown` rows using current `phrases.json`. |
+| `python -m engagement.linkedin.scrape_comments --days 5` | Scrape last 5 calendar days **including today** of LI comments → Supabase. Headful by default. `--days N` means N total days, so `--days 1` = today only. |
+| `python -m engagement.linkedin.scrape_comments --days 1 --limit 1 --dry-run` | Smoke test against 1 post (today only); writes `results/engagement/dryrun-*.json` instead of upserting. |
+| `python -m engagement.classify.rules` | Re-classify all `pending` `unknown` rows using current `phrases.json`. If a local model is on disk, it runs as a second pass on the rows the rules layer left as `unknown`. |
+| `python -m engagement.classify.local_model train` | Train the local sklearn classifier on accumulated whitelist/blacklist labels. Refuses to train below `rules.local_model_min_train_per_class` per class. Writes `engagement/classify/local_model.joblib` (gitignored) + a metadata sidecar. |
+| `python -m engagement.classify.local_model eval` | 5-fold stratified CV on the same labeled set; prints AUC + precision/recall/F1 at the configured threshold. |
 | `& .\.venv\Scripts\python.exe -m streamlit run engagement\review_app.py` | Launch the review UI on `http://localhost:8501`. |
 
 ## One-time setup
@@ -52,7 +59,9 @@ No new secrets needed — uses `config.supabase.service_role_key` and `config.no
 - **Headful by default.** Headless would be brittle for first-run selector debugging. Use `--headless` once selectors are validated.
 - **Idempotent.** Both tables are upserted on `(platform, comment_id)` and `(platform, account_url)` respectively — safe to re-run on the same posts.
 - **Relative time parsing is approximate.** LinkedIn shows `2h`, `5m`, `1d`. We reconstruct an absolute timestamp from scrape time, so `posted_at` drifts up to ~one tick of the LI display unit. Fine for cadence rules.
-- **Unknown ≠ AI.** Comments that score below the AI threshold stay `unknown` and surface in the real-comments tab by default. Bias is toward human review — better to over-surface than wrongly stage a canned reply.
+- **Unknown ≠ AI.** Comments that score below the AI threshold (and below the local-model threshold, if a model is loaded) stay `unknown` and surface in the real-comments tab by default. Bias is toward human review — better to over-surface than wrongly stage a canned reply.
+- **Local model is lossless when missing.** If `local_model.joblib` isn't on disk yet, the rules pass is the only classifier and the verdict reasons match Phase 1 exactly. Train it by running `python -m engagement.classify.local_model train` once you have ≥20 whitelist + ≥20 blacklist commenters.
+- **Featurizer is the single source of truth.** `local_model.featurize_one` re-imports `_seconds_after`, `_is_emoji_only`, `_generic_praise_hits`, `_has_personal_token` from `rules.py` so train-time and inference-time signals can never drift. If you tune one of those rules in `phrases.json` (or the helper logic), retrain before relying on the model.
 - **Whitelist/blacklist cascades.** Marking a commenter triggers a retroactive reclassification of their pending comments (`cascade_blacklist_pending` / `cascade_whitelist_pending`).
 - **No tests yet.** Single-user pipeline; verification is a real scrape + manual eyeball.
 
@@ -65,8 +74,11 @@ engagement/
 ├── linkedin/
 │   └── scrape_comments.py            # Notion → LI post URLs → comment DOM → Supabase
 ├── classify/
-│   ├── rules.py                      # rule pipeline + verdict writer
-│   └── phrases.json                  # generic-praise list, weights, thresholds, reply templates
+│   ├── rules.py                      # rule pipeline + verdict writer; calls local_model on unknowns
+│   ├── local_model.py                # sklearn logreg, trained on accumulated wl/bl labels
+│   ├── phrases.json                  # generic-praise list, weights, thresholds, reply templates
+│   ├── local_model.joblib            # (gitignored) trained pipeline — user-specific artifact
+│   └── local_model.json              # (gitignored) training metadata sidecar
 ├── db/
 │   ├── client.py                     # supabase-py + notion client + CRUD helpers
 │   └── schema.sql                    # one-time DDL for commenters + comments
@@ -77,7 +89,7 @@ engagement/
 
 ```json
 "engagement": {
-    "default_days": 3,
+    "default_days": 5,
     "phrases_path": "engagement/classify/phrases.json",
     "platforms_enabled": ["linkedin"],
     "linkedin": {
@@ -90,7 +102,8 @@ engagement/
 
 ## Next phases
 
-- **Phase 2** — small sklearn classifier (logreg/gradient boost) trained on accumulated whitelist/blacklist labels; Playwright send worker that posts approved replies with jitter.
-- **Phase 3** — LLM fallback (Gemini Flash-Lite / Haiku 4.5) for the ambiguous middle; rolling reputation_score recomputation.
-- **Phase 4** — Instagram, then Twitter, Threads, Substack.
-- **Phase 5** — cross-platform identity linking + retroactive blacklist propagation.
+- **Phase 2a** ✅ shipped — local sklearn classifier (this section). Train it when you have ≥20 labeled commenters per class.
+- **Phase 2b** ❌ permanently out of scope — auto-send worker. Violates LinkedIn TOS §8.2. The pipeline stays staged + manual copy-paste.
+- **Phase 3** — LLM fallback (Gemini Flash-Lite / Haiku 4.5) for the ambiguous middle; rolling `commenters.signals` recomputation per scrape (cadence, comment-to-original ratio, length variance, …). Once `signals` is populated, the local model can pull per-commenter features for additional lift.
+- **Phase 4** — Instagram, then Twitter, Threads, Substack. Each reuses its sibling `planning/<P>/chrome_user_data`.
+- **Phase 5** — cross-platform identity linking (`commenter_identity` table) + retroactive blacklist propagation across linked accounts.

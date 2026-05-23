@@ -59,7 +59,9 @@
         "emoji_only_weight": 0.40,
         "exact_text_duplicate_weight": 0.60,
         "sub_2_min_weight": 0.20,
-        "ai_classification_threshold": 0.50
+        "ai_classification_threshold": 0.50,
+        "local_model_ai_threshold": 0.70,
+        "local_model_min_train_per_class": 20
     },
     "reply_templates": {
         "like_and_thanks": [

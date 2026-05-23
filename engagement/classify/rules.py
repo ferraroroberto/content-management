@@ -152,6 +152,17 @@ def classify_pending(platform: str = "linkedin") -> dict:
     cfg = load_engagement_config()
     threshold = phrases["rules"]["ai_classification_threshold"]
 
+    # Local sklearn classifier (Phase 2a) — lazy import to avoid circular deps
+    # (local_model imports the per-comment helpers from this module). Falls
+    # back gracefully if the .joblib file isn't on disk yet.
+    from engagement.classify import local_model
+    local_threshold = phrases["rules"].get("local_model_ai_threshold", 0.70)
+    local_available = local_model.model_is_available()
+    if local_available:
+        logger.info("🤖 local model loaded (threshold=%.2f)", local_threshold)
+    else:
+        logger.debug("local model not trained yet — skipping local pass")
+
     sb = supabase_client()
     pending = (
         sb.table("comments")
@@ -196,6 +207,18 @@ def classify_pending(platform: str = "linkedin") -> dict:
                     "like_and_thanks",
                     _pick_reply("like_and_thanks", c.get("display_name"), phrases),
                 )
+            elif local_available:
+                prob = local_model.predict_one(c, duplicates, phrases)
+                if prob is not None and prob >= local_threshold:
+                    verdict = (
+                        "ai", float(prob), "local",
+                        reasons + [{"rule": "local_model", "prob": float(prob)}],
+                        "like_and_thanks",
+                        _pick_reply("like_and_thanks", c.get("display_name"), phrases),
+                    )
+                else:
+                    extra = [{"rule": "local_model_prob", "prob": float(prob)}] if prob is not None else []
+                    verdict = ("unknown", score, "rules", reasons + extra, "surface_to_me", None)
             else:
                 # Stay unknown so we still surface for review, but record the score.
                 verdict = ("unknown", score, "rules", reasons, "surface_to_me", None)
