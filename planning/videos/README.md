@@ -146,7 +146,12 @@ attach helper. See:
   TH (and the other platforms) succeed once, which prevents accidental
   double-scheduling in practice — but if you re-tick WIP-Vd later
   without first deleting the existing scheduled Threads post, you'll
-  get a duplicate.
+  get a duplicate. The post-LIVE sentinel-write loop in
+  `schedule_videos_posts.py` explicitly skips platforms in
+  `PLATFORMS_TAG_ALONG` (see issue #29) so successful TH runs don't
+  log a misleading `"Role 'post_url_th' not present"` warning — that
+  warning is reserved for *real* `editorial_columns` regressions
+  (e.g. a `post_url_li` entry accidentally deleted from `config.json`).
 - **LinkedIn keeps uploading the video AFTER the composer closes.** The
   composer disappears as soon as `Schedule` is clicked, but LinkedIn
   finishes the .mp4 upload in the background. If the Playwright context
