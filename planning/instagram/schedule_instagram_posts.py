@@ -152,7 +152,12 @@ def fetch_wip_ig_rows(notion, db_id: str, ed_cols: dict, days: Optional[list[dat
             props = r.get("properties", {})
             row_day = default_day or _row_day(r)
             if row_day is None:
-                logger.warning("⚠️  Skipping row %s: unparseable day title.", r.get("id"))
+                logger.warning(
+                    "⚠️  Skipping row %s: day title is empty / not YYYYMMDD. "
+                    "Likely a stale scratch/template row — consider archiving "
+                    "it in Notion (%s).",
+                    r.get("id"), r.get("url") or "(no url)",
+                )
                 continue
             illust_rels = props.get(illust_col, {}).get("relation", []) or []
             post_rels = props.get(post_col, {}).get("relation", []) or []
@@ -528,7 +533,7 @@ def _dump_upload_debug(page: Page, tag: str) -> Path:
     return shot
 
 
-def _upload_files(page: Page, paths: list[Path]) -> None:
+def _upload_files(page: Page, paths: list[Path], *, is_video: bool = False) -> None:
     """Get files into the Meta composer.
 
     Meta's "Add photo/video" affordance has shipped in two shapes:
@@ -547,6 +552,12 @@ def _upload_files(page: Page, paths: list[Path]) -> None:
     final failure we save a debug screenshot + dump the visible dialog
     buttons so the next regression triages from artefacts, not a live DOM
     session (AC #5).
+
+    ``is_video=True`` narrows Leg 0's selector to
+    ``input[type=file][accept*="video"]`` so we cannot accidentally bind
+    files to an image input when Meta's post composer mounts both
+    (issue #37 — duplicated attach when the video input is filled AND the
+    image affordance re-opens its own chooser).
     """
     file_paths = [str(p) for p in paths]
 
@@ -568,19 +579,51 @@ def _upload_files(page: Page, paths: list[Path]) -> None:
 
     # --- Leg 0: pre-mounted hidden input[type=file] (Meta planner often uses
     #            a label-wrapped <input> where the visible button is decorative).
-    pre_inp = page.locator('input[type="file"]').last
-    if pre_inp.count() > 0:
+    # When uploading a video, narrow to the video-accept input so we do not
+    # accidentally fill an image input that Meta also mounts in the same
+    # composer (issue #37).
+    leg0_selector = (
+        'input[type="file"][accept*="video"]' if is_video else 'input[type="file"]'
+    )
+    pre_inp = page.locator(leg0_selector).last
+    leg0_n_inputs = pre_inp.count() if pre_inp else 0
+    if leg0_n_inputs > 0:
+        # 15 s — set_input_files on a multi-MB video can blow past 4 s while
+        # Meta is still accepting the file. A premature TimeoutError there
+        # used to throw us into Leg 1, which opened the file chooser and
+        # attached the same clip a SECOND time → issue #37's duplicate.
         try:
-            pre_inp.set_input_files(file_paths, timeout=4000)
-            logger.debug(
-                "📤 Leg 0: %d file(s) sent via pre-mounted input[type=file] "
-                "(no Add-photo/video click needed).",
-                len(file_paths),
+            pre_inp.set_input_files(file_paths, timeout=15000)
+            logger.info(
+                "📤 Leg 0 (%s, %d input(s) matched): %d file(s) sent via "
+                "pre-mounted input[type=file] (no Add-photo/video click needed).",
+                leg0_selector, leg0_n_inputs, len(file_paths),
             )
             page.wait_for_timeout(3000 + 1500 * len(paths))
             return
         except Exception as err:
-            logger.debug("Leg 0 (pre-mounted input[type=file]): %s", err)
+            logger.warning(
+                "⚠️ Leg 0 (%s) raised after %d input(s) matched: %s — "
+                "probing composer before fallthrough (issue #37 race guard).",
+                leg0_selector, leg0_n_inputs, err,
+            )
+            # Race guard: the input may have ACCEPTED the file before
+            # Playwright timed out. Falling through to Leg 1 in that case
+            # double-attaches. Probe the composer; if any media is already
+            # attached, treat Leg 0 as a success.
+            try:
+                already_attached = _count_composer_media(page)
+            except Exception as probe_err:
+                logger.debug("Race-guard probe failed: %s", probe_err)
+                already_attached = 0
+            if already_attached > 0:
+                logger.info(
+                    "📤 Leg 0 (%s): file appears attached despite timeout "
+                    "(probe sees %d media tile(s)) — not falling through.",
+                    leg0_selector, already_attached,
+                )
+                page.wait_for_timeout(3000 + 1500 * len(paths))
+                return
 
     # --- Leg 1: click 'Add photo/video' and hope for a direct file chooser ---
     # Meta's post composer sometimes leaves the button without a hydrated
@@ -620,7 +663,7 @@ def _upload_files(page: Page, paths: list[Path]) -> None:
 
     if leg1_chooser is not None:
         leg1_chooser.set_files(file_paths)
-        logger.debug("📤 Leg 1: %d file(s) sent via direct FileChooser.", len(file_paths))
+        logger.info("📤 Leg 1: %d file(s) sent via direct FileChooser.", len(file_paths))
         page.wait_for_timeout(3000 + 1500 * len(paths))
         return
 
@@ -668,6 +711,170 @@ def _upload_files(page: Page, paths: list[Path]) -> None:
             f"computer', attached input[type=file]). Last error from leg 3: "
             f"{err}. Debug screenshot: {shot}"
         )
+
+
+# JS probe that counts attached media tiles inside the post composer.
+#
+# Verified live (see E:\\tmp\\probe_meta_composer.py results, May 2026):
+#
+# * Meta's planner does NOT wrap the post composer in [role="dialog"];
+#   the composer renders inline in the planner shell. So we scan the
+#   whole document — there is no other "Remove video" / "Remove photo"
+#   affordance on the planner page to conflict with this.
+# * The trash icon on each attached tile has NO aria-label. The visible
+#   text inside its <div role="button"> is exactly "Remove video"
+#   (followed by a zero-width space + newline). Same shape for the
+#   image flow ("Remove photo") and the ES build ("Eliminar vídeo").
+# * Counting <video> elements is WRONG: the right-side "Instagram Feed
+#   preview" pane mounts its own <video>, so videos.length = N_attached
+#   + 1. Using it as a fallback over-deleted in the live probe.
+#
+# Therefore the canonical signal is: count <div role="button"> whose
+# innerText starts with Remove/Delete/Eliminar/Quitar followed by the
+# media noun. Exactly one per attached tile.
+_MEDIA_COUNT_JS = r"""
+() => {
+    const labelRe = /^(remove|delete|eliminar|quitar)\s+(video|photo|media|attachment|file|image|v[ií]deo|foto)\b/i;
+    const buttons = Array.from(document.querySelectorAll('[role="button"], button'));
+    return buttons.filter(b => labelRe.test(((b.innerText || '') + '').trim())).length;
+}
+"""
+
+
+def _count_composer_media(page: Page) -> int:
+    """Best-effort count of attached media tiles in the open composer.
+
+    Returns 0 on probe failure so callers can decide whether 0 means
+    "empty" or "stale selector"; never raises.
+    """
+    try:
+        return int(page.evaluate(_MEDIA_COUNT_JS) or 0)
+    except Exception as err:
+        logger.debug("composer media-count probe raised: %s", err)
+        return 0
+
+
+def _delete_extra_media_tiles(page: Page, target: int) -> int:
+    """Dismiss attached-media tiles until the composer shows ``target`` tiles.
+
+    LIFO — the duplicate from a re-upload race is always the newer tile.
+    Verified live (probe_meta_composer.py): clicking the trash button on
+    a tile removes it immediately; Meta does NOT open a confirmation
+    popover. Stops as soon as ``count <= target`` is reached, or aborts
+    if a click makes no progress.
+
+    Issue #37 — designed to recover from a duplicate-attach so the live
+    run does not deadlock waiting for the user to intervene in the
+    browser.
+    """
+    js_delete_last = r"""
+    () => {
+        const labelRe = /^(remove|delete|eliminar|quitar)\s+(video|photo|media|attachment|file|image|v[ií]deo|foto)\b/i;
+        const buttons = Array.from(document.querySelectorAll('[role="button"], button'))
+            .filter(b => labelRe.test(((b.innerText || '') + '').trim()));
+        if (!buttons.length) return false;
+        const last = buttons[buttons.length - 1];
+        last.scrollIntoView({block: 'center'});
+        last.click();
+        return true;
+    }
+    """
+    count = _count_composer_media(page)
+    if count <= target:
+        return count
+    logger.warning(
+        "⚠️ composer shows %d attached media (target %d) — attempting "
+        "LIFO delete recovery (issue #37 duplicate-attach).",
+        count, target,
+    )
+    safety = 0
+    while count > target and safety < (count - target) + 3:
+        safety += 1
+        try:
+            clicked = bool(page.evaluate(js_delete_last))
+        except Exception as err:
+            logger.warning("⚠️ Delete-last click failed: %s — aborting recovery.", err)
+            break
+        if not clicked:
+            logger.warning("⚠️ No delete button found in composer — aborting recovery.")
+            break
+        page.wait_for_timeout(700)
+        new_count = _count_composer_media(page)
+        if new_count >= count:
+            logger.warning("⚠️ Delete made no progress (%d→%d) — aborting recovery.", count, new_count)
+            break
+        logger.info("🧹 Dedupe: %d → %d tile(s).", count, new_count)
+        count = new_count
+    return count
+
+
+def _assert_composer_media_count(page: Page, expected: int) -> None:
+    """Verify Meta's composer shows exactly ``expected`` attached media tiles.
+
+    Raises ``RuntimeError`` on a confirmed mismatch (>0 but != expected).
+    A 0 result is logged but does not raise — the probe is best-effort
+    and 0 may mean "selector drift" rather than "really empty". Callers
+    that need to GUARANTEE attached media should pair this with
+    ``_count_composer_media`` themselves.
+    """
+    count = _count_composer_media(page)
+    logger.info("🔢 composer media-count probe: %d (expected %d).", count, expected)
+    if count == 0:
+        logger.warning(
+            "⚠️ media-count probe returned 0 — selector may be stale. "
+            "Not blocking; if Schedule fails to enable, this probe is "
+            "the first thing to fix (issue #37 reference)."
+        )
+        return
+    if count != expected:
+        raise RuntimeError(
+            f"IG composer reports {count} attached media after upload "
+            f"(expected {expected}) — likely duplicated attach (issue #37). "
+            f"Aborting before Schedule deadlock."
+        )
+
+
+def _check_meta_video_error_toast(page: Page) -> Optional[str]:
+    """Scan the composer for Meta's video-rejection error toasts.
+
+    Returns the matched toast text (truncated) if one is visible, else
+    None. Callers raise so the existing FAIL handler screenshots and
+    records the row. Known strings (Meta A/Bs these — substring scan over
+    role=alert / role=status nodes):
+
+    - "more than 1 minute"
+    - "only post one video"
+    - "video is too long"
+    """
+    patterns = [
+        "more than 1 minute",
+        "only post one video",
+        "can only post one video",
+        "can only upload one video",
+        "video is too long",
+    ]
+    try:
+        toast_text = page.evaluate(
+            """
+            (patterns) => {
+                const nodes = Array.from(document.querySelectorAll(
+                    '[role="alert"],[role="status"]'
+                ));
+                for (const n of nodes) {
+                    const t = (n.innerText || '').toLowerCase();
+                    for (const p of patterns) {
+                        if (t.includes(p)) return t.trim().slice(0, 240);
+                    }
+                }
+                return null;
+            }
+            """,
+            patterns,
+        )
+    except Exception as err:
+        logger.debug("Meta-error-toast probe failed: %s", err)
+        return None
+    return toast_text
 
 
 # Meta renders date and time controls as ``div[role="button"]`` with the

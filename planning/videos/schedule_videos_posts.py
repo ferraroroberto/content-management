@@ -147,7 +147,12 @@ def fetch_wip_video_rows(notion, db_id: str, video_cols: dict,
         for r in results:
             row_day = default_day or _row_day(r)
             if row_day is None:
-                logger.warning("⚠️ Skipping row %s: unparseable day title.", r.get("id"))
+                logger.warning(
+                    "⚠️ Skipping row %s: day title is empty / not YYYYMMDD. "
+                    "Likely a stale scratch/template row — consider archiving "
+                    "it in Notion (%s).",
+                    r.get("id"), r.get("url") or "(no url)",
+                )
                 continue
 
             # In-scope per platform = the platform-specific clip relation is set,
@@ -304,7 +309,7 @@ def _aggregate_row_status(state: _RowState, dry_run: bool) -> tuple[str, str]:
     return "FAIL", ", ".join(parts)
 
 
-def _maybe_untick_wip(notion, video_cols: dict, state: _RowState, dry_run: bool) -> None:
+def _maybe_untick_wip(notion, video_cols: dict, state: _RowState, dry_run: bool) -> tuple[str, str]:
     """Untick Work-in-Progress-Video iff every scheduled platform is OK AND
     link SB is populated.
 
@@ -320,9 +325,16 @@ def _maybe_untick_wip(notion, video_cols: dict, state: _RowState, dry_run: bool)
     Note: tag-along platforms (no ``post_url_<P>`` column on the editorial
     DB — currently TH) have no link-based idempotency marker. They are
     only considered OK if the driver returned LIVE this run.
+
+    Returns ``(action, reason)`` so the end-of-run summary can name the
+    WIP-Vd outcome per row (issue #37 AC). Actions:
+      * "unticked"      — checkbox cleared in Notion this run
+      * "kept-checked"  — gate blocked the untick (reason names the gate)
+      * "untick-failed" — gate passed but Notion write raised
+      * "dry-run"       — dry-run mode, no change attempted
     """
     if dry_run:
-        return
+        return "dry-run", "dry-run mode"
 
     for p in PLATFORMS_SCHEDULED:
         s = state.driver_status.get(p, "")
@@ -336,7 +348,7 @@ def _maybe_untick_wip(notion, video_cols: dict, state: _RowState, dry_run: bool)
             "⏳ %s: keeping WIP-Vd checked — %s status is %r (not LIVE / idempotent-skip / out-of-scope).",
             state.day_title, p.upper(), s,
         )
-        return
+        return "kept-checked", f"{p.upper()}={s or 'MISSING'} (not LIVE / idempotent-skip / out-of-scope)"
 
     sb_link = state.link_status.get("sb")
     if not sb_link:
@@ -345,7 +357,7 @@ def _maybe_untick_wip(notion, video_cols: dict, state: _RowState, dry_run: bool)
             "leaving WIP-Vd checked. Daily Substack pipeline will close the loop.",
             state.day_title,
         )
-        return
+        return "kept-checked", "link SB(v) empty — waiting for daily Substack pipeline"
 
     try:
         set_field(
@@ -353,11 +365,13 @@ def _maybe_untick_wip(notion, video_cols: dict, state: _RowState, dry_run: bool)
             video_cols, "checkbox",
         )
         logger.info("☑️ %s: Work-in-Progress-Video unticked in Notion.", state.day_title)
+        return "unticked", "all platforms OK and link SB(v) populated"
     except Exception as err:
         logger.warning(
             "⚠️ %s: scheduled OK but failed to untick WIP-Video: %s",
             state.day_title, err,
         )
+        return "untick-failed", f"Notion write raised: {err}"
 
 
 def _set_post_url(notion, page_id: str, video_cols: dict, platform: str,
@@ -421,6 +435,13 @@ def main() -> tuple[int, list[dict]]:
         "videos_instagram",
         "videos_twitter",
         "videos_threads",
+        # _upload_files + Meta-toast / debug helpers live in
+        # planning.instagram.schedule_instagram_posts and log to the
+        # "instagram_schedule" logger. Without this line, every 📤 Leg N
+        # DEBUG message and every dump_upload_debug screenshot path
+        # disappears during a videos run — which is exactly when we need
+        # them. See issue #37.
+        "instagram_schedule",
     ):
         configure_logger(name, debug=args.debug)
     cfg = load_videos_config()
@@ -549,12 +570,28 @@ def main() -> tuple[int, list[dict]]:
             )
 
         status, detail = _aggregate_row_status(state, dry_run)
-        summary_rows.append({"day": state.day_title, "status": status, "detail": detail})
-        _maybe_untick_wip(notion, cfg["editorial_columns"], state, dry_run)
+        wip_action, wip_reason = _maybe_untick_wip(
+            notion, cfg["editorial_columns"], state, dry_run,
+        )
+        summary_rows.append({
+            "day": state.day_title,
+            "status": status,
+            "detail": detail,
+            "wip_action": wip_action,
+            "wip_reason": wip_reason,
+        })
 
+    _WIP_GLYPH = {
+        "unticked": "✅ unticked",
+        "kept-checked": "⏳ kept checked",
+        "untick-failed": "⚠️ untick failed",
+        "dry-run": "🧪 dry-run",
+    }
     logger.info("══════════ Summary ══════════")
     for entry in summary_rows:
         logger.info("   %s: %s | %s", entry["day"], entry["status"], entry["detail"])
+        glyph = _WIP_GLYPH.get(entry["wip_action"], entry["wip_action"])
+        logger.info("       WIP-Vd: %s — %s", glyph, entry["wip_reason"])
 
     # SKIP-only is not a failure (e.g. --skip-* flags or all-already-scheduled).
     failed = [r for r in summary_rows if r["status"] in ("FAIL", "PARTIAL", "LOGIN-REQUIRED")]
