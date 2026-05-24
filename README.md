@@ -216,7 +216,7 @@ flowchart LR
 
 ```powershell
 git clone <repository-url>
-cd reporting
+cd content-management
 
 # Create venv and install
 python -m venv .venv

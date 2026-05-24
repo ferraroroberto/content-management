@@ -5,7 +5,7 @@ Fourth pipeline in this repo (sibling to `planning/`, `reporting/`, `newsletter/
 1. **Real-comments inbox** — comments worth my personal reply, surfaced in a clean Streamlit view.
 2. **AI-triage queue** — staged canned acknowledgements I one-click approve in a batch.
 
-**Never auto-sends.** Every action is staged for explicit approval. See issue [#20](https://github.com/ferraroroberto/reporting/issues/20) for the full design + the public-repo defense-mechanism disclaimer.
+**Never auto-sends.** Every action is staged for explicit approval. See issue [#20](https://github.com/ferraroroberto/content-management/issues/20) for the full design + the public-repo defense-mechanism disclaimer.
 
 ## What's here
 
@@ -16,7 +16,7 @@ Fourth pipeline in this repo (sibling to `planning/`, `reporting/`, `newsletter/
   2. **Local sklearn model** (Phase 2a) — logistic regression on TF-IDF (word 1-2 + char_wb 3-5) plus six per-comment scalars, trained on accumulated commenter-level whitelist/blacklist labels. Called only on rows the rules layer left as `unknown`. Lossless when not trained yet — pipeline behaves identically to rules-only.
 - Two Supabase tables (`commenters` + `comments`) — see `engagement/db/schema.sql`.
 - Streamlit review app — `engagement/review_app.py`.
-- **No auto-posting worker, ever.** Approved rows sit in Supabase; you copy the suggested reply via `st.code`'s built-in copy button and paste it into LinkedIn's native composer yourself. The originally-planned Phase 2b send worker is permanently out of scope on TOS grounds (see issue [#20](https://github.com/ferraroroberto/reporting/issues/20)).
+- **No auto-posting worker, ever.** Approved rows sit in Supabase; you copy the suggested reply via `st.code`'s built-in copy button and paste it into LinkedIn's native composer yourself. The originally-planned Phase 2b send worker is permanently out of scope on TOS grounds (see issue [#20](https://github.com/ferraroroberto/content-management/issues/20)).
 
 ## Workflow
 
