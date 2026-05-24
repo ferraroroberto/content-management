@@ -1,7 +1,7 @@
 # Substack Automation — Playwright + Real Chrome Integration
 
 **Date:** 2026-05-13
-**Issue:** [#7 — feat(substack): automated Note posting + follower count via Playwright](https://github.com/ferraroroberto/reporting/issues/7)
+**Issue:** [#7 — feat(substack): automated Note posting + follower count via Playwright](https://github.com/ferraroroberto/content-management/issues/7)
 **Branch:** `feat/substack-integration`
 
 ---

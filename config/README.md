@@ -1,6 +1,6 @@
 # Configuration Directory
 
-This directory contains all configuration files for the social media reporting automation system.
+This directory contains all configuration files for the social media content management automation system.
 
 ## Files Overview
 

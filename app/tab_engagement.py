@@ -29,7 +29,7 @@ _HOW_IT_WORKS = """\
 
 Reads comments on your own LinkedIn posts, classifies each as **human / AI / unknown**, and stages canned acknowledgements for the AI ones so you can batch them through LinkedIn's native composer with one copy-paste per reply.
 
-The pipeline **never auto-sends**. Every reply is a manual copy-paste — by design, because automating reply submission via the web UI violates LinkedIn's User Agreement §8.2 (see [issue #20](https://github.com/ferraroroberto/reporting/issues/20)).
+The pipeline **never auto-sends**. Every reply is a manual copy-paste — by design, because automating reply submission via the web UI violates LinkedIn's User Agreement §8.2 (see [issue #20](https://github.com/ferraroroberto/content-management/issues/20)).
 
 ---
 

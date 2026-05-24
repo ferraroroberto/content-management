@@ -5,8 +5,8 @@ tabs in your real Chrome into Notion, normalise article titles to
 sentence case, strip tracking params from URLs, then build the
 ready-to-paste HTML for a specific newsletter number.
 
-Tracks issues: ferraroroberto/reporting#17 (archive step) and
-ferraroroberto/reporting#18 (full pipeline + monorepo migration).
+Tracks issues: ferraroroberto/content-management#17 (archive step) and
+ferraroroberto/content-management#18 (full pipeline + monorepo migration).
 
 ## Workflow
 
