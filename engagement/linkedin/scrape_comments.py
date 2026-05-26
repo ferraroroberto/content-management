@@ -243,13 +243,24 @@ _JS_EXTRACT_COMMENTS = r"""
 
         const displayName = cleanName(link.innerText || link.getAttribute('aria-label') || '');
 
-        let rel = '';
+        // Prefer the <time datetime="..."> attribute (exact ISO timestamp LinkedIn
+        // embeds for every comment) over the display label ("1d", "2h") which
+        // maps multiple comments to the same coarse bucket. Fall back to label
+        // parsing only when the attribute is absent (e.g. very old comments
+        // rendered without a <time> element).
+        let postedAt = null;
         const candidates = block.querySelectorAll('time, span');
         for (const c of candidates) {
+            if (c.tagName === 'TIME') {
+                const dt = c.getAttribute('datetime');
+                if (dt) { postedAt = dt; break; }
+            }
             const t = (c.innerText || '').trim();
-            if (/^\d+\s*(s|m|h|d|w|mo|y)\b/i.test(t)) { rel = t; break; }
+            if (/^\d+\s*(s|m|h|d|w|mo|y)\b/i.test(t)) {
+                postedAt = parseRelative(t);
+                break;
+            }
         }
-        const postedAt = parseRelative(rel);
 
         // The LinkedIn URN lives on the OUTERMOST per-comment ancestor as
         // componentkey="replaceableComment_urn:li:comment:(urn:li:ugcPost:NNN,COMMENTID)".
