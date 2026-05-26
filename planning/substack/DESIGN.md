@@ -24,9 +24,8 @@ substack/
 ├── substack_session.py            — Playwright session manager (persistent context, safety guard)
 ├── bootstrap_session.py           — one-time interactive login → dedicated Chrome profile
 ├── notion_editorial.py            — role→column resolver over the editorial DB
-├── post_substack_note.py          — step 1 (publish Note)
-├── update_substack_followers.py   — step 2 (scrape followers)
-└── daily_pipeline.py              — orchestrator (single browser, both steps)
+├── post_substack_note.py          — publish Note
+└── daily_pipeline.py              — orchestrator (publishes Note(s); follower scrape was folded into `reporting/scrape_client/substack.py`)
 ```
 
 ## Files modified
@@ -145,13 +144,12 @@ Safe and idempotent — does nothing on stdout streams that are already UTF-8.
 
 ### 10. Logger plumbing when steps run via the orchestrator
 
-`config/logger_config.py::setup_logger` attaches handlers only to the named logger, not to root. When `daily_pipeline.main()` called `post_note()` and `update_followers()` directly (rather than via their CLIs), the child-step `logger.info(...)` lines vanished — the named loggers had no handler. Fix: `daily_pipeline.main()` pre-configures every `substack_*` logger up front:
+`config/logger_config.py::setup_logger` attaches handlers only to the named logger, not to root. When `daily_pipeline.main()` calls `post_note()` directly (rather than via its CLI), the child-step `logger.info(...)` lines would vanish — the named logger has no handler. Fix: `daily_pipeline.main()` pre-configures every `substack_*` logger up front:
 
 ```python
 for name in (
     "substack_daily_pipeline",
     "substack_post_note",
-    "substack_update_followers",
     "substack_session",
     "substack_notion_editorial",
 ):

@@ -10,8 +10,8 @@ touched**: a separate, dedicated on-disk directory is created by Playwright
 under the repo, and Chrome writes its session cookies there.
 
 After login the dedicated profile retains the session, so subsequent runs of
-``post_substack_note`` and ``update_substack_followers`` reuse it without
-prompting.
+``post_substack_note`` (and ``reporting/scrape_client/substack.py``) reuse it
+without prompting.
 """
 
 from __future__ import annotations

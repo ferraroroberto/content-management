@@ -33,8 +33,7 @@ substack/
 ├── substack_session.py             — Playwright context + storage_state lifecycle
 ├── bootstrap_session.py            — one-time headed login; writes storage_state.json
 ├── notion_editorial.py             — read/write editorial rows (role→column map)
-├── post_substack_note.py           — step 1 (publish Note)
-├── update_substack_followers.py    — step 2 (scrape total followers)
+├── post_substack_note.py           — publish Note
 └── daily_pipeline.py               — orchestrator; CLI entry
 ```
 
@@ -66,7 +65,7 @@ substack/
 | `user_data_dir` | Dedicated Chrome profile directory (gitignored; defaults to `substack/chrome_user_data`). Must NOT point at your real Chrome profile — the session refuses to start if it does. |
 | `illustrations_folder` | Absolute folder containing the daily image. Joined with `image_filename`. |
 | `editorial_db_id` | Notion editorial database id. |
-| `notion_columns` | Role-to-column map. Roles: `title_day`, `text_body`, `image_filename`, `post_url`, `follower_count`. |
+| `notion_columns` | Role-to-column map. Roles: `title_day`, `text_body`, `image_filename`, `post_url`. The `follower_count` column is populated via the reporting pipeline (`reporting/scrape_client/substack.py::fetch_profile` writes through `data_processor` → `notion_update`). |
 | `headless` | Optional bool (default `false`). |
 | `dry_run_default` | Optional bool (default `false`). When `true`, step 1 always runs as a dry-run unless `--force` is passed. |
 
@@ -84,17 +83,18 @@ first filename is used.
 - Idempotent: if the editorial row's `post_url` is already populated, the script exits 0 unless `--force` is supplied.
 - `--dry-run` composes the Note (text + image) but **does not** click Post. A screenshot is saved under `results/substack/<date>-dryrun.png`.
 
-### Step 2 — scrape followers
-```powershell
-& .\.venv\Scripts\python.exe -m planning.substack.update_substack_followers [--date YYYYMMDD] [--debug]
-```
-Always overwrites the `follower_count` column.
+### Follower scrape (now in the reporting pipeline)
+The Substack follower count is no longer scraped from here. See
+`reporting/scrape_client/substack.py::fetch_profile`, dispatched by
+`reporting/social_client/social_api_client.py` when the
+`substack_profile` block in `config.json` carries `"source": "playwright"`.
+The value flows through `data_processor` → `profile_aggregator` →
+`notion_update` like every other platform's follower count.
 
 ### Combined pipeline
 ```powershell
-& .\.venv\Scripts\python.exe -m planning.substack.daily_pipeline [--date YYYYMMDD] [--dry-run] [--skip-post] [--skip-followers] [--force] [--debug]
+& .\.venv\Scripts\python.exe -m planning.substack.daily_pipeline [--date YYYYMMDD] [--dry-run] [--skip-post] [--force] [--debug]
 ```
-Both steps share a single browser launch. A failure in step 1 does not block step 2.
 
 ## Failure handling
 
