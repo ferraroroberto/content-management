@@ -6,7 +6,7 @@ Initialization script to run the complete data processing pipeline:
 3. profile_aggregator - Aggregate profile data across platforms
 4. posts_consolidator - Consolidate posts data across platforms
 5. notion_update - Update Notion databases with processed data
-6. substack.daily_pipeline - Publish daily Substack Note + scrape follower count
+6. substack.daily_pipeline - Publish daily Substack Note (follower scrape now lives in reporting/scrape_client/substack.py)
 """
 
 import os
@@ -54,7 +54,7 @@ def parse_arguments():
     parser.add_argument('-a', '--skip-aggregation', action='store_true', help='Skip the profile aggregation step')
     parser.add_argument('-c', '--skip-consolidation', action='store_true', help='Skip the posts consolidation step')
     parser.add_argument('-n', '--skip-notion', action='store_true', help='Skip the Notion update step')
-    parser.add_argument('-b', '--skip-substack', action='store_true', help='Skip the Substack daily pipeline (publish Note + scrape followers)')
+    parser.add_argument('-b', '--skip-substack', action='store_true', help='Skip the Substack daily pipeline (publish daily Note)')
     parser.add_argument('-y', '--yes', action='store_true',
                         help='Auto-confirm interactive prompts in sub-steps (e.g. Notion update). Use this for unattended/scheduled runs.')
     parser.add_argument('--date', type=str, help='Reference date in YYYYMMDD format. Will process the day before this date.')
@@ -174,7 +174,7 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
     else:
         logger.info("⏭️ Skipping Notion Update step")  # type: ignore
 
-    # Step 6: Publish Substack Note + scrape follower count
+    # Step 6: Publish Substack Note (follower scrape now happens in step 1 via reporting/scrape_client/substack.py)
     if not skip_substack:
         logger.info("📰 Step 6: Running Substack Daily Pipeline")  # type: ignore
         try:

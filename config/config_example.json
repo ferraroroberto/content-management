@@ -11,6 +11,7 @@
         "profile_table": "profile"
     },
     "linkedin_profile": {
+        "source": "rapidapi",
         "api_url": "https://fresh-linkedin-profile-data.p.rapidapi.com/get-profile-public-data",
         "api_key": "your_api_key_here",
         "api_host": "fresh-linkedin-profile-data.p.rapidapi.com",
@@ -30,6 +31,7 @@
         }
     },
     "linkedin_posts": {
+        "source": "rapidapi",
         "api_url": "https://fresh-linkedin-profile-data.p.rapidapi.com/get-profile-posts",
         "api_key": "your_api_key_here",
         "api_host": "fresh-linkedin-profile-data.p.rapidapi.com",
@@ -39,6 +41,7 @@
         }
     },
     "instagram_profile": {
+        "source": "rapidapi",
         "api_url": "https://instagram-looter2.p.rapidapi.com/profile",
         "api_key": "your_api_key_here",
         "api_host": "instagram-looter2.p.rapidapi.com",
@@ -47,6 +50,7 @@
         }
     },
     "instagram_posts": {
+        "source": "rapidapi",
         "api_url": "https://instagram-looter2.p.rapidapi.com/user-feeds",
         "api_key": "your_api_key_here",
         "api_host": "instagram-looter2.p.rapidapi.com",
@@ -56,6 +60,7 @@
         }
     },
     "twitter_profile": {
+        "source": "rapidapi",
         "api_url": "https://twitter241.p.rapidapi.com/user",
         "api_key": "your_api_key_here",
         "api_host": "twitter241.p.rapidapi.com",
@@ -64,6 +69,7 @@
         }
     },
     "twitter_posts": {
+        "source": "rapidapi",
         "api_url": "https://twitter241.p.rapidapi.com/user-tweets",
         "api_key": "your_api_key_here",
         "api_host": "twitter241.p.rapidapi.com",
@@ -73,6 +79,7 @@
         }
     },
     "threads_profile": {
+        "source": "rapidapi",
         "api_url": "https://threads-api4.p.rapidapi.com/api/user/info",
         "api_key": "your_api_key_here",
         "api_host": "threads-api4.p.rapidapi.com",
@@ -81,6 +88,7 @@
         }
     },
     "threads_posts": {
+        "source": "rapidapi",
         "api_url": "https://threads-scraper.p.rapidapi.com/api/v1/users/posts",
         "api_key": "your_api_key_here",
         "api_host": "threads-scraper.p.rapidapi.com",
@@ -89,6 +97,7 @@
         }
     },
     "substack_profile": {
+        "source": "rapidapi",
         "api_url": "https://substack-live.p.rapidapi.com/profile/public-profile",
         "api_key": "your_api_key_here",
         "api_host": "substack-live.p.rapidapi.com",
@@ -97,6 +106,7 @@
         }
     },
     "substack_posts": {
+        "source": "rapidapi",
         "api_url": "https://substack-live.p.rapidapi.com/profile/activity",
         "api_key": "your_api_key_here",
         "api_host": "substack-live.p.rapidapi.com",

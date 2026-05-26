@@ -8,6 +8,15 @@
             }
         }
     },
+    "linkedin_profile_playwright": {
+        "fields": {
+            "num_followers": {
+                "path": "data.num_followers",
+                "type": "integer",
+                "required": true
+            }
+        }
+    },
     "linkedin_posts": {
         "type": "array",
         "array_path": "data.data",
@@ -41,13 +50,34 @@
                 "path": "num_reposts",
                 "type": "integer",
                 "required": true
-            }                       
+            }
+        }
+    },
+    "linkedin_posts_playwright": {
+        "type": "array",
+        "array_path": "data.posts",
+        "fields": {
+            "post_id": {"path": "post_id", "type": "string", "required": true},
+            "posted_at": {"path": "posted_at", "type": "string", "required": true},
+            "is_video": {"path": "is_video", "type": "integer", "required": false},
+            "num_likes": {"path": "num_likes", "type": "integer", "required": true},
+            "num_comments": {"path": "num_comments", "type": "integer", "required": true},
+            "num_reshares": {"path": "num_reshares", "type": "integer", "required": true}
         }
     },
     "instagram_profile": {
         "fields": {
             "num_followers": {
                 "path": "data.edge_followed_by.count",
+                "type": "integer",
+                "required": true
+            }
+        }
+    },
+    "instagram_profile_playwright": {
+        "fields": {
+            "num_followers": {
+                "path": "data.num_followers",
                 "type": "integer",
                 "required": true
             }
@@ -72,7 +102,7 @@
                 "type": "custom",
                 "transform": "value == 2",
                 "required": true
-            },            
+            },
             "num_likes": {
                 "path": "like_count",
                 "type": "integer",
@@ -82,7 +112,18 @@
                 "path": "comment_count",
                 "type": "integer",
                 "required": true
-            }        
+            }
+        }
+    },
+    "instagram_posts_playwright": {
+        "type": "array",
+        "array_path": "data.posts",
+        "fields": {
+            "post_id": {"path": "post_id", "type": "string", "required": true},
+            "posted_at": {"path": "posted_at", "type": "string", "required": true},
+            "is_video": {"path": "is_video", "type": "integer", "required": false},
+            "num_likes": {"path": "num_likes", "type": "integer", "required": true},
+            "num_comments": {"path": "num_comments", "type": "integer", "required": true}
         }
     },
     "threads_profile": {
@@ -92,6 +133,27 @@
                 "type": "integer",
                 "required": true
             }
+        }
+    },
+    "threads_profile_playwright": {
+        "fields": {
+            "num_followers": {
+                "path": "data.num_followers",
+                "type": "integer",
+                "required": true
+            }
+        }
+    },
+    "threads_posts_playwright": {
+        "type": "array",
+        "array_path": "data.posts",
+        "fields": {
+            "post_id": {"path": "post_id", "type": "string", "required": true},
+            "posted_at": {"path": "posted_at", "type": "string", "required": true},
+            "is_video": {"path": "is_video", "type": "integer", "required": false},
+            "num_likes": {"path": "num_likes", "type": "integer", "required": true},
+            "num_comments": {"path": "num_comments", "type": "integer", "required": true},
+            "num_reshares": {"path": "num_reshares", "type": "integer", "required": true}
         }
     },
     "threads_posts": {
@@ -177,6 +239,27 @@
             }
         }
     },
+    "twitter_profile_playwright": {
+        "fields": {
+            "num_followers": {
+                "path": "data.num_followers",
+                "type": "integer",
+                "required": true
+            }
+        }
+    },
+    "twitter_posts_playwright": {
+        "type": "array",
+        "array_path": "data.posts",
+        "fields": {
+            "post_id": {"path": "post_id", "type": "string", "required": true},
+            "posted_at": {"path": "posted_at", "type": "string", "required": true},
+            "is_video": {"path": "is_video", "type": "integer", "required": false},
+            "num_likes": {"path": "num_likes", "type": "integer", "required": true},
+            "num_comments": {"path": "num_comments", "type": "integer", "required": true},
+            "num_reshares": {"path": "num_reshares", "type": "integer", "required": true}
+        }
+    },
     "twitter_posts": {
         "type": "array",
         "array_path": "data.result.timeline.instructions",
@@ -225,6 +308,27 @@
                 "type": "integer",
                 "required": true
             }
+        }
+    },
+    "substack_profile_playwright": {
+        "fields": {
+            "num_followers": {
+                "path": "data.num_followers",
+                "type": "integer",
+                "required": true
+            }
+        }
+    },
+    "substack_posts_playwright": {
+        "type": "array",
+        "array_path": "data.posts",
+        "fields": {
+            "post_id": {"path": "post_id", "type": "string", "required": true},
+            "posted_at": {"path": "posted_at", "type": "string", "required": true},
+            "is_video": {"path": "is_video", "type": "integer", "required": false},
+            "num_likes": {"path": "num_likes", "type": "integer", "required": true},
+            "num_comments": {"path": "num_comments", "type": "integer", "required": true},
+            "num_reshares": {"path": "num_reshares", "type": "integer", "required": true}
         }
     },
     "substack_posts": {

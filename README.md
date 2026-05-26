@@ -189,18 +189,27 @@ rows are skipped (separate manual process). Full table + selectors in
 
 ```mermaid
 flowchart LR
-    A[RapidAPI<br/>5 platforms] --> B[reporting.social_client]
+    A1[RapidAPI<br/>x10 endpoints]:::rapidapi --> B
+    A2[Playwright<br/>x10 endpoints]:::playwright --> B
+    B[reporting.social_client<br/>dispatch on 'source']
     B --> C[results/raw/<br/>JSON dump]
     C --> D[reporting.process.data_processor]
     D --> E[(Supabase<br/>PostgreSQL)]
     E --> F[reporting.process<br/>profile_aggregator<br/>posts_consolidator]
     F --> G[reporting.notion.notion_update<br/>daily numbers]
-    G --> H[planning.substack.daily_pipeline<br/>Note + follower scrape]
+    G --> H[planning.substack.daily_pipeline<br/>publish daily Note]
+    classDef rapidapi fill:#fff4e6,stroke:#c47f17
+    classDef playwright fill:#e6f4ea,stroke:#1e8e3e
 ```
 
 - Idempotent upserts: re-running for the same date is a no-op.
 - All six steps run as one script (`reporting_pipeline.py`) with
   per-step `--skip-*` flags for partial reruns.
+- Each of the 10 `<platform>_<data_type>` endpoints in `config/config.json`
+  carries a `"source"` key picking which collector runs — `"rapidapi"`
+  (paid HTTP fetcher) or `"playwright"` (free logged-in-Chrome scraper).
+  See [Choosing the data source](#choosing-the-data-source-rapidapi-vs-playwright)
+  for how to flip per platform and roll back.
 
 ## Quick Start
 
@@ -243,6 +252,84 @@ Copy-Item config\config_example.json config\config.json
 & .\.venv\Scripts\python.exe reporting_pipeline.py --date 20260517 --yes
 & .\.venv\Scripts\python.exe reporting_pipeline.py --date 20260517 --yes --skip-substack
 ```
+
+## Choosing the data source — RapidAPI vs Playwright
+
+Each `<platform>_<data_type>` block in `config/config.json` carries a
+`"source"` key. The dispatcher in
+`reporting/social_client/social_api_client.py::get_api_data` reads it and
+either makes the HTTP call (`"rapidapi"`) or delegates to the matching
+`reporting.scrape_client.<platform>.fetch_<data_type>` (`"playwright"`).
+
+The downstream pipeline is source-agnostic — `data_processor` reads the
+JSON envelope from `results/raw/<platform>_<data_type>_<YYYY-MM-DD>.json`
+and uses the matching `<key>` mapping in `config/mapping.json`, falling
+back to `<key>_playwright` automatically (via
+`get_alternative_mapping_keys`). So you can flip one platform at a time
+with no other change.
+
+### Per-source trade-offs
+
+| | RapidAPI (`"source": "rapidapi"`) | Playwright (`"source": "playwright"`) |
+|---|---|---|
+| **Cost** | Monthly subscription per provider | Free — drives the existing logged-in Chrome profile |
+| **Speed** | ~2s per endpoint | ~5–30s per endpoint (browser launch + scroll + read; one open per endpoint) |
+| **Session** | API key in config | Persistent profile at `planning/<platform>/chrome_user_data/`; re-login via `python -m planning.<p>.bootstrap_session` if Chrome forgets the session |
+| **Breakage mode** | Provider may rate-limit, change pricing, deprecate endpoints | Selectors break when the platform's DOM changes — patch the per-platform module under `reporting/scrape_client/` |
+| **Site coverage** | 1:1 with provider's API | Whatever's visible in the logged-in browser; see `docs/playwright-social-scraping.md` for per-platform quirks |
+
+### Flipping a platform
+
+Edit `config/config.json` and set `source` on the two endpoints for that
+platform (the `_profile` and `_posts` block):
+
+```jsonc
+"linkedin_profile": {
+  "source": "playwright",           // ← was "rapidapi"
+  "api_url": "...",                 // RapidAPI keys left in place for instant rollback
+  ...
+},
+"linkedin_posts": {
+  "source": "playwright",
+  ...
+}
+```
+
+Then run just that platform to validate:
+
+```powershell
+& .\.venv\Scripts\python.exe -m reporting.social_client.social_api_client `
+    --platform linkedin_profile --no-skip --debug
+& .\.venv\Scripts\python.exe -m reporting.social_client.social_api_client `
+    --platform linkedin_posts --no-skip --debug
+```
+
+The new envelope lands in `reporting/results/raw/linkedin_*_<today>.json`.
+Re-run `reporting_pipeline.py` (or just `data_processor`) and confirm the
+Notion row matches what you expect.
+
+### Rolling back to RapidAPI
+
+If a platform's Playwright scraper breaks the day before you need a clean
+report — flip its `"source"` back to `"rapidapi"` in `config/config.json`,
+delete the broken file from `reporting/results/raw/`, and re-run the
+pipeline. The RapidAPI configuration (api_url / api_key / api_host / etc.)
+is intentionally left untouched in the config — flipping the key is the
+only change. Keep the RapidAPI subscription active for at least one full
+reporting cycle after the Playwright cutover to retain this rollback
+escape hatch.
+
+### Cancelling the RapidAPI subscription
+
+Only after a sustained period (≥ 1 week) of clean Playwright runs:
+
+1. Confirm every endpoint's `"source"` has been `"playwright"` continuously.
+2. Cancel the provider subscription(s) on RapidAPI.
+3. Open a follow-up issue to *retire* the now-dead RapidAPI integration —
+   strip the `api_url` / `api_key` / `api_host` / `querystring` fields from
+   `config.json` and remove the HTTP path from `social_api_client.py`. Do
+   NOT do this in the same PR as the Playwright cutover — the dual-path
+   architecture is the whole point of the rollback safety net.
 
 ### Weekly planning run
 

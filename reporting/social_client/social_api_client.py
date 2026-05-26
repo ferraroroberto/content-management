@@ -1,6 +1,7 @@
 import requests
 import json
 from datetime import datetime
+import importlib
 import os
 import logging
 import sys
@@ -73,14 +74,61 @@ def check_file_exists_for_date(platform_key, config, date_str):
         logger.info(f"🔄 Found existing file for {platform_key} dated {date_str}: {filename}")
     return exists, file_path
 
-def get_api_data(platform_key, config):
-    """Fetch data using the API for the specified platform with retries and exponential backoff."""
+def _fetch_via_playwright(platform_key, reference_date):
+    """Delegate to the per-platform scraper in ``reporting.scrape_client``.
+
+    ``platform_key`` is e.g. ``"linkedin_profile"`` → calls
+    ``reporting.scrape_client.linkedin.fetch_profile(reference_date)``.
+    """
+    parts = platform_key.split('_', 1)
+    if len(parts) != 2:
+        logger.error(f"❌ Cannot dispatch {platform_key!r} — expected '<platform>_<data_type>'")
+        return None
+    platform, data_type = parts
+    fn_name = f"fetch_{data_type}"
+    try:
+        module = importlib.import_module(f"reporting.scrape_client.{platform}")
+    except ImportError as err:
+        logger.error(f"❌ No Playwright scraper module for {platform!r}: {err}")
+        return None
+    fn = getattr(module, fn_name, None)
+    if fn is None:
+        logger.error(f"❌ Playwright scraper {platform!r} has no {fn_name}()")
+        return None
+    logger.info(f"🌐 Scraping {platform_key} via Playwright")
+    try:
+        return fn(reference_date)
+    except Exception as err:
+        logger.error(f"❌ Playwright scrape of {platform_key} failed: {err}", exc_info=True)
+        return None
+
+
+def get_api_data(platform_key, config, reference_date=None):
+    """Fetch data for the specified platform with retries and exponential backoff.
+
+    Dispatches on ``api_config['source']``:
+
+    * ``"playwright"`` → delegates to ``reporting.scrape_client.<platform>.fetch_<data_type>``
+      which drives the platform's persistent Chrome profile via the existing
+      ``planning/<platform>/<platform>_session.py`` session class (stealth
+      launch comes from ``config/chrome_launch.py``).
+    * anything else (including the default when the key is absent) → RapidAPI
+      HTTP call as before.
+    """
     if not config or platform_key not in config:
         logger.error(f"❌ {platform_key} configuration not found in config file")
         return None
 
-    logger.info(f"🔍 Fetching {platform_key} data")
     api_config = config[platform_key]
+
+    source = api_config.get('source', 'rapidapi')
+    if source == 'playwright':
+        return _fetch_via_playwright(platform_key, reference_date)
+    if source != 'rapidapi':
+        logger.error(f"❌ Unknown source '{source}' for {platform_key} — expected 'rapidapi' or 'playwright'")
+        return None
+
+    logger.info(f"🔍 Fetching {platform_key} data")
 
     url = api_config.get('api_url')
     headers = {
@@ -124,13 +172,7 @@ def save_results(platform_key, data, config, date_str):
         return
     
     logger.info(f"💾 Saving {platform_key} data")
-    
-    # Check if a file for date already exists
-    exists, file_path = check_file_exists_for_date(platform_key, config, date_str)
-    if exists:
-        logger.info(f"📂 Skipping save: File for {platform_key} already exists for {date_str}")
-        return file_path  # Return the existing file path
-    
+
     # Determine platform and data type from platform_key
     parts = platform_key.split('_')
     platform = parts[0]
@@ -213,7 +255,7 @@ def process_all_endpoints(config, debug_mode=False, specific_platform=None, skip
                 continue
         
         # Get data
-        data = get_api_data(platform_key, config)
+        data = get_api_data(platform_key, config, reference_date=reference_date)
         if data:
             # Save results
             file_path = save_results(platform_key, data, config, reference_date)
