@@ -367,6 +367,7 @@ def render_real_tab(platform: str | None, search: str) -> None:
                 df["text"].fillna("").str.lower().str.contains(search)
                 | df["display_name"].fillna("").str.lower().str.contains(search)
             ]
+        df = df.sort_values("posted_at", ascending=False, na_position="last")
     if df.empty:
         st.info("inbox clear — no real comments match the current view.")
         return
@@ -387,7 +388,7 @@ def render_ai_tab(platform: str | None, search: str) -> None:
                 df["text"].fillna("").str.lower().str.contains(search)
                 | df["display_name"].fillna("").str.lower().str.contains(search)
             ]
-        df = df.sort_values(["classification", "confidence"], ascending=[True, False])
+        df = df.sort_values("posted_at", ascending=False, na_position="last")
     if df.empty:
         st.info("triage clear — no AI-flagged comments match the current view.")
         return
