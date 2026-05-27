@@ -1,66 +1,81 @@
 /* ============================================================================
-   STEP 1. Grant anon privileges
-   ---------------------------------------------------------------------------
-   This ensures anon can SELECT, INSERT, UPDATE, DELETE on all *existing*
-   tables (includes views and foreign tables in GRANT semantics) and also on
-   all *future* tables in the `public` schema.
+   supabase_policy_script.sql
+
+   Idempotent fix for Supabase's `rls_disabled_in_public` advisor warning.
+
+   For every table in the `public` schema:
+     - Enables Row Level Security (no-op if already on)
+     - Creates the four open anon policies (anon_select_all, anon_insert_all,
+       anon_update_all, anon_delete_all) only if missing
+
+   For every view in `public`: sets security_invoker = on so the view honours
+   the underlying tables' RLS.
+
+   Threat model: this project uses the anon key only from server-side
+   automation (never shipped to a browser). RLS is enabled here for
+   defence-in-depth and to clear the Supabase advisor warning — access is
+   still fully open to anon, because that's what the automation needs.
+   Re-run after creating new tables. Safe to run repeatedly.
    ============================================================================ */
 
--- Allow anon to use the public schema
+-- STEP 1. Grant anon privileges on existing and future tables in public
 GRANT USAGE ON SCHEMA public TO anon;
-
--- Grant anon privileges on all existing tables
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon;
-
--- Ensure anon automatically gets privileges on future tables in public
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO anon;
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO anon;
 
+-- STEP 2. Enable RLS + open anon policies on every public table (idempotent)
+DO $$
+DECLARE
+  t record;
+BEGIN
+  FOR t IN
+    SELECT tablename FROM pg_tables WHERE schemaname = 'public'
+  LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', t.tablename);
 
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_policies
+      WHERE schemaname='public' AND tablename=t.tablename AND policyname='anon_select_all'
+    ) THEN
+      EXECUTE format('CREATE POLICY anon_select_all ON public.%I FOR SELECT TO anon USING (true);', t.tablename);
+    END IF;
 
-/* ============================================================================
-   STEP 2. Generate RLS + policy statements (tables) and invoker security (views)
-   ---------------------------------------------------------------------------
-   The query below outputs one SQL statement per row. For each table in
-   the `public` schema, it will produce:
-     - ALTER TABLE ... ENABLE ROW LEVEL SECURITY
-     - CREATE POLICY anon_select_all
-     - CREATE POLICY anon_insert_all
-     - CREATE POLICY anon_update_all
-     - CREATE POLICY anon_delete_all
-   For each view in the `public` schema, it will produce:
-     - ALTER VIEW ... SET (security_invoker = on)
-   ============================================================================ */
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_policies
+      WHERE schemaname='public' AND tablename=t.tablename AND policyname='anon_insert_all'
+    ) THEN
+      EXECUTE format('CREATE POLICY anon_insert_all ON public.%I FOR INSERT TO anon WITH CHECK (true);', t.tablename);
+    END IF;
 
--- Ensure views execute with invoker's privileges so underlying table RLS applies
-SELECT 'ALTER VIEW public.' || viewname || ' SET (security_invoker = on);' AS policy_sql
-FROM pg_views
-WHERE schemaname = 'public'
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_policies
+      WHERE schemaname='public' AND tablename=t.tablename AND policyname='anon_update_all'
+    ) THEN
+      EXECUTE format('CREATE POLICY anon_update_all ON public.%I FOR UPDATE TO anon USING (true) WITH CHECK (true);', t.tablename);
+    END IF;
 
-UNION ALL
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_policies
+      WHERE schemaname='public' AND tablename=t.tablename AND policyname='anon_delete_all'
+    ) THEN
+      EXECUTE format('CREATE POLICY anon_delete_all ON public.%I FOR DELETE TO anon USING (true);', t.tablename);
+    END IF;
+  END LOOP;
+END$$;
 
-SELECT 'ALTER TABLE public.' || tablename || ' ENABLE ROW LEVEL SECURITY;' AS policy_sql
+-- STEP 3. Views execute with invoker's privileges so underlying table RLS applies
+DO $$
+DECLARE
+  v record;
+BEGIN
+  FOR v IN SELECT viewname FROM pg_views WHERE schemaname='public' LOOP
+    EXECUTE format('ALTER VIEW public.%I SET (security_invoker = on);', v.viewname);
+  END LOOP;
+END$$;
+
+-- STEP 4. Verify — should return zero rows
+SELECT tablename
 FROM pg_tables
-WHERE schemaname = 'public'
-
-UNION ALL
-SELECT 'CREATE POLICY anon_select_all ON public.' || tablename || ' FOR SELECT TO anon USING (true);'
-FROM pg_tables
-WHERE schemaname = 'public'
-
-UNION ALL
-SELECT 'CREATE POLICY anon_insert_all ON public.' || tablename || ' FOR INSERT TO anon WITH CHECK (true);'
-FROM pg_tables
-WHERE schemaname = 'public'
-
-UNION ALL
-SELECT 'CREATE POLICY anon_update_all ON public.' || tablename || ' FOR UPDATE TO anon USING (true) WITH CHECK (true);'
-FROM pg_tables
-WHERE schemaname = 'public'
-
-UNION ALL
-SELECT 'CREATE POLICY anon_delete_all ON public.' || tablename || ' FOR DELETE TO anon USING (true);'
-FROM pg_tables
-WHERE schemaname = 'public'
-
-ORDER BY policy_sql;
+WHERE schemaname='public'
+  AND NOT rowsecurity;
