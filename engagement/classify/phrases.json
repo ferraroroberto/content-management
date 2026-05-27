@@ -61,7 +61,9 @@
         "sub_2_min_weight": 0.20,
         "ai_classification_threshold": 0.50,
         "local_model_ai_threshold": 0.70,
-        "local_model_min_train_per_class": 20
+        "local_model_min_train_per_class": 20,
+        "llm_fallback_local_uncertainty_low": 0.30,
+        "llm_fallback_ai_threshold": 0.70
     },
     "reply_templates": {
         "like_and_thanks": [

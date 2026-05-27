@@ -14,6 +14,8 @@ Fourth pipeline in this repo (sibling to `planning/`, `reporting/`, `newsletter/
 - **Layered classifier**:
   1. **Rules** (Phase 1) — whitelist / blacklist / generic-praise / short / no-personal-token / emoji-only / exact-text-duplicate / sub-2-min-after-post. Tunable via `engagement/classify/phrases.json`.
   2. **Local sklearn model** (Phase 2a) — logistic regression on TF-IDF (word 1-2 + char_wb 3-5) plus six per-comment scalars, trained on accumulated commenter-level whitelist/blacklist labels. Called only on rows the rules layer left as `unknown`. Lossless when not trained yet — pipeline behaves identically to rules-only.
+  3. **LLM fallback** (Phase 3) — routed through the local LLM hub (`http://127.0.0.1:8000`, version-free alias `claude_haiku`). Fires only on rows where the local model's `P(AI)` sits in the uncertainty window `[llm_fallback_local_uncertainty_low, local_model_ai_threshold)` — i.e. the ambiguous middle the cheap layers can't resolve. Verdicts are cached on disk (`engagement/classify/.llm_cache.json`, gitignored) keyed by `sha256(commenter_url|text)`; database is the truth-of-record.
+- **Reputation feedback loop** (Phase 3) — `engagement.reputation.update` recomputes rolling per-commenter `signals`, `counters`, and `reputation_score` from accumulated comment history and upserts them into `commenters`. Pure batch, idempotent, preserves manual whitelist/blacklist labels.
 - Two Supabase tables (`commenters` + `comments`) — see `engagement/db/schema.sql`.
 - Streamlit review app — `engagement/review_app.py`.
 - **No auto-posting worker, ever.** Approved rows sit in Supabase; you copy the suggested reply via `st.code`'s built-in copy button and paste it into LinkedIn's native composer yourself. The originally-planned Phase 2b send worker is permanently out of scope on TOS grounds (see issue [#20](https://github.com/ferraroroberto/content-management/issues/20)).
@@ -43,6 +45,7 @@ flowchart LR
 | `python -m engagement.classify.rules` | Re-classify all `pending` `unknown` rows using current `phrases.json`. If a local model is on disk, it runs as a second pass on the rows the rules layer left as `unknown`. |
 | `python -m engagement.classify.local_model train` | Train the local sklearn classifier on accumulated whitelist/blacklist labels. Refuses to train below `rules.local_model_min_train_per_class` per class. Writes `engagement/classify/local_model.joblib` (gitignored) + a metadata sidecar. |
 | `python -m engagement.classify.local_model eval` | 5-fold stratified CV on the same labeled set; prints AUC + precision/recall/F1 at the configured threshold. |
+| `python -m engagement.reputation.update` | Recompute rolling per-commenter signals + counters + reputation_score from the `comments` table and upsert into `commenters`. Idempotent; preserves manual whitelist/blacklist. |
 | `& .\.venv\Scripts\python.exe -m streamlit run engagement\review_app.py` | Launch the review UI on `http://localhost:8501`. |
 
 ## One-time setup
@@ -74,11 +77,15 @@ engagement/
 ├── linkedin/
 │   └── scrape_comments.py            # Notion → LI post URLs → comment DOM → Supabase
 ├── classify/
-│   ├── rules.py                      # rule pipeline + verdict writer; calls local_model on unknowns
+│   ├── rules.py                      # rule pipeline + verdict writer; calls local_model + llm_fallback on unknowns
 │   ├── local_model.py                # sklearn logreg, trained on accumulated wl/bl labels
+│   ├── llm_fallback.py               # Phase 3 — local-hub LLM, fires only inside the local-model uncertainty window
 │   ├── phrases.json                  # generic-praise list, weights, thresholds, reply templates
 │   ├── local_model.joblib            # (gitignored) trained pipeline — user-specific artifact
-│   └── local_model.json              # (gitignored) training metadata sidecar
+│   ├── local_model.json              # (gitignored) training metadata sidecar
+│   └── .llm_cache.json               # (gitignored) per-machine cache of LLM verdicts
+├── reputation/
+│   └── update.py                     # rolling signals + reputation_score recomputer (Phase 3)
 ├── db/
 │   ├── client.py                     # supabase-py + notion client + CRUD helpers
 │   └── schema.sql                    # one-time DDL for commenters + comments
@@ -96,14 +103,22 @@ engagement/
         "expand_max_clicks": 30,
         "expand_settle_ms": 1200,
         "page_settle_ms": 2500
+    },
+    "llm_fallback": {
+        "enabled": true,
+        "base_url": "http://127.0.0.1:8000",
+        "model": "claude_haiku",
+        "cache_path": "engagement/classify/.llm_cache.json",
+        "timeout_seconds": 20
     }
 }
 ```
 
-## Next phases
+## Phase status
 
-- **Phase 2a** ✅ shipped — local sklearn classifier (this section). Train it when you have ≥20 labeled commenters per class.
+- **Phase 1** ✅ shipped — rules classifier + LI scraper + Streamlit review UI.
+- **Phase 2a** ✅ shipped — local sklearn classifier. Train it when you have ≥20 labeled commenters per class.
 - **Phase 2b** ❌ permanently out of scope — auto-send worker. Violates LinkedIn TOS §8.2. The pipeline stays staged + manual copy-paste.
-- **Phase 3** — LLM fallback (Gemini Flash-Lite / Haiku 4.5) for the ambiguous middle; rolling `commenters.signals` recomputation per scrape (cadence, comment-to-original ratio, length variance, …). Once `signals` is populated, the local model can pull per-commenter features for additional lift.
-- **Phase 4** — Instagram, then Twitter, Threads, Substack. Each reuses its sibling `planning/<P>/chrome_user_data`.
-- **Phase 5** — cross-platform identity linking (`commenter_identity` table) + retroactive blacklist propagation across linked accounts.
+- **Phase 3** ✅ shipped — LLM fallback (local LLM hub, `claude_haiku` alias) for the ambiguous middle, plus rolling `commenters.signals` / `counters` / `reputation_score` recomputation via `engagement.reputation.update`.
+- **Phase 4** ❌ dropped from scope (2026-05-27) — other platforms (IG/TW/TH/SB). Engagement pipeline stays LinkedIn-only.
+- **Phase 5** ❌ dropped from scope (2026-05-27) — cross-platform identity linking. Folds under Phase 4 and is dropped with it.

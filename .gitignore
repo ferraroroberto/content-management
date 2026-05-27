@@ -50,3 +50,6 @@ supabase/.branches/_current_branch
 # Local sklearn classifier artifact (user-specific, trained from accumulated labels).
 engagement/classify/local_model.joblib
 engagement/classify/local_model.json
+
+# LLM fallback verdict cache (per-machine performance cache; truth lives in Supabase).
+engagement/classify/.llm_cache.json
