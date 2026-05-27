@@ -35,3 +35,7 @@ streamlit
 # Lower bound = 1.5 (ColumnTransformer + StratifiedKFold API stability); no upper
 # bound — 1.8 is the first release with Python 3.14 wheels for this venv.
 scikit-learn>=1.5
+# Anthropic SDK for the engagement Phase-3 LLM fallback classifier. Calls are
+# routed through the local LLM hub at http://127.0.0.1:8000 using the
+# version-free alias "claude_haiku" — no direct vendor traffic.
+anthropic

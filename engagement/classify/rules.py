@@ -163,6 +163,18 @@ def classify_pending(platform: str = "linkedin") -> dict:
     else:
         logger.debug("local model not trained yet — skipping local pass")
 
+    # LLM fallback (Phase 3) — third layer; only fires inside the local
+    # model's uncertainty window. Cheap to import even when disabled.
+    from engagement.classify import llm_fallback
+    llm_enabled = llm_fallback.is_enabled(cfg)
+    llm_low = phrases["rules"].get("llm_fallback_local_uncertainty_low", 0.30)
+    llm_ai_threshold = phrases["rules"].get("llm_fallback_ai_threshold", 0.70)
+    if llm_enabled:
+        logger.info(
+            "🛰️ llm fallback enabled (window=[%.2f, %.2f), ai_threshold=%.2f)",
+            llm_low, local_threshold, llm_ai_threshold,
+        )
+
     sb = supabase_client()
     pending = (
         sb.table("comments")
@@ -216,6 +228,45 @@ def classify_pending(platform: str = "linkedin") -> dict:
                         "like_and_thanks",
                         _pick_reply("like_and_thanks", c.get("display_name"), phrases),
                     )
+                elif (
+                    llm_enabled
+                    and prob is not None
+                    and llm_low <= prob < local_threshold
+                ):
+                    out = llm_fallback.classify_one(c, reasons)
+                    if out and out["verdict"] == "ai" and out["confidence"] >= llm_ai_threshold:
+                        verdict = (
+                            "ai", float(out["confidence"]), "llm",
+                            reasons + [
+                                {"rule": "local_model_prob", "prob": float(prob)},
+                                {"rule": "llm_fallback",
+                                 "confidence": float(out["confidence"]),
+                                 "reasoning": out["reasoning"]},
+                            ],
+                            "like_and_thanks",
+                            out.get("suggested_reply")
+                            or _pick_reply("like_and_thanks", c.get("display_name"), phrases),
+                        )
+                    elif out and out["verdict"] == "human":
+                        verdict = (
+                            "human", float(out["confidence"]), "llm",
+                            reasons + [
+                                {"rule": "local_model_prob", "prob": float(prob)},
+                                {"rule": "llm_fallback",
+                                 "confidence": float(out["confidence"]),
+                                 "reasoning": out["reasoning"]},
+                            ],
+                            "surface_to_me", None,
+                        )
+                    else:
+                        verdict = (
+                            "unknown", score, "rules",
+                            reasons + [
+                                {"rule": "local_model_prob", "prob": float(prob)},
+                                {"rule": "llm_skipped"},
+                            ],
+                            "surface_to_me", None,
+                        )
                 else:
                     extra = [{"rule": "local_model_prob", "prob": float(prob)}] if prob is not None else []
                     verdict = ("unknown", score, "rules", reasons + extra, "surface_to_me", None)
