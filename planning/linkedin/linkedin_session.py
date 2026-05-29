@@ -22,12 +22,21 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from playwright.sync_api import BrowserContext, Page, Playwright, sync_playwright
+from playwright.sync_api import (
+    BrowserContext,
+    Error as PlaywrightError,
+    Page,
+    Playwright,
+    sync_playwright,
+)
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.chrome_launch import STEALTH_INIT_SCRIPT, stealth_launch_kwargs  # noqa: E402
@@ -117,6 +126,81 @@ def _user_data_dir_initialized(user_data_dir: Path) -> bool:
     return user_data_dir.exists() and (user_data_dir / "Default").exists()
 
 
+# Playwright surfaces a locked persistent profile with one of these phrases.
+# Match defensively (lowercased substring) — the wording has drifted between
+# Playwright versions ("Opening in existing browser session" / "already in use").
+_LOCKED_PROFILE_SIGNATURES = (
+    "opening in existing browser session",
+    "already in use",
+    "process singleton",
+)
+
+
+def _is_locked_profile_error(err: Exception) -> bool:
+    """True when a Playwright launch error means the profile dir is already locked."""
+    msg = str(err).lower()
+    return any(sig in msg for sig in _LOCKED_PROFILE_SIGNATURES)
+
+
+def _kill_chrome_holding_profile(user_data_dir: Path) -> int:
+    """Terminate Chrome process(es) bound to **this exact** `user_data_dir`.
+
+    Targets only Chrome whose command line carries `--user-data-dir=<this dir>`,
+    never a blanket `taskkill chrome.exe` — the user's everyday browser runs on a
+    different profile and must not be touched. Windows-only for now (this is where
+    the suite runs); returns the number of processes terminated.
+    """
+    if sys.platform != "win32":
+        logger.warning("⚠️ locked-profile cleanup is Windows-only — skipping kill on %s", sys.platform)
+        return 0
+    target = str(user_data_dir).replace("'", "''")
+    # PowerShell: match chrome.exe whose CommandLine references our profile dir
+    # (regex-escaped, optional surrounding quote) and kill by PID, echoing each PID.
+    script = (
+        "$ErrorActionPreference='SilentlyContinue';"
+        f"$t=[regex]::Escape('{target}');"
+        "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | "
+        "Where-Object { $_.CommandLine -match ('--user-data-dir=\"?' + $t) } | "
+        "ForEach-Object { Stop-Process -Id $_.ProcessId -Force; $_.ProcessId }"
+    )
+    # Use the Windows PowerShell 5.1 absolute path — the `pwsh` on PATH is a
+    # WindowsApps stub that fails when spawned non-interactively.
+    powershell = str(
+        Path(os.environ.get("SystemRoot", r"C:\Windows"))
+        / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    )
+    try:
+        proc = subprocess.run(
+            [powershell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+            capture_output=True, text=True, timeout=20,
+        )
+    except (OSError, subprocess.SubprocessError) as err:
+        logger.warning("⚠️ could not run Chrome-cleanup helper: %s", err)
+        return 0
+    return len([ln for ln in (proc.stdout or "").splitlines() if ln.strip()])
+
+
+def _clear_stale_singleton_locks(user_data_dir: Path) -> int:
+    """Remove Chrome's profile lock files left behind by a process that's now gone.
+
+    Only call this after `_kill_chrome_holding_profile` — removing these while a
+    live Chrome still holds the profile would corrupt its state. Returns the count
+    of lock files removed.
+    """
+    removed = 0
+    for name in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+        lock = user_data_dir / name
+        try:
+            # `is_symlink()` catches the dangling-symlink form used on POSIX, where
+            # `exists()` returns False; on Windows these are plain files.
+            if lock.exists() or lock.is_symlink():
+                lock.unlink()
+                removed += 1
+        except OSError as err:
+            logger.debug("could not remove stale lock %s: %s", lock, err)
+    return removed
+
+
 class LinkedInSession:
     """Persistent-context wrapper around real Chrome with a dedicated profile.
 
@@ -153,9 +237,7 @@ class LinkedInSession:
                 "Run `python -m linkedin.bootstrap_session` first."
             )
         self._playwright = sync_playwright().start()
-        self._context = self._playwright.chromium.launch_persistent_context(
-            **stealth_launch_kwargs(str(self.user_data_dir), headless=self.headless),
-        )
+        self._context = self._launch_context_with_recovery()
         self._context.add_init_script(STEALTH_INIT_SCRIPT)
         # `launch_persistent_context` opens one default page already.
         self._page = self._context.pages[0] if self._context.pages else self._context.new_page()
@@ -164,6 +246,46 @@ class LinkedInSession:
             self.headless, self.user_data_dir,
         )
         return self
+
+    def _launch_context(self) -> BrowserContext:
+        return self._playwright.chromium.launch_persistent_context(
+            **stealth_launch_kwargs(str(self.user_data_dir), headless=self.headless),
+        )
+
+    def _launch_context_with_recovery(self) -> BrowserContext:
+        """Launch the persistent context, self-healing a locked profile once.
+
+        A stale/zombie Chrome from a previous run (or an overlapping run) can keep
+        the dedicated profile locked, which Playwright reports as "Opening in
+        existing browser session". Rather than crash the whole run, terminate the
+        stale holder bound to this profile, clear any leftover lock files, and
+        retry the launch exactly once. Non-lock launch errors propagate unchanged.
+        """
+        try:
+            return self._launch_context()
+        except PlaywrightError as err:
+            if not _is_locked_profile_error(err):
+                raise
+            logger.warning(
+                "⚠️ Chrome profile %s is locked — self-healing (kill stale holder + retry)",
+                self.user_data_dir,
+            )
+            killed = _kill_chrome_holding_profile(self.user_data_dir)
+            logger.info("🔪 terminated %d stale Chrome process(es) holding the profile", killed)
+            removed = _clear_stale_singleton_locks(self.user_data_dir)
+            if removed:
+                logger.info("🧹 cleared %d stale lock file(s) from the profile", removed)
+            time.sleep(1.5)
+            try:
+                ctx = self._launch_context()
+            except PlaywrightError as retry_err:
+                raise RuntimeError(
+                    f"Chrome profile at {self.user_data_dir} is still locked after self-heal "
+                    "(killed stale holders + retried once). Close any Chrome window using this "
+                    "profile and re-run."
+                ) from retry_err
+            logger.info("✅ profile lock cleared — launch succeeded on retry")
+            return ctx
 
     def __exit__(self, exc_type, exc, tb) -> None:
         try:
