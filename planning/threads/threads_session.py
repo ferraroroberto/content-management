@@ -24,7 +24,8 @@ from typing import Optional
 from playwright.sync_api import BrowserContext, Page, Playwright, sync_playwright
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from config.chrome_launch import STEALTH_INIT_SCRIPT, stealth_launch_kwargs  # noqa: E402
+from config.chrome_launch import STEALTH_INIT_SCRIPT  # noqa: E402
+from config.chrome_profile_lock import launch_persistent_context_with_lock_wait  # noqa: E402
 from config.logger_config import setup_logger  # noqa: E402
 
 logger = logging.getLogger("threads_session")
@@ -137,8 +138,8 @@ class ThreadsSession:
                 "Run `python -m threads.bootstrap_session` first."
             )
         self._playwright = sync_playwright().start()
-        self._context = self._playwright.chromium.launch_persistent_context(
-            **stealth_launch_kwargs(str(self.user_data_dir), headless=self.headless),
+        self._context = launch_persistent_context_with_lock_wait(
+            self._playwright, self.user_data_dir, headless=self.headless, logger=logger,
         )
         self._context.add_init_script(STEALTH_INIT_SCRIPT)
         self._page = self._context.pages[0] if self._context.pages else self._context.new_page()
