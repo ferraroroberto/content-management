@@ -24,10 +24,18 @@ from datetime import date
 
 # ---------- Feed share box ----------
 
-PHOTO_BTN_RE = re.compile(r"^(?:photo|foto)$", re.I)
+# The share-box buttons render with the noun as VISIBLE text ("Photo"/"Video")
+# but LinkedIn now also sets an aria-label ("Add a photo"/"Add a video"), and
+# the aria-label wins the accessible-name computation. Anchoring on the trailing
+# noun ($) — preceded by start-of-string or whitespace — matches every observed
+# form across this change and across locales: "Photo", "Foto", "Add a photo",
+# "Añadir una foto", "Agregar foto", etc. (issue #60). Do NOT re-anchor with a
+# leading ^ only: that broke the moment LinkedIn prepended "Add a ".
+PHOTO_BTN_RE = re.compile(r"(?:^|\s)(?:photo|foto)$", re.I)
 
 # LinkedIn Spain uses "Vídeo" (with accent); some LATAM builds use "Video".
-VIDEO_BTN_RE = re.compile(r"^(?:video|vídeo)$", re.I)
+# Same trailing-noun anchor to absorb the "Add a video" aria-label.
+VIDEO_BTN_RE = re.compile(r"(?:^|\s)(?:v[ií]deo)$", re.I)
 
 # Two known EN names + two known ES names for the share box's main affordance.
 START_POST_RE = re.compile(

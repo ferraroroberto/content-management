@@ -39,9 +39,12 @@ from __future__ import annotations
 
 import logging
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+
+from notion_client.errors import HTTPResponseError, RequestTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from reporting.notion.editorial import (  # noqa: E402
@@ -49,6 +52,38 @@ from reporting.notion.editorial import (  # noqa: E402
 )
 
 logger = logging.getLogger("linkedin_posts_body")
+
+# Notion intermittently returns a transient 5xx / 429 — most notably a 503
+# "Public API object rendering exceeded the response time budget", whose own
+# remediation text says to retry with exponential backoff. We classify on the
+# HTTP status (the message wording is not stable) and retry a few times before
+# letting the error propagate; the caller's per-row handler then degrades a
+# still-failing read to a single FAIL row instead of aborting the platform.
+_NOTION_TRANSIENT_STATUS = frozenset({429, 500, 502, 503, 504})
+_NOTION_RETRY_ATTEMPTS = 4
+_NOTION_RETRY_BASE_DELAY = 2.0
+
+
+def _list_children_with_retry(notion, **kwargs) -> dict:
+    """``notion.blocks.children.list`` with bounded exponential backoff on
+    transient Notion errors (5xx / 429 / request timeout)."""
+    for attempt in range(1, _NOTION_RETRY_ATTEMPTS + 1):
+        try:
+            return notion.blocks.children.list(**kwargs)
+        except (HTTPResponseError, RequestTimeoutError) as exc:
+            status = getattr(exc, "status", None)
+            transient = isinstance(exc, RequestTimeoutError) or status in _NOTION_TRANSIENT_STATUS
+            if not transient or attempt == _NOTION_RETRY_ATTEMPTS:
+                raise
+            delay = _NOTION_RETRY_BASE_DELAY * (2 ** (attempt - 1))
+            logger.warning(
+                "⚠️ Notion blocks.children.list transient error (status=%s, attempt %d/%d): "
+                "%s — sleeping %.1fs",
+                status, attempt, _NOTION_RETRY_ATTEMPTS,
+                str(exc).splitlines()[0][:160], delay,
+            )
+            time.sleep(delay)
+    raise RuntimeError("unreachable")  # pragma: no cover — loop always returns or raises
 
 # Notion enforces 2000 chars per rich_text segment's `text.content`.
 # Long LI captions (4k+ chars) must be split across multiple segments
@@ -131,7 +166,7 @@ def first_code_block_text(notion, page_id: str) -> str:
         kwargs: dict = {"block_id": page_id, "page_size": 100}
         if cursor:
             kwargs["start_cursor"] = cursor
-        response = notion.blocks.children.list(**kwargs)
+        response = _list_children_with_retry(notion, **kwargs)
         for block in response.get("results", []):
             if block.get("type") != "code":
                 continue

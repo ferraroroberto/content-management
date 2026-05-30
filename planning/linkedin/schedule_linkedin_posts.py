@@ -45,6 +45,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Literal, Optional
 
+from notion_client.errors import HTTPResponseError
 from playwright.sync_api import Page, TimeoutError as PWTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -527,28 +528,32 @@ def _set_schedule_datetime(page: Page, target: date, hour: int, minute: int) -> 
     try:
         di.click(timeout=10000)
         page.wait_for_timeout(600)
-        # If the displayed month/year is wrong, click Next month until it
-        # matches. The header text reads "May 2026" / "mayo de 2026" / etc.
-        header_selector = ", ".join(
-            f'h2:has-text("{h}"), div:has-text("{h}")' for h in header_candidates
-        )
+        # Advance the calendar to the target month. LinkedIn's calendar header
+        # is an ``<h1 class="artdeco-calendar__month">`` (e.g. "May 2026" /
+        # "mayo de 2026"), rendered in the artdeco calendar popover which is
+        # NOT inside ``[role="dialog"]`` — so we read it document-wide. The old
+        # code scoped an ``h2``/``div`` match to the dialog; it never matched
+        # (the header is an h1 outside the dialog), so the loop ran Next-month
+        # straight into LinkedIn's 3-month scheduling limit and overshot the
+        # target. The calendar opens on the current month and we only ever
+        # schedule forward.
+        header_loc = page.locator("h1.artdeco-calendar__month")
+        header_lc = [h.lower() for h in header_candidates]
         for _ in range(18):  # generous safety bound (~1.5 years forward)
             try:
-                hdr = page.locator('[role="dialog"]').last.locator(header_selector)
-                if hdr.count() > 0:
-                    break
+                current = (header_loc.first.inner_text(timeout=2000) or "").strip().lower()
             except Exception:
-                pass
+                current = ""
+            if any(h in current for h in header_lc):
+                break
             try:
-                page.locator('[role="dialog"]').get_by_role(
+                page.get_by_role(
                     "button", name=NEXT_MONTH_BTN_RE
                 ).first.click(timeout=2000)
-                page.wait_for_timeout(200)
+                page.wait_for_timeout(250)
             except Exception:
                 break
-        day_btn = page.locator('[role="dialog"]').get_by_role(
-            "button", name=day_aria_re
-        )
+        day_btn = page.get_by_role("button", name=day_aria_re)
         day_btn.first.click(timeout=10000)
         page.wait_for_timeout(500)
     except Exception as err:
@@ -1144,7 +1149,8 @@ def main() -> tuple[int, list[dict]]:
                 statuses.append(f"{row.day_title}: LOGIN-REQUIRED")
                 results.append({"day": row.day_title, "status": "LOGIN-REQUIRED", "detail": str(err)})
                 break
-            except (FileNotFoundError, RuntimeError, PWTimeoutError) as err:
+            except (FileNotFoundError, RuntimeError, PWTimeoutError,
+                    HTTPResponseError) as err:
                 shot = session.screenshot_failure(f"{row.day_title}-error")
                 logger.error("❌ %s failed: %s (screenshot %s)", row.day_title, err, shot)
                 statuses.append(f"{row.day_title}: FAILED ({err})")
