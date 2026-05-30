@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import re
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -35,6 +34,14 @@ from typing import Optional
 from playwright.sync_api import Page, TimeoutError as PWTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from planning.twitter.twitter_labels import (  # noqa: E402
+    CANCEL_CLOSE_BTN_RES,
+    CONFIRM_BTN_RE,
+    DISCARD_BTN_RES,
+    DISMISS_DIALOG_BTN_RES,
+    FINAL_SCHEDULE_BTN_RE,
+    SCHEDULE_TOOLBAR_BTN_RE,
+)
 from planning.twitter.twitter_session import (  # noqa: E402
     LoginRequiredError,
     TwitterSession,
@@ -222,14 +229,14 @@ def _dismiss_blocking_modals(page: Page) -> bool:
     dialog = page.locator('[role="dialog"]')
     if not dialog.count():
         return False
-    for name_re in (r"^not now$", r"^skip for now$", r"^maybe later$", r"^dismiss$", r"^close$"):
+    for name_re in DISMISS_DIALOG_BTN_RES:
         try:
-            btn = dialog.first.get_by_role("button", name=re.compile(name_re, re.I))
+            btn = dialog.first.get_by_role("button", name=name_re)
             if btn.count():
                 btn.first.click(timeout=2500)
                 page.wait_for_timeout(400)
                 dismissed = True
-                logger.info("ℹ️ Dismissed dialog via %r button.", name_re)
+                logger.info("ℹ️ Dismissed dialog via %r button.", name_re.pattern)
                 break
         except Exception:
             pass
@@ -443,7 +450,7 @@ def _click_schedule_toolbar(page: Page) -> None:
     candidates = [
         lambda: page.locator('button[data-testid="scheduleOption"]'),
         lambda: page.locator('[aria-label="Schedule post"]'),
-        lambda: page.get_by_role("button", name=re.compile(r"^schedule(\spost)?$", re.I)),
+        lambda: page.get_by_role("button", name=SCHEDULE_TOOLBAR_BTN_RE),
     ]
     for find in candidates:
         try:
@@ -514,7 +521,7 @@ def _click_confirm_in_modal(page: Page) -> None:
     """Click the bottom-right 'Confirm' in the Schedule modal."""
     candidates = [
         lambda: page.locator('[data-testid="scheduledConfirmationPrimaryAction"]'),
-        lambda: page.get_by_role("button", name=re.compile(r"^confirm$", re.I)),
+        lambda: page.get_by_role("button", name=CONFIRM_BTN_RE),
     ]
     for find in candidates:
         try:
@@ -543,7 +550,7 @@ def _click_final_schedule_action(page: Page) -> None:
     candidates = [
         lambda: page.locator('[data-testid="tweetButton"]'),
         lambda: page.locator('button[data-testid="tweetButtonInline"]'),
-        lambda: page.get_by_role("button", name=re.compile(r"^schedule$", re.I)),
+        lambda: page.get_by_role("button", name=FINAL_SCHEDULE_BTN_RE),
     ]
     for find in candidates:
         try:
@@ -597,9 +604,9 @@ def _cancel_composer(page: Page) -> None:
     except Exception:
         pass
     # If a "Save changes?" / "Discard?" dialog appears, pick Discard.
-    for name_re in (r"^discard$", r"^discard changes$"):
+    for name_re in DISCARD_BTN_RES:
         try:
-            btn = page.get_by_role("button", name=re.compile(name_re, re.I))
+            btn = page.get_by_role("button", name=name_re)
             if btn.count():
                 btn.first.click(timeout=2000)
                 page.wait_for_timeout(400)
@@ -653,9 +660,9 @@ def schedule_post(
             label, shot,
         )
         # Cancel the schedule modal AND the composer to leave clean state.
-        for name_re in (r"^cancel$", r"^close$"):
+        for name_re in CANCEL_CLOSE_BTN_RES:
             try:
-                btn = page.get_by_role("button", name=re.compile(name_re, re.I))
+                btn = page.get_by_role("button", name=name_re)
                 if btn.count():
                     btn.first.click(timeout=2000)
                     page.wait_for_timeout(400)

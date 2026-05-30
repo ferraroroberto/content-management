@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import re
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -36,6 +35,18 @@ from typing import Optional
 from playwright.sync_api import Page, TimeoutError as PWTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from planning.threads.threads_labels import (  # noqa: E402
+    ATTACH_MEDIA_BTN_RE,
+    CANCEL_DISCARD_BTN_RES,
+    DISCARD_BTN_RE,
+    DONE_BTN_RE,
+    FINAL_SCHEDULE_BTN_RE,
+    NEXT_MONTH_BTN_RE,
+    SCHEDULE_MENUITEM_RE,
+    SCHEDULE_TEXT_RE,
+    WHATS_NEW_TEXTBOX_RE,
+    calendar_header,
+)
 from planning.threads.threads_session import (  # noqa: E402
     LoginRequiredError,
     ThreadsSession,
@@ -246,7 +257,7 @@ def _type_caption(page: Page, caption: str) -> None:
     # The textarea inside the dialog is a contenteditable, anchored by the
     # same "What's new?" placeholder. Anchor by role.
     ta_candidates = [
-        dialog.get_by_role("textbox", name=re.compile(r"what's new", re.I)).first,
+        dialog.get_by_role("textbox", name=WHATS_NEW_TEXTBOX_RE).first,
         dialog.locator('div[contenteditable="true"]').first,
         dialog.locator('[role="textbox"]').first,
     ]
@@ -284,7 +295,7 @@ def _upload_image(page: Page, path: Path) -> None:
     except Exception:
         # Click the first media icon → intercept the FileChooser.
         media_btn_candidates = [
-            dialog.get_by_role("button", name=re.compile(r"^(attach media|add media|attach image|attach photo)$", re.I)).first,
+            dialog.get_by_role("button", name=ATTACH_MEDIA_BTN_RE).first,
             dialog.locator('[aria-label="Attach media" i]').first,
             dialog.locator('[aria-label*="image" i][role="button"]').first,
             # Last-resort positional: the first <svg>-containing button in
@@ -362,9 +373,7 @@ def _open_three_dots_menu(page: Page) -> None:
     page.wait_for_timeout(600)
     # Confirm a Schedule menuitem appeared.
     for _ in range(20):
-        if page.get_by_text(
-            re.compile(r"^schedule(…|\.\.\.)$", re.I)
-        ).count():
+        if page.get_by_text(SCHEDULE_TEXT_RE).count():
             logger.debug("⋯ Opened more-options menu.")
             return
         page.wait_for_timeout(150)
@@ -374,10 +383,8 @@ def _open_three_dots_menu(page: Page) -> None:
 def _click_schedule_menuitem(page: Page) -> None:
     """Click 'Schedule…' from the 3-dots menu (Threads uses U+2026 ellipsis)."""
     candidates = [
-        lambda: page.get_by_role(
-            "menuitem", name=re.compile(r"^schedule(…|\.\.\.)?$", re.I)
-        ),
-        lambda: page.get_by_text(re.compile(r"^schedule(…|\.\.\.)$", re.I)),
+        lambda: page.get_by_role("menuitem", name=SCHEDULE_MENUITEM_RE),
+        lambda: page.get_by_text(SCHEDULE_TEXT_RE),
     ]
     for find in candidates:
         try:
@@ -392,15 +399,9 @@ def _click_schedule_menuitem(page: Page) -> None:
     raise RuntimeError("Could not click 'Schedule…' menuitem.")
 
 
-_MONTH_NAMES = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
-]
-
-
 def _navigate_calendar_month(page: Page, target: date) -> None:
     """Click the calendar's '>' until the visible header is `<Month> <Year>`."""
-    target_header = f"{_MONTH_NAMES[target.month - 1]} {target.year}"
+    target_header = calendar_header(target)
     for _ in range(36):  # 3 years forward max
         try:
             if page.get_by_text(target_header, exact=True).count():
@@ -408,7 +409,7 @@ def _navigate_calendar_month(page: Page, target: date) -> None:
         except Exception:
             pass
         next_btn_candidates = [
-            page.get_by_role("button", name=re.compile(r"^next month$", re.I)).first,
+            page.get_by_role("button", name=NEXT_MONTH_BTN_RE).first,
             page.locator('[aria-label="Next month" i]').first,
             page.locator('[aria-label="Next" i]').first,
         ]
@@ -495,7 +496,7 @@ def _click_calendar_day(page: Page, target: date) -> None:
     and next months are also present but greyed out. JS picks the brightest
     cell with matching text (current-month).
     """
-    header_text = f"{_MONTH_NAMES[target.month - 1]} {target.year}"
+    header_text = calendar_header(target)
     day_text = str(target.day)
     try:
         res = page.evaluate(_CLICK_CAL_DAY_JS, {"headerText": header_text, "dayText": day_text})
@@ -538,8 +539,8 @@ def _set_calendar_time(page: Page, hour: int, minute: int) -> None:
 def _click_calendar_done(page: Page) -> None:
     """Click the calendar popup's bottom-right 'Done'."""
     candidates = [
-        lambda: page.get_by_role("button", name=re.compile(r"^done$", re.I)).first,
-        lambda: page.get_by_text(re.compile(r"^done$", re.I)).first,
+        lambda: page.get_by_role("button", name=DONE_BTN_RE).first,
+        lambda: page.get_by_text(DONE_BTN_RE).first,
     ]
     for find in candidates:
         try:
@@ -559,8 +560,8 @@ def _click_final_schedule_action(page: Page) -> None:
     'Schedule'. Click it."""
     dialog = page.locator('[role="dialog"]').last
     candidates = [
-        lambda: dialog.get_by_role("button", name=re.compile(r"^schedule$", re.I)).first,
-        lambda: page.get_by_role("button", name=re.compile(r"^schedule$", re.I)).last,
+        lambda: dialog.get_by_role("button", name=FINAL_SCHEDULE_BTN_RE).first,
+        lambda: page.get_by_role("button", name=FINAL_SCHEDULE_BTN_RE).last,
     ]
     for find in candidates:
         try:
@@ -594,9 +595,9 @@ def _wait_composer_closes(page: Page, timeout_ms: int = 20000) -> bool:
 
 def _cancel_composer(page: Page) -> None:
     """Best-effort: cancel any open Threads composer."""
-    for name_re in (r"^cancel$", r"^discard$"):
+    for name_re in CANCEL_DISCARD_BTN_RES:
         try:
-            btn = page.get_by_role("button", name=re.compile(name_re, re.I))
+            btn = page.get_by_role("button", name=name_re)
             if btn.count():
                 btn.first.click(timeout=2000)
                 page.wait_for_timeout(400)
@@ -650,7 +651,7 @@ def schedule_post(
         # Discard prompt after Cancel.
         for _ in range(3):
             try:
-                btn = page.get_by_role("button", name=re.compile(r"^discard$", re.I))
+                btn = page.get_by_role("button", name=DISCARD_BTN_RE)
                 if btn.count():
                     btn.first.click(timeout=2000)
                     page.wait_for_timeout(400)
