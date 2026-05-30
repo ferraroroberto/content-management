@@ -28,6 +28,7 @@ CLI:
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 import time
@@ -47,6 +48,7 @@ from typing import Callable, Optional
 
 sys.path.append(str(Path(__file__).parent))
 from config.logger_config import setup_logger  # noqa: E402
+from planning._failure import classify as classify_failure, extract_screenshot  # noqa: E402
 from planning.instagram.clone_to_other_platforms import main as run_clone  # noqa: E402
 from planning.linkedin.schedule_linkedin_posts import main as run_linkedin  # noqa: E402
 from planning.instagram.schedule_instagram_posts import main as run_instagram  # noqa: E402
@@ -305,6 +307,70 @@ def _write_summary(md: str, started_at: datetime) -> Path:
     return out_path
 
 
+def _build_result_json(args: argparse.Namespace,
+                       results: list[PlatformResult],
+                       started_at: datetime,
+                       finished_at: datetime,
+                       exit_code: int,
+                       summary_path: Path) -> dict:
+    """Machine-readable run record consumed by the planning tab + the
+    ``/schedule-autoheal`` skill. Each row is decorated with the screenshot
+    path (lifted out of the inline ``detail`` text) and a ``failure_kind`` from
+    the shared classifier so the heal loop knows which failures are UI-drift
+    (the only kind it may auto-fix)."""
+    if args.live:
+        mode_label = "LIVE"
+    elif args.dry_run:
+        mode_label = "DRY-RUN"
+    else:
+        mode_label = "config default"
+
+    platforms: list[dict] = []
+    for r in results:
+        rows: list[dict] = []
+        for row in r.rows:
+            status = row.get("status", "OTHER")
+            detail = row.get("detail", "") or ""
+            rows.append({
+                "platform": r.name,
+                "day": row.get("day", ""),
+                "status": status,
+                "detail": detail,
+                "screenshot": extract_screenshot(detail),
+                "failure_kind": classify_failure(status, detail),
+            })
+        platforms.append({
+            "platform": r.name,
+            "skipped": r.skipped,
+            "exit_code": r.exit_code,
+            "duration_s": round(r.duration_s, 2),
+            "error": r.error,
+            "rows": rows,
+        })
+
+    return {
+        "started_at": started_at.isoformat(timespec="seconds"),
+        "finished_at": finished_at.isoformat(timespec="seconds"),
+        "mode": mode_label,
+        "exit_code": exit_code,
+        "verdict": "clean" if exit_code == 0 else "failures",
+        "summary_path": str(summary_path),
+        "platforms": platforms,
+    }
+
+
+def _write_result_json(result: dict, started_at: datetime) -> Path:
+    """Write the timestamped result record plus a stable ``latest-result.json``
+    pointer so the app can find the newest run deterministically."""
+    out_dir = Path(__file__).parent / "results" / "planning"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(result, indent=2, ensure_ascii=False)
+    out_path = out_dir / f"{started_at.strftime('%Y-%m-%d-%H%M%S')}-result.json"
+    out_path.write_text(payload, encoding="utf-8")
+    (out_dir / "latest-result.json").write_text(payload, encoding="utf-8")
+    return out_path
+
+
 def main() -> int:
     args = parse_args()
     configure_logger(args.debug)
@@ -343,7 +409,13 @@ def main() -> int:
         not r.skipped and (r.error or any(row["status"] in ("FAIL", "LOGIN-REQUIRED") for row in r.rows))
         for r in results
     )
-    return 0 if not any_fail else 11
+    exit_code = 0 if not any_fail else 11
+
+    result = _build_result_json(args, results, started_at, finished_at, exit_code, out_path)
+    result_path = _write_result_json(result, started_at)
+    logger.info("🧾 Result JSON written to %s", result_path)
+
+    return exit_code
 
 
 if __name__ == "__main__":

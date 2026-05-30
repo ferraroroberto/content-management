@@ -283,5 +283,8 @@
             "expand_settle_ms": 1200,
             "page_settle_ms": 2500
         }
+    },
+    "slack": {
+        "autoheal_channel": ""
     }
 }
