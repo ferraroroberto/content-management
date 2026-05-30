@@ -263,6 +263,34 @@ def format_must_read_line(three_names: Sequence[str], must_read: int) -> str:
     return ". ".join(three_names[i] for i in perm) + "."
 
 
+def topics_sidecar_path(newsletter_number: str) -> Path:
+    """Path of the topics sidecar JSON for a newsletter number (``057``/``N057``)."""
+    return RESULTS_DIR / f"{_normalize_newsletter_number(newsletter_number)}.topics.json"
+
+
+def _write_topics_sidecar(
+    nl_num: str,
+    headings: Sequence[str],
+    top_names: Optional[Sequence[str]],
+) -> Path:
+    """Persist the top article per topic so the Streamlit must-read picker can
+    compose the line without re-querying Notion (the app drives builds as
+    subprocesses, so there is no structured return value to read).
+
+    ``top_names`` is ``None`` when any topic has no articles — the UI then knows
+    the must-read line is unavailable.
+    """
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    path = topics_sidecar_path(nl_num)
+    payload = {
+        "newsletter": nl_num,
+        "headings": list(headings),
+        "top_names": list(top_names) if top_names is not None else None,
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
 def copy_to_clipboard(text: str) -> None:
     if sys.platform == "win32":
         subprocess.run(
@@ -321,8 +349,20 @@ def _normalize_newsletter_number(raw: str) -> str:
 
 
 def run(newsletter_number: str, debug: bool = False, *,
-        interactive_must_read: bool = True, open_browser: bool = True) -> Path:
-    """Build the newsletter end-to-end. Returns the HTML file path written."""
+        interactive_must_read: bool = True, open_browser: bool = True,
+        must_read: Optional[int] = None) -> Path:
+    """Build the newsletter end-to-end. Returns the HTML file path written.
+
+    Always writes a topics sidecar (``N{NNN}.topics.json``) next to the HTML so
+    the Streamlit must-read picker can compose the line without re-querying
+    Notion.
+
+    Must-read handling, in priority order:
+
+    * ``must_read`` (1/2/3) set → compose + copy the line non-interactively.
+    * else ``interactive_must_read`` → prompt on stdin (console flow).
+    * else → write the HTML + sidecar only (the app's non-blocking path).
+    """
     _setup_logging(debug)
     nl_num = _normalize_newsletter_number(newsletter_number)
     builder = NotionNewsletterBuilder()
@@ -334,11 +374,22 @@ def run(newsletter_number: str, debug: bool = False, *,
     out_path.write_text(complete_html, encoding="utf-8")
     logging.info(f"💾 HTML saved to: {out_path}")
 
+    top_names = top_article_names_by_topic(builder.topics, grouped)
+    sidecar = _write_topics_sidecar(nl_num, TOPIC_HEADINGS, top_names)
+    logging.info(f"🗂️ Topics sidecar: {sidecar}")
+
     if open_browser:
         webbrowser.open(f"file://{out_path}")
         logging.info(f"🌐 Opened HTML in browser: {out_path}")
 
-    if interactive_must_read:
+    if must_read is not None:
+        if top_names is None:
+            logging.warning("⚠️ Cannot compose must-read line: a topic has no articles")
+        else:
+            line = format_must_read_line(top_names, must_read)
+            copy_to_clipboard(line)
+            logging.info(f"📋 Must-read line (copied to clipboard): {line}")
+    elif interactive_must_read:
         prompt_must_read_line(builder.topics, grouped)
 
     return out_path

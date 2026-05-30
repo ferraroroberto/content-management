@@ -13,19 +13,24 @@ Three pipelines, one repo:
   with a dedicated profile. The Instagram step also clones captions /
   illustrations into the TW/TH/SB Notion columns so the other planners
   and the daily Substack run can consume them.
-- **Newsletter** (`newsletter/`, `newsletter_pipeline.py`) — the full
-  weekly newsletter workflow as one orchestrated run. Step 1 archives
-  the open article tabs in a CDP-attached real Chrome into Notion
-  (readability-lxml extraction → Gemini-Lite topic + 3-line summary →
-  author resolved against the connections DB with exact / fuzzy /
-  LLM-pick-primary / `(not classified)` fallback — never invents → first
-  future newsletter row with `< 8` per topic → write + close tab). Step
-  2 normalises article titles to sentence case while preserving a
-  whitelist of proper names (spaCy PERSON entities optional). Step 3
-  strips tracking query params from each URL except for video / tweet
-  domains. Step 4 prompts for the newsletter number and emits the
-  ready-to-paste HTML at `results/newsletter/N{NNN}.html`, opens it in
-  the browser, and copies the must-read line to the clipboard.
+- **Newsletter** (`newsletter/`, `newsletter_pipeline.py`) — the weekly
+  newsletter workflow, split into independent non-interactive steps
+  (`bootstrap` / `archive` / `normalize` / `build`, plus `create` and
+  `all` composites) so each runs on its own from the app or a console.
+  **Bootstrap** launches the dedicated newsletter Chrome on `:9222`
+  without touching the everyday browser (targeted, idempotent — issue
+  #59). **Archive** walks the open article tabs in that CDP-attached
+  Chrome into Notion (readability-lxml extraction → Gemini-Lite topic +
+  3-line summary → author resolved against the connections DB with exact
+  / fuzzy / LLM-pick-primary / `(not classified)` fallback — never
+  invents → first future newsletter row with `< 8` per topic → write +
+  close tab). **Normalize** rewrites article titles to sentence case
+  (preserving a proper-name whitelist; spaCy PERSON entities optional)
+  and strips tracking query params from each URL except for video /
+  tweet domains. **Build** emits the ready-to-paste HTML at
+  `results/newsletter/N{NNN}.html`, opens it in the browser, and lets you
+  compose the must-read line (interactively in a console, or via the
+  app's picker fed by a topics sidecar).
 
 Both pipelines read from the same Notion editorial database. Each per-folder
 README has its own mermaid flowchart, CLI table, gotchas, and validated
@@ -89,7 +94,7 @@ reporting/                            # repo root
 ├── docs/                             # retrospective changelogs (gitignored locally)
 ├── planning_pipeline.py              # orchestrator: LI → IG → TW → TH (--all-wip)
 ├── reporting_pipeline.py             # orchestrator: APIs → Supabase → Notion → Substack
-├── newsletter_pipeline.py            # orchestrator: archive → normalize → build HTML
+├── newsletter_pipeline.py            # orchestrator: bootstrap/archive/normalize/build subcommands
 ├── launch_planning.bat               # planning launcher (Windows CMD)
 ├── launch_reporting.bat              # reporting launcher (Windows CMD)
 └── launch_newsletter.bat             # newsletter launcher (Windows CMD)
