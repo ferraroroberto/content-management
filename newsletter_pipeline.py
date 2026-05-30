@@ -1,21 +1,28 @@
-"""Newsletter pipeline orchestrator (issue #18).
+"""Newsletter pipeline orchestrator (issues #18, #59).
 
-Walks the weekly newsletter workflow end-to-end:
+The weekly newsletter workflow, split into independent, non-interactive steps
+so each can run on its own and stream cleanly to the Streamlit app. The same
+subcommands back both the app and ``launch_newsletter.bat`` — there is no
+Streamlit-only path.
 
-1. Ensure Chrome is up on ``:9222`` against the dedicated newsletter profile.
-   Bootstrap is **skipped by default** — bring Chrome up yourself by running
-   ``newsletter/bootstrap_chrome.bat`` in a separate console (it kills every
-   chrome.exe + relaunches with ``--user-data-dir``). Pass ``--no-skip-bootstrap``
-   to let the pipeline run that bootstrap for you.
-2. Wait for you to open your article tabs in that Chrome window.
-3. Archive the tabs into Notion via :func:`newsletter.pipeline.run_batch`.
-4. Wait for the green light to clean up.
-5. Run :func:`newsletter.normalize_names.run` (titles → sentence case).
-6. Run :func:`newsletter.normalize_url.run` (strip tracking params).
-7. Prompt for the newsletter number and run
-   :func:`newsletter.build_newsletter.run` — HTML written under
-   ``results/newsletter/N{NNN}.html``, opened in the browser, then prompt
-   for the must-read topic and copy the composed line to the clipboard.
+Subcommands::
+
+    newsletter_pipeline.py bootstrap                         # ensure Chrome on :9222 (targeted)
+    newsletter_pipeline.py archive   [--debug]               # open tabs -> Notion
+    newsletter_pipeline.py normalize [--days 14] [--debug]   # titles + URLs
+    newsletter_pipeline.py build     --newsletter NNN [--debug] [--no-open]
+                                     [--must-read 1|2|3 | --no-must-read]
+    newsletter_pipeline.py create    --newsletter NNN [--days 14] [--debug]
+    newsletter_pipeline.py all       [--newsletter NNN] [--days 14] [--debug]
+
+* ``bootstrap`` launches the dedicated newsletter Chrome on :9222 **without**
+  killing the everyday browser (see ``newsletter/bootstrap_chrome.py``).
+* ``archive`` / ``normalize`` / ``build`` / ``create`` are all non-interactive.
+* ``create`` = archive -> normalize -> build (no must-read prompt), chained.
+* ``all`` is the one sanctioned interactive console flow: bootstrap -> a single
+  "open your tabs, press Enter" pause (you can't archive tabs that aren't open
+  yet) -> archive -> normalize -> build with the interactive must-read prompt.
+* No subcommand defaults to ``all`` so existing muscle memory keeps working.
 
 Mirrors the shape of ``reporting_pipeline.py`` / ``planning_pipeline.py``.
 """
@@ -24,9 +31,7 @@ from __future__ import annotations
 
 import argparse
 import logging
-import subprocess
 import sys
-import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -40,13 +45,9 @@ for _stream in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
-import requests  # noqa: E402
-
+from newsletter import bootstrap_chrome  # noqa: E402
 from newsletter import build_newsletter, normalize_names, normalize_url  # noqa: E402
 from newsletter import pipeline as archive_pipeline  # noqa: E402
-
-BOOTSTRAP_BAT = REPO_ROOT / "newsletter" / "bootstrap_chrome.bat"
-DEBUG_URL = "http://127.0.0.1:9222/json/version"
 
 logger = logging.getLogger("newsletter_pipeline")
 
@@ -63,141 +64,179 @@ def _wait_for_user(prompt: str) -> None:
         raise SystemExit(2)
 
 
-def _debug_port_up(timeout: float = 1.0) -> bool:
-    try:
-        r = requests.get(DEBUG_URL, timeout=timeout)
-        return r.status_code == 200
-    except requests.RequestException:
-        return False
+def _banner(title: str) -> None:
+    print()
+    print("=" * 60)
+    print(f">>> {title}")
+    print("=" * 60)
 
 
 # ---------------------------------------------------------------------- steps
 
 
-def step_bootstrap_chrome() -> None:
-    print("=" * 60)
-    print(">>> Step 1/5: bootstrap Chrome on :9222")
-    print("=" * 60)
-    if not BOOTSTRAP_BAT.exists():
-        raise FileNotFoundError(f"Missing bootstrap_chrome.bat at {BOOTSTRAP_BAT}")
-    # The bat kills every chrome.exe, relaunches with the debug port, and polls
-    # until :9222 responds. We don't capture output — let the user see it.
-    result = subprocess.run([str(BOOTSTRAP_BAT)], shell=True)
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"bootstrap_chrome.bat exited with code {result.returncode}"
-        )
-    # Belt-and-braces — confirm the port is actually reachable from here.
-    for _ in range(10):
-        if _debug_port_up():
-            print("✅ Chrome :9222 is ready")
-            return
-        time.sleep(1)
-    raise RuntimeError(":9222 not reachable after bootstrap")
+def step_bootstrap() -> int:
+    _banner("bootstrap Chrome on :9222 (targeted — everyday browser untouched)")
+    return bootstrap_chrome.ensure_chrome()
 
 
-def step_archive(debug: bool) -> None:
-    print()
-    print("=" * 60)
-    print(">>> Step 3/5: archive open Chrome tabs to Notion")
-    print("=" * 60)
-    rc = archive_pipeline.run_batch(write=True, debug=debug)
-    if rc != 0:
-        raise RuntimeError(f"newsletter archive returned exit code {rc}")
+def step_archive(debug: bool) -> int:
+    _banner("archive open Chrome tabs to Notion")
+    if not bootstrap_chrome.debug_port_up():
+        print("❌ Chrome isn't responding on :9222 — run the bootstrap step first")
+        print("   (the '① Bootstrap Chrome' button, or:")
+        print("       newsletter_pipeline.py bootstrap )")
+        return 1
+    return archive_pipeline.run_batch(write=True, debug=debug)
 
 
-def step_normalize(days: int, debug: bool) -> None:
-    print()
-    print("=" * 60)
-    print(f">>> Step 4a/5: normalize_names (last {days} days)")
-    print("=" * 60)
+def step_normalize(days: int, debug: bool) -> int:
+    _banner(f"normalize_names (last {days} days)")
     normalize_names.run(days=days, dry_run=False, debug=debug)
-
-    print()
-    print("=" * 60)
-    print(f">>> Step 4b/5: normalize_url (last {days} days)")
-    print("=" * 60)
+    _banner(f"normalize_url (last {days} days)")
     normalize_url.run(days=days, dry_run=False, testing_mode=False, debug=debug)
-
-
-def step_build_newsletter(newsletter_number: str | None, debug: bool) -> None:
-    print()
-    print("=" * 60)
-    print(">>> Step 5/5: build newsletter HTML")
-    print("=" * 60)
-    if not newsletter_number:
-        try:
-            newsletter_number = input("Enter newsletter number (e.g. 057): ").strip()
-        except (EOFError, KeyboardInterrupt):
-            raise SystemExit(2)
-    if not newsletter_number:
-        raise SystemExit("❌ newsletter number is required")
-    out_path = build_newsletter.run(newsletter_number, debug=debug)
-    print()
-    print(f"🎉 Newsletter pipeline complete. HTML: {out_path}")
-
-
-# --------------------------------------------------------------- orchestration
-
-
-def run_pipeline(*, days: int, newsletter_number: str | None,
-                 debug: bool, skip_bootstrap: bool) -> int:
-    if not skip_bootstrap:
-        step_bootstrap_chrome()
-    else:
-        if not _debug_port_up():
-            print("❌ Chrome isn't responding on :9222 — cannot archive tabs.")
-            print("   Bootstrap is skipped by default (it kills every chrome.exe,")
-            print("   including your everyday browser). Open a SEPARATE console and run:")
-            print("       newsletter\\bootstrap_chrome.bat")
-            print("   open your newsletter article tabs in that window, then re-run this")
-            print("   pipeline. To let the pipeline bootstrap for you, pass --no-skip-bootstrap.")
-            return 1
-        print("⏭️  Using the existing Chrome on :9222 (bootstrap skipped by default)")
-
-    _wait_for_user(
-        ">>> Step 2/5: open every newsletter article tab in the Chrome window, "
-        "then press Enter…"
-    )
-
-    step_archive(debug=debug)
-
-    _wait_for_user(
-        ">>> Press Enter when you're ready to normalise names + URLs…"
-    )
-
-    step_normalize(days=days, debug=debug)
-
-    step_build_newsletter(newsletter_number, debug=debug)
     return 0
 
 
-def main() -> int:
+def step_build(newsletter_number: str | None, debug: bool, *,
+               interactive_must_read: bool, open_browser: bool,
+               must_read: int | None) -> int:
+    _banner("build newsletter HTML")
+    if not newsletter_number:
+        if interactive_must_read:
+            try:
+                newsletter_number = input("Enter newsletter number (e.g. 057): ").strip()
+            except (EOFError, KeyboardInterrupt):
+                raise SystemExit(2)
+        if not newsletter_number:
+            print("❌ newsletter number is required (--newsletter NNN)")
+            return 1
+    out_path = build_newsletter.run(
+        newsletter_number, debug=debug,
+        interactive_must_read=interactive_must_read,
+        open_browser=open_browser, must_read=must_read,
+    )
+    print(f"🎉 Newsletter HTML: {out_path}")
+    return 0
+
+
+# --------------------------------------------------------------- composite flows
+
+
+def run_create(*, days: int, newsletter_number: str | None, debug: bool) -> int:
+    """archive -> normalize -> build (no must-read prompt). Non-interactive."""
+    if not newsletter_number:
+        print("❌ newsletter number is required for 'create' (--newsletter NNN)")
+        return 1
+    rc = step_archive(debug=debug)
+    if rc != 0:
+        return rc
+    rc = step_normalize(days=days, debug=debug)
+    if rc != 0:
+        return rc
+    return step_build(
+        newsletter_number, debug=debug,
+        interactive_must_read=False, open_browser=True, must_read=None,
+    )
+
+
+def run_all(*, days: int, newsletter_number: str | None, debug: bool) -> int:
+    """Full interactive console sequence with a single manual pause."""
+    rc = step_bootstrap()
+    if rc != 0:
+        return rc
+    _wait_for_user(
+        ">>> Open every newsletter article tab in the Chrome window, then press Enter…"
+    )
+    rc = step_archive(debug=debug)
+    if rc != 0:
+        return rc
+    _wait_for_user(">>> Press Enter when you're ready to normalise names + URLs…")
+    rc = step_normalize(days=days, debug=debug)
+    if rc != 0:
+        return rc
+    return step_build(
+        newsletter_number, debug=debug,
+        interactive_must_read=True, open_browser=True, must_read=None,
+    )
+
+
+# --------------------------------------------------------------------- CLI
+
+
+def _add_days(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--days", type=int, default=14,
+                   help="Look back N days for normalize (default 14)")
+
+
+def _add_newsletter(p: argparse.ArgumentParser, *, required: bool) -> None:
+    p.add_argument("--newsletter", type=str, default=None, required=required,
+                   help="Newsletter number, e.g. 057 or N057")
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Newsletter pipeline: bootstrap → archive → normalize → build."
     )
-    parser.add_argument(
-        "--days", type=int, default=14,
-        help="Look back N days for normalize_names / normalize_url (default 14)",
-    )
-    parser.add_argument(
-        "--newsletter", type=str, default=None,
-        help="Newsletter number (e.g. 057). Prompted if omitted.",
-    )
-    parser.add_argument(
-        "--skip-bootstrap", action=argparse.BooleanOptionalAction, default=True,
-        help="Skip the Chrome kill/relaunch and reuse the existing :9222 instance "
-             "(default). Use --no-skip-bootstrap to let the pipeline kill every "
-             "chrome.exe and relaunch the dedicated newsletter profile.",
-    )
-    parser.add_argument("--debug", action="store_true")
-    args = parser.parse_args()
+    parser.add_argument("--debug", action="store_true",
+                        help="Verbose logs (also accepted per-subcommand)")
+    sub = parser.add_subparsers(dest="cmd")
 
-    return run_pipeline(
-        days=args.days,
-        newsletter_number=args.newsletter,
-        debug=args.debug,
-        skip_bootstrap=args.skip_bootstrap,
+    sub.add_parser("bootstrap", help="Ensure Chrome is up on :9222 (targeted)")
+
+    p_arch = sub.add_parser("archive", help="Archive open Chrome tabs to Notion")
+    p_arch.add_argument("--debug", action="store_true")
+
+    p_norm = sub.add_parser("normalize", help="Normalize article titles + URLs")
+    _add_days(p_norm)
+    p_norm.add_argument("--debug", action="store_true")
+
+    p_build = sub.add_parser("build", help="Build the newsletter HTML")
+    _add_newsletter(p_build, required=False)
+    p_build.add_argument("--debug", action="store_true")
+    p_build.add_argument("--no-open", action="store_true",
+                         help="Don't open the rendered HTML in the browser")
+    mr = p_build.add_mutually_exclusive_group()
+    mr.add_argument("--must-read", type=int, choices=(1, 2, 3), default=None,
+                    help="Compose + copy the must-read line non-interactively")
+    mr.add_argument("--no-must-read", action="store_true",
+                    help="Skip the must-read step entirely (app's non-blocking path)")
+
+    p_create = sub.add_parser("create", help="archive → normalize → build (non-interactive)")
+    _add_newsletter(p_create, required=True)
+    _add_days(p_create)
+    p_create.add_argument("--debug", action="store_true")
+
+    p_all = sub.add_parser("all", help="Full interactive console sequence")
+    _add_newsletter(p_all, required=False)
+    _add_days(p_all)
+    p_all.add_argument("--debug", action="store_true")
+
+    args = parser.parse_args(argv)
+    debug = bool(getattr(args, "debug", False))
+    cmd = args.cmd or "all"
+
+    if cmd == "bootstrap":
+        return step_bootstrap()
+    if cmd == "archive":
+        return step_archive(debug=debug)
+    if cmd == "normalize":
+        return step_normalize(days=args.days, debug=debug)
+    if cmd == "build":
+        # build default (no must-read flags) → interactive prompt.
+        interactive = args.must_read is None and not args.no_must_read
+        return step_build(
+            args.newsletter, debug=debug,
+            interactive_must_read=interactive,
+            open_browser=not args.no_open,
+            must_read=args.must_read,
+        )
+    if cmd == "create":
+        return run_create(days=args.days, newsletter_number=args.newsletter, debug=debug)
+    # "all" (explicit or default)
+    return run_all(
+        days=getattr(args, "days", 14),
+        newsletter_number=getattr(args, "newsletter", None),
+        debug=debug,
     )
 
 

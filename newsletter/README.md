@@ -13,7 +13,7 @@ ferraroroberto/content-management#18 (full pipeline + monorepo migration).
 ```mermaid
 flowchart LR
     subgraph S1[1. Bootstrap]
-        A[bootstrap_chrome.bat<br/>kill+relaunch Chrome on :9222<br/>--user-data-dir=newsletter/chrome_user_data]
+        A[bootstrap_chrome.py<br/>targeted: reuse :9222 if up,<br/>else kill only the newsletter-profile<br/>Chrome and relaunch on :9222]
     end
     subgraph S2[2. Archive]
         B[connect_over_cdp] --> C[list tabs<br/>skip gmail/notion/...]
@@ -68,13 +68,14 @@ flowchart LR
 launch_newsletter.bat
 ```
 
-That launcher runs `newsletter_pipeline.py`, which walks you through:
+That launcher runs `newsletter_pipeline.py all` — the full interactive console
+sequence:
 
-1. **Bootstrap Chrome** — *skipped by default.* Bring Chrome up yourself by
-   running `newsletter\bootstrap_chrome.bat` in a **separate console** (it kills
-   all `chrome.exe`, including your everyday browser, then relaunches with
-   `--remote-debugging-port=9222 --user-data-dir=newsletter\chrome_user_data`).
-   Pass `--no-skip-bootstrap` to let the pipeline run that kill+relaunch for you.
+1. **Bootstrap Chrome** — launches the dedicated newsletter Chrome on `:9222`
+   *without touching your everyday browser.* If `:9222` is already up it reuses
+   it (your tabs stay); otherwise it kills only the Chrome bound to
+   `newsletter\chrome_user_data` (if any) and relaunches with
+   `--remote-debugging-port=9222`.
 2. **Wait** — you open the newsletter article tabs in that Chrome window
    (clicking links in Gmail is fine — they'll open there). Press Enter
    when ready.
@@ -94,15 +95,29 @@ CLI flags pass through to the orchestrator:
 
 ```powershell
 launch_newsletter.bat --newsletter 057      # pre-fill the number
-launch_newsletter.bat --no-skip-bootstrap   # let the pipeline kill+relaunch Chrome
 launch_newsletter.bat --debug               # verbose everywhere
 launch_newsletter.bat --days 7              # tighter normalise window
 ```
 
 ## Running steps in isolation
 
+The pipeline is split into independent, non-interactive subcommands (issue #59)
+— the same ones the Streamlit app drives, so nothing is app-only:
+
 | Command | What it does |
 |---|---|
+| `newsletter_pipeline.py bootstrap` | Ensure Chrome is up on `:9222` (targeted — never kills the everyday browser). |
+| `newsletter_pipeline.py archive [--debug]` | Archive every eligible open tab → Notion, write + close. |
+| `newsletter_pipeline.py normalize [--days 14] [--debug]` | normalize_names + normalize_url. |
+| `newsletter_pipeline.py build --newsletter 057 [--no-open] [--must-read 1\|2\|3 \| --no-must-read]` | Render HTML + write the topics sidecar. |
+| `newsletter_pipeline.py create --newsletter 057 [--days 14]` | archive → normalize → build (non-interactive). |
+| `newsletter_pipeline.py all [--newsletter 057] [--days 14]` | Full interactive console sequence (default when no subcommand). |
+
+Lower-level module entry points:
+
+| Command | What it does |
+|---|---|
+| `python -m newsletter.bootstrap_chrome` | The targeted bootstrap itself (what `bootstrap_chrome.bat` wraps). |
 | `python -m newsletter.bootstrap_session` | One-time Gmail / source login into the dedicated Chrome profile. |
 | `python -m newsletter.dry_run --first-non-gmail-tab --no-write` | Archive ONE tab, log only, no Notion writes. |
 | `python -m newsletter.dry_run --single-url <url>` | Pick a specific tab by URL substring. Add `--no-write` for read-only. |
@@ -161,11 +176,15 @@ byline. The fallback exists so the pipeline never invents people.
 
 - **Chrome 136+** silently refuses to bind `--remote-debugging-port`
   against the default profile dir (security policy change to block
-  session-stealing extensions). The bat always launches with
+  session-stealing extensions). Bootstrap always launches with
   `--user-data-dir=newsletter\chrome_user_data\` to work around this.
-- The bat always kills every `chrome.exe` first (logging what it
-  killed) because a single orphan from a parallel Playwright run will
-  otherwise grab the binary and swallow the debug flag.
+- Bootstrap is **targeted and idempotent** (issue #59, supersedes #57): it
+  reuses an existing `:9222` if one is up, and otherwise kills **only** the
+  Chrome whose command line carries `--user-data-dir=<newsletter profile>` (via
+  `config.chrome_profile_lock.pids_holding_profile`) — never `taskkill /IM
+  chrome.exe`. Your everyday browser is never touched. If a *non-debug* Chrome
+  is holding the newsletter profile, relaunching it drops that window's open
+  tabs (logins persist).
 - The pipeline does **not** close Chrome when it disconnects — only the
   tabs whose articles processed successfully are closed.
 - New connections are created with `name` + `topic` only. LinkedIn URLs
@@ -182,7 +201,8 @@ byline. The fallback exists so the pipeline never invents people.
 
 ## Files
 
-- `bootstrap_chrome.bat` — daily Chrome launcher (kill + relaunch on `:9222`).
+- `bootstrap_chrome.py` — targeted, idempotent Chrome launcher on `:9222` (reuse-or-relaunch; never kills the everyday browser).
+- `bootstrap_chrome.bat` — thin wrapper that runs `python -m newsletter.bootstrap_chrome`.
 - `bootstrap_session.py` — one-time Gmail-login flow into the dedicated profile.
 - `chrome_tabs.py` — CDP attach, list, skip filter, tab close.
 - `extractor.py` — Playwright + readability-lxml + meta-tag fallback.
@@ -198,4 +218,4 @@ byline. The fallback exists so the pipeline never invents people.
 - `normalize_names_words.json` — sidecar: proper-name whitelist + special
   cases + common words.
 - `normalize_url.py` — URL query-param stripper with preserve list.
-- `build_newsletter.py` — HTML builder + must-read line copier.
+- `build_newsletter.py` — HTML builder + must-read line; writes the `N{NNN}.topics.json` sidecar the app's must-read picker reads.
