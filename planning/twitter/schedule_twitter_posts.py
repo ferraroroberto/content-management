@@ -294,7 +294,82 @@ def _type_caption(page: Page, caption: str) -> None:
     # Lexical ignores .fill(); type via keyboard so onChange fires.
     page.keyboard.type(caption, delay=4)
     page.wait_for_timeout(400)
+    _dismiss_mention_typeahead(page)
     logger.debug("📝 Caption typed (%d chars).", len(caption))
+
+
+def _dismiss_mention_typeahead(page: Page) -> None:
+    """Close X's mention typeahead if it's open.
+
+    A caption ending in an unterminated ``@handle`` leaves the typeahead open —
+    the caret sits right after the handle, so nothing dismisses it. It reopens
+    whenever focus returns to the textarea (e.g. after the Schedule modal
+    closes), and it overlays the composer's primary Schedule button, failing
+    ``_click_final_schedule_action`` (issue #63 follow-on). Escape closes it
+    without altering the caption (verified: "@handle" stays as literal text,
+    which X still linkifies on publish).
+
+    Guarded by the typeahead's own presence: a bare Escape on a clean composer
+    can pop the discard-draft prompt. The typeahead is a body-level portal (NOT
+    inside the composer dialog) with a stable id prefix ``typeaheadDropdown``,
+    so we match it precisely rather than via a bare ``[role="listbox"]``.
+    """
+    try:
+        if page.locator('[role="listbox"][id^="typeaheadDropdown"]').count() > 0:
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(300)
+            logger.debug("⌨️ Dismissed mention typeahead.")
+    except Exception:
+        pass
+
+
+def _click_through_cover(
+    page: Page,
+    loc,
+    *,
+    label: str,
+    verify=None,
+    timeout_ms: int = 5000,
+) -> bool:
+    """Click ``loc``, surviving the composer's intermittent full-cover overlay.
+
+    After an image is attached the action toolbar relocates low in the modal
+    (probed y≈810 at 1280×900) and an absolutely-positioned full-cover ``<div>``
+    (``r-1p0dtai/-1d2f490/-1xcajam/-zchlnj`` ≈ top/left/bottom/right:0) shares
+    that stacking context. It is normally *behind* the buttons, but X's
+    hit-testing intermittently routes the pointer to the cover and Playwright
+    reports the subtree "intercepts pointer events" even though the button is
+    visible/enabled/stable (issue #63).
+
+    Scroll into view, try a normal click (which polls actionability — cheap on
+    a warm composer), then fall back to a JS ``el.click()`` that bypasses
+    pointer-event hit-testing and reliably lands. When ``verify`` is given,
+    return True only once it reports success, so a slow UI transition isn't
+    mistaken for a failed click and re-clicked.
+    """
+    try:
+        loc.scroll_into_view_if_needed(timeout=2000)
+        page.wait_for_timeout(200)
+    except Exception:
+        pass
+    try:
+        loc.click(timeout=timeout_ms)
+        if verify is None or verify():
+            return True
+    except PWTimeoutError:
+        logger.info(
+            "ℹ️ %s click intercepted by the cover overlay — "
+            "falling back to JS click (issue #63).", label,
+        )
+    except Exception:
+        pass
+    try:
+        loc.evaluate("el => el.click()")
+        if verify is None or verify():
+            return True
+    except Exception:
+        pass
+    return False
 
 
 def _upload_image(page: Page, path: Path) -> None:
@@ -338,8 +413,33 @@ def _upload_image(page: Page, path: Path) -> None:
     page.wait_for_timeout(800)
 
 
+def _schedule_modal_open(page: Page, timeout_ms: int = 2500) -> bool:
+    """Poll until the Schedule modal's native date/time selects mount.
+
+    The modal adds exactly 6 native ``<select>``s (Month/Day/Year/Hour/Minute/
+    AM-PM) inside a dialog; the composer dialog itself has none, so ``>= 6``
+    cleanly distinguishes "modal open" from "still on the composer".
+    """
+    for _ in range(max(1, timeout_ms // 150)):
+        try:
+            if page.locator('[role="dialog"] select').count() >= 6:
+                return True
+        except Exception:
+            pass
+        page.wait_for_timeout(150)
+    return False
+
+
 def _click_schedule_toolbar(page: Page) -> None:
-    """Click the calendar-clock icon in the composer toolbar (tooltip 'Schedule')."""
+    """Open the Schedule modal via the composer's calendar-clock toolbar button.
+
+    The button relocates low in the modal after image attach and is subject to
+    the intermittent cover-overlay interception handled by ``_click_through_cover``
+    (issue #63). Success is confirmed by the modal's 6 native selects mounting,
+    so a slow open isn't mistaken for a failed click. The image is already
+    fully attached by now (``_upload_image`` waits for the preview), so the
+    JS-click bypass is safe — not a blind early click.
+    """
     candidates = [
         lambda: page.locator('button[data-testid="scheduleOption"]'),
         lambda: page.locator('[aria-label="Schedule post"]'),
@@ -348,14 +448,17 @@ def _click_schedule_toolbar(page: Page) -> None:
     for find in candidates:
         try:
             loc = find().first
-            if loc.count():
-                loc.click(timeout=5000)
-                page.wait_for_timeout(800)
-                logger.debug("📅 Opened Schedule modal.")
-                return
         except Exception:
             continue
-    raise RuntimeError("Could not click Schedule toolbar button.")
+        if not loc.count():
+            continue
+        if _click_through_cover(
+            page, loc, label="Schedule toolbar",
+            verify=lambda: _schedule_modal_open(page),
+        ):
+            logger.debug("📅 Opened Schedule modal.")
+            return
+    raise RuntimeError("Could not open the Schedule modal (toolbar button).")
 
 
 def _set_schedule_modal(page: Page, target: date, hour: int, minute: int) -> None:
@@ -429,7 +532,14 @@ def _click_confirm_in_modal(page: Page) -> None:
 def _click_final_schedule_action(page: Page) -> None:
     """The composer's primary action button — after Confirm in the schedule
     modal — reads 'Schedule' instead of 'Post'. Click it.
+
+    Closing the Schedule modal returns focus to the textarea, which reopens the
+    mention typeahead when the caption ends in an ``@handle`` — that dropdown
+    overlays this button, so dismiss it first. The button lives in the same
+    relocated toolbar as the schedule icon, so it gets the same cover-overlay
+    JS-click fallback (issue #63).
     """
+    _dismiss_mention_typeahead(page)
     candidates = [
         lambda: page.locator('[data-testid="tweetButton"]'),
         lambda: page.locator('button[data-testid="tweetButtonInline"]'),
@@ -438,14 +548,14 @@ def _click_final_schedule_action(page: Page) -> None:
     for find in candidates:
         try:
             loc = find().last
-            if loc.count():
-                loc.scroll_into_view_if_needed(timeout=2000)
-                loc.click(timeout=6000)
-                page.wait_for_timeout(700)
-                logger.debug("🚀 Final Schedule action clicked.")
-                return
         except Exception:
             continue
+        if not loc.count():
+            continue
+        if _click_through_cover(page, loc, label="Final Schedule"):
+            page.wait_for_timeout(700)
+            logger.debug("🚀 Final Schedule action clicked.")
+            return
     raise RuntimeError("Could not click the final Schedule action button.")
 
 
