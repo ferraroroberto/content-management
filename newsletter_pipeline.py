@@ -2,8 +2,11 @@
 
 Walks the weekly newsletter workflow end-to-end:
 
-1. Bootstrap Chrome on ``:9222`` against the dedicated newsletter profile
-   (kill all chrome.exe + relaunch with `--user-data-dir`).
+1. Ensure Chrome is up on ``:9222`` against the dedicated newsletter profile.
+   Bootstrap is **skipped by default** — bring Chrome up yourself by running
+   ``newsletter/bootstrap_chrome.bat`` in a separate console (it kills every
+   chrome.exe + relaunches with ``--user-data-dir``). Pass ``--no-skip-bootstrap``
+   to let the pipeline run that bootstrap for you.
 2. Wait for you to open your article tabs in that Chrome window.
 3. Archive the tabs into Notion via :func:`newsletter.pipeline.run_batch`.
 4. Wait for the green light to clean up.
@@ -143,9 +146,14 @@ def run_pipeline(*, days: int, newsletter_number: str | None,
         step_bootstrap_chrome()
     else:
         if not _debug_port_up():
-            print("❌ --skip-bootstrap was set but :9222 isn't responding")
+            print("❌ Chrome isn't responding on :9222 — cannot archive tabs.")
+            print("   Bootstrap is skipped by default (it kills every chrome.exe,")
+            print("   including your everyday browser). Open a SEPARATE console and run:")
+            print("       newsletter\\bootstrap_chrome.bat")
+            print("   open your newsletter article tabs in that window, then re-run this")
+            print("   pipeline. To let the pipeline bootstrap for you, pass --no-skip-bootstrap.")
             return 1
-        print("⏭️  Skipping bootstrap (--skip-bootstrap); :9222 already up")
+        print("⏭️  Using the existing Chrome on :9222 (bootstrap skipped by default)")
 
     _wait_for_user(
         ">>> Step 2/5: open every newsletter article tab in the Chrome window, "
@@ -177,8 +185,10 @@ def main() -> int:
         help="Newsletter number (e.g. 057). Prompted if omitted.",
     )
     parser.add_argument(
-        "--skip-bootstrap", action="store_true",
-        help="Skip the Chrome kill/relaunch (use the existing :9222 instance)",
+        "--skip-bootstrap", action=argparse.BooleanOptionalAction, default=True,
+        help="Skip the Chrome kill/relaunch and reuse the existing :9222 instance "
+             "(default). Use --no-skip-bootstrap to let the pipeline kill every "
+             "chrome.exe and relaunch the dedicated newsletter profile.",
     )
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()

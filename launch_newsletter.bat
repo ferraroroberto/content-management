@@ -5,12 +5,16 @@ REM
 REM Usage:
 REM   launch_newsletter.bat                   - interactive (prompts for # and
 REM                                              "press Enter" between steps)
-REM   launch_newsletter.bat --newsletter 057  - pre-fills the newsletter #
-REM   launch_newsletter.bat --skip-bootstrap  - reuse an already-up Chrome :9222
-REM   launch_newsletter.bat --debug           - verbose logs everywhere
+REM   launch_newsletter.bat --newsletter 057     - pre-fills the newsletter #
+REM   launch_newsletter.bat --no-skip-bootstrap  - let the pipeline kill+relaunch
+REM                                                Chrome (default: bootstrap is
+REM                                                skipped; bring :9222 up yourself
+REM                                                via newsletter\bootstrap_chrome.bat)
+REM   launch_newsletter.bat --debug              - verbose logs everywhere
 REM
 REM Full pipeline:
-REM   1. Bootstrap Chrome on :9222 (kill + relaunch on the dedicated profile)
+REM   1. Use Chrome already up on :9222 (bootstrap skipped by default; run
+REM      newsletter\bootstrap_chrome.bat yourself, or pass --no-skip-bootstrap)
 REM   2. Wait for you to open the newsletter article tabs
 REM   3. Archive each tab to Notion (newsletter.pipeline.run_batch)
 REM   4. Wait, then normalize_names + normalize_url

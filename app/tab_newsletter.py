@@ -39,18 +39,26 @@ def run() -> None:
     with cols[2]:
         skip_bootstrap = st.toggle(
             "skip Chrome bootstrap",
-            value=False,
+            value=True,
             key="newsletter-skip-bootstrap",
-            help="Skip the chrome.exe kill + relaunch; reuse the existing :9222 instance.",
+            help="On (default): reuse the Chrome already up on :9222 — bring it up "
+                 "yourself with `newsletter\\bootstrap_chrome.bat` in a console first. "
+                 "Off: the pipeline kills every chrome.exe and relaunches the "
+                 "dedicated profile.",
         )
 
     debug = st.toggle("debug", value=False, key="newsletter-debug")
 
+    if skip_bootstrap:
+        st.caption(
+            "ℹ️ Chrome must already be up on :9222 — run "
+            "`newsletter\\bootstrap_chrome.bat` in a console first."
+        )
+
     cmd = [str(VENV_PY), "newsletter_pipeline.py", "--days", str(int(days))]
     if newsletter_number.strip():
         cmd.extend(["--newsletter", newsletter_number.strip()])
-    if skip_bootstrap:
-        cmd.append("--skip-bootstrap")
+    cmd.append("--skip-bootstrap" if skip_bootstrap else "--no-skip-bootstrap")
     if debug:
         cmd.append("--debug")
 

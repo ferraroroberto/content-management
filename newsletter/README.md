@@ -70,8 +70,11 @@ launch_newsletter.bat
 
 That launcher runs `newsletter_pipeline.py`, which walks you through:
 
-1. **Bootstrap Chrome** — kills all `chrome.exe`, relaunches with
-   `--remote-debugging-port=9222 --user-data-dir=newsletter\chrome_user_data`.
+1. **Bootstrap Chrome** — *skipped by default.* Bring Chrome up yourself by
+   running `newsletter\bootstrap_chrome.bat` in a **separate console** (it kills
+   all `chrome.exe`, including your everyday browser, then relaunches with
+   `--remote-debugging-port=9222 --user-data-dir=newsletter\chrome_user_data`).
+   Pass `--no-skip-bootstrap` to let the pipeline run that kill+relaunch for you.
 2. **Wait** — you open the newsletter article tabs in that Chrome window
    (clicking links in Gmail is fine — they'll open there). Press Enter
    when ready.
@@ -90,10 +93,10 @@ That launcher runs `newsletter_pipeline.py`, which walks you through:
 CLI flags pass through to the orchestrator:
 
 ```powershell
-launch_newsletter.bat --newsletter 057     # pre-fill the number
-launch_newsletter.bat --skip-bootstrap     # reuse an already-up Chrome
-launch_newsletter.bat --debug              # verbose everywhere
-launch_newsletter.bat --days 7             # tighter normalise window
+launch_newsletter.bat --newsletter 057      # pre-fill the number
+launch_newsletter.bat --no-skip-bootstrap   # let the pipeline kill+relaunch Chrome
+launch_newsletter.bat --debug               # verbose everywhere
+launch_newsletter.bat --days 7              # tighter normalise window
 ```
 
 ## Running steps in isolation
