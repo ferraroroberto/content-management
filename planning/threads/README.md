@@ -64,6 +64,8 @@ from the IG side of the editorial DB. The scheduler only **reads** these
 
 ## Validated selectors (verified 2026-05-17 against `threads.com`)
 
+> **Centralised labels:** every user-facing accessible name (caption textbox, media-attach, the `Schedule…` menuitem, the calendar `Next month` / `Done` controls, the final `Schedule` action, the cancel / discard prompts) plus the localized calendar header live in [`threads_labels.py`](threads_labels.py) — `WHATS_NEW_TEXTBOX_RE`, `ATTACH_MEDIA_BTN_RE`, `SCHEDULE_MENUITEM_RE`, `SCHEDULE_TEXT_RE`, `NEXT_MONTH_BTN_RE`, `DONE_BTN_RE`, `FINAL_SCHEDULE_BTN_RE`, `CANCEL_DISCARD_BTN_RES`, `DISCARD_BTN_RE`, `calendar_header()`. When Threads relabels a control, extend the alternation there — do **not** re-inline a `re.compile` at the call site. The positional JS pickers and structural selectors below stay inline in the driver.
+
 | Step | Selector | Notes |
 |------|----------|-------|
 | Open composer | `text="What's new?"` on the profile feed | Opens the `New thread` dialog. The placeholder text re-appears inside the dialog too. |

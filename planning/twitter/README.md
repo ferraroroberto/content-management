@@ -63,6 +63,8 @@ successful live run).
 
 ## Validated selectors (verified 2026-05-17 against `x.com/home`)
 
+> **Centralised labels:** every user-facing accessible name (dialog dismissals, the Schedule toolbar, Confirm, the final Schedule action, the discard / cancel prompts) is defined as a compiled regex in [`twitter_labels.py`](twitter_labels.py) — `DISMISS_DIALOG_BTN_RES`, `SCHEDULE_TOOLBAR_BTN_RE`, `CONFIRM_BTN_RE`, `FINAL_SCHEDULE_BTN_RE`, `DISCARD_BTN_RES`, `CANCEL_CLOSE_BTN_RES`. When X relabels a button or A/Bs a wording, extend the alternation there — do **not** re-inline a `re.compile` at the call site. The structural `data-testid` hooks below stay inline in the driver.
+
 | Step | Selector | Notes |
 |------|----------|-------|
 | Open composer | `[data-testid="SideNav_NewTweet_Button"]` | Side-rail Post button; opens a clean modal. |

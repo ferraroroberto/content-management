@@ -38,6 +38,20 @@ from typing import Optional
 from playwright.sync_api import Page, TimeoutError as PWTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from planning.instagram.instagram_labels import (  # noqa: E402
+    ADD_MEDIA_BTN_SELECTOR,
+    CLOSE_BTN_RE,
+    DISCARD_LEAVE_BTN_RE,
+    NEXT_MONTH_BTN_RE,
+    NEXT_WEEK_BTN_RE,
+    NOT_NOW_BTN_RE,
+    PREV_WEEK_BTN_RE,
+    SCHEDULE_TEXT_RE,
+    SET_DATE_TIME_TEXT_RE,
+    UPLOAD_FROM_COMPUTER_SELECTOR,
+    day_cell_label,
+    fmt_time_12h,
+)
 from planning.instagram.instagram_session import (  # noqa: E402
     InstagramSession,
     LoginRequiredError,
@@ -82,14 +96,6 @@ def parse_single_date(s: str) -> date:
 
 def date_to_day_title(d: date) -> str:
     return d.strftime("%Y%m%d")
-
-
-def fmt_time_12h(hour: int, minute: int) -> str:
-    suffix = "AM" if hour < 12 else "PM"
-    h12 = hour % 12
-    if h12 == 0:
-        h12 = 12
-    return f"{h12}:{minute:02d} {suffix}"
 
 
 # ---------- Row model ----------
@@ -307,16 +313,6 @@ def resolve_story_payload(notion, cfg: dict, row: ScheduleRow) -> PostPayload:
 
 # ---------- Meta planner UI helpers ----------
 
-# The day-cell header in the Meta planner is e.g. "Mon 18". Windows strftime
-# uses "%#d" rather than "%-d" for an unpadded day. Build the label with
-# explicit indexing to stay cross-platform-safe.
-_WEEKDAY_ABBR = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-
-
-def _day_cell_label(d: date) -> str:
-    return f"{_WEEKDAY_ABBR[d.weekday()]} {d.day}"
-
-
 # JS helper: walk up from the day-header text node until we find an ancestor
 # div that itself contains a "Schedule" button. That ancestor IS the day's
 # calendar column, which we can then hover and from which we can click
@@ -356,7 +352,7 @@ def dismiss_meta_verified_modal(page: Page) -> bool:
     'Not now' button dismisses it. Returns True if it was dismissed.
     """
     try:
-        not_now = page.get_by_role("button", name=re.compile(r"^not now$", re.I))
+        not_now = page.get_by_role("button", name=NOT_NOW_BTN_RE)
         if not_now.count():
             not_now.first.click(timeout=4000)
             page.wait_for_timeout(500)
@@ -367,7 +363,7 @@ def dismiss_meta_verified_modal(page: Page) -> bool:
     # Fallback: dialog-scoped Close (×) button.
     try:
         close = page.locator('[role="dialog"]').get_by_role(
-            "button", name=re.compile(r"^close$", re.I)
+            "button", name=CLOSE_BTN_RE
         )
         if close.count():
             close.first.click(timeout=2000)
@@ -392,7 +388,7 @@ def _open_day_schedule_menu(page: Page, d: date, action: str) -> None:
     column. The hover + click then happen via the bounding-box of that
     ancestor's Schedule button.
     """
-    label = _day_cell_label(d)
+    label = day_cell_label(d)
     logger.debug("🖱  resolving column for day cell %s", label)
 
     # Make a small attempt to dismiss any modal that crept in between actions.
@@ -460,32 +456,6 @@ def _open_day_schedule_menu(page: Page, d: date, action: str) -> None:
         except Exception as err:
             raise RuntimeError(f"Could not click menu item '{action}': {err}")
     page.wait_for_timeout(1000)
-
-
-_ADD_MEDIA_BTN_SELECTOR = (
-    'div[role="button"]:has-text("Add photo/video"), '
-    'button:has-text("Add photo/video"), '
-    'div[role="button"]:has-text("Añadir foto/vídeo"), '
-    'button:has-text("Añadir foto/vídeo"), '
-    'div[role="button"]:has-text("Añadir foto"), '
-    'button:has-text("Añadir foto"), '
-    '[data-surface*="upload_button"]'
-)
-
-# Some Meta planner builds open an intermediate dialog instead of a native
-# file chooser when "Add photo/video" is clicked — the file picker only fires
-# after a second click on an "Upload from computer" affordance inside that
-# dialog. We accept EN + ES wordings to survive locale flips (see issue #28).
-_UPLOAD_FROM_COMPUTER_SELECTOR = (
-    'div[role="dialog"] div[role="button"]:has-text("Upload from computer"), '
-    'div[role="dialog"] button:has-text("Upload from computer"), '
-    'div[role="dialog"] div[role="button"]:has-text("Upload"), '
-    'div[role="dialog"] button:has-text("Upload"), '
-    'div[role="dialog"] div[role="button"]:has-text("Subir desde el ordenador"), '
-    'div[role="dialog"] button:has-text("Subir desde el ordenador"), '
-    'div[role="dialog"] div[role="button"]:has-text("Subir"), '
-    'div[role="dialog"] button:has-text("Subir")'
-)
 
 
 def _dump_upload_debug(page: Page, tag: str) -> Path:
@@ -561,7 +531,7 @@ def _upload_files(page: Page, paths: list[Path], *, is_video: bool = False) -> N
     """
     file_paths = [str(p) for p in paths]
 
-    add_btn = page.locator(_ADD_MEDIA_BTN_SELECTOR).first
+    add_btn = page.locator(ADD_MEDIA_BTN_SELECTOR).first
     try:
         add_btn.wait_for(state="visible", timeout=12000)
     except Exception as err:
@@ -658,7 +628,7 @@ def _upload_files(page: Page, paths: list[Path], *, is_video: bool = False) -> N
         # Re-find: the previous click may have changed the DOM even if no
         # chooser fired. Then JS-click the freshly resolved element.
         page.wait_for_timeout(600)
-        add_btn = page.locator(_ADD_MEDIA_BTN_SELECTOR).first
+        add_btn = page.locator(ADD_MEDIA_BTN_SELECTOR).first
         leg1_chooser = _try_click_for_chooser(_js_click)
 
     if leg1_chooser is not None:
@@ -669,7 +639,7 @@ def _upload_files(page: Page, paths: list[Path], *, is_video: bool = False) -> N
 
     # --- Leg 2: intermediate dialog — click 'Upload from computer' inside it ---
     leg2_chooser = None
-    upload_btn = page.locator(_UPLOAD_FROM_COMPUTER_SELECTOR).first
+    upload_btn = page.locator(UPLOAD_FROM_COMPUTER_SELECTOR).first
     try:
         upload_btn.wait_for(state="visible", timeout=5000)
     except Exception as err:
@@ -951,13 +921,13 @@ def _ensure_set_date_toggle_on(page: Page) -> None:
         pass
     # Fallback: click the visible label text.
     try:
-        page.get_by_text(re.compile(r"^set date and time$", re.I)).first.click(timeout=4000)
+        page.get_by_text(SET_DATE_TIME_TEXT_RE).first.click(timeout=4000)
         page.wait_for_timeout(1200)
     except Exception:
         pass
     # Final scroll so the (now-mounted) date/time row is in viewport.
     try:
-        page.get_by_text(re.compile(r"^schedule$", re.I)).last.scroll_into_view_if_needed(timeout=2000)
+        page.get_by_text(SCHEDULE_TEXT_RE).last.scroll_into_view_if_needed(timeout=2000)
         page.wait_for_timeout(400)
     except Exception:
         pass
@@ -978,7 +948,7 @@ def _click_calendar_day(page: Page, target: date) -> None:
             break
         try:
             next_btn = page.get_by_role(
-                "button", name=re.compile(r"next month", re.I)
+                "button", name=NEXT_MONTH_BTN_RE
             )
             if next_btn.count():
                 next_btn.first.click(timeout=2000)
@@ -1098,7 +1068,7 @@ def _cancel_composer(page: Page) -> None:
             pass
     # Discard confirmation, if Meta asks.
     try:
-        discard = page.get_by_role("button", name=re.compile(r"^(discard|leave)$", re.I))
+        discard = page.get_by_role("button", name=DISCARD_LEAVE_BTN_RE)
         if discard.count():
             discard.first.click(timeout=2000)
             page.wait_for_timeout(500)
@@ -1126,7 +1096,7 @@ def navigate_to_week(page: Page, target: date, *, max_clicks: int = 10) -> None:
     Strategy: try clicking 'Next week' until the target's column appears,
     then 'Previous week' if we overshot.
     """
-    label = _day_cell_label(target)
+    label = day_cell_label(target)
 
     def col_present() -> bool:
         try:
@@ -1139,12 +1109,8 @@ def navigate_to_week(page: Page, target: date, *, max_clicks: int = 10) -> None:
 
     # Meta uses chevron-glyph text "Left" / "Right" as the button label
     # (probed via DOM); aria-label is empty.
-    next_btn = page.get_by_role(
-        "button", name=re.compile(r"^(next week|right)$", re.I)
-    )
-    prev_btn = page.get_by_role(
-        "button", name=re.compile(r"^(previous week|left)$", re.I)
-    )
+    next_btn = page.get_by_role("button", name=NEXT_WEEK_BTN_RE)
+    prev_btn = page.get_by_role("button", name=PREV_WEEK_BTN_RE)
 
     # Try forward first.
     for _ in range(max_clicks):
@@ -1325,7 +1291,7 @@ def _set_all_visible_date_time(
     composer surfaces 1 set (only after 'Set date and time' is on).
     """
     try:
-        page.get_by_text(re.compile(r"^schedule$", re.I)).last.scroll_into_view_if_needed(timeout=2000)
+        page.get_by_text(SCHEDULE_TEXT_RE).last.scroll_into_view_if_needed(timeout=2000)
         page.wait_for_timeout(500)
     except Exception:
         pass

@@ -181,6 +181,8 @@ Cross-module dependencies:
 
 Meta's class names are obfuscated and rotate — never anchor on classes. These role/text/input selectors are the ones validated against the live UI during the first end-to-end run.
 
+> **Centralised labels:** the user-facing accessible names and the locale `EN | ES` media-attach unions live in [`instagram_labels.py`](instagram_labels.py) — `NOT_NOW_BTN_RE`, `CLOSE_BTN_RE`, `DISCARD_LEAVE_BTN_RE`, `SET_DATE_TIME_TEXT_RE`, `SCHEDULE_TEXT_RE`, `NEXT_MONTH_BTN_RE`, `NEXT_WEEK_BTN_RE`, `PREV_WEEK_BTN_RE`, `ADD_MEDIA_BTN_SELECTOR`, `UPLOAD_FROM_COMPUTER_SELECTOR`, plus the `day_cell_label()` / `fmt_time_12h()` rendering helpers. When Meta relabels a control or an account flips locale, extend the alternation there — do **not** re-inline it at the call site. Argument-built name regexes (`Schedule post` / `Schedule story`, action buttons, time slots) and structural CSS/JS probes stay inline in the driver.
+
 | step | selector |
 |------|----------|
 | Dismiss 'Get Meta Verified' upsell | `page.get_by_role("button", name=/^not now$/i)` — fires on first navigation only |
