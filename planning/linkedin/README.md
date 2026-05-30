@@ -229,7 +229,7 @@ LinkedIn's class names are obfuscated (`_6e37ba57`, `_876da3c4`, …) and rotate
 
 | step | selector |
 |------|----------|
-| Open post + file picker (ILL / POST) | `page.get_by_role("button", name=PHOTO_BTN_RE)` on the feed (e.g. EN `^photo$` / ES `^foto$`) |
+| Open post + file picker (ILL / POST) | `page.get_by_role("button", name=PHOTO_BTN_RE)` on the feed. The button's accessible name is its `aria-label` (`"Add a photo"`), not its visible text `"Photo"`, so `PHOTO_BTN_RE` anchors on the trailing noun (`(?:^|\s)(?:photo\|foto)$`) to match `Photo` / `Foto` / `Add a photo` / `Añadir … foto` alike |
 | Upload image | `input[type="file"]` (first; appears in DOM after "Photo" click) |
 | Open ALT dialog | `[role="dialog"] >> get_by_role("button", name=ALT_TEXT_BTN_RE)` |
 | ALT textarea | `textarea[placeholder*="describe this image" i], textarea[placeholder*="imagen" i], [role='dialog'] textarea` (first hit wins) |
@@ -237,7 +237,7 @@ LinkedIn's class names are obfuscated (`_6e37ba57`, `_876da3c4`, …) and rotate
 | Editor → composer (Next) | `[role="dialog"] button:has-text("Next"), [role="dialog"] button:has-text("Siguiente")` |
 | Caption editor | `div[role="textbox"][contenteditable="true"]` (then `page.keyboard.type(...)`) |
 | Open Schedule dialog | `get_by_role("button", name=SCHEDULE_POST_BTN_RE)` |
-| Set date | Click `input[name="artdeco-date"]` → click calendar day by `calendar_day_aria_re(target)` (EN `Monday, May 18, 2026.` / ES `lunes, 18 de mayo de 2026.`) |
+| Set date | Click `input[name="artdeco-date"]` → advance to the target month by reading the header `h1.artdeco-calendar__month` (e.g. `May 2026` / `mayo de 2026`) and clicking `aria-label="Next month"` until it matches → click the calendar day by `calendar_day_aria_re(target)` (EN `Monday, May 18, 2026.` / ES `lunes, 18 de mayo de 2026.`). The calendar popover is portaled **outside** `[role="dialog"]`, so the header + day cells are matched document-wide, not scoped to the dialog |
 | Set time | Click `input[name="timepicker"]` → wait for `.artdeco-typeahead__results-list:not([data-count="0"])` → click `li:has-text(<cand>)` for `<cand>` in `time_picker_candidates(hour, minute)` (EN `6:30 AM` / ES 24h `06:30` / ES 12h `6:30 a. m.`) |
 | Schedule sub-dialog → composer | `[role="dialog"] button:has-text("Next"), [role="dialog"] button:has-text("Siguiente")` |
 | Final Schedule button | `[role="dialog"] >> get_by_role("button", name=FINAL_SCHEDULE_BTN_RE)` (anchored on `^schedule$` / `^programar$` so it never re-opens the clock-icon's schedule sub-dialog) |
@@ -267,6 +267,7 @@ LinkedIn's class names are obfuscated (`_6e37ba57`, `_876da3c4`, …) and rotate
 - **Carousel "Next" buttons on the feed** behind the modal have `aria-label="Next"` but empty visible text. Scope to `[role="dialog"] button:has-text("Next"), [role="dialog"] button:has-text("Siguiente")` so they don't win the `.first` race.
 - **Don't trust a fixed `wait_for_timeout` + screenshot as success confirmation.** The composer briefly stays open while LinkedIn renders the schedule, then unmounts. Wait for the dialog to actually disappear.
 - **LinkedIn's account-level UI language wins over `Accept-Language`.** If the connected LI account is set to Spanish (Settings → Account preferences → Site Preferences → Language), every page renders in Spanish no matter what `locale="en-US"` and `--lang=en-US` are doing at the Chrome layer — even mid-session LI can flip back after an action. The selectors in [`linkedin_labels.py`](linkedin_labels.py) cover both languages; if you see a brand-new Spanish wording that doesn't match, extend the alternation there, not at the call site.
+- **The schedule calendar popover renders OUTSIDE `[role="dialog"]`.** Its month header is an `<h1 class="artdeco-calendar__month">` (e.g. `May 2026`), not an `h2`/`div`, and it is not a descendant of the composer dialog. Scoping the month-arrival check to `[role="dialog"]` (or matching `h2`/`div`) silently never fires, so the "Next month" loop runs until LinkedIn's ~3-month scheduling limit and overshoots the target month. Read the header document-wide from `h1.artdeco-calendar__month` and click `aria-label="Next month"` until it matches.
 - **First feed action of a fresh session needs a longer click timeout.** LinkedIn redirects `/feed/` → `/` for logged-in users and re-renders the share box client-side; the cold-start race used to time the original 10 s `.click()` out (issue #27). The shared constant `linkedin_composer.FEED_ENTRY_CLICK_TIMEOUT_MS` (30 s) is what every feed-entry helper (`_click_add_photo`, `_click_video_button`, `_click_start_a_post`) uses; warm calls still return in ~1 s because `.click()` returns the instant the button is actionable.
 
 ---
