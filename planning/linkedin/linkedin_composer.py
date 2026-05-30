@@ -46,11 +46,46 @@ FEED_ENTRY_CLICK_TIMEOUT_MS = 30000
 
 # A LinkedIn mention starts at "@" and runs through one or more capitalized
 # tokens separated by single spaces. We intentionally STOP at the first
-# non-letter (punctuation, newline, lowercase) so "@Hannah Wilson. " resolves
-# the mention "Hannah Wilson" and leaves the period + space as literal text.
-# Periods/apostrophes inside names (e.g. "@O'Connor") are NOT supported by
-# this regex; extend if you hit a real case.
-_MENTION_RE = re.compile(r"@([A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*)*)")
+# non-letter (punctuation, newline) so "@Hannah Wilson. " resolves the mention
+# "Hannah Wilson" and leaves the period + space as literal text.
+#
+# Letters are Unicode-aware (``[^\W\d_]`` = any word char that is not a digit
+# or underscore, i.e. any Unicode letter) so accented names — "@Mercè Brey",
+# "@Begoña Núñez" — are captured WHOLE. The old ASCII-only ``[a-zA-Z]`` stopped
+# at the first accented character, capturing only the prefix ("Merc"), which
+# made the chip resolve on the prefix and then dumped the accented tail
+# ("è Brey") into the composer as stale literal text beside the blue chip.
+#
+# stdlib ``re`` has no Unicode uppercase class, so the regex matches a greedy
+# run of letter tokens (any case) and ``_leading_capitalized_run`` trims it
+# down to the leading run of *capitalized* tokens. That keeps two behaviours
+# the old ``[A-Z]``-anchored regex had for free: a lowercase-initial match
+# (the "@gmail" of an email) yields an empty run and is skipped, and a name
+# does not greedily swallow following lowercase words ("Thanks @John for help"
+# resolves "John", not "John for help").
+#
+# Periods/apostrophes/hyphens inside names ("@O'Connor", "@Jean-Paul") are
+# still NOT supported; extend the token class if you hit a real case.
+_MENTION_RE = re.compile(r"@([^\W\d_]+(?:\s+[^\W\d_]+)*)", re.UNICODE)
+_NAME_TOKEN_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
+
+
+def _leading_capitalized_run(raw: str) -> str:
+    """Return the leading run of capitalized whitespace-separated tokens.
+
+    ``raw`` is a ``_MENTION_RE`` group-1 capture (letter tokens joined by
+    whitespace). Tokens are kept while their first character is uppercase and
+    the result is a verbatim prefix of ``raw`` (original separators preserved),
+    so the caller can locate its end with ``match.start(1) + len(result)``.
+    Returns ``""`` when the first token is not capitalized.
+    """
+    end = 0
+    for tok in _NAME_TOKEN_RE.finditer(raw):
+        if tok.group(0)[0].isupper():
+            end = tok.end()
+        else:
+            break
+    return raw[:end]
 
 # Selector candidates for the LinkedIn mention typeahead dropdown, in
 # specificity order. LinkedIn's UI varies across rollouts; the generic
@@ -132,10 +167,18 @@ def fill_caption_with_mentions(page: Page, caption: str) -> None:
     mention_count = 0
     resolved_count = 0
     for m in _MENTION_RE.finditer(caption):
+        # Trim the greedy letter run to its leading capitalized tokens. An
+        # empty run means the "@" is lowercase-initial (e.g. an email's
+        # "@gmail"): leave it untouched — we don't type or advance ``pos``, so
+        # it stays in the literal stream typed by the next iteration's leading
+        # chunk (or the final tail).
+        name = _leading_capitalized_run(m.group(1))
+        if not name:
+            continue
+        name_end = m.start(1) + len(name)  # caption index just past the name
         if m.start() > pos:
             page.keyboard.type(caption[pos:m.start()], delay=4)
         mention_count += 1
-        name = m.group(1)
         page.keyboard.type("@", delay=20)
         page.wait_for_timeout(250)
         page.keyboard.type(name, delay=80)
@@ -155,10 +198,10 @@ def fill_caption_with_mentions(page: Page, caption: str) -> None:
             # one) or alphanumeric (defensive — source missed a space).
             # Newlines, punctuation, EOF: leave alone.
             page.wait_for_timeout(150)
-            next_char = caption[m.end():m.end()+1]
+            next_char = caption[name_end:name_end+1]
             if next_char in (" ", "\t"):
                 page.keyboard.type(" ", delay=40)
-                pos = m.end() + 1  # skip the (would-be-eaten) source space
+                pos = name_end + 1  # skip the (would-be-eaten) source space
                 continue
             if next_char and next_char.isalnum():
                 page.keyboard.type(" ", delay=40)
@@ -167,7 +210,7 @@ def fill_caption_with_mentions(page: Page, caption: str) -> None:
                 "⚠️ Could not resolve LinkedIn mention @%s — left as literal text. "
                 "The composer may still show the unresolved @<name>.", name,
             )
-        pos = m.end()
+        pos = name_end
     if pos < len(caption):
         page.keyboard.type(caption[pos:], delay=4)
     if mention_count:

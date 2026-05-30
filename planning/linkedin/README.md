@@ -342,7 +342,7 @@ LinkedIn renders an `@Name` mention as a blue, clickable link to the person's pr
 
 ### Implementation (`planning/linkedin/linkedin_composer.py::fill_caption_with_mentions`)
 
-1. Scan the caption with a strict regex: `r"@([A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*)*)"`. This matches `@Hannah Wilson`, `@Hannah`, `@RobertoFerraro`, etc., and intentionally STOPS at punctuation, lowercase, or newline. Periods/apostrophes inside names (`@O'Connor`) are NOT supported — extend the regex if needed.
+1. Scan the caption with a Unicode-aware regex: `r"@([^\W\d_]+(?:\s+[^\W\d_]+)*)"`. The letter class `[^\W\d_]` matches **any** Unicode letter, so accented names — `@Mercè Brey`, `@Begoña Núñez` — are captured whole. (The earlier ASCII-only `[A-Z][a-zA-Z]*` stopped at the first accented character, capturing only `Merc` and dumping the tail `è Brey` into the composer as stale literal text beside the resolved chip.) Because stdlib `re` has no Unicode-uppercase class, the regex matches a greedy run of letter tokens of any case and `_leading_capitalized_run` then trims it to the leading run of *capitalized* tokens — so a lowercase-initial `@` (an email's `@gmail`) is skipped, and `Thanks @John for help` resolves `John`, not `John for help`. Periods/apostrophes/hyphens inside names (`@O'Connor`, `@Jean-Paul`) are still NOT supported — extend the token class if needed.
 2. For each match:
    - Type the literal text up to the `@`.
    - Type `@` with a 20ms delay.
