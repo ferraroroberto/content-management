@@ -97,7 +97,8 @@ reporting/                            # repo root
 ├── newsletter_pipeline.py            # orchestrator: bootstrap/archive/normalize/build subcommands
 ├── launch_planning.bat               # planning launcher (Windows CMD)
 ├── launch_reporting.bat              # reporting launcher (Windows CMD)
-└── launch_newsletter.bat             # newsletter launcher (Windows CMD)
+├── launch_newsletter.bat             # newsletter launcher (Windows CMD)
+└── launch_autoheal.bat               # self-healing planning run (visible console)
 ```
 
 ### Per-folder READMEs
@@ -189,6 +190,19 @@ rows are skipped (separate manual process). Full table + selectors in
 - Each platform package owns its own dedicated Chrome profile under
   `planning/<P>/chrome_user_data/` (gitignored). One-time bootstrap per
   platform: `python -m planning.<P>.bootstrap_session`.
+
+### Self-healing planning runs
+
+The schedulers drive live platform UIs whose DOM drifts almost weekly, silently
+breaking selectors. The **🔧 run + autoheal** button in the control-panel app's
+planning tab (and `launch_autoheal.bat`) runs the `/schedule-autoheal` skill in a
+**visible console**: it runs the scheduler and, on a UI-drift failure, probes the
+live DOM, applies a selector-only fix, re-validates with a dry-run, and — when
+confident — files an issue, opens a PR, and merges end-to-end. Login / data
+errors instead ping Slack and stop for a human. The run also writes a
+machine-readable `results/planning/latest-result.json`. See
+[`docs/self-healing-scheduler.md`](docs/self-healing-scheduler.md) for the full
+loop, failure classification, and guardrails.
 
 ## Reporting pipeline — overview
 

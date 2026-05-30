@@ -35,14 +35,9 @@ __pycache__/
 supabase/.temp/cli-latest
 supabase/.branches/_current_branch
 
-# claude code settings
-.claude/
-
-# temp files
-/tmp
-
-# claude code settings
-.claude/
+# claude code settings — ignore local settings, but TRACK project skills
+.claude/*
+!.claude/skills/
 
 # temp files
 /tmp

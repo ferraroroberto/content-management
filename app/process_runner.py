@@ -141,6 +141,84 @@ def start_pipeline(name: str, cmd: list[str], *, cwd: Optional[Path] = None) -> 
     threading.Thread(target=_pump, daemon=True, name=f"pump-{name}").start()
 
 
+def start_skill_console(name: str, skill_cmd: str, *, model: str = "claude-opus-4-8") -> None:
+    """Launch the ``/schedule-autoheal`` skill in a **visible, detached console**.
+
+    Unlike :func:`start_pipeline` (which PIPEs the child into an in-app panel),
+    this spawns ``app/autoheal_console.py`` with ``CREATE_NEW_CONSOLE`` so the
+    agent's live ``--verbose`` stream appears in its own OS window — the user
+    watches it directly. We can't also PIPE a new-console child, so the wrapper
+    tees its output to a log file and a background thread tails that file into
+    the same deque ``render_log_panel`` reads, mirroring the window in-app.
+
+    The ``Popen`` handle is kept (detached ≠ untracked) so ``stop_pipeline`` and
+    the status badges keep working.
+    """
+    if is_running(name):
+        logger.warning("skill console %s already running — ignoring start", name)
+        return
+
+    ts = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+    log_path = REPO_ROOT / "results" / "planning" / f"autoheal-{ts}.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    wrapper = REPO_ROOT / "app" / "autoheal_console.py"
+    cmd = [
+        str(VENV_PY), str(wrapper),
+        "--skill-cmd", skill_cmd,
+        "--log", str(log_path),
+        "--model", model,
+    ]
+
+    lines = _get_lines(name)
+    lines.clear()
+    lines.append(f"$ {skill_cmd}")
+    lines.append(f"# visible console launched {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    lines.append(f"# live output streams in the new window; mirrored here from {log_path.name}")
+    lines.append("")
+
+    env = os.environ.copy()
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    env.setdefault("PYTHONUNBUFFERED", "1")
+
+    creationflags = 0
+    if sys.platform == "win32":
+        # CREATE_NEW_CONSOLE → a real, visible window that outlives this app.
+        creationflags = subprocess.CREATE_NEW_CONSOLE
+
+    proc = subprocess.Popen(
+        cmd,
+        cwd=str(REPO_ROOT),
+        env=env,
+        creationflags=creationflags,
+    )
+    _set_proc(name, proc)
+    _set_meta(name, started_at=datetime.now().isoformat(timespec="seconds"),
+              cmd=cmd, log_path=str(log_path))
+
+    def _tail():
+        # Wait for the wrapper to create the log, then stream new lines into the
+        # deque until the process exits and the file is fully drained.
+        while not log_path.exists() and proc.poll() is None:
+            time.sleep(0.2)
+        try:
+            with log_path.open("r", encoding="utf-8", errors="replace") as fh:
+                while True:
+                    line = fh.readline()
+                    if line:
+                        lines.append(line.rstrip("\n"))
+                        continue
+                    if proc.poll() is not None:
+                        for rest in fh.read().splitlines():
+                            lines.append(rest)
+                        break
+                    time.sleep(0.3)
+        except Exception as err:  # noqa: BLE001 — tail must never crash the app
+            lines.append(f"[tail error] {err}")
+
+    threading.Thread(target=_tail, daemon=True, name=f"tail-{name}").start()
+
+
 def stop_pipeline(name: str) -> None:
     proc = _get_proc(name)
     if proc is None or proc.poll() is not None:
