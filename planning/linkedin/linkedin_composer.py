@@ -45,9 +45,17 @@ FEED_ENTRY_CLICK_TIMEOUT_MS = 30000
 # ---------- Mention resolution ----------
 
 # A LinkedIn mention starts at "@" and runs through one or more capitalized
-# tokens separated by single spaces. We intentionally STOP at the first
-# non-letter (punctuation, newline) so "@Hannah Wilson. " resolves the mention
-# "Hannah Wilson" and leaves the period + space as literal text.
+# tokens separated by HORIZONTAL whitespace (space/tab). We intentionally STOP
+# at the first non-letter (punctuation, newline) so "@Hannah Wilson. " resolves
+# the mention "Hannah Wilson" and leaves the period + space as literal text.
+#
+# The inter-token separator is ``[ \t]+`` rather than ``\s+`` on purpose: ``\s``
+# also matches ``\n``/``\r``, so a capitalized word after a blank line would
+# continue the name ("@Andre Muller\n\nThanks" → "Andre Muller\n\nThanks"),
+# typed verbatim (newlines and all) into the composer and mis-resolved by the
+# typeahead (issue #74). Restricting to horizontal whitespace keeps a name on a
+# single line: "@Mercè Brey\n\nGreat book" resolves the chip "Mercè Brey" and
+# leaves "\n\nGreat book" as literal text.
 #
 # Letters are Unicode-aware (``[^\W\d_]`` = any word char that is not a digit
 # or underscore, i.e. any Unicode letter) so accented names — "@Mercè Brey",
@@ -66,7 +74,7 @@ FEED_ENTRY_CLICK_TIMEOUT_MS = 30000
 #
 # Periods/apostrophes/hyphens inside names ("@O'Connor", "@Jean-Paul") are
 # still NOT supported; extend the token class if you hit a real case.
-_MENTION_RE = re.compile(r"@([^\W\d_]+(?:\s+[^\W\d_]+)*)", re.UNICODE)
+_MENTION_RE = re.compile(r"@([^\W\d_]+(?:[ \t]+[^\W\d_]+)*)", re.UNICODE)
 _NAME_TOKEN_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
 
 
