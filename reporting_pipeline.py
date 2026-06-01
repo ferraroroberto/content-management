@@ -11,7 +11,9 @@ Initialization script to run the complete data processing pipeline:
 
 import os
 import sys
+import json
 import argparse
+import importlib.util
 import logging
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -28,7 +30,11 @@ for _stream in (sys.stdout, sys.stderr):
 # Add the current directory to the Python path
 sys.path.append(str(Path(__file__).parent))
 from config.logger_config import setup_logger
-from reporting.social_client.social_api_client import main as run_social_api_client, configure_logger as configure_social_logger
+from reporting.social_client.social_api_client import (
+    main as run_social_api_client,
+    configure_logger as configure_social_logger,
+    check_file_exists_for_date,
+)
 from reporting.process.data_processor import main as run_data_processor, configure_logger as configure_data_processor_logger
 from reporting.process.profile_aggregator import main as run_profile_aggregator, configure_logger as configure_profile_logger
 from reporting.process.posts_consolidator import main as run_posts_consolidator, configure_logger as configure_posts_logger
@@ -45,6 +51,121 @@ def configure_logger(debug_mode=False):
     logger = setup_logger("init", file_logging=False, level=log_level)
     return logger
 
+class PipelineFailures:
+    """Accumulates hard failures during a run for one consolidated alert.
+
+    Two depths are tracked (see issue #76):
+
+    * ``step_failures`` — a pipeline step raised (recorded by ``run_module``).
+    * ``missing_endpoints`` — a configured endpoint produced no raw JSON file
+      for the processing date (recorded by ``check_endpoint_coverage``); this
+      catches the ``None``→no-file case that the per-endpoint loop swallows.
+    """
+
+    def __init__(self) -> None:
+        self.step_failures: list[tuple[str, str]] = []
+        self.missing_endpoints: list[str] = []
+
+    def any(self) -> bool:
+        return bool(self.step_failures or self.missing_endpoints)
+
+
+def _load_config() -> dict | None:
+    """Load ``config/config.json`` for coverage + Slack channel resolution."""
+    config_path = Path(__file__).parent / "config" / "config.json"
+    try:
+        with open(config_path, "r", encoding="utf-8") as file:
+            return json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        logger.error(f"❌ Could not load config for failure detection: {e}")  # type: ignore
+        return None
+
+
+def check_endpoint_coverage(config: dict, processing_date: str, failures: "PipelineFailures") -> None:
+    """Record any configured endpoint missing its raw JSON file for the date.
+
+    Uses the same endpoint filter (`config` blocks carrying an ``api_url``) and
+    the same ``<platform>_<data_type>_<date>.json`` path logic the social client
+    writes with, by reusing ``check_file_exists_for_date``.
+    """
+    config_endpoints = {k: v for k, v in config.items() if isinstance(v, dict) and 'api_url' in v}
+    for platform_key in config_endpoints:
+        exists, _ = check_file_exists_for_date(platform_key, config, processing_date)
+        if not exists:
+            failures.missing_endpoints.append(platform_key)
+            logger.error(f"❌ Missing expected data file for {platform_key} on {processing_date}")  # type: ignore
+    if not failures.missing_endpoints:
+        logger.info(f"✅ All {len(config_endpoints)} expected endpoint files present for {processing_date}")  # type: ignore
+
+
+def _resolve_reporting_channel(config: dict | None) -> str:
+    """Slack target: ``slack.reporting_channel`` → falls back to ``slack.autoheal_channel``."""
+    slack_cfg = config.get("slack", {}) if config else {}
+    channel = (slack_cfg.get("reporting_channel") or "").strip()
+    if channel:
+        return channel
+    return (slack_cfg.get("autoheal_channel") or "").strip()
+
+
+def _load_slack_notify():
+    """Import the fleet-wide Slack helper from ``~/.claude/hooks/slack_notify.py``.
+
+    Returns the module, or ``None`` if it can't be located/imported (logged).
+    The helper is provided by the ``claude-config`` project and reused fleet-wide
+    (the same transport ``/schedule-autoheal`` uses) — do not reimplement it.
+    """
+    helper = Path.home() / ".claude" / "hooks" / "slack_notify.py"
+    if not helper.exists():
+        logger.error(f"❌ Slack helper not found at {helper} — alert not sent")  # type: ignore
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location("slack_notify", helper)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)  # type: ignore
+        return module
+    except Exception as e:
+        logger.error(f"❌ Could not import Slack helper: {e}")  # type: ignore
+        return None
+
+
+def _build_alert_message(failures: "PipelineFailures", processing_date: str) -> str:
+    """Deterministic, mobile-skimmable alert body listing date, steps, endpoints."""
+    lines = [f"🚨 Reporting pipeline dropped data — {processing_date}"]
+    if failures.step_failures:
+        lines.append("")
+        lines.append("Failed steps:")
+        for name, error in failures.step_failures:
+            lines.append(f"• {name}: {error}")
+    if failures.missing_endpoints:
+        lines.append("")
+        lines.append("Missing endpoints:")
+        for endpoint in failures.missing_endpoints:
+            lines.append(f"• {endpoint}")
+    return "\n".join(lines)
+
+
+def send_failure_alert(failures: "PipelineFailures", processing_date: str, config: dict | None) -> None:
+    """Send exactly one consolidated Slack alert for a failed run.
+
+    Channel resolution and missing token/channel degrade gracefully (logged);
+    the non-zero exit in ``main()`` is the independent second signal regardless.
+    """
+    message = _build_alert_message(failures, processing_date)
+    logger.error("🚨 Pipeline finished with failures:\n%s", message)  # type: ignore
+
+    channel = _resolve_reporting_channel(config)
+    if not channel:
+        logger.error("❌ No Slack channel configured (slack.reporting_channel / slack.autoheal_channel) — alert not sent")  # type: ignore
+        return
+
+    slack = _load_slack_notify()
+    if slack is None:
+        return
+
+    if not slack.notify(message, channel=channel):
+        logger.error("❌ Slack alert delivery failed (see slack_notify logs)")  # type: ignore
+
+
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='Run the complete data processing pipeline.')
@@ -60,15 +181,16 @@ def parse_arguments():
     parser.add_argument('--date', type=str, help='Reference date in YYYYMMDD format. Will process the day before this date.')
     return parser.parse_args()
 
-def run_module(module_func, module_name, debug_mode=False, extra_args=None):
+def run_module(module_func, module_name, debug_mode=False, extra_args=None, failures=None):
     """
     Run a module with clean command line arguments.
-    
+
     Args:
         module_func: The module's main function to run
         module_name: Name of the module for logging
         debug_mode: Whether to enable debug mode
         extra_args: List of additional arguments to pass
+        failures: Optional PipelineFailures accumulator to record step exceptions
     """
     # Save original command line arguments
     original_argv = sys.argv.copy()
@@ -90,6 +212,8 @@ def run_module(module_func, module_name, debug_mode=False, extra_args=None):
         logger.info(f"✅ {module_name} completed successfully")  # type: ignore
     except Exception as e:
         logger.error(f"❌ Error in {module_name}: {e}")  # type: ignore
+        if failures is not None:
+            failures.step_failures.append((module_name, str(e)))
         if debug_mode:
             raise
     finally:
@@ -99,10 +223,19 @@ def run_module(module_func, module_name, debug_mode=False, extra_args=None):
 def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
                 skip_aggregation=False, skip_consolidation=False, skip_notion=False,
                 skip_substack=False, reference_date=None, auto_confirm=False):
-    """Run the complete data processing pipeline."""
+    """Run the complete data processing pipeline.
+
+    Returns the PipelineFailures accumulator so the caller can set a non-zero
+    exit code when the run dropped data.
+    """
     # Configure the main logger
     configure_logger(debug_mode)
-    
+
+    # Failure detection: collect step exceptions + missing-endpoint coverage,
+    # then emit one consolidated Slack alert at the end (issue #76).
+    failures = PipelineFailures()
+    config = _load_config()
+
     logger.info("🚀 Starting the complete data processing pipeline")  # type: ignore
     logger.info(f"🐞 Debug mode: {'Enabled' if debug_mode else 'Disabled'}")  # type: ignore
     
@@ -129,7 +262,10 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
     if not skip_api:
         logger.info("📡 Step 1: Running Social API Client")  # type: ignore
         configure_social_logger(debug_mode)
-        run_module(run_social_api_client, "Social API Client", debug_mode, extra_args=date_args)
+        run_module(run_social_api_client, "Social API Client", debug_mode, extra_args=date_args, failures=failures)
+        # Coverage check: which configured endpoints produced no file for the date.
+        if config:
+            check_endpoint_coverage(config, processing_date, failures)
     else:
         logger.info("⏭️ Skipping Social API Client step")  # type: ignore
     
@@ -137,7 +273,7 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
     if not skip_processing:
         logger.info("🔄 Step 2: Running Data Processor")  # type: ignore
         configure_data_processor_logger(debug_mode)
-        run_module(run_data_processor, "Data Processor", debug_mode, extra_args=date_args)
+        run_module(run_data_processor, "Data Processor", debug_mode, extra_args=date_args, failures=failures)
     else:
         logger.info("⏭️ Skipping Data Processor step")  # type: ignore
     
@@ -145,7 +281,7 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
     if not skip_aggregation:
         logger.info("📊 Step 3: Running Profile Aggregator")  # type: ignore
         configure_profile_logger()
-        run_module(run_profile_aggregator, "Profile Aggregator", debug_mode)
+        run_module(run_profile_aggregator, "Profile Aggregator", debug_mode, failures=failures)
     else:
         logger.info("⏭️ Skipping Profile Aggregator step")  # type: ignore
     
@@ -153,7 +289,7 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
     if not skip_consolidation:
         logger.info("📑 Step 4: Running Posts Consolidator")  # type: ignore
         configure_posts_logger(debug_mode)
-        run_module(run_posts_consolidator, "Posts Consolidator", debug_mode)
+        run_module(run_posts_consolidator, "Posts Consolidator", debug_mode, failures=failures)
     else:
         logger.info("⏭️ Skipping Posts Consolidator step")  # type: ignore
         
@@ -166,7 +302,7 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
             notion_extra_args = [processing_date]
             if auto_confirm:
                 notion_extra_args.append('--yes')
-            run_module(run_notion_update, "Notion Update", debug_mode, notion_extra_args)
+            run_module(run_notion_update, "Notion Update", debug_mode, notion_extra_args, failures=failures)
         except Exception as e:
             logger.error(f"❌ Error in Notion Update: {e}")  # type: ignore
             if debug_mode:
@@ -178,7 +314,7 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
     if not skip_substack:
         logger.info("📰 Step 6: Running Substack Daily Pipeline")  # type: ignore
         try:
-            run_module(run_substack_daily_pipeline, "Substack Daily Pipeline", debug_mode, extra_args=date_args)
+            run_module(run_substack_daily_pipeline, "Substack Daily Pipeline", debug_mode, extra_args=date_args, failures=failures)
         except Exception as e:
             logger.error(f"❌ Error in Substack Daily Pipeline: {e}")  # type: ignore
             if debug_mode:
@@ -186,13 +322,20 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
     else:
         logger.info("⏭️ Skipping Substack Daily Pipeline step")  # type: ignore
 
-    logger.info("🎉 Complete data processing pipeline finished")  # type: ignore
+    # Notify only on failure: one consolidated alert + a non-zero exit signal.
+    if failures.any():
+        send_failure_alert(failures, processing_date, config)
+        logger.error("❌ Complete data processing pipeline finished WITH FAILURES")  # type: ignore
+    else:
+        logger.info("🎉 Complete data processing pipeline finished")  # type: ignore
+
+    return failures
 
 def main():
     """Main function to run the complete pipeline."""
     args = parse_arguments()
-    
-    run_pipeline(
+
+    failures = run_pipeline(
         debug_mode=args.debug,
         skip_api=args.skip_api,
         skip_processing=args.skip_processing,
@@ -203,6 +346,10 @@ def main():
         reference_date=args.date,
         auto_confirm=args.yes,
     )
+
+    # Second, independent failure signal so the launcher / scheduler can react.
+    if failures and failures.any():
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
