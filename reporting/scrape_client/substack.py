@@ -34,10 +34,9 @@ from planning.substack.substack_session import (  # noqa: E402
 )
 from reporting.scrape_client.base import (  # noqa: E402
     ScrapeError,
+    human_date_to_iso_date,
     normalize_target_date,
     parse_int,
-    relative_time_to_iso_date,
-    to_iso_date,
 )
 
 logger = logging.getLogger("substack_scrape")
@@ -104,65 +103,6 @@ def _get_handle() -> str:
     return handle
 
 
-def _note_engagement(container) -> dict:
-    """Pull likes / comments / restacks from a Substack note's toolbar.
-
-    Substack renders each engagement slot as **two** sibling ``<button>``
-    elements: the first carries ``aria-label="Like"`` / ``"Comment"`` /
-    ``"Restack"`` and holds the icon SVG; the second carries the visible
-    count text (or empty for zero). So for each role we read the next-sibling
-    button's ``innerText``.
-    """
-    out = {"num_likes": 0, "num_comments": 0, "num_reshares": 0}
-    role_map = (("num_likes", "Like"), ("num_comments", "Comment"), ("num_reshares", "Restack"))
-    for field, role in role_map:
-        try:
-            btn = container.locator(f"button[aria-label='{role}']").first
-            if btn.count() == 0:
-                continue
-            cnt_btn = btn.locator("xpath=following-sibling::button[1]").first
-            if cnt_btn.count() == 0:
-                continue
-            txt = cnt_btn.inner_text(timeout=1500) or ""
-            v = parse_int(txt)
-            if v is not None:
-                out[field] = v
-        except Exception as err:
-            logger.debug("substack %s count read failed: %s", role, err)
-    return out
-
-
-def _note_permalink_and_date(container, handle: str) -> tuple[Optional[str], Optional[str]]:
-    post_url = None
-    posted_at = None
-    try:
-        anchors = container.locator("a[href*='/note/']")
-        n = min(anchors.count(), 20)
-    except Exception:
-        n = 0
-    for i in range(n):
-        try:
-            href = anchors.nth(i).get_attribute("href") or ""
-        except Exception:
-            continue
-        m = _NOTE_PATH_RE.match(href)
-        if m and m.group(1).lower() == handle.lower():
-            post_url = f"https://substack.com{href.split('?')[0]}"
-            break
-    try:
-        time_el = container.locator("time").first
-        if time_el.count() > 0:
-            iso = time_el.get_attribute("datetime")
-            if iso:
-                posted_at = to_iso_date(iso)
-            if posted_at is None:
-                txt = time_el.inner_text(timeout=1000) or ""
-                posted_at = relative_time_to_iso_date(txt)
-    except Exception:
-        pass
-    return post_url, posted_at
-
-
 def _collect_note_codes(page, handle: str, skip_first: bool = True) -> list[str]:
     """Walk the @profile feed and return up to MAX_POSTS unique note codes.
 
@@ -197,11 +137,20 @@ def _collect_note_codes(page, handle: str, skip_first: bool = True) -> list[str]
 
 
 def _scrape_note_permalink(page, handle: str, code: str) -> Optional[dict]:
-    """Open a note's permalink and read its engagement bar.
+    """Open a note's permalink and read its date + engagement bar.
 
-    On the permalink there's only one toolbar — no container scoping needed,
-    so ``button[aria-label="Like"]`` (and Comment / Restack) finds it
-    unambiguously. The count is in the immediately-following sibling button.
+    A note permalink no longer renders a single note — it renders a *feed*
+    (the subject note plus recommended/related notes), each with its own
+    engagement toolbar. So a page-global ``button[aria-label="Like"].first``
+    grabbed whichever note happened to render first (constant across
+    permalinks → identical, wrong counts for every note), and the old
+    ``<time datetime>`` element is gone entirely (→ ``posted_at`` was always
+    ``None``, which dropped every record downstream — issue #77).
+
+    We pin the subject note via its own timestamp anchor
+    (``<a title="May 30, 2026, 6:03 AM" href="…/note/<code>">``), walk up to
+    the smallest ancestor that owns the note's ``Like`` button, and read the
+    date + engagement scoped to that container.
     """
     permalink = f"https://substack.com/@{handle}/note/{code}"
     try:
@@ -211,63 +160,55 @@ def _scrape_note_permalink(page, handle: str, code: str) -> Optional[dict]:
         return None
     page.wait_for_timeout(2000)
 
-    out = {"num_likes": 0, "num_comments": 0, "num_reshares": 0}
-    for field, role in (("num_likes", "Like"), ("num_comments", "Comment"), ("num_reshares", "Restack")):
-        try:
-            btn = page.locator(f"button[aria-label='{role}']").first
-            if btn.count() == 0:
-                continue
-            # On the permalink page the count lives in a child element
-            # inside the button. Playwright's ``inner_text()`` returns the
-            # CSS-visible rendered text only, which is empty here because
-            # Substack styles the count container in a way that excludes it
-            # from inner_text accounting. Use ``text_content()`` (full DOM
-            # text) instead. On the feed-view layout the count is a
-            # next-sibling button — we still try that as a fallback.
-            v = None
-            try:
-                own_text = btn.text_content(timeout=1500) or ""
-                v = parse_int(own_text)
-            except Exception:
-                pass
-            if v is None:
-                cnt_btn = btn.locator("xpath=following-sibling::button[1]").first
-                if cnt_btn.count() > 0:
-                    try:
-                        sib_text = cnt_btn.text_content(timeout=1500) or ""
-                        v = parse_int(sib_text)
-                    except Exception:
-                        pass
-            if v is not None:
-                out[field] = v
-        except Exception as err:
-            logger.debug("Substack permalink %s %s read failed: %s", code, role, err)
-
-    posted_at = None
     try:
-        time_el = page.locator("time").first
-        if time_el.count() > 0:
-            iso = time_el.get_attribute("datetime")
-            if iso:
-                posted_at = to_iso_date(iso)
-            if posted_at is None:
-                txt = time_el.inner_text(timeout=1000) or ""
-                posted_at = relative_time_to_iso_date(txt)
-    except Exception:
-        pass
+        data = page.evaluate(
+            r"""(code) => {
+                const anchor = document.querySelector(`a[title][href*='/note/${code}']`);
+                if (!anchor) return null;
+                // Smallest ancestor that owns this note's Like button.
+                let node = anchor, container = null;
+                while (node && node !== document.body) {
+                    if (node.querySelector && node.querySelector("button[aria-label='Like']")) {
+                        container = node;
+                        break;
+                    }
+                    node = node.parentElement;
+                }
+                const read = (role) => {
+                    if (!container) return null;
+                    const b = container.querySelector(`button[aria-label='${role}']`);
+                    return b ? (b.textContent || '').trim() : null;
+                };
+                return {
+                    title: anchor.getAttribute('title'),
+                    like: read('Like'),
+                    comment: read('Comment'),
+                    restack: read('Restack'),
+                    video: container ? !!container.querySelector('video') : false,
+                };
+            }""",
+            code,
+        )
+    except Exception as err:
+        logger.warning("⚠️ Substack note %s extract failed: %s", code, err)
+        return None
 
-    try:
-        is_video = 1 if page.locator("video").count() > 0 else 0
-    except Exception:
-        is_video = 0
+    if not data:
+        logger.warning("⚠️ Substack note %s not found in permalink feed.", code)
+        return None
+
+    posted_at = human_date_to_iso_date(data.get("title") or "")
+    likes = parse_int(data.get("like"))
+    comments = parse_int(data.get("comment"))
+    reshares = parse_int(data.get("restack"))
 
     return {
         "post_id": permalink,
         "posted_at": posted_at,
-        "is_video": is_video,
-        "num_likes": out["num_likes"],
-        "num_comments": out["num_comments"],
-        "num_reshares": out["num_reshares"],
+        "is_video": 1 if data.get("video") else 0,
+        "num_likes": likes if likes is not None else 0,
+        "num_comments": comments if comments is not None else 0,
+        "num_reshares": reshares if reshares is not None else 0,
     }
 
 
