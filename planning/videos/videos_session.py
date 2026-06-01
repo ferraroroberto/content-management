@@ -72,18 +72,7 @@ class ClipPayload:
     caption_long: str
 
 
-def _force_utf8_stdout() -> None:
-    for stream_name in ("stdout", "stderr"):
-        stream = getattr(sys, stream_name, None)
-        if stream is not None and hasattr(stream, "reconfigure"):
-            try:
-                stream.reconfigure(encoding="utf-8", errors="replace")
-            except Exception:
-                pass
-
-
 def configure_logger(name: str = "videos", debug: bool = False) -> logging.Logger:
-    _force_utf8_stdout()
     level = logging.DEBUG if debug else logging.INFO
     return setup_logger(name, level=level, file_logging=True)
 
