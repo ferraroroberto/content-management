@@ -34,20 +34,8 @@ CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "config
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
-def _force_utf8_stdout() -> None:
-    """Force stdout/stderr to UTF-8 so emoji log lines don't crash Windows cp1252 consoles."""
-    for stream_name in ("stdout", "stderr"):
-        stream = getattr(sys, stream_name, None)
-        if stream is not None and hasattr(stream, "reconfigure"):
-            try:
-                stream.reconfigure(encoding="utf-8", errors="replace")
-            except Exception:
-                pass
-
-
 def configure_logger(name: str = "instagram", debug: bool = False) -> logging.Logger:
     """Set up a logger using the project-wide pattern."""
-    _force_utf8_stdout()
     level = logging.DEBUG if debug else logging.INFO
     return setup_logger(name, level=level, file_logging=True)
 
