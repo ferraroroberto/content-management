@@ -285,6 +285,7 @@
         }
     },
     "slack": {
-        "autoheal_channel": ""
+        "autoheal_channel": "",
+        "reporting_channel": ""
     }
 }
