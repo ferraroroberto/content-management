@@ -58,8 +58,8 @@ def _get_handle() -> str:
 def fetch_profile(target_date: Optional[str] = None) -> Optional[dict]:
     """Scrape Threads follower count.
 
-    Threads embeds the exact count in a ``<span title="31,080">31K</span>``
-    element right next to the abbreviated "31K followers" label. No hover
+    Threads embeds the exact count in a ``<span title="31,136">31.1K</span>``
+    element right next to the abbreviated "31.1K followers" label. No hover
     is required — we read the ``title`` attribute directly (same pattern
     Instagram uses for its own follower count).
     """
@@ -74,7 +74,14 @@ def fetch_profile(target_date: Optional[str] = None) -> Optional[dict]:
         except LoginRequiredError as err:
             raise ScrapeError(f"Threads login required: {err}") from err
 
-        followers_div = s.page.get_by_text(re.compile(r"^\d+[KMk]?\s+followers?$", re.IGNORECASE)).first
+        # Allow a decimal in the abbreviated count — Threads switched the
+        # label from "31K followers" to "31.1K followers" once the count
+        # crossed into needing one decimal, and the old digits-only matcher
+        # stopped matching (→ wait_for timed out → ScrapeError → no file,
+        # issue #77). The exact value still lives in the descendant span[title].
+        followers_div = s.page.get_by_text(
+            re.compile(r"^\d[\d.,]*[KMk]?\s+followers?$", re.IGNORECASE)
+        ).first
         try:
             followers_div.wait_for(state="visible", timeout=20000)
         except Exception as err:

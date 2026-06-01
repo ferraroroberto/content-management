@@ -119,6 +119,38 @@ def to_iso_date(value) -> Optional[str]:
     return None
 
 
+_MONTHS = {
+    m: i
+    for i, m in enumerate(
+        ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"),
+        start=1,
+    )
+}
+_HUMAN_DATE_RE = re.compile(r"([A-Za-z]{3,9})\s+(\d{1,2}),\s+(\d{4})")
+
+
+def human_date_to_iso_date(text: Optional[str]) -> Optional[str]:
+    """Parse a human-readable date to ``YYYY-MM-DD``.
+
+    Handles strings like ``"May 30, 2026, 6:03 AM"`` or ``"September 5, 2025"``
+    (e.g. the ``title`` attribute Substack now puts on a note's timestamp
+    anchor, having dropped the old ``<time datetime>`` element). Returns
+    ``None`` if no ``Month DD, YYYY`` fragment is present.
+    """
+    if not text:
+        return None
+    m = _HUMAN_DATE_RE.search(text)
+    if not m:
+        return None
+    month = _MONTHS.get(m.group(1)[:3].lower())
+    if not month:
+        return None
+    try:
+        return f"{int(m.group(3)):04d}-{month:02d}-{int(m.group(2)):02d}"
+    except ValueError:
+        return None
+
+
 def linkedin_activity_to_iso_date(activity_id) -> Optional[str]:
     """Decode a LinkedIn activity/URN numeric id to ``YYYY-MM-DD``.
 
