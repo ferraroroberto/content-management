@@ -5,8 +5,10 @@ Uses **real Chrome** (channel="chrome") with a **dedicated, separate**
 user-data directory configured under ``twitter.user_data_dir``. The user's
 regular Chrome profile is never read or written by anything in this package.
 
-Mirror of ``instagram/instagram_session.py`` — see that file for the
-rationale behind real-Chrome + persistent profile + the stealth flags.
+The persistent-context lifecycle, the ``_resolve_user_data_dir`` safety guard,
+the failure-screenshot helper, the logger factory and ``LoginRequiredError``
+all live in :mod:`planning._session_base`; this module only declares what is
+specific to X.
 """
 
 from __future__ import annotations
@@ -14,27 +16,35 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from datetime import datetime
 from pathlib import Path
-from typing import Optional
-
-from playwright.sync_api import BrowserContext, Page, Playwright, sync_playwright
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from config.chrome_launch import STEALTH_INIT_SCRIPT  # noqa: E402
-from config.chrome_profile_lock import launch_persistent_context_with_lock_wait  # noqa: E402
-from config.logger_config import setup_logger  # noqa: E402
-
-logger = logging.getLogger("twitter_session")
+from planning._session_base import (  # noqa: E402
+    LoginRequiredError,
+    PlatformSession,
+    _resolve_user_data_dir,
+    _user_data_dir_initialized,
+)
+from planning._session_base import configure_logger as _configure_logger  # noqa: E402
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "config.json"
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+# Re-exported so callers' `except LoginRequiredError` / `_resolve_user_data_dir`
+# / `_user_data_dir_initialized` imports keep resolving against this module.
+__all__ = [
+    "TwitterSession",
+    "LoginRequiredError",
+    "configure_logger",
+    "load_twitter_config",
+    "load_notion_token",
+    "_resolve_user_data_dir",
+    "_user_data_dir_initialized",
+]
 
 
 def configure_logger(name: str = "twitter", debug: bool = False) -> logging.Logger:
     """Set up a logger using the project-wide pattern."""
-    level = logging.DEBUG if debug else logging.INFO
-    return setup_logger(name, level=level, file_logging=True)
+    return _configure_logger(name, debug=debug)
 
 
 def load_twitter_config() -> dict:
@@ -57,122 +67,15 @@ def load_notion_token() -> str:
     return token
 
 
-def _resolve_user_data_dir(rel_or_abs: str) -> Path:
-    """Resolve `user_data_dir`; refuse paths that look like the user's real Chrome profile."""
-    p = Path(rel_or_abs)
-    if not p.is_absolute():
-        p = REPO_ROOT / p
-    resolved = p.resolve() if p.exists() else p
-    danger_substrings = (
-        "Google/Chrome/User Data",
-        "Google\\Chrome\\User Data",
-        "Chromium/User Data",
-        "Chromium\\User Data",
-        "Library/Application Support/Google/Chrome",
-        ".config/google-chrome",
+class TwitterSession(PlatformSession):
+    """Persistent-context X session — see :class:`PlatformSession`."""
+
+    platform_name = "twitter"
+    session_display = "Twitter (x.com)"
+    default_timeout_ms = 45000
+    login_markers = (
+        "x.com/i/flow/login",
+        "twitter.com/i/flow/login",
+        "x.com/login",
+        "twitter.com/login",
     )
-    as_str = str(resolved).replace("\\", "/")
-    for marker in danger_substrings:
-        if marker.replace("\\", "/") in as_str:
-            raise RuntimeError(
-                f"Refusing to use user_data_dir={resolved!r} — it looks like the "
-                "main Chrome profile. Pick a dedicated directory (e.g. "
-                "'twitter/chrome_user_data')."
-            )
-    return p
-
-
-def _user_data_dir_initialized(user_data_dir: Path) -> bool:
-    """A persistent-profile directory is 'ready' once Chrome has written its Default subdir."""
-    return user_data_dir.exists() and (user_data_dir / "Default").exists()
-
-
-class TwitterSession:
-    """Persistent-context wrapper around real Chrome with a dedicated profile.
-
-    Usage:
-        with TwitterSession(cfg) as session:
-            page = session.page
-            session.goto_with_login_check(url)
-    """
-
-    def __init__(self, cfg: dict, *, headless: Optional[bool] = None):
-        self.cfg = cfg
-        self.user_data_dir = _resolve_user_data_dir(cfg["user_data_dir"])
-        self.headless = cfg.get("headless", False) if headless is None else headless
-        self._playwright: Optional[Playwright] = None
-        self._context: Optional[BrowserContext] = None
-        self._page: Optional[Page] = None
-
-    @property
-    def page(self) -> Page:
-        if self._page is None:
-            raise RuntimeError("Session not entered — use `with TwitterSession(cfg) as s:`")
-        return self._page
-
-    @property
-    def context(self) -> BrowserContext:
-        if self._context is None:
-            raise RuntimeError("Session not entered")
-        return self._context
-
-    def __enter__(self) -> "TwitterSession":
-        if not _user_data_dir_initialized(self.user_data_dir):
-            raise FileNotFoundError(
-                f"Chrome profile at {self.user_data_dir} is empty or missing. "
-                "Run `python -m twitter.bootstrap_session` first."
-            )
-        self._playwright = sync_playwright().start()
-        self._context = launch_persistent_context_with_lock_wait(
-            self._playwright, self.user_data_dir, headless=self.headless, logger=logger,
-        )
-        self._context.add_init_script(STEALTH_INIT_SCRIPT)
-        self._page = self._context.pages[0] if self._context.pages else self._context.new_page()
-        logger.info(
-            "🌐 Twitter (x.com) session started (channel=chrome, headless=%s, profile=%s)",
-            self.headless, self.user_data_dir,
-        )
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> None:
-        try:
-            if self._context is not None:
-                self._context.close()
-        finally:
-            if self._playwright is not None:
-                self._playwright.stop()
-            logger.info("👋 Twitter session closed")
-
-    def goto_with_login_check(self, url: str, *, timeout_ms: int = 45000) -> None:
-        """Navigate to `url`. Raise LoginRequiredError if x.com redirected to login."""
-        logger.debug("➡️ Navigating to %s", url)
-        self.page.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
-        current = (self.page.url or "").lower()
-        login_markers = (
-            "x.com/i/flow/login",
-            "twitter.com/i/flow/login",
-            "x.com/login",
-            "twitter.com/login",
-        )
-        if any(m in current for m in login_markers):
-            raise LoginRequiredError(
-                "X redirected to login — the saved Chrome profile session expired. "
-                "Re-run `python -m twitter.bootstrap_session` to log in again."
-            )
-
-    def screenshot_failure(self, label: str) -> Path:
-        """Save a debug screenshot under results/twitter/."""
-        out_dir = REPO_ROOT / "results" / "twitter"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-        path = out_dir / f"{ts}-{label}.png"
-        try:
-            self.page.screenshot(path=str(path), full_page=True)
-            logger.warning("📸 Failure screenshot saved → %s", path)
-        except Exception as err:
-            logger.error("❌ Could not save failure screenshot: %s", err)
-        return path
-
-
-class LoginRequiredError(RuntimeError):
-    """Raised when the saved X session is no longer valid."""

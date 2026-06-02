@@ -18,18 +18,12 @@ import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 
-# Console can be cp1252 on Windows; force UTF-8 so emoji in logs don't blow up.
-for _stream in (sys.stdout, sys.stderr):
-    reconfigure = getattr(_stream, "reconfigure", None)
-    if callable(reconfigure):
-        try:
-            reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
-
 # Add the current directory to the Python path
 sys.path.append(str(Path(__file__).parent))
-from config.logger_config import setup_logger
+# Console can be cp1252 on Windows; force UTF-8 so emoji in logs don't blow up.
+from config.console import force_utf8_stdio  # noqa: E402
+force_utf8_stdio()
+from config.logger_config import setup_logger  # noqa: E402
 from reporting.social_client.social_api_client import (
     main as run_social_api_client,
     configure_logger as configure_social_logger,

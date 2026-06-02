@@ -33,6 +33,7 @@ from playwright.sync_api import Page, TimeoutError as PWTimeoutError
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(REPO_ROOT))
 
+from config.console import force_utf8_stdio  # noqa: E402
 from config.logger_config import setup_logger  # noqa: E402
 from engagement.db.client import (  # noqa: E402
     load_config,
@@ -41,17 +42,6 @@ from engagement.db.client import (  # noqa: E402
     upsert_commenters,
     upsert_comments,
 )
-
-
-def _force_utf8_stdout() -> None:
-    """Reconfigure stdout/stderr to UTF-8 so emoji log lines don't crash Windows cp1252 consoles."""
-    for stream_name in ("stdout", "stderr"):
-        stream = getattr(sys, stream_name, None)
-        if stream is not None and hasattr(stream, "reconfigure"):
-            try:
-                stream.reconfigure(encoding="utf-8", errors="replace")
-            except Exception:
-                pass
 from planning.linkedin.linkedin_session import (  # noqa: E402
     LinkedInSession,
     LoginRequiredError,
@@ -698,7 +688,7 @@ def main() -> None:  # pragma: no cover
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
-    _force_utf8_stdout()
+    force_utf8_stdio()
     setup_logger("engagement.linkedin.scrape", level=logging.DEBUG if args.debug else logging.INFO, file_logging=True)
     logging.getLogger().setLevel(logging.DEBUG if args.debug else logging.INFO)
 

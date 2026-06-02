@@ -130,13 +130,8 @@ def probe(platform: str, url: Optional[str] = None, *, save_screenshot: bool = T
 def main() -> int:
     # Force UTF-8 stdout so emoji / em-dash in the dump don't crash a cp1252
     # Windows console (same guard the session modules use).
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if callable(reconfigure):
-            try:
-                reconfigure(encoding="utf-8", errors="replace")
-            except Exception:
-                pass
+    from config.console import force_utf8_stdio
+    force_utf8_stdio()
     parser = argparse.ArgumentParser(description="Dump live-DOM role+name candidates for a planning platform.")
     parser.add_argument("platform", choices=sorted(_REGISTRY), help="which platform's live page to probe")
     parser.add_argument("--url", default=None, help="override the page URL (defaults to the platform's feed_url)")

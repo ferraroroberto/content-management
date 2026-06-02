@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from config.logger_config import setup_logger  # noqa: E402
+from planning._session_base import configure_logger as _configure_logger  # noqa: E402
 from reporting.notion.editorial import (  # noqa: E402
     get_field,
     get_page_body_text,
@@ -73,8 +73,7 @@ class ClipPayload:
 
 
 def configure_logger(name: str = "videos", debug: bool = False) -> logging.Logger:
-    level = logging.DEBUG if debug else logging.INFO
-    return setup_logger(name, level=level, file_logging=True)
+    return _configure_logger(name, debug=debug)
 
 
 def load_videos_config() -> dict:

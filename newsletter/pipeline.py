@@ -20,11 +20,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 # Console emojis crash on Windows' default cp1252; force UTF-8 stdio.
-for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-    except Exception:
-        pass
+from config.console import force_utf8_stdio  # noqa: E402
+force_utf8_stdio()
 
 from config.logger_config import setup_logger  # noqa: E402
 from newsletter import (  # noqa: E402

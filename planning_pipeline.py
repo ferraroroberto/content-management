@@ -32,21 +32,15 @@ import json
 import logging
 import sys
 import time
-
-# Console can be cp1252 on Windows; force UTF-8 so emoji in summaries don't blow up.
-for _stream in (sys.stdout, sys.stderr):
-    reconfigure = getattr(_stream, "reconfigure", None)
-    if callable(reconfigure):
-        try:
-            reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
 sys.path.append(str(Path(__file__).parent))
+# Console can be cp1252 on Windows; force UTF-8 so emoji in summaries don't blow up.
+from config.console import force_utf8_stdio  # noqa: E402
+force_utf8_stdio()
 from config.logger_config import setup_logger  # noqa: E402
 from planning._failure import classify as classify_failure, extract_screenshot  # noqa: E402
 from planning.instagram.clone_to_other_platforms import main as run_clone  # noqa: E402

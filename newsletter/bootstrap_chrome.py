@@ -136,11 +136,8 @@ def ensure_chrome(*, timeout_s: int = 15) -> int:
 
 def main() -> int:
     # Force UTF-8 stdio so emoji log lines don't crash Windows' cp1252 console.
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-        except Exception:
-            pass
+    from config.console import force_utf8_stdio
+    force_utf8_stdio()
     if not logging.getLogger().handlers:
         logging.basicConfig(
             level=logging.INFO,

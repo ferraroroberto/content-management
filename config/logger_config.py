@@ -2,26 +2,7 @@ import logging
 import sys
 import os
 
-
-def _force_utf8_stdout():
-    """Reconfigure stdout/stderr to UTF-8 so emoji log lines don't crash on
-    Windows cp1252 consoles.
-
-    On a default Windows console ``sys.stdout`` is cp1252, so any non-cp1252
-    glyph (e.g. an emoji in a log message) raises ``UnicodeEncodeError`` on
-    write and the logging machinery prints a ``--- Logging error ---``
-    traceback instead of the message. Reconfiguring with ``errors="replace"``
-    makes a non-encodable glyph degrade to a replacement char instead of
-    crashing. Guarded with ``hasattr`` because not every stream (e.g. a
-    pytest capture buffer) supports ``reconfigure``.
-    """
-    for stream_name in ("stdout", "stderr"):
-        stream = getattr(sys, stream_name, None)
-        if stream is not None and hasattr(stream, "reconfigure"):
-            try:
-                stream.reconfigure(encoding="utf-8", errors="replace")
-            except Exception:
-                pass
+from config.console import force_utf8_stdio
 
 
 def setup_logger(name, level=logging.INFO, file_logging=True):
@@ -45,8 +26,8 @@ def setup_logger(name, level=logging.INFO, file_logging=True):
         logger.handlers.clear()
 
     # Make the console sink robust to emoji on Windows cp1252 consoles before
-    # attaching the StreamHandler (see _force_utf8_stdout).
-    _force_utf8_stdout()
+    # attaching the StreamHandler (see config.console.force_utf8_stdio).
+    force_utf8_stdio()
 
     # Create console handler
     c_handler = logging.StreamHandler(sys.stdout)
