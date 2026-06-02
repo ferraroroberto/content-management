@@ -210,11 +210,8 @@ def run(days: int = 14, dry_run: bool = False, testing_mode: bool = False,
 
 def _setup_logging(debug: bool = False):
     level = logging.DEBUG if debug else logging.INFO
-    for s in (sys.stdout, sys.stderr):
-        try:
-            s.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-        except Exception:
-            pass
+    from config.console import force_utf8_stdio
+    force_utf8_stdio()
     if not logging.getLogger().handlers:
         logging.basicConfig(
             level=level,

@@ -22,22 +22,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO_ROOT))
 
 from config.chrome_launch import STEALTH_INIT_SCRIPT, stealth_launch_kwargs  # noqa: E402
+from config.console import force_utf8_stdio  # noqa: E402
 
 import os
 
 # Default to 8501 (what `launch_app.bat` uses). Override with APP_URL env var
 # when running parallel to the standalone review_app for dev.
 APP_URL = os.environ.get("APP_URL", "http://localhost:8501")
-
-
-def _force_utf8_stdout() -> None:
-    for s in ("stdout", "stderr"):
-        st_ = getattr(sys, s, None)
-        if st_ is not None and hasattr(st_, "reconfigure"):
-            try:
-                st_.reconfigure(encoding="utf-8", errors="replace")
-            except Exception:
-                pass
 
 
 def _pass(label: str, detail: str = "") -> None:
@@ -87,7 +78,7 @@ def _click_tab(page, label: str) -> bool:
 
 
 def run() -> int:
-    _force_utf8_stdout()
+    force_utf8_stdio()
     out_dir = REPO_ROOT / "results" / "engagement" / "e2e-control" / datetime.now().strftime("%Y%m%d-%H%M%S")
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"📁 screenshots → {out_dir}")

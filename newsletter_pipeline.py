@@ -39,11 +39,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 # Force UTF-8 stdio so emoji log lines don't crash Windows' cp1252 console.
-for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-    except Exception:
-        pass
+from config.console import force_utf8_stdio  # noqa: E402
+force_utf8_stdio()
 
 from newsletter import bootstrap_chrome  # noqa: E402
 from newsletter import build_newsletter, normalize_names, normalize_url  # noqa: E402

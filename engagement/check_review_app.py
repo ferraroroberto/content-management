@@ -30,19 +30,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO_ROOT))
 
 from config.chrome_launch import STEALTH_INIT_SCRIPT, stealth_launch_kwargs  # noqa: E402
+from config.console import force_utf8_stdio  # noqa: E402
 from engagement.db.client import supabase_client  # noqa: E402
 
 APP_URL = "http://localhost:8501"
-
-
-def _force_utf8_stdout() -> None:
-    for s in ("stdout", "stderr"):
-        st = getattr(sys, s, None)
-        if st is not None and hasattr(st, "reconfigure"):
-            try:
-                st.reconfigure(encoding="utf-8", errors="replace")
-            except Exception:
-                pass
 
 
 def _shot(page: Page, out_dir: Path, label: str) -> Path:
@@ -90,7 +81,7 @@ def _click_tab(page: Page, label: str) -> bool:
 
 
 def run() -> int:
-    _force_utf8_stdout()
+    force_utf8_stdio()
     out_dir = REPO_ROOT / "results" / "engagement" / "e2e" / datetime.now().strftime("%Y%m%d-%H%M%S")
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"📁 screenshots → {out_dir}")

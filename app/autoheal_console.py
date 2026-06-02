@@ -163,13 +163,8 @@ def run(skill_cmd: str, log_path: Path, model: str, claude_exe: str,
 
 
 def main() -> int:
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if callable(reconfigure):
-            try:
-                reconfigure(encoding="utf-8", errors="replace")
-            except Exception:
-                pass
+    from config.console import force_utf8_stdio
+    force_utf8_stdio()
 
     parser = argparse.ArgumentParser(description="Run /schedule-autoheal headless in a visible console.")
     parser.add_argument("--skill-cmd", required=True,

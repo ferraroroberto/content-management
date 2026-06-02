@@ -88,7 +88,7 @@ reporting/                            # repo root
 ├── newsletter/                       # weekly newsletter pipeline (archive + normalize + build)
 │                                     # archive=chrome tabs → notion; normalize_names + normalize_url
 │                                     # rewrite titles + clean URLs; build_newsletter renders HTML
-├── config/                           # config.json, mapping.json, logger_config, chrome_launch
+├── config/                           # config.json, mapping.json, logger_config, chrome_launch, console
 ├── results/                          # outputs — planning summaries + raw API JSON
 ├── logs/                             # per-module .log files
 ├── docs/                             # retrospective changelogs (gitignored locally)

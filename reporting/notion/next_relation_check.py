@@ -19,12 +19,10 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
-    sys.stderr.reconfigure(encoding="utf-8")
-
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from config.logger_config import setup_logger
+from config.console import force_utf8_stdio  # noqa: E402
+force_utf8_stdio()
+from config.logger_config import setup_logger  # noqa: E402
 from reporting.notion import notion_update as _nu
 from reporting.notion.notion_update import (
     format_database_id,

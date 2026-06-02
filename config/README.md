@@ -63,6 +63,16 @@ Python module for setting up logging configuration.
 - Automatic log directory creation
 - UTF-8 encoding support for file logs
 
+### 5. `console.py`
+Single-source helper for forcing UTF-8 stdio on Windows (`cp1252`) consoles so emoji in log output and print statements do not crash the pipeline. Exposes one function:
+
+```python
+from config.console import force_utf8_stdio
+force_utf8_stdio()   # called once at each entry-point module's top level
+```
+
+All entry points (`*_pipeline.py`, `app/*.py`, `newsletter/*.py`, etc.) call this instead of the inline `for _stream in (sys.stdout, sys.stderr): _stream.reconfigure(...)` loop that was previously hand-copied across ~13 modules.
+
 ## Usage
 
 1. Copy `config_example.json` to `config.json`
