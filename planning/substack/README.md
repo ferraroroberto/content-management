@@ -65,7 +65,7 @@ substack/
 | `user_data_dir` | Dedicated Chrome profile directory (gitignored; defaults to `substack/chrome_user_data`). Must NOT point at your real Chrome profile — the session refuses to start if it does. |
 | `illustrations_folder` | Absolute folder containing the daily image. Joined with `image_filename`. |
 | `editorial_db_id` | Notion editorial database id. |
-| `notion_columns` | Role-to-column map. Roles: `title_day`, `text_body`, `image_filename`, `post_url`. The `follower_count` column is populated via the reporting pipeline (`reporting/scrape_client/substack.py::fetch_profile` writes through `data_processor` → `notion_update`). |
+| `notion_columns` | Role-to-column map. Roles: `title_day`, `text_body`, `image_filename`, `post_url`. The `follow SB` follower column is **not** in this map — it is populated by the reporting pipeline (`reporting/scrape_client/substack.py::fetch_profile` → `data_processor` → `notion_update`, mapped from `profile.num_followers_substack`) like every other platform's follower count. |
 | `headless` | Optional bool (default `false`). |
 | `dry_run_default` | Optional bool (default `false`). When `true`, step 1 always runs as a dry-run unless `--force` is passed. |
 
