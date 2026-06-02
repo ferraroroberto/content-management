@@ -209,8 +209,7 @@
             "title_day": "day",
             "text_body": "text SB",
             "image_filename": "ill (copy)",
-            "post_url": "link SB",
-            "follower_count": "follow SB"
+            "post_url": "link SB"
         },
         "headless": false,
         "dry_run_default": false
