@@ -54,20 +54,25 @@ def configure_logger(debug_mode=False):
 class PipelineFailures:
     """Accumulates hard failures during a run for one consolidated alert.
 
-    Two depths are tracked (see issue #76):
+    Three depths are tracked (issues #76, #84):
 
     * ``step_failures`` — a pipeline step raised (recorded by ``run_module``).
     * ``missing_endpoints`` — a configured endpoint produced no raw JSON file
       for the processing date (recorded by ``check_endpoint_coverage``); this
       catches the ``None``→no-file case that the per-endpoint loop swallows.
+    * ``missing_post_metrics`` — a platform's *consolidated* post metrics are
+      absent for the date (recorded by ``check_posts_coverage``); this catches
+      the case where the raw file exists but holds no post the consolidator can
+      match (e.g. the day's note was dropped before it reached the DB).
     """
 
     def __init__(self) -> None:
         self.step_failures: list[tuple[str, str]] = []
         self.missing_endpoints: list[str] = []
+        self.missing_post_metrics: list[str] = []
 
     def any(self) -> bool:
-        return bool(self.step_failures or self.missing_endpoints)
+        return bool(self.step_failures or self.missing_endpoints or self.missing_post_metrics)
 
 
 def _load_config() -> dict | None:
@@ -96,6 +101,51 @@ def check_endpoint_coverage(config: dict, processing_date: str, failures: "Pipel
             logger.error(f"❌ Missing expected data file for {platform_key} on {processing_date}")  # type: ignore
     if not failures.missing_endpoints:
         logger.info(f"✅ All {len(config_endpoints)} expected endpoint files present for {processing_date}")  # type: ignore
+
+
+# Platforms whose consolidated post metrics we expect on every daily run.
+COVERAGE_PLATFORMS = ("linkedin", "instagram", "twitter", "threads", "substack")
+
+
+def check_posts_coverage(processing_date: str, failures: "PipelineFailures") -> None:
+    """Record any platform whose consolidated post metrics are absent for the date.
+
+    ``check_endpoint_coverage`` is presence-only — it cannot see this: a raw
+    file can exist yet hold no post the consolidator can match (``posted_at =
+    date - 1 day``), leaving every ``*_<platform>_*`` column NULL (issue #84).
+    Here we read the consolidated ``posts`` row that actually feeds Notion and
+    flag any platform with neither a video nor a non-video ``post_id``. DB
+    errors degrade gracefully (logged) — the run is never crashed by the check.
+    """
+    try:
+        from reporting.process.supabase_uploader import get_db_connection
+        connection = get_db_connection()
+        if not connection:
+            logger.error("❌ Posts-coverage check: no DB connection — skipped")  # type: ignore
+            return
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT * FROM posts WHERE date = %s LIMIT 1", (processing_date,))
+                row = cursor.fetchone()
+                columns = [desc[0] for desc in cursor.description] if cursor.description else []
+        finally:
+            connection.close()
+
+        if not row:
+            failures.missing_post_metrics.append("(no consolidated posts row)")
+            logger.error(f"❌ Posts-coverage: no consolidated posts row for {processing_date}")  # type: ignore
+            return
+
+        data = dict(zip(columns, row))
+        for platform in COVERAGE_PLATFORMS:
+            has_metrics = data.get(f"post_id_{platform}_no_video") or data.get(f"post_id_{platform}_video")
+            if not has_metrics:
+                failures.missing_post_metrics.append(platform)
+                logger.error(f"❌ Posts-coverage: no post metrics for {platform} on {processing_date}")  # type: ignore
+        if not failures.missing_post_metrics:
+            logger.info(f"✅ Posts-coverage: all {len(COVERAGE_PLATFORMS)} platforms have post metrics for {processing_date}")  # type: ignore
+    except Exception as e:
+        logger.error(f"❌ Posts-coverage check failed: {e}")  # type: ignore
 
 
 def _resolve_reporting_channel(config: dict | None) -> str:
@@ -141,6 +191,11 @@ def _build_alert_message(failures: "PipelineFailures", processing_date: str) -> 
         lines.append("Missing endpoints:")
         for endpoint in failures.missing_endpoints:
             lines.append(f"• {endpoint}")
+    if failures.missing_post_metrics:
+        lines.append("")
+        lines.append("No post metrics (platform):")
+        for platform in failures.missing_post_metrics:
+            lines.append(f"• {platform}")
     return "\n".join(lines)
 
 
@@ -290,6 +345,9 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
         logger.info("📑 Step 4: Running Posts Consolidator")  # type: ignore
         configure_posts_logger(debug_mode)
         run_module(run_posts_consolidator, "Posts Consolidator", debug_mode, failures=failures)
+        # Content-coverage check: did every platform actually land post metrics
+        # in the consolidated table (not just produce a raw file)? — issue #84.
+        check_posts_coverage(processing_date, failures)
     else:
         logger.info("⏭️ Skipping Posts Consolidator step")  # type: ignore
         

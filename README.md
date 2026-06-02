@@ -229,12 +229,16 @@ flowchart LR
   (paid HTTP fetcher) or `"playwright"` (free logged-in-Chrome scraper).
   See [Choosing the data source](#choosing-the-data-source-rapidapi-vs-playwright)
   for how to flip per platform and roll back.
-- **Fails loudly when it drops data.** If any step raises, or any configured
-  endpoint produces no raw file for the date, the run sends **one** Slack alert
-  (date + failing steps + missing endpoints) and exits non-zero. A clean run
-  sends nothing and exits `0`. The alert channel is `slack.reporting_channel`
-  in `config/config.json`, falling back to `slack.autoheal_channel`; delivery
-  uses the fleet-wide `~/.claude/hooks/slack_notify.py` bot helper.
+- **Fails loudly when it drops data.** The run sends **one** Slack alert and
+  exits non-zero if any of these hold: a step raised; a configured endpoint
+  produced no raw file for the date; or — after consolidation — a platform has
+  **no post metrics** in the consolidated `posts` row for the day (a
+  content-level check, since a raw file can exist yet contain no post the
+  consolidator can match). The alert lists the date + failing steps + missing
+  endpoints + platforms with no post metrics. A clean run sends nothing and
+  exits `0`. The alert channel is `slack.reporting_channel` in
+  `config/config.json`, falling back to `slack.autoheal_channel`; delivery uses
+  the fleet-wide `~/.claude/hooks/slack_notify.py` bot helper.
 
 ## Quick Start
 

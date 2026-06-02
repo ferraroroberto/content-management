@@ -7,9 +7,18 @@ Profile follower count: drives ``substack.stats_audience_url`` and reads the
 ``planning/substack/update_substack_followers.py``, folded in here so all
 five platforms share a uniform shape.
 
-Posts: ``https://substack.com/@<handle>`` activity feed. The first entry is
-always the newsletter teaser (the user explicitly told us to skip it) so we
-drop ``index == 0`` and start from the second item. For each note:
+Posts: ``https://substack.com/@<handle>`` activity feed. We used to drop the
+first feed entry unconditionally as "the newsletter teaser", but with the daily
+Note workflow the scrape (pipeline step 1) runs *before* the day's Note is
+published (step 6), so at scrape time the top entry is *yesterday's* real daily
+Note — exactly the row the posts consolidator needs (it matches
+``posted_at = date - 1 day``). Dropping it left every ``*_substack_no_video``
+column NULL → blank Notion fields (issue #84).
+
+A genuine newsletter-announcement / restack note embeds a ``/p/`` newsletter
+post as a preview card (an ``<a href*='/p/'>`` inside the note container);
+ordinary daily notes never do. So instead of a positional skip we drop a note
+only when it carries that teaser signal. For each kept note:
   * ``post_id``       full ``https://substack.com/@<handle>/note/c-<id>`` URL.
   * ``posted_at``     from the ``<time datetime>`` attribute on the note.
   * ``is_video``      ``<video>`` element presence inside the note container.
@@ -103,19 +112,19 @@ def _get_handle() -> str:
     return handle
 
 
-def _collect_note_codes(page, handle: str, skip_first: bool = True) -> list[str]:
-    """Walk the @profile feed and return up to MAX_POSTS unique note codes.
+def _collect_note_codes(page, handle: str, limit: int) -> list[str]:
+    """Walk the @profile feed and return up to ``limit`` unique note codes.
 
-    The first unique code is the newsletter teaser (per the user's
-    instruction) and is dropped when ``skip_first=True``.
+    Returns codes in feed order (newest first). Teaser filtering happens later,
+    per-note, in ``_scrape_note_permalink`` (a teaser can only be recognised
+    from the note's own content, not its feed position).
     """
     codes: list[str] = []
     seen: set[str] = set()
-    skipped_first = False
     anchors = page.locator(f"a[href*='/@{handle}/note/']")
     n = anchors.count()
     for i in range(n):
-        if len(codes) >= MAX_POSTS:
+        if len(codes) >= limit:
             break
         try:
             href = anchors.nth(i).get_attribute("href") or ""
@@ -128,10 +137,6 @@ def _collect_note_codes(page, handle: str, skip_first: bool = True) -> list[str]
         if code in seen:
             continue
         seen.add(code)
-        if skip_first and not skipped_first:
-            skipped_first = True
-            logger.debug("⏭️ Substack: skipping first note %s (newsletter teaser).", code)
-            continue
         codes.append(code)
     return codes
 
@@ -179,12 +184,18 @@ def _scrape_note_permalink(page, handle: str, code: str) -> Optional[dict]:
                     const b = container.querySelector(`button[aria-label='${role}']`);
                     return b ? (b.textContent || '').trim() : null;
                 };
+                // A newsletter-announcement / restack note embeds a /p/ post
+                // preview card; ordinary daily notes never do (issue #84).
+                const isTeaser = container
+                    ? !!container.querySelector("a[href*='/p/']")
+                    : false;
                 return {
                     title: anchor.getAttribute('title'),
                     like: read('Like'),
                     comment: read('Comment'),
                     restack: read('Restack'),
                     video: container ? !!container.querySelector('video') : false,
+                    isTeaser: isTeaser,
                 };
             }""",
             code,
@@ -209,6 +220,7 @@ def _scrape_note_permalink(page, handle: str, code: str) -> Optional[dict]:
         "num_likes": likes if likes is not None else 0,
         "num_comments": comments if comments is not None else 0,
         "num_reshares": reshares if reshares is not None else 0,
+        "is_teaser": bool(data.get("isTeaser")),
     }
 
 
@@ -239,16 +251,23 @@ def fetch_posts(target_date: Optional[str] = None) -> Optional[dict]:
             s.page.mouse.wheel(0, 4000)
             s.page.wait_for_timeout(SCROLL_PAUSE_MS)
 
-        codes = _collect_note_codes(s.page, handle, skip_first=True)
+        # Collect a couple extra codes so dropping any teaser still leaves a
+        # full MAX_POSTS window of real daily notes.
+        codes = _collect_note_codes(s.page, handle, MAX_POSTS + 2)
         if not codes:
             s.screenshot_failure(f"{target_date}-substack-no-notes-collected")
-            raise ScrapeError("Substack: no note codes after skipping the newsletter teaser.")
+            raise ScrapeError("Substack: no note codes found in the feed.")
         logger.info("ℹ️ Substack note codes collected: %d", len(codes))
 
         posts: list[dict] = []
         for code in codes:
+            if len(posts) >= MAX_POSTS:
+                break
             rec = _scrape_note_permalink(s.page, handle, code)
             if rec is None:
+                continue
+            if rec.pop("is_teaser", False):
+                logger.info("⏭️ Substack: skipping newsletter-teaser note %s (embeds /p/ preview).", code)
                 continue
             posts.append(rec)
             logger.debug(
