@@ -155,7 +155,10 @@ WITH
         substack_video AS (
             SELECT DISTINCT ON (date)
                 date::date as date,
-                'https://substack.com/profile/11567179-roberto-ferraro/note/' || post_id as post_id,
+                -- post_id is already a full note URL from the Playwright
+                -- scraper; do NOT prepend a prefix (issue #84 — that produced
+                -- doubled/malformed link SB).
+                post_id,
                 posted_at::date as posted_at,
                 num_likes,
                 num_comments,
@@ -169,7 +172,8 @@ WITH
         substack_non_video AS (
             SELECT DISTINCT ON (date)
                 date::date as date,
-                'https://substack.com/profile/11567179-roberto-ferraro/note/' || post_id as post_id,
+                -- post_id is already a full note URL (see substack_video).
+                post_id,
                 posted_at::date as posted_at,
                 num_likes,
                 num_comments,
