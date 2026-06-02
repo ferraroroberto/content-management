@@ -101,7 +101,10 @@ WITH
         instagram_video AS (
             SELECT DISTINCT ON (date)
                 date::date as date,
-                'https://www.instagram.com/p/' || post_id as post_id,
+                -- post_id is already a full post URL from the Playwright
+                -- scraper; do NOT prepend a prefix (issue #86 — that produced
+                -- doubled/malformed link IG).
+                post_id,
                 posted_at::date as posted_at,
                 num_likes,
                 num_comments
@@ -114,7 +117,8 @@ WITH
         instagram_non_video AS (
             SELECT DISTINCT ON (date)
                 date::date as date,
-                'https://www.instagram.com/p/' || post_id as post_id,
+                -- post_id is already a full post URL (see instagram_video).
+                post_id,
                 posted_at::date as posted_at,
                 num_likes,
                 num_comments
@@ -127,7 +131,10 @@ WITH
         twitter_video AS (
             SELECT DISTINCT ON (date)
                 date::date as date,
-                'https://x.com/FerraroRoberto/status/' || post_id as post_id,
+                -- post_id is already a full post URL from the Playwright
+                -- scraper; do NOT prepend a prefix (issue #86 — that produced
+                -- doubled/malformed link TW).
+                post_id,
                 posted_at::date as posted_at,
                 num_likes,
                 num_comments,
@@ -141,7 +148,8 @@ WITH
         twitter_non_video AS (
             SELECT DISTINCT ON (date)
                 date::date as date,
-                'https://x.com/FerraroRoberto/status/' || post_id as post_id,
+                -- post_id is already a full post URL (see twitter_video).
+                post_id,
                 posted_at::date as posted_at,
                 num_likes,
                 num_comments,
@@ -187,7 +195,10 @@ WITH
         threads_video AS (
             SELECT DISTINCT ON (date)
                 date::date as date,
-                'https://www.threads.com/@ferraroroberto/post/' || post_id as post_id,
+                -- post_id is already a full post URL from the Playwright
+                -- scraper; do NOT prepend a prefix (issue #86 — that produced
+                -- doubled/malformed link TH).
+                post_id,
                 posted_at::date as posted_at,
                 num_likes,
                 num_comments,
@@ -201,7 +212,8 @@ WITH
         threads_non_video AS (
             SELECT DISTINCT ON (date)
                 date::date as date,
-                'https://www.threads.com/@ferraroroberto/post/' || post_id as post_id,
+                -- post_id is already a full post URL (see threads_video).
+                post_id,
                 posted_at::date as posted_at,
                 num_likes,
                 num_comments,
