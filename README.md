@@ -287,8 +287,19 @@ Copy-Item config\config_example.json config\config.json
 Each `<platform>_<data_type>` block in `config/config.json` carries a
 `"source"` key. The dispatcher in
 `reporting/social_client/social_api_client.py::get_api_data` reads it and
-either makes the HTTP call (`"rapidapi"`) or delegates to the matching
-`reporting.scrape_client.<platform>.fetch_<data_type>` (`"playwright"`).
+either makes the HTTP call (`"rapidapi"`), delegates to the matching
+`reporting.scrape_client.<platform>.fetch_<data_type>` (`"playwright"`), or
+delegates to `reporting.scrape_client.<platform>_native.fetch_<data_type>`
+(`"native"` — the platform's own HTTP API with cookie auth, no browser).
+
+**Substack native API:** `substack_profile.source` defaults to `"native"`,
+fetching the follower count via a single authenticated GET instead of a headed
+Chrome scrape. It needs a one-time cookie harvest
+(`python -m planning.substack.extract_session`, re-run ~quarterly when the
+cookie expires); flip back to `"playwright"` to use the browser scrape. See
+[`docs/substack-native-api.md`](docs/substack-native-api.md) and
+[`planning/substack/README.md`](planning/substack/README.md). `"native"` is
+Substack-only for now (the follower count); other platforms use rapidapi/playwright.
 
 The downstream pipeline is source-agnostic — `data_processor` reads the
 JSON envelope from `results/raw/<platform>_<data_type>_<YYYY-MM-DD>.json`

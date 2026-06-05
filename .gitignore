@@ -15,6 +15,8 @@ reporting/process/.env
 # nothing to do with the user's regular ~/Chrome User Data profile.
 planning/substack/chrome_user_data/
 planning/linkedin/chrome_user_data/
+# Native Substack API session cache (live auth cookies + UA) — never commit.
+/planning/substack/api_session.json
 planning/twitter/chrome_user_data/
 planning/threads/chrome_user_data/
 planning/instagram/chrome_user_data/

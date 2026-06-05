@@ -103,6 +103,38 @@ def _fetch_via_playwright(platform_key, reference_date):
         return None
 
 
+def _fetch_via_native(platform_key, reference_date):
+    """Delegate to the per-platform native-API fetcher in ``reporting.scrape_client``.
+
+    ``platform_key`` is e.g. ``"substack_profile"`` → calls
+    ``reporting.scrape_client.substack_native.fetch_profile(reference_date)``.
+    The native fetchers hit the platform's own HTTP API directly (cookie auth);
+    they return the same envelope as the Playwright scrapers, so they are drop-in
+    interchangeable via the ``source`` config flag.
+    """
+    parts = platform_key.split('_', 1)
+    if len(parts) != 2:
+        logger.error(f"❌ Cannot dispatch {platform_key!r} — expected '<platform>_<data_type>'")
+        return None
+    platform, data_type = parts
+    fn_name = f"fetch_{data_type}"
+    try:
+        module = importlib.import_module(f"reporting.scrape_client.{platform}_native")
+    except ImportError as err:
+        logger.error(f"❌ No native-API fetcher module for {platform!r}: {err}")
+        return None
+    fn = getattr(module, fn_name, None)
+    if fn is None:
+        logger.error(f"❌ Native fetcher {platform!r} has no {fn_name}()")
+        return None
+    logger.info(f"🔌 Fetching {platform_key} via native API")
+    try:
+        return fn(reference_date)
+    except Exception as err:
+        logger.error(f"❌ Native API fetch of {platform_key} failed: {err}", exc_info=True)
+        return None
+
+
 def get_api_data(platform_key, config, reference_date=None):
     """Fetch data for the specified platform with retries and exponential backoff.
 
@@ -112,6 +144,9 @@ def get_api_data(platform_key, config, reference_date=None):
       which drives the platform's persistent Chrome profile via the existing
       ``planning/<platform>/<platform>_session.py`` session class (stealth
       launch comes from ``config/chrome_launch.py``).
+    * ``"native"`` → delegates to ``reporting.scrape_client.<platform>_native.fetch_<data_type>``
+      which calls the platform's own HTTP API directly with cookie auth (no
+      browser). Used by Substack's follower count.
     * anything else (including the default when the key is absent) → RapidAPI
       HTTP call as before.
     """
@@ -124,8 +159,10 @@ def get_api_data(platform_key, config, reference_date=None):
     source = api_config.get('source', 'rapidapi')
     if source == 'playwright':
         return _fetch_via_playwright(platform_key, reference_date)
+    if source == 'native':
+        return _fetch_via_native(platform_key, reference_date)
     if source != 'rapidapi':
-        logger.error(f"❌ Unknown source '{source}' for {platform_key} — expected 'rapidapi' or 'playwright'")
+        logger.error(f"❌ Unknown source '{source}' for {platform_key} — expected 'rapidapi', 'playwright', or 'native'")
         return None
 
     logger.info(f"🔍 Fetching {platform_key} data")
