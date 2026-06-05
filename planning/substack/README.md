@@ -24,6 +24,60 @@ refuses to start if `user_data_dir` resolves to a path that looks like a real
 Chrome profile location (`Google/Chrome/User Data`, `Library/Application
 Support/Google/Chrome`, etc.).
 
+## Native HTTP API path (cookie-auth) — preferred for the follower count
+
+Alongside the Playwright automation above, this package also talks to Substack's
+private HTTP API directly with the session cookie (no browser, no DOM selectors,
+no reCAPTCHA, no profile lock). It is the **default source for the daily follower
+count** and provides manual tools to pull an archive and create/publish editions.
+The Playwright path is **kept** as an alternative source — nothing here removes it.
+See `docs/substack-native-api.md` for the design, endpoint map, and fragility notes.
+
+Modules:
+
+```
+api_client.py        — session loader + fetch_follower_count() + SubstackAPI (pull/create/publish)
+extract_session.py   — harvest cookies+UA from the Chrome profile → api_session.json (gitignored)
+api_pull.py          — manual CLI: dump a post archive to JSON
+api_create.py        — manual CLI: create a draft edition (publish only with --confirm)
+```
+
+One-time / once-per-~89-days setup (the `substack.sid` cookie lives ~89 days):
+
+```powershell
+# After bootstrap_session has logged the dedicated profile in:
+& .\.venv\Scripts\python.exe -m planning.substack.extract_session
+```
+
+This writes `planning/substack/api_session.json` (gitignored: live auth cookies +
+the browser User-Agent that `cf_clearance` is bound to). When the cookie expires
+the API returns 401/403 and the helpers raise `SessionExpiredError` telling you to
+re-run `extract_session`.
+
+### Daily follower count via the API
+
+Set `substack_profile.source` to `"native"` in `config.json` (leave the other
+keys — the endpoint loop still needs `api_url` present). The reporting pipeline
+then routes the follower count through
+`reporting/scrape_client/substack_native.py::fetch_profile`, which returns the
+same `{"num_followers": N}` envelope as the Playwright scraper. Flip back to
+`"playwright"` to use the browser scrape. (`substack_posts` / note engagement
+stays on Playwright — the Notes endpoints aren't reverse-engineered yet.)
+
+### Manual archive + create
+
+```powershell
+# Pull the latest published posts into results/substack/archive_<date>.json
+& .\.venv\Scripts\python.exe -m planning.substack.api_pull [--limit N] [--with-body]
+
+# Create a private DRAFT edition (does NOT email anyone); validate it; print the edit URL
+& .\.venv\Scripts\python.exe -m planning.substack.api_create --title "..." --subtitle "..." --body "para" [--image p.png]
+# Add --confirm ONLY when you intend to publish + email the whole subscriber list (irreversible).
+```
+
+`api_create` defaults to draft + pre-publish validation and never publishes
+without `--confirm`; it is never wired into the daily cron.
+
 ## Module layout
 
 ```

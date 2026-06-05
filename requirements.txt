@@ -14,6 +14,10 @@ python-dotenv
 psycopg2-binary
 # Browser automation for the Substack pipeline (note posting + follower scraping)
 playwright
+# Native Substack HTTP API (cookie-auth) — follower count + draft create/publish,
+# the lighter alternative to the Playwright path. Unofficial/reverse-engineered:
+# pinned so an upstream release can't silently break the private endpoints we use.
+python-substack==0.1.22
 # Article body extraction (readability) for newsletter
 readability-lxml
 # Required HTML cleaner backend for newer readability-lxml versions
