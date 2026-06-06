@@ -1,6 +1,6 @@
 # Social Media Automation Suite
 
-Three pipelines, one repo:
+Four pipelines, one repo:
 
 - **Reporting** (`reporting/`, `reporting_pipeline.py`) — pulls daily
   metrics from social media APIs, processes through Supabase, syncs to
@@ -31,8 +31,16 @@ Three pipelines, one repo:
   `results/newsletter/N{NNN}.html`, opens it in the browser, and lets you
   compose the must-read line (interactively in a console, or via the
   app's picker fed by a topics sidecar).
+- **Engagement** (`engagement/`) — defends comment threads against
+  AI-generated noise using a layered classifier (rules → local sklearn
+  model → LLM fallback via the local hub). Scrapes LinkedIn comments
+  from recent posts in the Notion editorial DB, classifies them, and
+  surfaces a real-comments inbox and an AI-triage queue in a Streamlit
+  review app (`engagement/review_app.py`). Approved replies are staged
+  for manual copy-paste — never auto-sent. See
+  [`engagement/README.md`](engagement/README.md) for the full design.
 
-Both pipelines read from the same Notion editorial database. Each per-folder
+All four pipelines read from the same Notion editorial database. Each per-folder
 README has its own mermaid flowchart, CLI table, gotchas, and validated
 selector list — this README is the orientation map.
 
@@ -72,7 +80,7 @@ native-scheduler driver under `planning/`.
 ## Project structure
 
 ```
-reporting/                            # repo root
+content-management/                   # repo root
 ├── planning/                         # weekly publishing — drives platform schedulers
 │   ├── linkedin/                     # LinkedIn weekly post scheduler
 │   ├── instagram/                    # Meta planner (story + post) + IG→TW/TH/SB clone step
@@ -88,13 +96,20 @@ reporting/                            # repo root
 ├── newsletter/                       # weekly newsletter pipeline (archive + normalize + build)
 │                                     # archive=chrome tabs → notion; normalize_names + normalize_url
 │                                     # rewrite titles + clean URLs; build_newsletter renders HTML
+├── engagement/                       # anti-AI comment triage (rules → sklearn → LLM fallback)
+│   ├── linkedin/                     # LinkedIn comment scraper
+│   ├── classify/                     # layered classifier + phrase config
+│   ├── reputation/                   # per-commenter reputation feedback loop
+│   └── db/                           # Supabase schema (commenters + comments tables)
+├── app/                              # Streamlit control panel (four tabs: reporting/planning/newsletter/engagement)
 ├── config/                           # config.json, mapping.json, logger_config, chrome_launch, console
 ├── results/                          # outputs — planning summaries + raw API JSON
 ├── logs/                             # per-module .log files
-├── docs/                             # retrospective changelogs (gitignored locally)
+├── docs/                             # durable topic reference docs (tracked)
 ├── planning_pipeline.py              # orchestrator: LI → IG → TW → TH (--all-wip)
 ├── reporting_pipeline.py             # orchestrator: APIs → Supabase → Notion → Substack
 ├── newsletter_pipeline.py            # orchestrator: bootstrap/archive/normalize/build subcommands
+├── launch_app.bat                    # Streamlit control panel launcher (Windows CMD)
 ├── launch_planning.bat               # planning launcher (Windows CMD)
 ├── launch_reporting.bat              # reporting launcher (Windows CMD)
 ├── launch_newsletter.bat             # newsletter launcher (Windows CMD)
@@ -120,19 +135,23 @@ gotchas, files.
   [`reporting/notion/README.md`](reporting/notion/README.md)
 - **Newsletter** —
   [`newsletter/README.md`](newsletter/README.md)
+- **Engagement** —
+  [`engagement/README.md`](engagement/README.md)
 - **Shared** — [`config/README.md`](config/README.md)
 
-## The three launchers
+## The launchers
 
-The launchers are the user entrypoints. They wrap the three orchestrators
-with the venv interpreter and keep the CMD window open at the end so you
-can inspect the output.
+The launchers are the user entrypoints. They wrap the pipeline orchestrators
+and the control-panel app with the venv interpreter and keep the CMD window
+open at the end so you can inspect the output.
 
-| Launcher                  | Pipeline   | Default mode  | Cron-friendly arg |
-|---------------------------|------------|---------------|-------------------|
-| `launch_reporting.bat`    | Reporting  | interactive   | `auto`            |
-| `launch_planning.bat`     | Planning   | dry-run       | `live`, `auto`    |
-| `launch_newsletter.bat`   | Newsletter | interactive   | n/a (interactive) |
+| Launcher                  | Pipeline / app         | Default mode  | Cron-friendly arg |
+|---------------------------|------------------------|---------------|-------------------|
+| `launch_reporting.bat`    | Reporting              | interactive   | `auto`            |
+| `launch_planning.bat`     | Planning               | dry-run       | `live`, `auto`    |
+| `launch_newsletter.bat`   | Newsletter             | interactive   | n/a (interactive) |
+| `launch_app.bat`          | Streamlit control panel | —            | n/a               |
+| `launch_autoheal.bat`     | Planning (self-heal)   | visible console | n/a             |
 
 ```powershell
 # One-shot, daily numbers pipeline (today's date, no prompts)
