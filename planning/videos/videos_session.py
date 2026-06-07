@@ -50,6 +50,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 # ``post_url_li``.
 PLATFORMS = ("li", "ig", "tw", "th", "sb")
 
+# A large clip keeps uploading/finalizing server-side after the final Schedule /
+# Post click. The per-platform image flows finalize within ~25 s, but a
+# multi-hundred-MB video needs a much longer window before the composer
+# clears / the Post button enables. Mirrors LinkedIn's transcoding budget.
+VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS = 180000
+
 
 @dataclass
 class ClipPayload:
@@ -379,6 +385,7 @@ def load_clip_payload(notion, editorial_row: dict, video_cols: dict, clip_cols: 
 
 __all__ = [
     "PLATFORMS",
+    "VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS",
     "ClipPayload",
     "configure_logger",
     "ensure_local_file",

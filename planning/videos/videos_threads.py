@@ -40,7 +40,10 @@ from planning.threads.schedule_threads_posts import (  # noqa: E402
     _wait_composer_closes,
     return_to_profile,
 )
-from planning.videos.videos_session import ClipPayload  # noqa: E402
+from planning.videos.videos_session import (  # noqa: E402
+    VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS,
+    ClipPayload,
+)
 
 logger = logging.getLogger("videos_threads")
 
@@ -102,7 +105,10 @@ def schedule_one_video(
 
     _click_calendar_done(page)
     _click_final_schedule_action(page)
-    if not _wait_composer_closes(page, timeout_ms=25000):
+    # A large clip keeps uploading after Schedule; the New-thread dialog only
+    # closes once it finalizes. Use the video budget, not the image-sized
+    # default (issue #106).
+    if not _wait_composer_closes(page, timeout_ms=VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS):
         shot = out_dir / f"{label}-th-FAIL.png"
         page.screenshot(path=str(shot), full_page=False)
         raise RuntimeError(f"TH composer did not close — see {shot}")

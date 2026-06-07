@@ -37,7 +37,10 @@ from planning.twitter.schedule_twitter_posts import (  # noqa: E402
     _wait_composer_clears,
     return_to_home,
 )
-from planning.videos.videos_session import ClipPayload  # noqa: E402
+from planning.videos.videos_session import (  # noqa: E402
+    VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS,
+    ClipPayload,
+)
 
 logger = logging.getLogger("videos_twitter")
 
@@ -52,6 +55,44 @@ class VideoRow:
     @property
     def day_title(self) -> str:
         return self.day.strftime("%Y%m%d")
+
+
+def _wait_tweet_button_enabled(page, timeout_ms: int) -> None:
+    """Wait until X's final Schedule (tweetButton) is no longer disabled.
+
+    X keeps the composer's primary button ``aria-disabled`` while an uploaded
+    video is still processing server-side. ``_click_final_schedule_action`` uses
+    a JS-click fallback that *bypasses* the disabled state, so clicking during
+    that window is a silent no-op — the schedule never submits and the composer
+    never clears (issue #106). Poll until it enables (mirrors the Instagram /
+    LinkedIn ready-waits). Raises ``RuntimeError`` if it never enables.
+    """
+    deadline = page.evaluate("() => Date.now()") + timeout_ms
+    last = None
+    while page.evaluate("() => Date.now()") < deadline:
+        loc = page.locator(
+            '[data-testid="tweetButton"], button[data-testid="tweetButtonInline"]'
+        ).last
+        state = "not found"
+        try:
+            if loc.count():
+                aria = loc.get_attribute("aria-disabled")
+                dis = loc.get_attribute("disabled")
+                if aria in (None, "false") and dis is None:
+                    return
+                state = f"aria-disabled={aria} disabled={dis}"
+        except Exception:
+            state = "error reading state"
+        if state != last:
+            logger.debug("⏳ TW final Schedule not ready (%s) — polling…", state)
+            last = state
+        page.wait_for_timeout(500)
+    raise RuntimeError(
+        "TW final Schedule button never enabled — X has not accepted the clip. "
+        "Most often the .mp4 exceeds X's limits (≈512 MB / 2:20 / ~25 Mbps) or "
+        "carries an embedded subtitle track; re-encode the clip lower / strip "
+        "extra tracks for X."
+    )
 
 
 def schedule_one_video(
@@ -98,8 +139,14 @@ def schedule_one_video(
         return "TW:DRY"
 
     _click_confirm_in_modal(page)
+    # X keeps the final Schedule button disabled until the video finishes
+    # processing; clicking before then is a silent no-op (issue #106).
+    _wait_tweet_button_enabled(page, VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS)
     _click_final_schedule_action(page)
-    if not _wait_composer_clears(page, timeout_ms=25000):
+    # A large clip is still committing server-side after Schedule; the inline
+    # composer only reverts once that finishes. Use the video budget, not the
+    # image-sized default (issue #106).
+    if not _wait_composer_clears(page, timeout_ms=VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS):
         shot = out_dir / f"{label}-tw-FAIL.png"
         page.screenshot(path=str(shot), full_page=False)
         raise RuntimeError(f"TW composer did not clear — see {shot}")
