@@ -21,9 +21,13 @@ What lives here:
 
 from __future__ import annotations
 
+import ctypes
 import json
 import logging
+import os
+import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -165,14 +169,127 @@ def _clip_page_title(clip_page: dict) -> str:
     return ""
 
 
+# Win32 file-attribute bits that mark an un-hydrated OneDrive "Files On-Demand"
+# placeholder. For such a file ``Path.exists()`` is True AND ``stat().st_size``
+# reports the full logical size, so neither can tell a real local file apart
+# from a cloud-only stub — only these attributes can.
+_FILE_ATTRIBUTE_OFFLINE = 0x00001000
+_FILE_ATTRIBUTE_RECALL_ON_OPEN = 0x00040000
+_FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS = 0x00400000
+_PLACEHOLDER_MASK = (
+    _FILE_ATTRIBUTE_OFFLINE
+    | _FILE_ATTRIBUTE_RECALL_ON_OPEN
+    | _FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS
+)
+_INVALID_FILE_ATTRIBUTES = 0xFFFFFFFF
+
+
+def _win_file_attributes(path: Path) -> int:
+    """Return the Win32 attribute bitmask for ``path`` (-1 if unavailable).
+
+    Returns -1 on non-Windows platforms or when the query fails, so callers
+    treat the file as a normal local file (no-op) rather than a placeholder.
+    """
+    if os.name != "nt":
+        return -1
+    get_attrs = ctypes.windll.kernel32.GetFileAttributesW
+    get_attrs.restype = ctypes.c_uint32
+    get_attrs.argtypes = [ctypes.c_wchar_p]
+    attrs = get_attrs(str(path))
+    return -1 if attrs == _INVALID_FILE_ATTRIBUTES else int(attrs)
+
+
+def is_online_only(path: Path) -> bool:
+    """True iff ``path`` is an un-hydrated OneDrive Files-On-Demand placeholder."""
+    attrs = _win_file_attributes(path)
+    return attrs >= 0 and bool(attrs & _PLACEHOLDER_MASK)
+
+
+def _trigger_download(path: Path) -> None:
+    """Ask OneDrive to materialise a placeholder on disk.
+
+    Two complementary steps:
+
+    1. ``attrib +P -U`` pins the file ("always keep on this device", clear the
+       online-only flag) so OneDrive keeps it local and begins fetching. This is
+       best-effort — it only marks intent; the OneDrive service does the work.
+    2. A full streamed read forces a *synchronous* recall when the OneDrive
+       provider is running, so the bytes are on disk by the time we return.
+
+    If the read fails with the cloud-provider error (surfaced on Windows as
+    ``[Errno 22] Invalid argument`` / "The cloud file provider is not running"),
+    raise immediately with an actionable message rather than letting the caller
+    poll for the full timeout — the file can never hydrate while OneDrive is down.
+
+    Note: pinning leaves the file kept-locally — appropriate for a clip that's
+    actively being published; the user can free up space again afterwards.
+    """
+    if os.name == "nt":
+        try:
+            subprocess.run(
+                ["attrib", "+P", "-U", str(path)],
+                check=True, capture_output=True, timeout=30,
+            )
+        except (OSError, subprocess.SubprocessError) as err:
+            logger.debug("attrib pin failed (%s) — relying on read-through.", err)
+    try:
+        with open(path, "rb") as fh:
+            while fh.read(8 * 1024 * 1024):
+                pass
+    except OSError as err:
+        raise RuntimeError(
+            f"Could not hydrate OneDrive placeholder {path}: {err}. This usually "
+            "means the OneDrive cloud provider is not running — start OneDrive "
+            "(and ensure it is online), then retry."
+        ) from err
+
+
+def ensure_local_file(path: Path, *, timeout_s: float = 600.0, poll_s: float = 1.0) -> None:
+    """Force a OneDrive online-only placeholder to download before it is used.
+
+    Handing a cloud-only placeholder to Playwright's ``set_input_files`` makes
+    the platform read bytes that aren't on disk yet: the on-demand recall can
+    stall past the uploader's timeout, or fail outright when OneDrive is paused
+    / offline, so the post gets scheduled with no real media even though the run
+    reports success (issue #104).
+
+    This triggers OneDrive's download, then polls the placeholder attributes
+    until they clear. Raises ``RuntimeError`` if the file is still a placeholder
+    after ``timeout_s`` so the caller fails loudly instead of uploading a stub.
+    No-op for already-local files and on non-Windows platforms.
+    """
+    if not is_online_only(path):
+        return
+    size_mb = path.stat().st_size / 1_048_576
+    logger.info(
+        "🌥️ %s is an online-only OneDrive placeholder (%.1f MB) — forcing download…",
+        path.name, size_mb,
+    )
+    _trigger_download(path)
+    # The download runs in the OneDrive service; poll until the attributes clear.
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if not is_online_only(path):
+            logger.info("✅ %s hydrated locally (%.1f MB).", path.name, size_mb)
+            return
+        time.sleep(poll_s)
+    raise RuntimeError(
+        f"OneDrive placeholder {path} did not finish downloading within {timeout_s:.0f}s. "
+        "Pin it locally (right-click → Always keep on this device) and retry."
+    )
+
+
 def load_clip_payload(notion, editorial_row: dict, video_cols: dict, clip_cols: dict) -> ClipPayload:
     """Resolve the shared clip relation off the editorial row and build a payload.
 
     Raises ``RuntimeError`` if no clip relation is set, if the resolved
-    clip page is missing ``clipPC`` / ``filePC``, or if the assembled .mp4
-    file does not exist on disk. The LI long caption (page body) is read
-    here; the orchestrator will fail the LI status if it's empty (strict
-    per user spec — no fallback to the short ``Text`` caption).
+    clip page is missing ``clipPC`` / ``filePC``, if the assembled .mp4
+    file does not exist on disk, or if it is an online-only OneDrive
+    placeholder that cannot be hydrated within the budget (issue #104 —
+    every platform driver consumes this one ``video_path``, so hydration
+    happens here). The LI long caption (page body) is read here; the
+    orchestrator will fail the LI status if it's empty (strict per user
+    spec — no fallback to the short ``Text`` caption).
     """
     rel_id = first_clip_relation_id(editorial_row, video_cols)
     if not rel_id:
@@ -202,9 +319,15 @@ def load_clip_payload(notion, editorial_row: dict, video_cols: dict, clip_cols: 
 
     if not video_path.exists():
         raise FileNotFoundError(f"Video file not found: {video_path}")
+    # Materialise the clip locally before any driver feeds it to set_input_files —
+    # an online-only OneDrive placeholder passes .exists() but uploads as no/partial
+    # media (issue #104). Raises loudly if it can't hydrate within the budget.
+    ensure_local_file(video_path)
     if not thumb_path.exists():
         # Thumb is optional — some platforms auto-generate one. Log but don't fail.
         logger.warning("⚠️ Thumb not found (continuing without): %s", thumb_path)
+    else:
+        ensure_local_file(thumb_path)
 
     caption_short = _clip_text_property(clip_page, clip_cols)
 
@@ -258,7 +381,9 @@ __all__ = [
     "PLATFORMS",
     "ClipPayload",
     "configure_logger",
+    "ensure_local_file",
     "first_clip_relation_id",
+    "is_online_only",
     "load_clip_payload",
     "load_notion_token",
     "load_videos_config",
