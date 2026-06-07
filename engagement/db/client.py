@@ -72,8 +72,13 @@ def supabase_client():
             logger.info("🔑 using supabase key: %s", label)
             return client
         except Exception as err:
+            # Trying candidates in priority order and moving on is by design, so a
+            # failed candidate is not warning-worthy — it's the expected fallback
+            # path. Keep the detail at DEBUG for when someone is actually debugging;
+            # the terminal RuntimeError below is the single loud signal when *no*
+            # key works (it carries last_err).
             last_err = err
-            logger.warning("🔑 supabase key %s failed: %s", label, err)
+            logger.debug("🔑 supabase key %s not usable, trying next: %s", label, err)
             continue
     raise RuntimeError(f"No working supabase key found in config.supabase (last err: {last_err})")
 
