@@ -199,6 +199,19 @@ attach helper. See:
   `https://scheduled.local/<platform>/<day>` into `link <P>(v)`. This is
   intentional and gets overwritten by the data-collection pipeline once the
   real post goes live.
+- **OneDrive online-only clips are auto-hydrated before upload (issue #104).**
+  Clips live in a OneDrive folder. When a clip `.mp4`/`.png` is "online-only"
+  (a Files-On-Demand placeholder), `Path.exists()` is `True` **and**
+  `stat().st_size` reports the full size, yet the bytes are not on disk —
+  feeding that placeholder to a platform's `set_input_files` schedules a post
+  with no/partial media even though the run reports success. `load_clip_payload`
+  now detects the placeholder (Win32 `FILE_ATTRIBUTE_OFFLINE` /
+  `RECALL_ON_DATA_ACCESS` bits via `is_online_only`) and forces a download
+  (`ensure_local_file`: `attrib +P` pin + full streamed read) before returning,
+  raising loudly if it cannot. The most common cause of an un-hydratable clip is
+  **OneDrive not running** — the read fails with *"The cloud file provider is not
+  running"*; start OneDrive and retry. Hydrated files are left pinned ("always
+  keep on this device"); free up space again later if needed.
 
 ## Files
 
