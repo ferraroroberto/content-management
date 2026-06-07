@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -48,6 +47,7 @@ from planning.substack.substack_session import (  # noqa: E402
     normalize_day,
 )
 from planning.videos.videos_session import (  # noqa: E402
+    VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS,
     load_clip_payload,
     load_videos_config,
 )
@@ -237,9 +237,28 @@ def _post_video_note_for_row(
         logger.info("✅ DRY-RUN: video composer screenshot → %s (no post was published)", shot)
         return 0
 
+    # The Post button stays `disabled` until the clip finishes uploading
+    # server-side; for a large video that runs well past the click's own retry
+    # window, so wait for it to enable before clicking (issue #106).
     try:
-        session.page.get_by_role("dialog").first.get_by_role(
-            "button", name=re.compile(r"^post$", re.I)
+        session.page.wait_for_function(
+            """() => {
+                const b = document.querySelector('[role="dialog"] button[data-testid="composer-post"]')
+                          || document.querySelector('button[data-testid="composer-post"]');
+                return !!b && !b.disabled;
+            }""",
+            timeout=VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS,
+        )
+    except PWTimeoutError:
+        session.screenshot_failure(f"{payload.title or 'video'}-post-disabled")
+        logger.error("❌ Substack Post button never enabled — the video upload "
+                     "likely did not finish in time.")
+        return 9
+
+    try:
+        session.page.locator(
+            '[role="dialog"] button[data-testid="composer-post"], '
+            'button[data-testid="composer-post"]'
         ).first.click()
         session.page.get_by_role("dialog").first.wait_for(state="hidden", timeout=120000)
         logger.info("✅ Note dialog closed — video post submitted.")
