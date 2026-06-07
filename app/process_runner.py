@@ -161,6 +161,11 @@ def start_skill_console(name: str, skill_cmd: str, *, model: str = "claude-opus-
     ts = datetime.now().strftime("%Y-%m-%d-%H%M%S")
     log_path = REPO_ROOT / "results" / "planning" / f"autoheal-{ts}.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    # Create the file now, before the tail thread starts. The wrapper opens it
+    # with "wb" only after its own (new-console) Python startup, so if that child
+    # dies early the file would never exist and the tail's open() would raise
+    # FileNotFoundError — masking the child's real failure. touch() closes that race.
+    log_path.touch()
 
     wrapper = REPO_ROOT / "app" / "autoheal_console.py"
     cmd = [
@@ -201,6 +206,12 @@ def start_skill_console(name: str, skill_cmd: str, *, model: str = "claude-opus-
         # deque until the process exits and the file is fully drained.
         while not log_path.exists() and proc.poll() is None:
             time.sleep(0.2)
+        if not log_path.exists():
+            # Child exited before producing a log (and the pre-touch is gone).
+            # Surface its exit code instead of crashing on a missing-file open().
+            rc = proc.poll()
+            lines.append(f"[autoheal] console exited (code {rc}) before writing any log output.")
+            return
         try:
             with log_path.open("r", encoding="utf-8", errors="replace") as fh:
                 while True:
