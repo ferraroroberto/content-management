@@ -33,6 +33,11 @@ from pathlib import Path
 from typing import Any, Optional
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+# Run as a script (python app/autoheal_console.py via the app or launch_autoheal.bat),
+# so sys.path[0] is app/, not the repo root — without this the `from config.console`
+# import below raises ModuleNotFoundError and the wrapper dies before opening its log.
+# Mirrors app/app.py's own sys.path bootstrap.
+sys.path.insert(0, str(REPO_ROOT))
 DEFAULT_MODEL = "claude-opus-4-8"
 
 
