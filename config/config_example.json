@@ -238,7 +238,14 @@
         "post_minute_local": 0,
         "schedule_timezone": "Europe/Madrid",
         "headless": false,
-        "dry_run_default": true
+        "dry_run_default": true,
+        "transcode": {
+            "enabled": true,
+            "max_size_mb": 256,
+            "max_bitrate_mbps": 20,
+            "target_bitrate_mbps": 10,
+            "cache_dir": null
+        }
     },
     "newsletter_archive": {
         "articles_db_id": "67fbcee66711465c852ebf97303787a3",

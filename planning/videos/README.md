@@ -212,12 +212,44 @@ attach helper. See:
   **OneDrive not running** — the read fails with *"The cloud file provider is not
   running"*; start OneDrive and retry. Hydrated files are left pinned ("always
   keep on this device"); free up space again later if needed.
+- **X video scheduling watches the in-dialog Schedule button (issue #107, correcting #106).**
+  The real reason X "never scheduled the weekly clip": the video driver waited on
+  `.last` of a selector matching **both** `tweetButton` (the composer modal's real
+  Schedule button) **and** `tweetButtonInline` (the home timeline's empty,
+  permanently-disabled inline composer). `.last` picked the inline one, so the
+  wait timed out forever even though the real button was enabled within ~8 s of
+  the upload finishing. A network trace proved X ingests + processes the clip
+  every time (INIT/APPEND/FINALIZE → STATUS `succeeded`), so it was never file
+  weight, subtitles, or bandwidth. Fix: `_primary_button_enabled` scopes the
+  lookup to the composer `[role="dialog"]`. Also: readiness is gated on the
+  button enabling, **not** `[role="progressbar"]` — the composer's video *player*
+  mounts scrubber progressbars that never clear (a false "still uploading"
+  signal). `_wait_for_video_upload_ready` now lets the upload settle before the
+  schedule modal opens, so confirming never races a mid-upload state.
+- **Clips are transcoded to platform-safe specs before upload (issue #107).**
+  Independently of the scheduling fix, weekly masters are sometimes exported very
+  heavy (~30 Mbps / 200+ MB — **over X's ~25 Mbps ceiling**) and carry a
+  `mov_text` subtitle track X dislikes. After hydration, `load_clip_payload`
+  calls `ensure_platform_safe_clip`, which `ffprobe`s the master and, if it trips
+  a threshold (`max_size_mb`, `max_bitrate_mbps`) **or** carries a non-audio/video
+  stream, `ffmpeg`-transcodes a derivative (H.264 high, bitrate-capped to
+  `target_bitrate_mbps`, AAC, subtitle/data tracks dropped, `+faststart`) and
+  feeds *that* to all five platforms — normalizing to safe specs and lighter
+  uploads. The OneDrive **master is never modified**. The derivative is cached
+  under `<system temp>/cm-video-transcode/` keyed by the master's mtime+size, so
+  re-runs reuse it; a re-exported master invalidates the cache automatically.
+  Tuned via the `videos.transcode` config block (`enabled` / `max_size_mb` /
+  `max_bitrate_mbps` / `target_bitrate_mbps` / `cache_dir`). If `ffmpeg`/`ffprobe`
+  aren't on `PATH`, or the transcode fails, it logs a clear warning and falls back
+  to uploading the master as-is.
 
 ## Files
 
 - `__init__.py` — empty package marker.
 - `videos_session.py` — config loader, Notion token loader, `ClipPayload`
-  dataclass, `load_clip_payload(notion, editorial_row, video_cols, clip_cols)`.
+  dataclass, `load_clip_payload(notion, editorial_row, video_cols, clip_cols)`,
+  OneDrive hydration (`ensure_local_file`), and platform-safe transcode
+  (`ensure_platform_safe_clip`).
 - `schedule_videos_posts.py` — orchestrator entry point. Implements the
   `main() -> tuple[int, list[dict]]` contract consumed by
   `planning_pipeline.py`.
