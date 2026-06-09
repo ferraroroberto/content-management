@@ -25,8 +25,10 @@ import ctypes
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,10 +52,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 # ``post_url_li``.
 PLATFORMS = ("li", "ig", "tw", "th", "sb")
 
-# A large clip keeps uploading/finalizing server-side after the final Schedule /
-# Post click. The per-platform image flows finalize within ~25 s, but a
-# multi-hundred-MB video needs a much longer window before the composer
-# clears / the Post button enables. Mirrors LinkedIn's transcoding budget.
+# A clip keeps uploading/finalizing server-side before the composer's
+# Post/Schedule button enables. The per-platform image flows finalize within
+# ~25 s; a video needs longer for X's chunked upload + server-side processing
+# (INIT/APPEND/FINALIZE then STATUS polling to ``succeeded``) — empirically ~8 s
+# for a platform-safe clip, but allow generous headroom. It is a cap, so healthy
+# uploads return as soon as the button enables (issue #107).
 VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS = 180000
 
 
@@ -285,6 +289,186 @@ def ensure_local_file(path: Path, *, timeout_s: float = 600.0, poll_s: float = 1
     )
 
 
+# ---------------------------------------------------------------------------
+# Platform-safe transcode (issue #107)
+#
+# Some weekly masters are exported very heavy (~30 Mbps / 200+ MB) and carry a
+# mov_text subtitle track. X (Twitter) silently refuses such clips — its
+# Schedule button stays aria-disabled indefinitely — while LI/IG/TH/Substack
+# tolerate them. The durable fix is to transcode a platform-safe derivative
+# (H.264 high, bitrate-capped, AAC, no subtitle/data tracks, faststart) and
+# upload THAT everywhere, leaving the OneDrive master untouched. Degrades
+# gracefully to the master when ffmpeg/ffprobe are missing or transcode fails.
+# ---------------------------------------------------------------------------
+
+# Defaults applied when the ``videos.transcode`` block (or a key) is absent.
+_TRANSCODE_DEFAULTS = {
+    "enabled": True,
+    "max_size_mb": 256,
+    "max_bitrate_mbps": 20,
+    "target_bitrate_mbps": 10,
+    "cache_dir": None,
+}
+
+
+def _resolve_transcode_cfg() -> dict:
+    """Merge the ``videos.transcode`` config over the baked-in defaults."""
+    try:
+        block = load_videos_config().get("transcode") or {}
+    except RuntimeError:
+        block = {}
+    return {**_TRANSCODE_DEFAULTS, **block}
+
+
+def _probe_video(path: Path) -> Optional[dict]:
+    """Return ``{size, bit_rate, has_non_av_stream}`` via ffprobe, or None on failure.
+
+    ``size`` (bytes) and ``bit_rate`` (bits/s) come from ffprobe's format block.
+    ``has_non_av_stream`` is True when any stream's ``codec_type`` is not
+    video/audio (e.g. a ``mov_text`` subtitle or a data track) — X dislikes those.
+    None means we could not probe (ffprobe missing or errored); callers then skip
+    transcoding and log a warning rather than guess.
+    """
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        return None
+    try:
+        proc = subprocess.run(
+            [ffprobe, "-v", "error", "-show_format", "-show_streams",
+             "-of", "json", str(path)],
+            check=True, capture_output=True, timeout=120,
+        )
+        data = json.loads(proc.stdout or b"{}")
+    except (OSError, subprocess.SubprocessError, ValueError) as err:
+        logger.warning("⚠️ ffprobe failed on %s: %s", path.name, err)
+        return None
+
+    def _to_int(v) -> int:
+        try:
+            return int(float(v))
+        except (TypeError, ValueError):
+            return 0
+
+    fmt = data.get("format", {}) or {}
+    streams = data.get("streams", []) or []
+    return {
+        "size": _to_int(fmt.get("size")),
+        "bit_rate": _to_int(fmt.get("bit_rate")),
+        "has_non_av_stream": any(
+            s.get("codec_type") not in ("video", "audio") for s in streams
+        ),
+    }
+
+
+def _needs_transcode(probe: dict, tcfg: dict) -> tuple[bool, str]:
+    """Decide whether a probed master trips a platform-safety threshold."""
+    size_mb = probe["size"] / 1_048_576
+    bitrate_mbps = probe["bit_rate"] / 1_000_000
+    reasons: list[str] = []
+    if probe["has_non_av_stream"]:
+        reasons.append("non-AV stream (subtitle/data) present")
+    if tcfg["max_size_mb"] and size_mb > tcfg["max_size_mb"]:
+        reasons.append(f"size {size_mb:.0f} MB > {tcfg['max_size_mb']} MB")
+    if tcfg["max_bitrate_mbps"] and bitrate_mbps > tcfg["max_bitrate_mbps"]:
+        reasons.append(
+            f"bitrate {bitrate_mbps:.1f} Mbps > {tcfg['max_bitrate_mbps']} Mbps"
+        )
+    return bool(reasons), "; ".join(reasons)
+
+
+def _transcode_cache_path(src: Path, tcfg: dict) -> Path:
+    """Cache path keyed by source mtime+size so a re-exported master invalidates it."""
+    root = tcfg.get("cache_dir")
+    cache_dir = Path(root) if root else Path(tempfile.gettempdir()) / "cm-video-transcode"
+    st = src.stat()
+    return cache_dir / f"clip_{src.stem}_{st.st_mtime_ns}_{st.st_size}.mp4"
+
+
+def _run_ffmpeg_transcode(src: Path, dst: Path, tcfg: dict) -> bool:
+    """Transcode ``src`` → ``dst`` to platform-safe specs. Returns True on success.
+
+    Drops subtitle (``-sn``) / data (``-dn``) tracks and maps a single video +
+    optional audio stream, re-encodes H.264 high with a hard bitrate cap and AAC
+    audio, and writes ``+faststart`` for streaming. On any failure the partial
+    output is removed and False is returned so the caller falls back to the master.
+    """
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        return False
+    target = tcfg["target_bitrate_mbps"]
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        ffmpeg, "-y", "-i", str(src),
+        "-map", "0:v:0", "-map", "0:a:0?",
+        "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p",
+        "-b:v", f"{target}M", "-maxrate", f"{target}M", "-bufsize", f"{target * 2}M",
+        "-c:a", "aac", "-b:a", "128k",
+        "-movflags", "+faststart", "-sn", "-dn",
+        str(dst),
+    ]
+    logger.info("🎞️ Transcoding %s → platform-safe (%d Mbps cap)…", src.name, target)
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, timeout=1800)
+    except (OSError, subprocess.SubprocessError) as err:
+        stderr = getattr(err, "stderr", b"") or b""
+        logger.error(
+            "❌ ffmpeg transcode failed for %s: %s — falling back to master.",
+            src.name, stderr.decode("utf-8", "replace")[-500:] or err,
+        )
+        try:
+            dst.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return False
+    return True
+
+
+def ensure_platform_safe_clip(video_path: Path, tcfg: Optional[dict] = None) -> Path:
+    """Return a platform-safe derivative of ``video_path``, or the master unchanged.
+
+    Transcode triggers on a size/bitrate threshold or a non-audio/video stream
+    (issue #107 — X rejects heavy/subtitled clips). The derivative is cached in
+    the system temp dir keyed by source mtime+size and reused across re-runs.
+    Degrades to the master (logged) when transcode is disabled, ffmpeg/ffprobe
+    are unavailable, the clip is already safe, or ffmpeg fails — never raises,
+    since 4/5 platforms tolerate the heavy master.
+    """
+    tcfg = tcfg or _resolve_transcode_cfg()
+    if not tcfg.get("enabled", True):
+        return video_path
+    if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+        logger.warning(
+            "⚠️ ffmpeg/ffprobe not found on PATH — skipping platform-safe transcode; "
+            "uploading the master %s as-is (X may reject a heavy/subtitled clip).",
+            video_path.name,
+        )
+        return video_path
+
+    probe = _probe_video(video_path)
+    if probe is None:
+        return video_path  # already warned
+    needed, reason = _needs_transcode(probe, tcfg)
+    if not needed:
+        logger.info("✅ %s already platform-safe — no transcode.", video_path.name)
+        return video_path
+
+    cache = _transcode_cache_path(video_path, tcfg)
+    if cache.exists() and cache.stat().st_size > 0:
+        logger.info("♻️ Reusing cached platform-safe clip: %s", cache)
+        return cache
+
+    logger.info("🎬 %s needs transcode: %s", video_path.name, reason)
+    if _run_ffmpeg_transcode(video_path, cache, tcfg):
+        before_mb = probe["size"] / 1_048_576
+        after_mb = cache.stat().st_size / 1_048_576
+        logger.info(
+            "✅ Transcoded %s: %.0f MB → %.0f MB (%s).",
+            video_path.name, before_mb, after_mb, cache.name,
+        )
+        return cache
+    return video_path
+
+
 def load_clip_payload(notion, editorial_row: dict, video_cols: dict, clip_cols: dict) -> ClipPayload:
     """Resolve the shared clip relation off the editorial row and build a payload.
 
@@ -329,6 +513,11 @@ def load_clip_payload(notion, editorial_row: dict, video_cols: dict, clip_cols: 
     # an online-only OneDrive placeholder passes .exists() but uploads as no/partial
     # media (issue #104). Raises loudly if it can't hydrate within the budget.
     ensure_local_file(video_path)
+    # Transcode a platform-safe derivative if the master is too heavy / carries
+    # subtitle or data tracks — X rejects such clips (issue #107). All five
+    # consumers feed off this one ``video_path``, so doing it here covers every
+    # platform uniformly; the OneDrive master is never modified.
+    video_path = ensure_platform_safe_clip(video_path)
     if not thumb_path.exists():
         # Thumb is optional — some platforms auto-generate one. Log but don't fail.
         logger.warning("⚠️ Thumb not found (continuing without): %s", thumb_path)
@@ -389,6 +578,7 @@ __all__ = [
     "ClipPayload",
     "configure_logger",
     "ensure_local_file",
+    "ensure_platform_safe_clip",
     "first_clip_relation_id",
     "is_online_only",
     "load_clip_payload",
