@@ -207,7 +207,7 @@ What it does:
 | `linkedin_session.py` | `LinkedInSession` context manager: launches the persistent-profile real-Chrome session and exposes `page` + a `screenshot_failure()` helper. |
 | `linkedin_composer.py` | Shared composer helpers (`fill_caption_with_mentions`, `wait_for_upload_complete`) used by photo + post + carousel + video flows. Lives here (not in `videos/`) because it's an LI-composer concern, not video-only. |
 | `linkedin_posts_body.py` | Loads the LI long caption off a posts-DB page (preferring the `textLI` cache, falling back to the page body, write-through chunked into ≤2000-char rich_text segments). Also pre-flights LI's 3000-char post limit. |
-| `linkedin_carousel_pdf.py` | Pure fuzzy folder matcher: maps a post title like `LI - failure and success 04` to a PDF under `thread/books` + `thread/monographic` via `SequenceMatcher` (min ratio 0.6). |
+| `linkedin_carousel_pdf.py` | Pure fuzzy folder matcher: maps a post title like `LI - failure and success 04` to a PDF under `thread/books` + `thread/monographic` via `SequenceMatcher`. `fuzzy_min_ratio` (0.6) is a confidence threshold, not a gate — the best-scoring folder is **always** used; a below-threshold match is taken anyway with a `WARNING` naming the folder + candidates. Only no-candidates / no-PDF hard-fail. |
 | `schedule_linkedin_posts.py` | The scheduler. Queries Notion, classifies each row into ILL / POST / CAROUSEL, drives the appropriate UI, writes back the WIP-LI untick. |
 | `chrome_user_data/` | (auto-created, gitignored) The dedicated Chrome profile. |
 | `README.md` | This file. |
