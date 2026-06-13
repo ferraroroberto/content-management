@@ -96,11 +96,11 @@ Leave the working tree clean (or the branch un-pushed) and hand off to a human.
 ## Step 5 — escalate via Slack, then stop
 
 Read the Slack target from `config/config.json` → `slack.autoheal_channel`. Send the
-ping through the **fleet-wide Slack bot helper** (provided by `Codex-config`, available
-with zero install at `~/.Codex/hooks/slack_notify.py`):
+ping through the **fleet-wide Slack bot helper** (provided by `claude-config`, available
+with zero install at `~/.claude/hooks/slack_notify.py`):
 
 ```
-& py "$HOME/.Codex/hooks/slack_notify.py" --channel <autoheal_channel> --text "<message>"
+& py "$HOME/.claude/hooks/slack_notify.py" --channel <autoheal_channel> --text "<message>"
 ```
 
 Pass the bare channel id (the helper also accepts a pasted archive URL). The message must
@@ -110,8 +110,8 @@ exactly what you need decided.
 Why the bot and not the Slack MCP connector: the MCP connector posts **as the user**, so
 Slack never fires a notification for it and the escalation lands silently — defeating the
 point of an unattended scheduler. The bot posts as a separate identity, which actually
-notifies. The bot token lives in `~/.Codex/settings.json` env (`SLACK_BOT_TOKEN`), never
-in this repo; see `Codex-config/docs/slack-workflow.md`.
+notifies. The bot token lives in `~/.claude/settings.json` env (`SLACK_BOT_TOKEN`), never
+in this repo; see `claude-config/docs/slack-workflow.md`.
 
 If `autoheal_channel` is blank **or** the helper reports a failure (missing token, API
 error), surface that plainly in the run output and still **stop**. Either way: do not
