@@ -21,7 +21,6 @@ specific to Substack.
 
 from __future__ import annotations
 
-import json
 import logging
 import sys
 from datetime import datetime
@@ -34,10 +33,10 @@ from planning._session_base import (  # noqa: E402
     PlatformSession,
     _resolve_user_data_dir,
     _user_data_dir_initialized,
+    load_config_block,
+    load_notion_token,
 )
 from planning._session_base import configure_logger as _configure_logger  # noqa: E402
-
-CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "config.json"
 
 __all__ = [
     "SubstackSession",
@@ -72,22 +71,7 @@ def configure_logger(name: str = "substack", debug: bool = False) -> logging.Log
 
 def load_substack_config() -> dict:
     """Load and return the `substack` block from config.json."""
-    with open(CONFIG_PATH, "r", encoding="utf-8") as fp:
-        cfg = json.load(fp)
-    block = cfg.get("substack")
-    if not block:
-        raise RuntimeError("Missing 'substack' block in config.json")
-    return block
-
-
-def load_notion_token() -> str:
-    """Load Notion API token from config.json (reuses existing notion block)."""
-    with open(CONFIG_PATH, "r", encoding="utf-8") as fp:
-        cfg = json.load(fp)
-    token = cfg.get("notion", {}).get("api_token")
-    if not token:
-        raise RuntimeError("Missing 'notion.api_token' in config.json")
-    return token
+    return load_config_block("substack")
 
 
 class SubstackSession(PlatformSession):
