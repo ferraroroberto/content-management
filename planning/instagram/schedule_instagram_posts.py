@@ -375,6 +375,54 @@ def dismiss_meta_verified_modal(page: Page) -> bool:
     return False
 
 
+# Meta's Schedule menu intermittently renders slowly, or collapses before the
+# click lands, so a single 8s attempt flakes (post on the same day succeeds while
+# the story fails). Retry the menu-item click with escalating timeouts before
+# giving up; re-pop the menu via the Schedule button when it has collapsed.
+_MENU_ITEM_CLICK_TIMEOUTS_MS = (8000, 16000, 32000)  # exponential 8/16/32s ceiling
+
+
+def _click_schedule_menu_item(page: Page, schedule_btn, action: str) -> None:
+    """Click the ``action`` item in the day's Schedule menu, retrying with
+    exponential-backoff timeouts (8s / 16s / 32s).
+
+    ``schedule_btn`` is the ElementHandle for the column's Schedule ▾ button,
+    used to re-open the menu when an attempt finds it collapsed.
+    """
+    item = re.compile(rf"^{re.escape(action)}$", re.I)
+    last_err: Optional[Exception] = None
+    for attempt, timeout in enumerate(_MENU_ITEM_CLICK_TIMEOUTS_MS, start=1):
+        # On a retry the menu has usually collapsed — re-pop it via the
+        # Schedule button. (On attempt 1 the caller has just opened it.)
+        if attempt > 1:
+            try:
+                if not page.get_by_role("menuitem").first.is_visible():
+                    schedule_btn.click(timeout=8000)
+                    page.wait_for_timeout(500)
+            except Exception as err:
+                last_err = err
+        try:
+            page.get_by_role("menuitem", name=item).first.click(timeout=timeout)
+            return
+        except Exception:
+            try:
+                page.get_by_text(item).first.click(timeout=timeout)
+                return
+            except Exception as err:
+                last_err = err
+        if attempt < len(_MENU_ITEM_CLICK_TIMEOUTS_MS):
+            logger.warning(
+                "⚠️ Menu item '%s' not clickable (attempt %d/%d, timeout %dms): "
+                "%s — retrying with longer timeout.",
+                action, attempt, len(_MENU_ITEM_CLICK_TIMEOUTS_MS), timeout,
+                str(last_err).splitlines()[0][:160] if last_err else "?",
+            )
+    raise RuntimeError(
+        f"Could not click menu item '{action}' after "
+        f"{len(_MENU_ITEM_CLICK_TIMEOUTS_MS)} attempts: {last_err}"
+    )
+
+
 def _open_day_schedule_menu(page: Page, d: date, action: str) -> None:
     """Hover the day's calendar column to reveal the bottom-right Schedule ▾
     button, then click the requested menu item.
@@ -444,17 +492,7 @@ def _open_day_schedule_menu(page: Page, d: date, action: str) -> None:
 
     page.wait_for_timeout(500)
     # Menu pops up (image 06 / 10): "Schedule post", "Schedule story", etc.
-    try:
-        page.get_by_role(
-            "menuitem", name=re.compile(rf"^{re.escape(action)}$", re.I)
-        ).first.click(timeout=8000)
-    except Exception:
-        try:
-            page.get_by_text(
-                re.compile(rf"^{re.escape(action)}$", re.I)
-            ).first.click(timeout=8000)
-        except Exception as err:
-            raise RuntimeError(f"Could not click menu item '{action}': {err}")
+    _click_schedule_menu_item(page, schedule_btn, action)
     page.wait_for_timeout(1000)
 
 

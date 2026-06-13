@@ -9,8 +9,11 @@ folder basenames against the normalized post title.
 Public API:
 
 * ``locate_pdf(post_title, carousel_cfg) -> CarouselDoc``
-    - Raises ``FileNotFoundError`` if the best fuzzy match is below the
-      threshold or the matched folder contains no PDF.
+    - Always resolves to the best-scoring folder; when that best match is
+      below ``fuzzy_min_ratio`` it logs a warning naming the chosen folder
+      and candidates rather than failing. Raises ``FileNotFoundError`` only
+      on genuine hard failures: no candidate folders, or the matched folder
+      contains no PDF.
 * ``CarouselDoc`` holds the resolved ``pdf_path`` and the ``doc_title``
   (filename stem, truncated to ``doc_title_max_chars`` if needed).
 
@@ -97,7 +100,8 @@ def locate_pdf(post_title: str, carousel_cfg: dict) -> CarouselDoc:
         ``books``/``monographic`` branches.
       - ``subfolders``: list of branch names to scan, e.g.
         ``["books", "monographic"]``.
-      - ``fuzzy_min_ratio``: float — reject the best match if below.
+      - ``fuzzy_min_ratio``: float — confidence threshold; below it the best
+        match is still used but logged as a warning (not rejected).
       - ``doc_title_max_chars``: int — LinkedIn truncates very long doc
         titles, so we pre-truncate with a warning.
     """
@@ -122,13 +126,18 @@ def locate_pdf(post_title: str, carousel_cfg: dict) -> CarouselDoc:
     )
     best_ratio, best_folder = scored[0]
 
+    # Folder naming is approximate by design, so a sub-threshold best match is
+    # usually still the right folder. Always take the best-scoring folder, but
+    # when it falls below the confidence threshold log loudly which folder we
+    # picked and why — so the run record shows what we did. Genuine hard
+    # failures (no candidates / no PDF) still raise below.
     min_ratio = float(carousel_cfg.get("fuzzy_min_ratio", 0.6))
     if best_ratio < min_ratio:
         runners_up = ", ".join(f"{c.name} ({r:.2f})" for r, c in scored[:3])
-        raise FileNotFoundError(
-            f"No folder matches carousel title {post_title!r} above ratio "
-            f"{min_ratio:.2f} — best={best_folder.name} ({best_ratio:.2f}). "
-            f"Top candidates: {runners_up}"
+        logger.warning(
+            "⚠️ Carousel title %r has no folder match above the %.2f confidence "
+            "threshold — taking best match %s (%.2f) anyway. Top candidates: %s",
+            post_title, min_ratio, best_folder.name, best_ratio, runners_up,
         )
 
     pdf = _pick_best_pdf(best_folder, post_title)
