@@ -375,32 +375,35 @@ def dismiss_meta_verified_modal(page: Page) -> bool:
     return False
 
 
-# Meta's Schedule menu intermittently renders slowly, or collapses before the
-# click lands, so a single 8s attempt flakes (post on the same day succeeds while
-# the story fails). Retry the menu-item click with escalating timeouts before
-# giving up; re-pop the menu via the Schedule button when it has collapsed.
-_MENU_ITEM_CLICK_TIMEOUTS_MS = (8000, 16000, 32000)  # exponential 8/16/32s ceiling
+# The day-column Schedule ▾ control is a split-button (aria-haspopup="menu")
+# whose menu — "Schedule post" / "Schedule story" / "Create reel" /
+# "Schedule ad" — only opens on a JS-native element.click(). Playwright's
+# mouse-event .click() leaves it closed (the same half-bound React handler that
+# breaks the Add-media button, issue #28), so a Playwright click never reveals
+# the menu item and the click times out. We therefore open the menu with a
+# JS-native click, then select the item. Each (open + click) attempt is retried
+# with an escalating click timeout in case Meta's menu is also slow to paint.
+_MENU_ITEM_CLICK_TIMEOUTS_MS = (8000, 16000, 32000)  # 8/16/32s ceiling per attempt
 
 
 def _click_schedule_menu_item(page: Page, schedule_btn, action: str) -> None:
-    """Click the ``action`` item in the day's Schedule menu, retrying with
-    exponential-backoff timeouts (8s / 16s / 32s).
+    """Open the day's Schedule menu and click the ``action`` item.
 
-    ``schedule_btn`` is the ElementHandle for the column's Schedule ▾ button,
-    used to re-open the menu when an attempt finds it collapsed.
+    ``schedule_btn`` is the ElementHandle for the column's Schedule ▾ split-
+    button. The menu is opened with a JS-native ``element.click()`` because
+    Meta's split-button ignores Playwright's synthetic mouse click; the item
+    selection then proceeds normally. Retried with escalating click timeouts.
     """
     item = re.compile(rf"^{re.escape(action)}$", re.I)
     last_err: Optional[Exception] = None
     for attempt, timeout in enumerate(_MENU_ITEM_CLICK_TIMEOUTS_MS, start=1):
-        # On a retry the menu has usually collapsed — re-pop it via the
-        # Schedule button. (On attempt 1 the caller has just opened it.)
-        if attempt > 1:
-            try:
-                if not page.get_by_role("menuitem").first.is_visible():
-                    schedule_btn.click(timeout=8000)
-                    page.wait_for_timeout(500)
-            except Exception as err:
-                last_err = err
+        # (Re-)open the Schedule menu with a JS-native click — the only thing
+        # that actually pops it (Playwright .click() leaves it closed).
+        try:
+            schedule_btn.evaluate("el => el.click()")
+            page.wait_for_timeout(600)
+        except Exception as err:
+            last_err = err
         try:
             page.get_by_role("menuitem", name=item).first.click(timeout=timeout)
             return
@@ -413,7 +416,7 @@ def _click_schedule_menu_item(page: Page, schedule_btn, action: str) -> None:
         if attempt < len(_MENU_ITEM_CLICK_TIMEOUTS_MS):
             logger.warning(
                 "⚠️ Menu item '%s' not clickable (attempt %d/%d, timeout %dms): "
-                "%s — retrying with longer timeout.",
+                "%s — reopening menu and retrying.",
                 action, attempt, len(_MENU_ITEM_CLICK_TIMEOUTS_MS), timeout,
                 str(last_err).splitlines()[0][:160] if last_err else "?",
             )
@@ -485,13 +488,10 @@ def _open_day_schedule_menu(page: Page, d: date, action: str) -> None:
                 pass
     if schedule_btn is None:
         raise RuntimeError(f"Could not find Schedule button inside {label} column.")
-    try:
-        schedule_btn.click(timeout=8000)
-    except Exception as err:
-        raise RuntimeError(f"Could not click Schedule button on {label}: {err}")
 
-    page.wait_for_timeout(500)
-    # Menu pops up (image 06 / 10): "Schedule post", "Schedule story", etc.
+    # Open the Schedule ▾ menu (JS-native click — Playwright's mouse click does
+    # not pop it) and click the requested item ("Schedule post" / "Schedule
+    # story"). All of that, with retries, lives in the helper.
     _click_schedule_menu_item(page, schedule_btn, action)
     page.wait_for_timeout(1000)
 
