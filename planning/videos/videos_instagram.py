@@ -1,10 +1,15 @@
 """Instagram (Meta planner) video composer driver for the weekly-video orchestrator.
 
-Walks the Meta Business planner for one clip: planner → hover day column →
-Schedule menu → Schedule post → close sub-modal → upload .mp4 → caption
-(short) → Set date and time → fill date+time → Schedule. Reuses every
-helper from ``planning.instagram.schedule_instagram_posts`` — Meta's
-composer accepts .mp4 through the same FileChooser path as images.
+Schedules one clip through Meta's **Reels** composer (issue #118): planner →
+hover day column → Schedule menu → "Create reel" → Add Video → caption →
+Next → Scheduling options → pick "Schedule" → fill date+time → Schedule.
+
+The feed-post composer is deliberately not used for video: Instagram rejects
+vertical 9:16 clips there ("doesn't fit within Instagram's accepted aspect
+ratio range of 4:5 to 16:9", Schedule never enables) and duplicates a single
+upload into two tiles. The Reels composer accepts 9:16 and attaches one tile
+per file. The reel-specific composer helpers (and the shared date/time +
+caption helpers) all live in ``planning.instagram.schedule_instagram_posts``.
 """
 
 from __future__ import annotations
@@ -25,22 +30,18 @@ from planning.instagram.instagram_session import (  # noqa: E402
     load_instagram_config,
 )
 from planning.instagram.schedule_instagram_posts import (  # noqa: E402
-    _assert_composer_media_count,
     _cancel_composer,
-    _check_meta_video_error_toast,
-    _click_action_button,
-    _count_composer_media,
-    _delete_extra_media_tiles,
-    _dismiss_initial_schedule_submodal,
-    _ensure_set_date_toggle_on,
+    _click_reel_footer,
     _fill_post_text,
     _open_day_schedule_menu,
-    _set_all_visible_date_time,
-    _upload_files,
-    _wait_composer_closes,
+    _reel_add_video,
+    _select_reel_schedule_option,
+    _set_reel_schedule_datetime,
+    _wait_reel_composer_closes,
+    _wait_reel_footer_enabled,
+    _wait_reels_composer_ready,
     dismiss_meta_verified_modal,
     return_to_planner,
-    wait_action_button_enabled,
 )
 from planning.videos.videos_session import ClipPayload  # noqa: E402
 
@@ -70,55 +71,33 @@ def schedule_one_video(
     page = session.page
     label = row.day_title
 
-    _open_day_schedule_menu(page, row.day, "Schedule post")
-    _dismiss_initial_schedule_submodal(page)
-    # Meta's "Add photo/video" accepts .mp4 — give the same helper a list of one.
-    # is_video=True narrows Leg 0 to the video-accept input (issue #37).
-    _upload_files(page, [row.payload.video_path], is_video=True)
-    # Video transcoding in Meta's composer takes noticeably longer than images.
-    # Give it a head-start before we poll, so we don't spin on a button that's
-    # been re-rendered by the upload mid-attach.
-    page.wait_for_timeout(2000)
+    # Issue #118 — schedule via the Reels composer, not the feed-post composer.
+    # Instagram rejects vertical 9:16 clips in the post composer ("doesn't fit
+    # within Instagram's accepted aspect ratio range of 4:5 to 16:9", Schedule
+    # never enables) and IG now routes video to reels anyway. "Create reel" is a
+    # full-page wizard that accepts 9:16 and attaches one tile per file (no
+    # duplicate-attach). See the Reels-composer section in
+    # ``schedule_instagram_posts`` for the verified-live selectors.
+    _open_day_schedule_menu(page, row.day, "Create reel")
+    _wait_reels_composer_ready(page)
 
-    # Issue #37 — duplicate-attach recovery + assertion.
-    # When Leg 0's set_input_files times out (Playwright's 4 s default was
-    # too tight for a multi-MB video, raised after the file was actually
-    # accepted), the legacy fallthrough opened the file chooser and
-    # attached the same clip TWICE. Leg 0 now race-guards, but we also
-    # defend in depth here: if the composer ends up with extra tiles for
-    # any reason, dedupe LIFO before driving the Schedule button.
-    pre_dedupe_count = _count_composer_media(page)
-    if pre_dedupe_count > 1:
-        logger.warning(
-            "⚠️ %s IG: composer shows %d media tiles after upload — "
-            "auto-deduping to 1 (issue #37).",
-            label, pre_dedupe_count,
-        )
-        final_count = _delete_extra_media_tiles(page, target=1)
-        # Give Meta a beat to re-evaluate the error toast / Schedule state.
-        page.wait_for_timeout(1500)
-        if final_count != 1:
-            # Dedupe over-deleted (e.g. 0 left) or could not make progress.
-            # Either way scheduling now would create an empty/duplicated
-            # post — abort hard so the FAIL handler screenshots the
-            # composer instead of driving Schedule.
-            raise RuntimeError(
-                f"Dedupe ended with {final_count} attached media tile(s) "
-                f"(expected 1) — aborting before Schedule click."
-            )
-
-    # Hard assertion: any remaining mismatch raises and the existing FAIL
-    # handler screenshots the composer for triage.
-    _assert_composer_media_count(page, expected=1)
-    # Check for Meta's "video too long" / "only one video" toast, which
-    # also keeps Schedule disabled. Surface it as an explicit FAIL.
-    toast = _check_meta_video_error_toast(page)
-    if toast:
-        raise RuntimeError(f"Meta rejected the video: {toast!r}")
-
+    _reel_add_video(page, row.payload.video_path)
+    # Caption lives on the reel-details step (fillable before the upload
+    # finishes processing).
     _fill_post_text(page, row.payload.caption_short)
-    _ensure_set_date_toggle_on(page)
-    _set_all_visible_date_time(
+
+    # Footer "Next" stays aria-disabled until Meta finishes processing the
+    # upload (the left rail counts up to 100%). A multi-MB clip can take a
+    # while, so wait generously before advancing.
+    _wait_reel_footer_enabled(page, "Next", timeout_ms=120000)
+    _click_reel_footer(page, "Next")
+
+    # Scheduling-options step: choose "Schedule" (vs "Share now") to reveal the
+    # date/time inputs, then set them. The reels date field is a segmented
+    # editor that must be set via its calendar popup (typing corrupts it) — see
+    # _set_reel_schedule_datetime.
+    _select_reel_schedule_option(page)
+    _set_reel_schedule_datetime(
         page, row.day,
         video_cfg["post_hour_local"], video_cfg["post_minute_local"],
     )
@@ -129,29 +108,20 @@ def schedule_one_video(
     if dry_run:
         shot = out_dir / f"{label}-ig-dryrun.png"
         page.screenshot(path=str(shot), full_page=False)
-        logger.info("✅ DRY-RUN %s IG: composer ready, screenshot → %s", label, shot)
+        logger.info("✅ DRY-RUN %s IG: reel composer ready, screenshot → %s", label, shot)
         _cancel_composer(page)
         return "IG:DRY"
 
-    # Wait for Meta's transcode to finish — the Schedule button is
-    # ``aria-disabled="true"`` while the upload is still being processed.
-    # 90 s is comfortably above the typical short-clip transcode time. If
-    # it never enables, check the error toast before erroring out so the
-    # FAIL detail names the actual Meta cause when present.
-    try:
-        wait_action_button_enabled(page, "Schedule", timeout_ms=90000)
-    except (RuntimeError, PWTimeoutError) as err:
-        late_toast = _check_meta_video_error_toast(page)
-        if late_toast:
-            raise RuntimeError(f"Meta rejected the video: {late_toast!r}") from err
-        raise
-    _click_action_button(page, "Schedule")
-    if not _wait_composer_closes(page, ig_cfg["feed_url"], timeout_ms=30000):
+    # Footer flips to "Schedule" once the Schedule option is selected; it stays
+    # aria-disabled until the date/time are valid and the upload is done.
+    _wait_reel_footer_enabled(page, "Schedule", timeout_ms=120000)
+    _click_reel_footer(page, "Schedule")
+    if not _wait_reel_composer_closes(page, timeout_ms=30000):
         shot = out_dir / f"{label}-ig-FAIL.png"
         page.screenshot(path=str(shot), full_page=False)
-        raise RuntimeError(f"IG composer did not close — see {shot}")
+        raise RuntimeError(f"IG reel composer did not close — see {shot}")
     page.wait_for_timeout(1500)
-    logger.info("✅ LIVE %s IG video scheduled", label)
+    logger.info("✅ LIVE %s IG video scheduled as reel", label)
     return "IG:LIVE"
 
 

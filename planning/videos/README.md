@@ -84,15 +84,20 @@ attach helper. See:
   typeahead dropdown (see Gotchas). After the final Schedule click,
   `wait_for_upload_complete` (same shared module) keeps the browser open
   until LinkedIn's background video upload settles (also see Gotchas).
-- Instagram (Meta planner): `planning/instagram/schedule_instagram_posts.py`
-  — same `Schedule post` menu, same FileChooser-intercept upload (accepts
-  .mp4), same `Set date and time` toggle + split hours/minutes/meridiem.
-  After upload the driver waits a short 2-second head-start, fills the
-  caption + date/time, then **polls the Schedule button's
-  `aria-disabled` attribute** (via `wait_action_button_enabled`, shared
-  helper in the IG planner module) for up to 90 s before clicking.
-  Meta keeps the Schedule control disabled until the .mp4 finishes
-  server-side transcoding; a fixed sleep is not reliable.
+- Instagram (Meta planner): `planning/videos/videos_instagram.py` via the
+  **Reels composer** (`Create reel` in the day's `Schedule ▾` menu), not the
+  feed-post composer (issue #118). Instagram rejects vertical 9:16 clips in the
+  post composer ("doesn't fit within Instagram's accepted aspect ratio range of
+  4:5 to 16:9", Schedule never enables) and also duplicates a single video
+  upload into two tiles there; the Reels composer accepts 9:16 and attaches one
+  tile per file. `Create reel` opens a full-page wizard at
+  `/latest/reels_composer/`: `Add Video` → fill caption → footer `Next` (which
+  stays `aria-disabled` until the upload hits 100%, polled via
+  `_wait_reel_footer_enabled`) → `Scheduling options` → pick `Schedule` → set
+  date/time → footer `Schedule`. The date field is a segmented editor pre-set to
+  today — *typing* corrupts it and unmounts the form, so the date is set by
+  clicking the target day in its calendar popup (`_set_reel_schedule_datetime`);
+  the hours/minutes/meridiem triplet is typed as usual.
 - Twitter (X): `planning/twitter/schedule_twitter_posts.py` — same
   `SideNav_NewTweet_Button`, same `fileInput` (accepts .mp4 directly),
   same `scheduleOption` + 6 native selects.
