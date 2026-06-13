@@ -654,23 +654,23 @@ ORDER BY date DESC;
 
 ### Debug Mode
 
-Most scripts support debug mode for detailed logging:
-```bash
-python script_name.py --debug
+Most scripts support debug mode for detailed logging. Use the venv-explicit module form (see Debug Commands below for ready-to-run examples):
+```powershell
+& .\.venv\Scripts\python.exe -m reporting.process.data_processor --debug
 ```
 
 ### Environment-Specific Settings
 
 Switch between local and cloud databases:
-```bash
-python supabase_uploader.py --environment local
+```powershell
+& .\.venv\Scripts\python.exe -m reporting.process.supabase_uploader --environment local
 ```
 
 ### Custom Configurations
 
 Override default configuration files:
-```bash
-python notion_supabase_sync.py --config custom_config.json
+```powershell
+& .\.venv\Scripts\python.exe -m reporting.notion.notion_supabase_sync --config custom_config.json
 ```
 
 ## 🐛 Troubleshooting
@@ -715,9 +715,7 @@ python notion_supabase_sync.py --config custom_config.json
 ## 📈 Performance Optimization
 
 - **Batch Processing**: Data is processed in batches to handle large datasets
-- **Incremental Sync**: Only new/modified data is synced to avoid redundant operations
-- **Connection Pooling**: Database connections are pooled for efficiency
-- **Smart Caching**: API responses are cached daily to minimize API calls
+- **Incremental Sync**: Only new/modified data is synced — `reporting_pipeline.py` skips re-fetch when today's JSON file already exists (`check_file_exists_for_date`), acting as an idempotent re-run guard
 
 ## 🔐 Security Best Practices
 
@@ -726,11 +724,9 @@ python notion_supabase_sync.py --config custom_config.json
    - Use `.env` files for database credentials
    - Rotate API keys regularly
 
-2. **Use environment variables in production**
-   ```bash
-   export SUPABASE_URL="your-url"
-   export SUPABASE_KEY="your-key"
-   ```
+2. **Store credentials in the right place**
+   - Supabase URL and key go in `config/config.json` (`supabase.url`, `supabase.key` / `supabase.service_role_key`) — keep that file out of version control
+   - PostgreSQL connection credentials go in `.env` (read by `python-dotenv` at startup)
 
 3. **Implement access controls**
    - Use read-only database users where possible
@@ -746,13 +742,13 @@ python notion_supabase_sync.py --config custom_config.json
    - Define field mappings in `mapping.json`
 
 2. **Test data collection**
-   ```bash
-   python social_api_client.py --platform new_platform --debug
+   ```powershell
+   & .\.venv\Scripts\python.exe -m reporting.social_client.social_api_client --platform new_platform --debug
    ```
 
 3. **Verify processing**
-   ```bash
-   python data_processor.py --debug
+   ```powershell
+   & .\.venv\Scripts\python.exe -m reporting.process.data_processor --debug
    ```
 
 ### Extending Functionality
