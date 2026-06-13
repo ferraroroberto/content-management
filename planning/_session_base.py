@@ -26,6 +26,7 @@ single-source here — never re-inline it in a platform module.
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -39,6 +40,7 @@ from config.logger_config import setup_logger
 
 # Repo root is two levels up from this file: planning/_session_base.py -> repo.
 REPO_ROOT = Path(__file__).resolve().parent.parent
+CONFIG_PATH = REPO_ROOT / "config" / "config.json"
 
 
 class LoginRequiredError(RuntimeError):
@@ -54,6 +56,38 @@ def configure_logger(name: str, debug: bool = False) -> logging.Logger:
     """Set up a logger using the project-wide pattern."""
     level = logging.DEBUG if debug else logging.INFO
     return setup_logger(name, level=level, file_logging=True)
+
+
+def load_notion_token() -> str:
+    """Load Notion API token from config.json.
+
+    Single-source for every platform session — platform modules re-export this
+    name so existing ``from planning.<P>.<P>_session import load_notion_token``
+    imports keep resolving unchanged.
+    """
+    with open(CONFIG_PATH, "r", encoding="utf-8") as fp:
+        cfg = json.load(fp)
+    token = cfg.get("notion", {}).get("api_token")
+    if not token:
+        raise RuntimeError("Missing 'notion.api_token' in config.json")
+    return token
+
+
+def load_config_block(name: str) -> dict:
+    """Load and return a named top-level block from config.json.
+
+    Single-source for the ``load_<platform>_config()`` helpers: each is the
+    same open/parse/raise body differing only by the block name. Platform
+    modules define a thin one-liner — ``return load_config_block("<name>")``
+    — so the logic lives once here. Re-export the per-platform name so
+    call sites are untouched.
+    """
+    with open(CONFIG_PATH, "r", encoding="utf-8") as fp:
+        cfg = json.load(fp)
+    block = cfg.get(name)
+    if not block:
+        raise RuntimeError(f"Missing '{name}' block in config.json")
+    return block
 
 
 def _resolve_user_data_dir(rel_or_abs: str, *, example_subdir: str = "<platform>/chrome_user_data") -> Path:
@@ -200,10 +234,13 @@ class PlatformSession:
 
 
 __all__ = [
+    "CONFIG_PATH",
     "REPO_ROOT",
     "LoginRequiredError",
     "PlatformSession",
     "configure_logger",
+    "load_config_block",
+    "load_notion_token",
     "_resolve_user_data_dir",
     "_user_data_dir_initialized",
 ]

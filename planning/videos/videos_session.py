@@ -36,6 +36,7 @@ from typing import Optional
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from planning._session_base import configure_logger as _configure_logger  # noqa: E402
+from planning._session_base import load_config_block, load_notion_token  # noqa: E402
 from reporting.notion.editorial import (  # noqa: E402
     get_field,
     get_page_body_text,
@@ -43,9 +44,6 @@ from reporting.notion.editorial import (  # noqa: E402
 )
 
 logger = logging.getLogger("videos_session")
-
-CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "config.json"
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Per-platform role suffixes on the editorial DB. The roles are wired in
 # config under ``videos.editorial_columns`` as e.g. ``clip_rel_li`` and
@@ -92,21 +90,7 @@ def configure_logger(name: str = "videos", debug: bool = False) -> logging.Logge
 
 def load_videos_config() -> dict:
     """Return the ``videos`` block from config.json."""
-    with open(CONFIG_PATH, "r", encoding="utf-8") as fp:
-        cfg = json.load(fp)
-    block = cfg.get("videos")
-    if not block:
-        raise RuntimeError("Missing 'videos' block in config.json")
-    return block
-
-
-def load_notion_token() -> str:
-    with open(CONFIG_PATH, "r", encoding="utf-8") as fp:
-        cfg = json.load(fp)
-    token = cfg.get("notion", {}).get("api_token")
-    if not token:
-        raise RuntimeError("Missing 'notion.api_token' in config.json")
-    return token
+    return load_config_block("videos")
 
 
 def first_clip_relation_id(editorial_row: dict, video_cols: dict) -> Optional[str]:
