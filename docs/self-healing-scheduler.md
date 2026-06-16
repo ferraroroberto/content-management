@@ -73,12 +73,12 @@ follow-up work).
 A fix lands end-to-end only when **all** hold: exactly one strong role/text
 candidate, the validating dry-run passes, and the diff is a pure selector-string
 change. Otherwise the skill escalates via the **fleet-wide Slack bot helper**
-(`~/.claude/hooks/slack_notify.py`, provided by `claude-config`) to the channel
+(`~/.claude/hooks/slack_notify.py`, provided by `fleet-config`) to the channel
 in `config/config.json` → `slack.autoheal_channel`, and stops. A bot identity is
 used deliberately: the claude.ai Slack MCP connector posts *as the user*, so Slack
 never fires a notification and the escalation would land silently. The bot token
 lives in `~/.claude/settings.json` env (`SLACK_BOT_TOKEN`), never in this repo;
-see `claude-config/docs/slack-workflow.md`.
+see `fleet-config/docs/slack-workflow.md`.
 
 ## The visible-console + tee mechanism
 

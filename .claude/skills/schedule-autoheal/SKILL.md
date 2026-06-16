@@ -96,7 +96,7 @@ Leave the working tree clean (or the branch un-pushed) and hand off to a human.
 ## Step 5 — escalate via Slack, then stop
 
 Read the Slack target from `config/config.json` → `slack.autoheal_channel`. Send the
-ping through the **fleet-wide Slack bot helper** (provided by `claude-config`, available
+ping through the **fleet-wide Slack bot helper** (provided by `fleet-config`, available
 with zero install at `~/.claude/hooks/slack_notify.py`):
 
 ```
@@ -111,7 +111,7 @@ Why the bot and not the Slack MCP connector: the MCP connector posts **as the us
 Slack never fires a notification for it and the escalation lands silently — defeating the
 point of an unattended scheduler. The bot posts as a separate identity, which actually
 notifies. The bot token lives in `~/.claude/settings.json` env (`SLACK_BOT_TOKEN`), never
-in this repo; see `claude-config/docs/slack-workflow.md`.
+in this repo; see `fleet-config/docs/slack-workflow.md`.
 
 If `autoheal_channel` is blank **or** the helper reports a failure (missing token, API
 error), surface that plainly in the run output and still **stop**. Either way: do not

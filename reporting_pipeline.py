@@ -155,7 +155,7 @@ def _load_slack_notify():
     """Import the fleet-wide Slack helper from ``~/.claude/hooks/slack_notify.py``.
 
     Returns the module, or ``None`` if it can't be located/imported (logged).
-    The helper is provided by the ``claude-config`` project and reused fleet-wide
+    The helper is provided by the ``fleet-config`` project and reused fleet-wide
     (the same transport ``/schedule-autoheal`` uses) — do not reimplement it.
     """
     helper = Path.home() / ".claude" / "hooks" / "slack_notify.py"
