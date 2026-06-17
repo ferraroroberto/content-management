@@ -97,7 +97,13 @@ attach helper. See:
   date/time → footer `Schedule`. The date field is a segmented editor pre-set to
   today — *typing* corrupts it and unmounts the form, so the date is set by
   clicking the target day in its calendar popup (`_set_reel_schedule_datetime`);
-  the hours/minutes/meridiem triplet is typed as usual.
+  the hours/minutes/meridiem triplet is typed as usual. **Success signal:** after
+  the final `Schedule` click Meta does *not* always navigate back to the planner —
+  it often stays on `/latest/reels_composer/` behind an in-place `Reel scheduled`
+  confirmation dialog, so `_wait_reel_composer_closes` treats *either* the URL
+  leaving the composer *or* that dialog appearing as success, then clicks its
+  `Done` button (issue #125). A URL-only check false-FAILs an already-scheduled
+  reel.
 - Twitter (X): `planning/twitter/schedule_twitter_posts.py` — same
   `SideNav_NewTweet_Button`, same `fileInput` (accepts .mp4 directly),
   same `scheduleOption` + 6 native selects.

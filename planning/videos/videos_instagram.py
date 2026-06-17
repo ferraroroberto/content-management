@@ -32,6 +32,7 @@ from planning.instagram.instagram_session import (  # noqa: E402
 from planning.instagram.schedule_instagram_posts import (  # noqa: E402
     _cancel_composer,
     _click_reel_footer,
+    _dismiss_reel_success_dialog,
     _fill_post_text,
     _open_day_schedule_menu,
     _reel_add_video,
@@ -120,6 +121,10 @@ def schedule_one_video(
         shot = out_dir / f"{label}-ig-FAIL.png"
         page.screenshot(path=str(shot), full_page=False)
         raise RuntimeError(f"IG reel composer did not close — see {shot}")
+    # On success Meta may stay on /reels_composer/ behind a "Reel scheduled"
+    # confirmation dialog rather than navigating back — dismiss it so the next
+    # day starts from a clean planner state (issue #125).
+    _dismiss_reel_success_dialog(page)
     page.wait_for_timeout(1500)
     logger.info("✅ LIVE %s IG video scheduled as reel", label)
     return "IG:LIVE"
