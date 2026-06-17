@@ -1458,11 +1458,47 @@ def _set_reel_schedule_datetime(page: Page, target: date, hour: int, minute: int
     logger.info("🕒 Reel scheduled for %s %d:%02d %s", target.isoformat(), h12, minute, mer)
 
 
+# Anchored so it matches only the post-Schedule confirmation heading, never the
+# earlier "Schedule" radio option or the "Scheduling options" step label.
+REEL_SCHEDULED_DIALOG_RE = re.compile(r"^Reel scheduled$", re.I)
+
+
+def _reel_scheduled_dialog_visible(page: Page) -> bool:
+    """True when Meta's post-Schedule 'Reel scheduled' confirmation dialog is up."""
+    try:
+        loc = page.get_by_text(REEL_SCHEDULED_DIALOG_RE)
+        return loc.count() > 0 and loc.first.is_visible()
+    except Exception:
+        return False
+
+
+def _dismiss_reel_success_dialog(page: Page) -> None:
+    """Best-effort click 'Done' on the 'Reel scheduled' confirmation dialog so
+    the next day starts from a clean planner state."""
+    try:
+        done = page.get_by_role("button", name=re.compile(r"^Done$", re.I))
+        if done.count():
+            done.first.click(timeout=3000)
+            page.wait_for_timeout(800)
+    except Exception:
+        pass
+
+
 def _wait_reel_composer_closes(page: Page, *, timeout_ms: int = 30000) -> bool:
-    """Wait until the URL leaves /reels_composer/ (the reel was scheduled)."""
+    """Wait for either success signal that means the reel was scheduled.
+
+    Two outcomes count as success, either of which ends the wait:
+    (1) the URL leaves /reels_composer/ (Meta navigates back to the planner), or
+    (2) the in-place "Reel scheduled" confirmation dialog appears over the
+        composer while the URL stays on /latest/reels_composer/ (issue #125).
+        A URL-only check times out here and falsely reports failure even though
+        the reel IS scheduled; the caller dismisses the dialog via "Done".
+    """
     deadline = page.evaluate("() => Date.now()") + timeout_ms
     while page.evaluate("() => Date.now()") < deadline:
         if REELS_COMPOSER_URL_FRAGMENT not in (page.url or "").lower():
+            return True
+        if _reel_scheduled_dialog_visible(page):
             return True
         page.wait_for_timeout(500)
     return False
