@@ -183,7 +183,7 @@ class PlatformSession:
         if not _user_data_dir_initialized(self.user_data_dir):
             raise FileNotFoundError(
                 f"Chrome profile at {self.user_data_dir} is empty or missing. "
-                f"Run `python -m {self.platform_name}.bootstrap_session` first."
+                f"Run `python -m planning.{self.platform_name}.bootstrap_session` first."
             )
         self._playwright = sync_playwright().start()
         self._context = launch_persistent_context_with_lock_wait(
@@ -216,7 +216,7 @@ class PlatformSession:
         if any(marker in current for marker in self.login_markers):
             raise LoginRequiredError(
                 f"{self._display} redirected to login — the saved Chrome profile session "
-                f"expired. Re-run `python -m {self.platform_name}.bootstrap_session` to log in again."
+                f"expired. Re-run `python -m planning.{self.platform_name}.bootstrap_session` to log in again."
             )
 
     def screenshot_failure(self, label: str) -> Path:
