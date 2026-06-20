@@ -727,6 +727,7 @@ Override default configuration files:
 2. **Store credentials in the right place**
    - Supabase URL and key go in `config/config.json` (`supabase.url`, `supabase.key` / `supabase.service_role_key`) — keep that file out of version control
    - PostgreSQL connection credentials go in `.env` (read by `python-dotenv` at startup)
+   - Reporting connects via direct psycopg2 (port 5432), not the REST API — no Supabase API key is involved. Engagement uses the Supabase client library at table-level (`/rest/v1/<table>`) with `service_role_key` preferred, falling back to the anon key; the bare `/rest/v1/` root endpoint is never called.
 
 3. **Implement access controls**
    - Use read-only database users where possible
