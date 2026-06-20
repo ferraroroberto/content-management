@@ -1,12 +1,12 @@
 r"""End-to-end Playwright check of the control-panel app.
 
-Drives http://localhost:8502 (control panel) — different port from the
-legacy standalone review at :8501 so both can coexist during the
-transition. Verifies each pipeline tab renders + the engagement
-sub-tabs work.
+Drives http://localhost:8501 (Streamlit's default — what ``launch_app.bat``
+uses). Verifies each pipeline tab renders + the engagement sub-tabs work.
+Override the target with the APP_URL environment variable when the app is
+running on a non-default port.
 
 Usage (control panel must already be running):
-    & .\.venv\Scripts\python.exe -m streamlit run app\app.py --server.port 8502
+    launch_app.bat   # or: .venv\Scripts\python.exe -m streamlit run app\app.py
     & .\.venv\Scripts\python.exe -m app.check_control_panel
 """
 
