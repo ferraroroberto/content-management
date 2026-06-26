@@ -1,7 +1,7 @@
 # Substack native HTTP API integration
 
 How this repo talks to Substack over its private HTTP API (cookie-auth) instead
-of driving a browser, and why. Companion to `planning/substack/DESIGN.md` (the
+of driving a browser, and why. Companion to `planning/substack/README.md` (the
 Playwright integration, which is **kept** as an alternative path — this does not
 replace it). Originated from the spike in issue #91.
 
@@ -17,7 +17,7 @@ Everything we actually want is reachable through the private endpoints the
 Substack web app itself calls, authenticated with **our own session cookie**.
 This is authenticated HTTP to our own account — no captcha bypass and no
 fingerprint spoofing (a different, lighter category than the anti-bot concerns in
-`DESIGN.md`). Functionally it is *more* robust than the Playwright path: no DOM
+the Playwright `README.md`). Functionally it is *more* robust than the Playwright path: no DOM
 selectors, no reCAPTCHA, no shared-profile lock, no headed launch. The trade-off
 is that these endpoints are **undocumented and can change without notice**.
 

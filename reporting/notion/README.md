@@ -13,6 +13,11 @@ The Notion automation suite consists of six main tools:
 5. **notion_database_relations.py** - Extracts and analyzes database relationships
 6. **notion_unify_data.py** - Executes SQL to unify editorial data into consolidated tables
 
+The folder also ships a handful of **one-time setup and manual diagnostic
+scripts** that are *not* part of any pipeline orchestrator — see
+[One-time setup & manual tools](#-one-time-setup--manual-tools-not-pipeline-steps)
+below so they aren't mistaken for daily-suite steps.
+
 ## 📋 Prerequisites
 
 - Python 3.7+
@@ -229,6 +234,47 @@ python -m reporting.notion.notion_unify_data --debug
 - Handles database connections and transactions
 - Provides detailed logging of SQL execution
 - Supports both local and cloud database environments
+
+## 🧰 One-time setup & manual tools (not pipeline steps)
+
+These scripts ship in this folder but are **not** imported by any pipeline
+orchestrator (`reporting_pipeline.py`, `planning_pipeline.py`,
+`newsletter_pipeline.py`) and are **not** part of the daily/sync suite above. They
+are run by hand — once when standing up the relations system, or ad hoc for a
+quick check. Listed here so a reader can tell them apart from the suite tools.
+
+### setup_notion_relations_system.py — one-time DB setup
+
+Reads `setup_notion_relations_system.sql` (the relations-system core) and executes
+it against Supabase to create the consolidated relations objects, then runs the
+initialization function. Run once when provisioning the database; see the
+companion `setup_notion_relations_system.md` for the SQL design.
+
+```bash
+python -m reporting.notion.setup_notion_relations_system [--debug]
+```
+
+### notion_relations_python_setup.py — one-time setup wrapper / verifier
+
+A Python CLI wrapper (`NotionRelationsPythonSetup`) over the same relations
+system, offering `setup` / `test` / `verify` / `demo` actions. An alternative
+entry point to the SQL-runner above for setting up and sanity-checking the
+relations system from Python. One-time / ad hoc — not a pipeline step.
+
+```bash
+python -m reporting.notion.notion_relations_python_setup [setup|test|verify|demo]
+```
+
+### next_relation_check.py — read-only diagnostic preview
+
+Read-only preview for the editorial DB's `next`-relation auto-fill: looks up the
+row for a target date and the day after and prints what a real run *would* write.
+**No Notion writes.** A manual sanity check, not a scheduled step.
+
+```bash
+python -m reporting.notion.next_relation_check            # today
+python -m reporting.notion.next_relation_check 20260513   # explicit date
+```
 
 ## 📊 Database Sample Directory
 
