@@ -150,6 +150,25 @@ The value flows through `data_processor` → `profile_aggregator` →
 & .\.venv\Scripts\python.exe -m planning.substack.daily_pipeline [--date YYYYMMDD] [--dry-run] [--skip-post] [--force] [--debug]
 ```
 
+## Composer selector notes
+
+A couple of non-obvious DOM facts the Note publisher relies on, kept here so a
+future selector fix starts from the right mental model rather than from the ARIA
+spec:
+
+- **The note composer is not a `role="dialog"` and the editor is not a
+  `role="textbox"`.** The composer is a custom popover and the editor is a
+  ProseMirror `contenteditable` div. `post_substack_note.py` therefore finds the
+  editor by `[contenteditable="true"]` (preferring one whose `data-placeholder`
+  mentions "mind") and scopes the composer by walking up to the nearest ancestor
+  that holds both the Cancel and Post buttons — so the image file-input search
+  doesn't hit the page's avatar or cover-photo inputs.
+- **Wait for the real upload preview, not any `<img>`.** A naive `img[src]`
+  match returns instantly against the tiny avatar in the popover header while the
+  Post button is still disabled. The publisher instead waits for an `<img>`
+  inside the composer with `naturalWidth > 200 && naturalHeight > 200 &&
+  complete` — the first such image is the upload preview, not an avatar.
+
 ## Failure handling
 
 - A redirect to `sign-in` raises `LoginRequiredError`; the script exits non-zero and asks you to re-run `bootstrap_session`.
@@ -158,6 +177,6 @@ The value flows through `data_processor` → `profile_aggregator` →
 
 ## Known risks
 
-- The Substack DOM may change. Selectors are anchored on ARIA roles + accessible-name regexes, but breakages are still possible.
+- The Substack DOM may change. Selectors are anchored on a mix of ARIA roles, accessible-name regexes, and structural fallbacks (see *Composer selector notes* above), but breakages are still possible.
 - The cookie eventually expires; re-run `bootstrap_session` when that happens.
 - Step 1 publishes content to a public platform. Use `--dry-run` first when in doubt.
