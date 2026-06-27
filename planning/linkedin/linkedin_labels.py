@@ -24,22 +24,32 @@ from datetime import date
 
 # ---------- Feed share box ----------
 
-# The share-box buttons render with the noun as VISIBLE text ("Photo"/"Video")
-# but LinkedIn now also sets an aria-label ("Add a photo"/"Add a video"), and
-# the aria-label wins the accessible-name computation. Anchoring on the trailing
-# noun ($) — preceded by start-of-string or whitespace — matches every observed
-# form across this change and across locales: "Photo", "Foto", "Add a photo",
-# "Añadir una foto", "Agregar foto", etc. (issue #60). Do NOT re-anchor with a
-# leading ^ only: that broke the moment LinkedIn prepended "Add a ".
-PHOTO_BTN_RE = re.compile(r"(?:^|\s)(?:photo|foto)$", re.I)
+# These three affordances are matched by their VISIBLE TEXT, not by an
+# accessible-name `get_by_role("button", ...)`, because LinkedIn's redesigned
+# share box mounts them as a role-less ``<a tabindex=0 onclick>`` (the visible
+# label lives in a child ``<p>Photo</p>``). The element has no ``role="button"``
+# and no aria-label once the feed hydrates, so the old accessible-name anchor
+# resolved nothing and the click timed out (issue #140 — confirmed by live DOM
+# probe: ``get_by_role("button", name=…)`` on the trailing-noun anchor → 0
+# matches post-hydration, while ``get_by_text(PHOTO_TEXT_RE)`` → exactly 1). The
+# pre-hydration placeholder briefly *is* a ``<div role="button">``, which is why
+# the failure used to read "element was detached from the DOM, retrying":
+# Playwright caught the placeholder, LinkedIn swapped it for the role-less
+# ``<a>``, and the accessible name never matched again. Matching the visible
+# ``<p>`` text and letting the click bubble up to the ``<a onclick>`` ancestor
+# works for both the placeholder and the hydrated form, and across locales.
+#
+# Whole-string anchors (``^…$``) so a feed post that merely *mentions* "photo"
+# can't win the match. ``get_by_text`` normalizes whitespace; the ``\s*`` guards
+# are belt-and-braces.
+PHOTO_TEXT_RE = re.compile(r"^\s*(?:photo|foto)\s*$", re.I)
 
 # LinkedIn Spain uses "Vídeo" (with accent); some LATAM builds use "Video".
-# Same trailing-noun anchor to absorb the "Add a video" aria-label.
-VIDEO_BTN_RE = re.compile(r"(?:^|\s)(?:v[ií]deo)$", re.I)
+VIDEO_TEXT_RE = re.compile(r"^\s*(?:v[ií]deo)\s*$", re.I)
 
 # Two known EN names + two known ES names for the share box's main affordance.
-START_POST_RE = re.compile(
-    r"start a post|create a post|empieza una publicación|crea una publicación",
+START_POST_TEXT_RE = re.compile(
+    r"^\s*(?:start a post|create a post|empieza una publicación|crea una publicación)\s*$",
     re.I,
 )
 
@@ -169,9 +179,9 @@ def time_picker_candidates(hour: int, minute: int) -> tuple[str, ...]:
 
 
 __all__ = [
-    "PHOTO_BTN_RE",
-    "VIDEO_BTN_RE",
-    "START_POST_RE",
+    "PHOTO_TEXT_RE",
+    "VIDEO_TEXT_RE",
+    "START_POST_TEXT_RE",
     "ALT_TEXT_BTN_RE",
     "ADD_BTN_RE",
     "MORE_BTN_RE",

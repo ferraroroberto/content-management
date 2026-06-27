@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import logging
 import re
+import time
+from typing import Optional
 
 from playwright.sync_api import Page
 
@@ -40,6 +42,55 @@ logger = logging.getLogger("linkedin_composer")
 # the button is clickable — so the cost on a warm session is essentially
 # zero, and only the cold first click pays.
 FEED_ENTRY_CLICK_TIMEOUT_MS = 30000
+
+# Per-attempt budget for one click try *inside* the retry loop below. Short
+# enough that a detached-element failure ends the attempt fast (so the next
+# attempt re-resolves against the settled DOM); long enough that a warm,
+# already-mounted button is clicked on the very first try.
+FEED_ENTRY_ATTEMPT_TIMEOUT_MS = 6000
+
+
+def click_feed_entry(page: Page, text_re: re.Pattern, label: str) -> None:
+    """Click a feed share-box affordance ('Photo' / 'Video' / 'Start a post')
+    by its VISIBLE TEXT, surviving the cold-start + feed-rehydration race.
+
+    LinkedIn's redesigned share box mounts each affordance as a role-less
+    ``<a tabindex=0 onclick>`` whose label is a child ``<p>Photo</p>`` — there is
+    no ``role="button"`` or aria-label once the feed hydrates, so the old
+    ``get_by_role("button", name=...)`` anchor resolved nothing and the click
+    burned its whole 30 s timeout (issue #140; the pre-hydration placeholder
+    briefly *is* a ``<div role="button">``, which is why the failure read
+    "element was detached from the DOM, retrying" — Playwright caught the
+    placeholder, LinkedIn swapped it for the role-less ``<a>``, and the name
+    never matched again). ``get_by_text`` matches the visible ``<p>`` in both the
+    placeholder and hydrated forms; clicking it bubbles up to the ``<a onclick>``.
+
+    We re-resolve on each attempt with a short per-attempt timeout, so a
+    cold-start miss (the share box not mounted yet, issue #27) or a transient
+    detachment fails fast and the next attempt clicks against the settled DOM.
+    Attempts accumulate up to ``FEED_ENTRY_CLICK_TIMEOUT_MS``; a warm share box
+    still returns on the first attempt in ~1 s.
+    """
+    deadline = time.monotonic() + FEED_ENTRY_CLICK_TIMEOUT_MS / 1000
+    last_err: Optional[Exception] = None
+    attempts = 0
+    while True:
+        attempts += 1
+        try:
+            page.get_by_text(text_re).first.click(
+                timeout=FEED_ENTRY_ATTEMPT_TIMEOUT_MS,
+            )
+            return
+        except Exception as err:  # not-yet-mounted, detachment, or attempt timeout
+            last_err = err
+            if time.monotonic() >= deadline:
+                break
+            # Brief settle before re-resolving against the churning feed.
+            page.wait_for_timeout(500)
+    raise RuntimeError(
+        f"Could not click '{label}' on the LinkedIn feed after {attempts} "
+        f"attempt(s): {last_err}"
+    )
 
 
 # ---------- Mention resolution ----------
@@ -352,6 +403,7 @@ def wait_for_upload_complete(page: Page, *, timeout_ms: int = 420000) -> bool:
 
 
 __all__ = [
+    "click_feed_entry",
     "fill_caption_with_mentions",
     "wait_for_upload_complete",
 ]

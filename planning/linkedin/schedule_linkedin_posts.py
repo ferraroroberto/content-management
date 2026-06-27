@@ -61,7 +61,7 @@ from planning.linkedin.linkedin_carousel_pdf import (  # noqa: E402
     locate_pdf,
 )
 from planning.linkedin.linkedin_composer import (  # noqa: E402
-    FEED_ENTRY_CLICK_TIMEOUT_MS,
+    click_feed_entry,
     fill_caption_with_mentions,
     wait_for_upload_complete,
 )
@@ -76,9 +76,9 @@ from planning.linkedin.linkedin_labels import (  # noqa: E402
     MORE_BTN_RE,
     NEXT_BTN_RE,
     NEXT_MONTH_BTN_RE,
-    PHOTO_BTN_RE,
+    PHOTO_TEXT_RE,
     SCHEDULE_POST_BTN_RE,
-    START_POST_RE,
+    START_POST_TEXT_RE,
     calendar_day_aria_re,
     calendar_header_candidates,
     time_picker_candidates,
@@ -406,16 +406,11 @@ def _dialog_button(page: Page, name_re: re.Pattern):
 
 def _click_add_photo(page: Page) -> None:
     """Click the 'Photo' button on the feed (opens post dialog + file picker)."""
-    # Confirmed via DOM probe: the visible 'Photo' is a <p> inside a <div role='button'>.
-    # `get_by_role('button', name='Photo')` resolves that ancestor cleanly.
-    # The longer timeout absorbs the cold-start race on the first action of a
-    # freshly-navigated session (issue #27); warm calls still return in ~1 s.
-    try:
-        page.get_by_role("button", name=PHOTO_BTN_RE).first.click(
-            timeout=FEED_ENTRY_CLICK_TIMEOUT_MS,
-        )
-    except Exception as err:
-        raise RuntimeError(f"Could not click 'Photo' on the LinkedIn feed: {err}")
+    # The hydrated 'Photo' affordance is a role-less <a> with a <p>Photo</p>
+    # label, so it's matched by visible text, not accessible name (issue #140).
+    # `click_feed_entry` re-resolves on each attempt, absorbing both the
+    # cold-start race (issue #27) and the share-box rehydration swap.
+    click_feed_entry(page, PHOTO_TEXT_RE, "Photo")
 
 
 def _upload_photo(page: Page, image_path: Path) -> None:
@@ -788,19 +783,13 @@ def _click_start_a_post(page: Page) -> None:
     a document'. LI's share box exposes a button with accessible name
     matching 'Start a post' (case-insensitive).
     """
-    # The longer click timeout absorbs the cold-start race on the first action
-    # of a freshly-navigated session (issue #27). Both English variants
-    # ('Start a post' / 'Create a post') and the Spanish variants are folded
-    # into the shared ``START_POST_RE`` so the single ``.click()`` actionability
-    # poll handles the cold-start wait once across locales.
-    try:
-        page.get_by_role("button", name=START_POST_RE).first.click(
-            timeout=FEED_ENTRY_CLICK_TIMEOUT_MS,
-        )
-    except Exception as err:
-        raise RuntimeError(
-            f"Could not click 'Start a post' on the LinkedIn feed: {err}"
-        )
+    # The hydrated 'Start a post' box is also role-less (issue #140), so it's
+    # matched by visible text. `click_feed_entry` absorbs both the cold-start
+    # race (issue #27) and the share-box rehydration swap by re-resolving on each
+    # attempt. Both English variants ('Start a post' / 'Create a post') and the
+    # Spanish variants are folded into the shared ``START_POST_TEXT_RE`` so one
+    # call handles every locale.
+    click_feed_entry(page, START_POST_TEXT_RE, "Start a post")
 
 
 # ---------- Per-row driver ----------
