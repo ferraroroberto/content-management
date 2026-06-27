@@ -105,8 +105,8 @@ def run() -> int:
             return 1
 
         body = page.inner_text("body")
-        if all(label in body.lower() for label in ("reporting", "planning", "newsletter", "engagement")):
-            _pass("all 4 pipeline tabs present")
+        if all(label in body.lower() for label in ("reporting", "editorial", "planning", "newsletter", "engagement")):
+            _pass("all 5 pipeline tabs present")
         else:
             _fail("missing pipeline tabs", "")
             fails += 1
@@ -125,6 +125,19 @@ def run() -> int:
             _pass("reporting controls render")
         else:
             _fail("reporting controls", "expected 'run reporting pipeline' button + 'skip substack' toggle")
+            fails += 1
+
+        print("\n📱 step 2b — Editorial tab renders seed button (before planning)")
+        _click_tab(page, "editorial")
+        page.wait_for_timeout(800)
+        _shot(page, out_dir, "02b-editorial")
+        body = page.inner_text("body")
+        if "seed editorial rows" in body.lower() and "seed calendar rows" in body.lower():
+            _pass("editorial controls render")
+        else:
+            _fail("editorial controls", "expected 'seed editorial rows' button + 'seed calendar rows' header")
+            fails += 1
+        if not _assert_no_traceback(page, "editorial tab"):
             fails += 1
 
         print("\n📱 step 3 — Planning tab renders dry-run/live radio")

@@ -44,6 +44,7 @@ from app.process_runner import exit_code, is_running  # noqa: E402
 
 PIPELINES = [
     ("reporting",          "📊 reporting"),
+    ("editorial",          "📅 editorial"),
     ("planning",           "📅 planning"),
     ("newsletter",         "📰 newsletter"),
     ("engagement-scrape",  "🛡️ engagement (scrape)"),
@@ -73,8 +74,9 @@ with st.sidebar:
 
 
 # ── Tabs ─────────────────────────────────────────────────────────────
-tab_rep, tab_plan, tab_news, tab_eng = st.tabs([
+tab_rep, tab_ed, tab_plan, tab_news, tab_eng = st.tabs([
     "📊 reporting",
+    "📅 editorial",
     "📅 planning",
     "📰 newsletter",
     "🛡️ engagement",
@@ -83,6 +85,10 @@ tab_rep, tab_plan, tab_news, tab_eng = st.tabs([
 with tab_rep:
     from app import tab_reporting  # noqa: PLC0415
     tab_reporting.run()
+
+with tab_ed:
+    from app import tab_editorial  # noqa: PLC0415
+    tab_editorial.run()
 
 with tab_plan:
     from app import tab_planning  # noqa: PLC0415
