@@ -22,11 +22,11 @@ from playwright.sync_api import Page, TimeoutError as PWTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from planning.linkedin.linkedin_composer import (  # noqa: E402
-    FEED_ENTRY_CLICK_TIMEOUT_MS,
+    click_feed_entry,
     fill_caption_with_mentions,
     wait_for_upload_complete,
 )
-from planning.linkedin.linkedin_labels import VIDEO_BTN_RE  # noqa: E402
+from planning.linkedin.linkedin_labels import VIDEO_TEXT_RE  # noqa: E402
 from planning.linkedin.linkedin_session import (  # noqa: E402
     LinkedInSession,
     LoginRequiredError,
@@ -69,20 +69,16 @@ def _click_video_button(page: Page) -> None:
     """Open the post composer in Video mode from the feed.
 
     Mirrors ``_click_add_photo`` from the photo flow but targets the
-    ``Video`` button. Same DOM shape — a ``<p>Video</p>`` text node inside a
-    ``<div role="button">`` wrapper.
+    ``Video`` affordance — a ``<p>Video</p>`` label inside the redesigned,
+    role-less ``<a>`` share-box wrapper, matched by visible text (issue #140;
+    matching by accessible name caught a feed "Play video" button instead).
 
-    The longer ``FEED_ENTRY_CLICK_TIMEOUT_MS`` absorbs the cold-start race on
-    the first feed action of a freshly-navigated session (issue #27); warm
-    calls still return in ~1 s because ``.click()`` returns the instant the
-    button is actionable.
+    ``click_feed_entry`` re-resolves on each attempt, so it absorbs both the
+    cold-start race on the first feed action of a freshly-navigated session
+    (issue #27) and the share-box rehydration swap; a warm affordance still
+    returns on the first attempt in ~1 s.
     """
-    try:
-        page.get_by_role("button", name=VIDEO_BTN_RE).first.click(
-            timeout=FEED_ENTRY_CLICK_TIMEOUT_MS,
-        )
-    except Exception as err:
-        raise RuntimeError(f"Could not click 'Video' on the LinkedIn feed: {err}")
+    click_feed_entry(page, VIDEO_TEXT_RE, "Video")
 
 
 def _upload_video(page: Page, video_path: Path) -> None:
