@@ -5,19 +5,26 @@ Each tab owns its own module (`app.tab_*`) per the project's per-tab
 convention (see pdf-to-markdown sibling project + CLAUDE.md). Subprocess
 lifecycle + live log streaming lives in `app/process_runner.py`.
 
-Launch:
+Launch via the wrapper (recommended — applies logging filters before server start):
     .\launch_app.bat
-    # or directly:
-    & .\.venv\Scripts\python.exe -m streamlit run app\app.py
+    # or: & .\.venv\Scripts\python.exe run_app.py
 """
 
 from __future__ import annotations
 
+import logging
 import sys
 from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
+
+# Belt-and-suspenders filter for direct launches (run_app.py applies these earlier).
+logging.getLogger("tornado.general").addFilter(
+    type("_NoInvalidHTTP", (logging.Filter,), {
+        "filter": staticmethod(lambda r: "Invalid HTTP request" not in r.getMessage())
+    })()
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
