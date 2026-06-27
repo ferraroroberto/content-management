@@ -265,6 +265,22 @@ relations system from Python. One-time / ad hoc — not a pipeline step.
 python -m reporting.notion.notion_relations_python_setup [setup|test|verify|demo]
 ```
 
+### add_editorial_dates.py — seed editorial-calendar rows
+
+Creates any missing day-rows in the editorial DB for the **current + next
+calendar month** (writing `day` / `date` / `DoW`). Idempotent — only missing
+dates are added, so re-running is a no-op. Resolves the editorial DB and token
+from `config.json` (`notion.api_token` + `notion.databases[0]`; column names
+overridable via `notion.editorial_date_columns`). Run on demand from a console
+or from the control-panel app's **📅 editorial** tab — both share this one code
+path.
+
+```bash
+python -m reporting.notion.add_editorial_dates            # current + next month
+python -m reporting.notion.add_editorial_dates --debug
+python -m reporting.notion.add_editorial_dates --database-id <id>
+```
+
 ### next_relation_check.py — read-only diagnostic preview
 
 Read-only preview for the editorial DB's `next`-relation auto-fill: looks up the

@@ -101,7 +101,7 @@ content-management/                   # repo root
 │   ├── classify/                     # layered classifier + phrase config
 │   ├── reputation/                   # per-commenter reputation feedback loop
 │   └── db/                           # Supabase schema (commenters + comments tables)
-├── app/                              # Streamlit control panel (four tabs: reporting/planning/newsletter/engagement)
+├── app/                              # Streamlit control panel (tabs: reporting/editorial/planning/newsletter/engagement)
 ├── config/                           # config.json, mapping.json, logger_config, chrome_launch, console
 ├── results/                          # outputs — planning summaries + raw API JSON
 ├── logs/                             # per-module .log files

@@ -122,6 +122,11 @@
                 "name": "database_name"
             }
         ],
+        "editorial_date_columns": {
+            "title_day": "day",
+            "date": "date",
+            "day_of_week": "DoW"
+        },
         "update_fields_followers": [
             "follow LI",
             "follow TW",
