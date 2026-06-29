@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.logger_config import setup_logger
+from config.loader import load_full_config as load_config
 from reporting.process.supabase_uploader import get_db_connection
 
 # Set up logger
@@ -21,23 +22,6 @@ def configure_logger(debug_mode=False):
     log_level = logging.DEBUG if debug_mode else logging.INFO
     logger = setup_logger("notion_unify_data", file_logging=False, level=log_level)
     return logger
-
-def load_config():
-    """Load main configuration from config.json file."""
-    logger.debug("📂 Loading main configuration file")
-    config_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config')
-    config_path = os.path.join(config_dir, 'config.json')
-    
-    try:
-        with open(config_path, 'r') as file:
-            logger.info("✅ Main configuration loaded successfully")
-            return json.load(file)
-    except FileNotFoundError:
-        logger.error(f"❌ Error: Main configuration file not found at {config_path}")
-        return None
-    except json.JSONDecodeError:
-        logger.error(f"❌ Error: Invalid JSON in main configuration file at {config_path}")
-        return None
 
 def read_sql_from_file():
     """Read the SQL content from the existing SQL file."""
@@ -89,10 +73,7 @@ def main(args=None):
     
     # Load configuration
     config = load_config()
-    if not config:
-        logger.error("❌ Failed to load configuration")
-        return
-    
+
     # Read SQL from file
     logger.info("📝 Reading SQL from file")
     sql_content = read_sql_from_file()
