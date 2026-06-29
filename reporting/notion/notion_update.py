@@ -4,7 +4,6 @@ import sys
 import argparse
 from pathlib import Path
 import os
-from notion_client import Client
 from datetime import datetime, timedelta
 import psycopg2
 from dotenv import load_dotenv
@@ -13,6 +12,9 @@ from dotenv import load_dotenv
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.logger_config import setup_logger
 from reporting.process.supabase_uploader import get_db_connection
+# init_notion_client / format_database_id live in the shared _client module;
+# re-exported here so existing importers (e.g. editorial.py) keep working.
+from reporting.notion._client import init_notion_client, format_database_id
 
 # Set up logger
 logger = None
@@ -23,24 +25,6 @@ def configure_logger(debug_mode=False):
     log_level = logging.DEBUG if debug_mode else logging.INFO
     logger = setup_logger("notion_update", file_logging=False, level=log_level)
     return logger
-
-def init_notion_client(api_token):
-    """Initialize Notion Client using the provided API token."""
-    logger.debug("🔑 Initializing Notion client")
-    try:
-        client = Client(auth=api_token)
-        logger.info("✅ Notion client initialized successfully")
-        return client
-    except Exception as e:
-        logger.error(f"❌ Error initializing Notion client: {e}")
-        return None
-
-def format_database_id(database_id):
-    """Format database ID with hyphens if needed."""
-    if len(database_id) == 32:
-        # Insert hyphens to convert into UUID format
-        return f"{database_id[:8]}-{database_id[8:12]}-{database_id[12:16]}-{database_id[16:20]}-{database_id[20:]}"
-    return database_id
 
 def extract_property_value(property_item):
     """Extract the value from a property item based on its type."""
