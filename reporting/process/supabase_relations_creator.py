@@ -7,7 +7,6 @@ Follows project automation standards with logging and configuration management.
 """
 
 import json
-import os
 import pandas as pd
 import logging
 from pathlib import Path
@@ -15,12 +14,13 @@ import sys
 import psycopg2
 import psycopg2.extras
 import argparse
-from dotenv import load_dotenv
 from typing import Dict, List, Any, Optional, Tuple, Set
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.logger_config import setup_logger
+# Single-source DB helpers — canonical defs live in supabase_uploader.
+from reporting.process.supabase_uploader import load_db_config, get_db_connection
 
 # Set up logger - will use existing logger if available
 logger = logging.getLogger("supabase_relations_creator")
@@ -69,66 +69,6 @@ def apply_table_policies(connection, table_name):
     except Exception as e:
         logger.error(f"❌ Error applying policies to table {table_name}: {e}")
         return False
-
-def load_db_config(environment="cloud"):
-    """
-    Load database configuration from environment variables.
-    
-    Args:
-        environment (str): The environment to use, either 'local' or 'cloud'
-    """
-    logger.debug(f"📂 Loading database configuration for {environment} environment")
-    
-    # Load environment variables from .env file
-    load_dotenv()
-    
-    env_suffix = f"_{environment}"
-    
-    db_config = {
-        "user": os.getenv(f"db_user{env_suffix}"),
-        "password": os.getenv(f"db_password{env_suffix}"),
-        "host": os.getenv(f"db_host{env_suffix}"),
-        "port": os.getenv(f"db_port{env_suffix}"),
-        "dbname": os.getenv(f"db_name{env_suffix}")
-    }
-    
-    # Check if all required configuration exists
-    missing_keys = [k for k, v in db_config.items() if not v]
-    if missing_keys:
-        logger.error(f"❌ Database configuration missing: {', '.join(missing_keys)}")
-        return None
-            
-    logger.info(f"✅ Database configuration loaded successfully for {environment} environment")
-    return db_config
-
-def get_db_connection(db_config=None, environment="cloud"):
-    """
-    Get a PostgreSQL database connection.
-    
-    Args:
-        db_config (dict, optional): Database configuration parameters
-        environment (str, optional): The environment to use if db_config is None
-    """
-    if db_config is None:
-        db_config = load_db_config(environment)
-        
-    if not db_config:
-        return None
-        
-    try:
-        connection = psycopg2.connect(
-            user=db_config.get("user"),
-            password=db_config.get("password"),
-            host=db_config.get("host"),
-            port=db_config.get("port"),
-            dbname=db_config.get("dbname")
-        )
-        connection.autocommit = True
-        logger.info("✅ Connected to database successfully")
-        return connection
-    except Exception as e:
-        logger.error(f"❌ Error connecting to database: {e}")
-        return None
 
 def load_notion_data():
     """

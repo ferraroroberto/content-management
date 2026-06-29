@@ -11,6 +11,7 @@ import glob
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.logger_config import setup_logger
+from config.loader import load_full_config as load_config
 from reporting.process.supabase_uploader import upload_all_dataframes
 
 # Set up logger
@@ -38,23 +39,6 @@ def load_mapping_config():
         return None
     except json.JSONDecodeError:
         logger.error(f"❌ Error: Invalid JSON in mapping configuration file at {config_path}")
-        return None
-
-def load_config():
-    """Load main configuration from config.json file."""
-    logger.debug("📂 Loading main configuration file")
-    config_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config')
-    config_path = os.path.join(config_dir, 'config.json')
-    
-    try:
-        with open(config_path, 'r') as file:
-            logger.info("✅ Main configuration loaded successfully")
-            return json.load(file)
-    except FileNotFoundError:
-        logger.error(f"❌ Error: Main configuration file not found at {config_path}")
-        return None
-    except json.JSONDecodeError:
-        logger.error(f"❌ Error: Invalid JSON in main configuration file at {config_path}")
         return None
 
 def get_nested_value(data, path):
@@ -604,9 +588,7 @@ def main(args=None):
         return
     
     main_config = load_config()
-    if not main_config:
-        logger.warning("⚠️  Failed to load main configuration, using defaults")
-    
+
     # Process all JSON files and get DataFrames by data type
     dataframes = process_all_files(mapping_config, main_config, debug_mode=debug_mode, target_date=args.date)
     

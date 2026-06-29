@@ -13,6 +13,7 @@ from pathlib import Path
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.logger_config import setup_logger
+from config.loader import load_full_config as load_config
 
 # Set up logger
 logger = None
@@ -32,23 +33,6 @@ def configure_logger(debug_mode=False):
     log_level = logging.DEBUG if debug_mode else logging.INFO
     logger = setup_logger("social_api_client", file_logging=False, level=log_level)
     return logger
-
-def load_config():
-    """Load configuration from config.json file."""
-    logger.debug("📂 Loading configuration file")
-    config_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config')
-    config_path = os.path.join(config_dir, 'config.json')
-    
-    try:
-        with open(config_path, 'r') as file:
-            logger.info("✅ Configuration loaded successfully")
-            return json.load(file)
-    except FileNotFoundError:
-        logger.error(f"❌ Error: Configuration file not found at {config_path}")
-        return None
-    except json.JSONDecodeError:
-        logger.error(f"❌ Error: Invalid JSON in configuration file at {config_path}")
-        return None
 
 def check_file_exists_for_date(platform_key, config, date_str):
     """Check if a file already exists for the specified date for this platform."""
@@ -355,10 +339,7 @@ def main(args=None):
     
     # Load configuration
     config = load_config()
-    if not config:
-        logger.error("❌ Failed to load configuration")
-        return
-    
+
     # Use arguments instead of prompts
     skip_existing = args.skip_existing
     logger.info(f"⏩ Skip existing: {'Enabled' if skip_existing else 'Disabled'}")

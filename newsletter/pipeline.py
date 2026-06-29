@@ -9,7 +9,6 @@ Two entrypoints:
 
 from __future__ import annotations
 
-import json
 import logging
 import sys
 from pathlib import Path
@@ -24,17 +23,12 @@ from config.console import force_utf8_stdio  # noqa: E402
 force_utf8_stdio()
 
 from config.logger_config import setup_logger  # noqa: E402
+from config.loader import load_full_config as load_config  # noqa: E402
 from newsletter import (  # noqa: E402
     author_resolver, chrome_tabs, classifier, extractor, llm, notion_io,
     summarizer,
 )
 from newsletter.cache import CacheState  # noqa: E402
-
-
-def load_config() -> Dict[str, Any]:
-    cfg_path = REPO_ROOT / "config" / "config.json"
-    with cfg_path.open("r", encoding="utf-8") as f:
-        return json.load(f)
 
 
 def process_url(

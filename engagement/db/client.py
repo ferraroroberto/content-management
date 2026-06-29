@@ -12,24 +12,20 @@ in exactly one place.
 
 from __future__ import annotations
 
-import json
 import logging
+import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-logger = logging.getLogger("engagement.db")
+# Add the repo root to sys.path to allow importing the shared config loader.
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
+from config.loader import load_full_config as load_config  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-CONFIG_PATH = REPO_ROOT / "config" / "config.json"
+logger = logging.getLogger("engagement.db")
 
 
 # ---------- Config ----------
-
-@lru_cache(maxsize=1)
-def load_config() -> dict:
-    with open(CONFIG_PATH, "r", encoding="utf-8") as fp:
-        return json.load(fp)
 
 
 def load_engagement_config() -> dict:

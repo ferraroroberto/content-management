@@ -20,10 +20,12 @@ from notion_client import Client
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from reporting.notion import notion_update as _nu  # noqa: E402
-from reporting.notion.notion_update import (  # noqa: E402
-    extract_property_value,
+from reporting.notion._client import (  # noqa: E402
     format_database_id,
     init_notion_client,
+)
+from reporting.notion.notion_update import (  # noqa: E402
+    extract_property_value,
     prepare_notion_update,
 )
 

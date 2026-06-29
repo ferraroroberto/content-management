@@ -73,6 +73,18 @@ force_utf8_stdio()   # called once at each entry-point module's top level
 
 All entry points (`*_pipeline.py`, `app/*.py`, `newsletter/*.py`, etc.) call this instead of the inline `for _stream in (sys.stdout, sys.stderr): _stream.reconfigure(...)` loop that was previously hand-copied across ~13 modules.
 
+### 6. `loader.py`
+Single-source loader for `config.json`. Every module that needs the config reads it through here instead of re-implementing its own open/parse helper. Exposes two functions:
+
+```python
+from config.loader import load_full_config, load_block
+
+cfg = load_full_config()        # full config.json, cached for the process
+notion = load_block("notion")   # one top-level block, raises if missing
+```
+
+Both raise on a missing or corrupt `config.json` (config is mandatory — a clear exception beats a silent skip), matching the contracts already used by `reporting/scrape_client/base.py` and `planning/_session_base.py`. This replaced seven hand-copied `load_config()` variants scattered across `reporting/`, `engagement/`, and `newsletter/`.
+
 ## Usage
 
 1. Copy `config_example.json` to `config.json`
