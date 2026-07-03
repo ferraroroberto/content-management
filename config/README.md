@@ -85,6 +85,33 @@ notion = load_block("notion")   # one top-level block, raises if missing
 
 Both raise on a missing or corrupt `config.json` (config is mandatory — a clear exception beats a silent skip), matching the contracts already used by `reporting/scrape_client/base.py` and `planning/_session_base.py`. This replaced seven hand-copied `load_config()` variants scattered across `reporting/`, `engagement/`, and `newsletter/`.
 
+### 7. `chrome_launch.py`
+Shared real-Chrome launch options for every Playwright-driven platform (LinkedIn, Instagram, Twitter, Threads, Substack). Builds the kwargs that make an automated Chrome session indistinguishable from a human-driven one — real Chrome (not bundled Chromium) via `channel="chrome"`, no "Chrome is being controlled by automated test software" infobar, no detectable `navigator.webdriver`, a pinned 1280×900 viewport, and a forced `en-US` locale so English selectors don't break on a localized OS/account.
+
+```python
+from config.chrome_launch import stealth_launch_kwargs, STEALTH_INIT_SCRIPT
+
+context = pw.chromium.launch_persistent_context(
+    **stealth_launch_kwargs(str(user_data_dir), headless=False)
+)
+context.add_init_script(STEALTH_INIT_SCRIPT)
+```
+
+**"NEVER re-inline these arguments in a new module — that's how stealth gets out of sync across platforms. Edit this file once; everyone inherits."**
+
+### 8. `chrome_profile_lock.py`
+Serializes access to a shared persistent Chrome profile. A persistent Chrome profile allows only one live instance, and several unattended jobs in this suite target the same profile (e.g. the engagement scrape and the reporting follower-scrape both drive `planning/linkedin/chrome_user_data`). The holder is almost always a legitimately-running sibling job, not a stale zombie, so this module waits for the profile to free with exponential backoff and re-attempts the launch — it never kills the holder — raising only if the profile is still locked after the full backoff schedule.
+
+```python
+from config.chrome_profile_lock import launch_persistent_context_with_lock_wait
+
+context = launch_persistent_context_with_lock_wait(
+    playwright, user_data_dir, headless=False, logger=logger,
+)
+```
+
+**"Single source of truth: every session module imports `launch_persistent_context_with_lock_wait` from here — never re-inline a launch-with-retry in a new module."**
+
 ## Usage
 
 1. Copy `config_example.json` to `config.json`
