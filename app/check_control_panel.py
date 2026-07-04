@@ -204,7 +204,8 @@ def run() -> int:
             fails += 1
 
         print("\n📱 step 6 — custom .streamlit/config.toml theme is applied")
-        # Theme values from app/.streamlit/config.toml:
+        # Theme values from .streamlit/config.toml (repo root — the config
+        # Streamlit actually reads via launch_app.bat / run_app.py):
         #   backgroundColor          = "#0E1117"  → rgb(14, 17, 23)
         #   secondaryBackgroundColor = "#262730"  → rgb(38, 39, 48)
         #   primaryColor             = "#1E88E5"  → rgb(30, 136, 229)
