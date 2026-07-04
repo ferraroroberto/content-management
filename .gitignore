@@ -1,9 +1,11 @@
 # Ignore virtual environment directory
 .venv/
 
-# Track docs/*.md changelogs; ignore heavy media/binary docs (videos, .docx)
+# Track docs/*.md changelogs + the hand-authored architecture diagram;
+# ignore heavy media/binary docs (videos, .docx)
 docs/*
 !docs/*.md
+!docs/architecture.mmd
 logs/
 
 # Ignore config.json file and .env file in the process directory

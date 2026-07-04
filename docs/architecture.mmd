@@ -1,0 +1,107 @@
+%% docs/architecture.mmd — content-management's own internal structure.
+%% Hand-authored, not generated — this is the per-repo companion diagram
+%% required by the fleet-wide convention (ferraroroberto/fleet-config#256):
+%% unlike a mechanically-crawled fleet map, a repo's own internal shape is
+%% semantic and has to be drawn by a human. Update this diagram in the same
+%% PR as any material structural change (a pipeline split, a module moved,
+%% a new external dependency) — same anti-staleness contract as this repo's
+%% own `.fleet.toml` `description` field.
+
+flowchart TB
+  subgraph entry["Entry points — launch_*.bat"]
+    LREPORT["launch_reporting.bat"]
+    LPLAN["launch_planning.bat"]
+    LNEWS["launch_newsletter.bat"]
+    LAPP["launch_app.bat -> run_app.py"]
+    LHEAL["launch_autoheal.bat"]
+  end
+
+  RPIPE["reporting_pipeline.py"]
+  PPIPE["planning_pipeline.py --all-wip"]
+  NPIPE["newsletter_pipeline.py\nbootstrap / archive / normalize / build"]
+  APP["app/app.py — Streamlit control panel\ntab_reporting · tab_planning · tab_newsletter ·\ntab_editorial · tab_engagement"]
+  AUTOHEAL["app/autoheal_console.py"]
+
+  LREPORT --> RPIPE
+  LPLAN --> PPIPE
+  LNEWS --> NPIPE
+  LAPP --> APP
+  LHEAL --> AUTOHEAL
+
+  subgraph reporting_mod["reporting/ — daily numbers"]
+    SC["social_client/social_api_client.py\ndispatch on config 'source'"]
+    SCRAPE["scrape_client/\nlinkedin · instagram · twitter · threads ·\nsubstack · substack_native"]
+    PROC["process/\ndata_processor · profile_aggregator ·\nposts_consolidator · supabase_uploader"]
+    NOTIONMOD["notion/\nnotion_update · notion_supabase_sync · editorial"]
+  end
+  RPIPE --> SC
+  SC -->|"source: rapidapi"| RAPIDAPI[("RapidAPI\n(paid HTTP)")]
+  SC -->|"source: playwright / native"| SCRAPE
+  SC --> RAW[["results/raw/*.json"]]
+  RAW --> PROC
+  PROC --> SUPA[("Supabase / PostgreSQL")]
+  PROC --> NOTIONMOD
+  NOTIONMOD --> NOTION[("Notion editorial DB\n(shared by all 4 pipelines)")]
+  RPIPE -->|"step 6"| SUBSTACKDAILY
+
+  subgraph planning_mod["planning/ — weekly schedulers (native UI, one Chrome profile each)"]
+    LI["linkedin/\nschedule_linkedin_posts + linkedin_composer\n(ILL / POST / CAROUSEL routes)"]
+    IG["instagram/\nschedule_instagram_posts +\nclone_to_other_platforms"]
+    TW["twitter/schedule_twitter_posts"]
+    TH["threads/schedule_threads_posts"]
+    SUBSTACKDAILY["substack/\ndaily_pipeline (invoked from reporting) +\npost_substack_note / post_substack_video_note"]
+    VIDEOS["videos/schedule_videos_posts\n(weekly cross-platform clip: LI+IG+TW+TH @19:00)"]
+  end
+  NOTION -->|"WIP-* checkboxes"| PPIPE
+  PPIPE --> LI --> IG --> TW --> TH --> VIDEOS
+  IG -.->|"clone captions/illustrations\nTW/TH/SB Notion columns"| TW
+  IG -.-> TH
+  IG -.-> SUBSTACKDAILY
+  LI --> CHROME[("Real Chrome\nper-platform persistent profile\nplanning/<p>/chrome_user_data/")]
+  IG --> CHROME
+  TW --> CHROME
+  TH --> CHROME
+  VIDEOS --> CHROME
+  PPIPE --> RESULTSPLAN[["results/planning/\nsummary.md + result.json"]]
+  RESULTSPLAN -.->|"selector-drift failure"| AUTOHEALSKILL
+
+  subgraph newsletter_mod["newsletter/ — weekly issue pipeline"]
+    NBOOT["bootstrap_chrome.py\n(dedicated Chrome, CDP :9222)"]
+    NARCHIVE["chrome_tabs + extractor +\nauthor_resolver + summarizer/llm"]
+    NNORM["normalize_names + normalize_url"]
+    NBUILD["build_newsletter.py"]
+  end
+  NPIPE --> NBOOT --> NARCHIVE --> NNORM --> NBUILD
+  NARCHIVE -->|"readability-lxml extraction"| NOTION
+  NARCHIVE --> LLMHUB[("local LLM hub\n127.0.0.1:8000\ntopic + 3-line summary")]
+  NBUILD --> RESULTSNEWS[["results/newsletter/N{NNN}.html"]]
+
+  subgraph engagement_mod["engagement/ — anti-AI comment triage"]
+    ESCRAPE["linkedin/scrape_comments.py"]
+    ECLASSIFY["classify/\nrules -> local_model.joblib -> llm_fallback"]
+    EDB["db/client.py\nSupabase commenters + comments"]
+    EREVIEW["review_app.py\n(Streamlit — real-comments inbox + AI-triage queue)"]
+    EREP["reputation/update.py"]
+  end
+  NOTION -->|"recent editorial posts"| ESCRAPE
+  ESCRAPE --> ECLASSIFY
+  ECLASSIFY -->|"fallback"| LLMHUB
+  ECLASSIFY --> EDB
+  EDB --> EREVIEW
+  EREVIEW -->|"approved replies staged,\nnever auto-sent"| EREP
+  EREP --> EDB
+
+  subgraph shared["config/ — shared by all four pipelines + app"]
+    CFGLOADER["loader.py\nconfig.json + mapping.json"]
+    CHROMELAUNCH["chrome_launch.py +\nchrome_profile_lock.py"]
+    LOGCFG["logger_config.py + console.py"]
+  end
+  reporting_mod -.-> shared
+  planning_mod -.-> shared
+  newsletter_mod -.-> shared
+  engagement_mod -.-> shared
+  APP -.-> shared
+
+  AUTOHEALSKILL["schedule-autoheal skill\n(.claude/skills/, .agents/skills/)\nprobe live DOM -> selector-only fix ->\ndry-run revalidate -> issue + PR"]
+  AUTOHEAL --> AUTOHEALSKILL
+  AUTOHEALSKILL -.->|"on confident fix"| GH[("GitHub\n(issue + PR)")]
