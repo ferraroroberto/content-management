@@ -24,7 +24,6 @@ Authenticates and resolves the editorial DB from this repo's ``config.json``
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import sys
 from calendar import monthrange
@@ -38,16 +37,15 @@ if str(REPO_ROOT) not in sys.path:
 
 # Importing editorial configures notion_update's module-level logger on import,
 # so the reused init_notion_client / query helpers below don't blow up.
+from config.loader import load_full_config  # noqa: E402
 from reporting.notion import notion_update as _nu  # noqa: E402
-from reporting.notion.editorial import query_rows_by_filter  # noqa: E402
-from reporting.notion.notion_update import (  # noqa: E402
+from reporting.notion._client import (  # noqa: E402
     format_database_id,
     init_notion_client,
 )
+from reporting.notion.editorial import query_rows_by_filter  # noqa: E402
 
 logger = logging.getLogger("add_editorial_dates")
-
-CONFIG_PATH = REPO_ROOT / "config" / "config.json"
 
 # Editorial-DB property names are structural; defaults match the live DB and can
 # be overridden via ``notion.editorial_date_columns`` in config.json (per the
@@ -91,9 +89,8 @@ def load_config(database_id_override: Optional[str] = None) -> tuple[str, str, d
     The editorial DB is the first entry in ``notion.databases`` (matching
     ``notion_update.py``), unless ``database_id_override`` is given.
     """
-    with open(CONFIG_PATH, "r", encoding="utf-8") as fh:
-        config = json.load(fh)
-    notion_cfg = config.get("notion", {})
+    cfg = load_full_config()
+    notion_cfg = cfg.get("notion", {})
 
     api_token = notion_cfg.get("api_token")
     if not api_token:
