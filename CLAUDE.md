@@ -17,3 +17,7 @@ Canonical instructions for AI coding agents working in this repository. Claude C
 ## This repository
 Python automation suite that collects social media metrics across platforms, stores them in Postgres/Supabase, and syncs to Notion for reporting.
 See `README.md` for setup, layout, and usage.
+
+## Internal architecture
+
+[`docs/architecture.mmd`](docs/architecture.mmd) is a hand-authored Mermaid diagram of this repo's own internal structure (the four pipelines — reporting/planning/newsletter/engagement — the shared `config/` layer, the Streamlit control panel, and the external dependencies each talks to). Update it in the same PR as any material structural change (a pipeline split, a module moved, a new external dependency) — same anti-staleness contract as this repo's own `.fleet.toml` `description` field. It is not auto-generated and not covered by any test suite.
