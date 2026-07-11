@@ -27,13 +27,15 @@ class _SuppressConnReset(logging.Filter):
         return True
 
 
-# Suppress "Invalid HTTP request received" — Tornado/Uvicorn warning triggered by
-# browser preconnects and non-HTTP traffic; not an app error.
-logging.getLogger("tornado.general").addFilter(
-    type("_NoInvalidHTTP", (logging.Filter,), {
-        "filter": staticmethod(lambda r: "Invalid HTTP request" not in r.getMessage())
-    })()
-)
+# Suppress "Invalid HTTP request received" — a warning triggered by browser
+# preconnects and non-HTTP traffic; not an app error. Streamlit >=1.5x serves
+# over Starlette/uvicorn (not Tornado), so the real logger is "uvicorn.error";
+# the "tornado.general" filter is kept for older Streamlit installs.
+_no_invalid_http = type("_NoInvalidHTTP", (logging.Filter,), {
+    "filter": staticmethod(lambda r: "Invalid HTTP request" not in r.getMessage())
+})()
+logging.getLogger("tornado.general").addFilter(_no_invalid_http)
+logging.getLogger("uvicorn.error").addFilter(_no_invalid_http)
 # Suppress ConnectionResetError / BrokenPipeError tracebacks from asyncio callbacks.
 logging.getLogger("asyncio").addFilter(_SuppressConnReset())
 
