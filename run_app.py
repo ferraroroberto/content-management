@@ -34,6 +34,11 @@ logging.getLogger("tornado.general").addFilter(
         "filter": staticmethod(lambda r: "Invalid HTTP request" not in r.getMessage())
     })()
 )
+logging.getLogger("uvicorn.error").addFilter(
+    type("_NoInvalidHTTP", (logging.Filter,), {
+        "filter": staticmethod(lambda r: "Invalid HTTP request" not in r.getMessage())
+    })()
+)
 # Suppress ConnectionResetError / BrokenPipeError tracebacks from asyncio callbacks.
 logging.getLogger("asyncio").addFilter(_SuppressConnReset())
 
