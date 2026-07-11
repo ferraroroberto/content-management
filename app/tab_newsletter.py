@@ -68,8 +68,11 @@ def run() -> None:
     st.caption("→ after bootstrap, open your article tabs in that Chrome window, then run ② (or ▶).")
 
     # ── ②③④ step buttons ─────────────────────────────────────────────
-    c2, c3, c4 = st.columns(3)
-    with c2:
+    # st.container(horizontal=True) rather than st.columns() — buttons with
+    # on_click nested inside st.columns() under st.tabs() silently fail to
+    # fire and reset the active tab on Streamlit's uvicorn/Starlette server
+    # (issue #155). container(horizontal=True) doesn't have this problem.
+    with st.container(horizontal=True, gap="small"):
         st.button(
             "② Archive → Notion",
             key="newsletter-archive",
@@ -78,7 +81,6 @@ def run() -> None:
             args=(PIPELINE_NAME, base + ["archive"] + dbg),
             width="stretch",
         )
-    with c3:
         st.button(
             "③ Normalize titles+URLs",
             key="newsletter-normalize",
@@ -87,7 +89,6 @@ def run() -> None:
             args=(PIPELINE_NAME, base + ["normalize", "--days", str(int(days))] + dbg),
             width="stretch",
         )
-    with c4:
         st.button(
             "④ Build HTML",
             key="newsletter-build",

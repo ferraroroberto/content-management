@@ -122,8 +122,11 @@ def run() -> None:
     if mode == "live":
         st.warning("⚠️ LIVE mode will write real schedules into LI/IG/TW/TH. Make sure your WIP-* checkboxes are correct.")
 
-    run_cols = st.columns([3, 4])
-    with run_cols[0]:
+    # st.container(horizontal=True) rather than st.columns() — buttons with
+    # on_click nested inside st.columns() under st.tabs() silently fail to
+    # fire and reset the active tab on Streamlit's uvicorn/Starlette server
+    # (issue #155). container(horizontal=True) doesn't have this problem.
+    with st.container(horizontal=True, gap="small"):
         st.button(
             "▶ run planning pipeline",
             key="planning-run",
@@ -132,7 +135,6 @@ def run() -> None:
             on_click=_launch_plain,
             args=(cmd,),
         )
-    with run_cols[1]:
         st.button(
             "🔧 run + autoheal (console)",
             key="planning-autoheal-run",
