@@ -409,8 +409,13 @@ def _click_add_photo(page: Page) -> None:
     # The hydrated 'Photo' affordance is a role-less <a> with a <p>Photo</p>
     # label, so it's matched by visible text, not accessible name (issue #140).
     # `click_feed_entry` re-resolves on each attempt, absorbing both the
-    # cold-start race (issue #27) and the share-box rehydration swap.
-    click_feed_entry(page, PHOTO_TEXT_RE, "Photo")
+    # cold-start race (issue #27) and the share-box rehydration swap. Passing
+    # `expect_selector` also guards a third failure mode: the click can land
+    # on a structurally-ready-but-not-yet-hydrated button and be silently
+    # swallowed, so `_upload_photo`'s `input[type="file"]` wait times out with
+    # no composer ever having opened (issue #150). `click_feed_entry` retries
+    # in that case instead of returning a false success.
+    click_feed_entry(page, PHOTO_TEXT_RE, "Photo", expect_selector='input[type="file"]')
 
 
 def _upload_photo(page: Page, image_path: Path) -> None:
