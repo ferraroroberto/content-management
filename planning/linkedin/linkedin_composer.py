@@ -49,8 +49,20 @@ FEED_ENTRY_CLICK_TIMEOUT_MS = 30000
 # already-mounted button is clicked on the very first try.
 FEED_ENTRY_ATTEMPT_TIMEOUT_MS = 6000
 
+# How long to wait, after a click reports success, for its expected effect
+# (``expect_selector`` attaching) before treating the click as inert and
+# retrying (issue #150). Short: on a hydrated feed the effect is near-
+# instant, so this only costs time on the inert-click path we're guarding.
+FEED_ENTRY_EFFECT_TIMEOUT_MS = 4000
 
-def click_feed_entry(page: Page, text_re: re.Pattern, label: str) -> None:
+
+def click_feed_entry(
+    page: Page,
+    text_re: re.Pattern,
+    label: str,
+    *,
+    expect_selector: Optional[str] = None,
+) -> None:
     """Click a feed share-box affordance ('Photo' / 'Video' / 'Start a post')
     by its VISIBLE TEXT, surviving the cold-start + feed-rehydration race.
 
@@ -70,6 +82,17 @@ def click_feed_entry(page: Page, text_re: re.Pattern, label: str) -> None:
     detachment fails fast and the next attempt clicks against the settled DOM.
     Attempts accumulate up to ``FEED_ENTRY_CLICK_TIMEOUT_MS``; a warm share box
     still returns on the first attempt in ~1 s.
+
+    ``expect_selector``, when given, guards a THIRD failure mode Playwright's
+    own actionability checks can't see (issue #150): the target node can be
+    attached, visible and stable — and receive the click — before LinkedIn's
+    framework finishes hydrating that node's own click handler, so the click
+    is delivered but silently swallowed. That reads as success to ``.click()``
+    but nothing happens (no composer, no file input). When ``expect_selector``
+    is passed, a successful click is only accepted once ``expect_selector``
+    attaches within ``FEED_ENTRY_EFFECT_TIMEOUT_MS``; otherwise the click is
+    treated as inert and retried like any other failed attempt, within the
+    same overall ``FEED_ENTRY_CLICK_TIMEOUT_MS`` budget.
     """
     deadline = time.monotonic() + FEED_ENTRY_CLICK_TIMEOUT_MS / 1000
     last_err: Optional[Exception] = None
@@ -80,13 +103,29 @@ def click_feed_entry(page: Page, text_re: re.Pattern, label: str) -> None:
             page.get_by_text(text_re).first.click(
                 timeout=FEED_ENTRY_ATTEMPT_TIMEOUT_MS,
             )
-            return
+            if expect_selector is None:
+                return
+            try:
+                page.locator(expect_selector).first.wait_for(
+                    state="attached", timeout=FEED_ENTRY_EFFECT_TIMEOUT_MS,
+                )
+                return
+            except Exception as effect_err:
+                last_err = RuntimeError(
+                    f"click landed but '{expect_selector}' never attached: "
+                    f"{effect_err}"
+                )
+                logger.info(
+                    "↻ '%s' click landed but had no visible effect "
+                    "('%s' didn't attach) — retrying click.",
+                    label, expect_selector,
+                )
         except Exception as err:  # not-yet-mounted, detachment, or attempt timeout
             last_err = err
-            if time.monotonic() >= deadline:
-                break
-            # Brief settle before re-resolving against the churning feed.
-            page.wait_for_timeout(500)
+        if time.monotonic() >= deadline:
+            break
+        # Brief settle before re-resolving against the churning feed.
+        page.wait_for_timeout(500)
     raise RuntimeError(
         f"Could not click '{label}' on the LinkedIn feed after {attempts} "
         f"attempt(s): {last_err}"
