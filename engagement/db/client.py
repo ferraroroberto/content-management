@@ -65,6 +65,10 @@ def supabase_client():
             client = create_client(url, key)
             # Cheap sanity ping — pick a table that exists, limit 1.
             client.table("commenters").select("platform").limit(1).execute()
+            if label == "anon_key":
+                # service_role_key and key both unavailable/failed — track whether
+                # this fallback is ever actually exercised (see issue #51).
+                logger.warning("🔓 supabase_client() fell back to anon_key — service_role_key and key both unavailable")
             logger.info("🔑 using supabase key: %s", label)
             return client
         except Exception as err:
