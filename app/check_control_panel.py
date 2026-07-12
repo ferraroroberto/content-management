@@ -46,7 +46,7 @@ def _shot(page, out_dir: Path, label: str) -> None:
 def _assert_no_traceback(page, label: str) -> bool:
     """Scan ONLY Streamlit's exception widgets for Python errors. Body-text
     scanning gives false positives — log panels of past runs contain
-    'Traceback:' as data, and st.tabs keeps all sub-tab content in the DOM."""
+    'Traceback:' as data."""
     try:
         excs = page.locator("[data-testid='stException']")
         count = excs.count()
@@ -204,6 +204,11 @@ def run() -> int:
             fails += 1
 
         print("\n📱 step 6 — custom .streamlit/config.toml theme is applied")
+        # Since app.py routes sections via st.segmented_control (issue #157), only
+        # the active section's buttons exist in the DOM — go back to reporting so
+        # a type=primary button is guaranteed present for the probe below.
+        _click_tab(page, "reporting")
+        page.wait_for_timeout(800)
         # Theme values from .streamlit/config.toml (repo root — the config
         # Streamlit actually reads via launch_app.bat / run_app.py):
         #   backgroundColor          = "#0E1117"  → rgb(14, 17, 23)
@@ -216,12 +221,12 @@ def run() -> int:
             () => {
                 const body = document.body;
                 const sidebar = document.querySelector("section[data-testid='stSidebar']");
-                // The 'run reporting pipeline' button is type=primary so it should use primaryColor.
-                let primaryBtn = null;
-                const btns = Array.from(document.querySelectorAll("button"));
-                for (const b of btns) {
-                    if ((b.innerText || '').toLowerCase().includes('run reporting pipeline')) { primaryBtn = b; break; }
-                }
+                // Any type=primary button should use primaryColor. Selected by Streamlit's
+                // own data-testid rather than a button label — since app.py routes sections
+                // via st.segmented_control (issue #157), only the currently active section's
+                // buttons exist in the DOM, so a label from a specific section (e.g. "run
+                // reporting pipeline") may not be present at this point in the script.
+                const primaryBtn = document.querySelector("button[data-testid='stBaseButton-primary']");
                 const cs = (el) => el ? getComputedStyle(el) : null;
                 return {
                     bodyBg:    cs(body)?.backgroundColor    || null,

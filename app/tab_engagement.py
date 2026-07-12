@@ -164,17 +164,26 @@ def run() -> None:
         with col_filters:
             platform, search = render_sidebar_filters(key_suffix="-engagement-tab")
 
-    sub_run, sub_real, sub_ai, sub_people = st.tabs([
-        "🚀 scrape + classify",
-        "🧑 real comments",
-        "🤖 AI triage",
-        "📊 commenters",
-    ])
-    with sub_run:
+    # st.segmented_control rather than st.tabs() — same fix as app.py's
+    # top-level routing (issue #157): st.tabs() loses the active sub-tab on
+    # any widget rerun triggered inside a non-default sub-tab.
+    SUB_SECTIONS = ["🚀 scrape + classify", "🧑 real comments", "🤖 AI triage", "📊 commenters"]
+    sub_section = st.segmented_control(
+        "engagement sub-section",
+        options=SUB_SECTIONS,
+        default=SUB_SECTIONS[0],
+        key="engagement-sub-section",
+        label_visibility="collapsed",
+    )
+    # See app.py's app-section for why this fallback is needed — segmented_control
+    # can return None for one rerun before its default is echoed back.
+    sub_section = sub_section or SUB_SECTIONS[0]
+
+    if sub_section == "🚀 scrape + classify":
         _render_run_subtab()
-    with sub_real:
+    elif sub_section == "🧑 real comments":
         render_real_tab(platform, search)
-    with sub_ai:
+    elif sub_section == "🤖 AI triage":
         render_ai_tab(platform, search)
-    with sub_people:
+    elif sub_section == "📊 commenters":
         render_commenters_tab(platform, search)
