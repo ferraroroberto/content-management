@@ -1,9 +1,11 @@
 r"""Unified control-panel Streamlit app.
 
-Tabs: 📊 Reporting · 📅 Planning · 📰 Newsletter · 🛡️ Engagement.
-Each tab owns its own module (`app.tab_*`) per the project's per-tab
-convention (see pdf-to-markdown sibling project + CLAUDE.md). Subprocess
-lifecycle + live log streaming lives in `app/process_runner.py`.
+Sections: 📊 Reporting · 📅 Editorial · 📅 Planning · 📰 Newsletter · 🛡️ Engagement.
+Routed via st.segmented_control rather than st.tabs() (issue #157 — st.tabs()
+loses the active tab on any widget rerun). Each section owns its own module
+(`app.tab_*`) per the project's per-tab convention (see pdf-to-markdown
+sibling project + CLAUDE.md). Subprocess lifecycle + live log streaming lives
+in `app/process_runner.py`.
 
 Launch via the wrapper (recommended — applies logging filters before server start):
     .\launch_app.bat
@@ -80,31 +82,42 @@ with st.sidebar:
     st.code(str(REPO_ROOT), language=None)
 
 
-# ── Tabs ─────────────────────────────────────────────────────────────
-tab_rep, tab_ed, tab_plan, tab_news, tab_eng = st.tabs([
-    "📊 reporting",
-    "📅 editorial",
-    "📅 planning",
-    "📰 newsletter",
-    "🛡️ engagement",
-])
+# ── Section routing ────────────────────────────────────────────────
+# st.segmented_control rather than st.tabs() — st.tabs() does not preserve
+# the active tab across a script rerun triggered by a widget on a
+# non-default tab (it silently snaps back to the first tab and the
+# triggering widget's new value never reaches the script). Confirmed
+# against upstream Streamlit 1.59.1 too, so it isn't fixable by upgrading
+# (issue #157; streamlit/streamlit#11160, #12554). segmented_control is a
+# real widget — its selection is ordinary widget state, so it survives any
+# rerun the way st.tabs()'s internal state does not.
+SECTIONS = ["📊 reporting", "📅 editorial", "📅 planning", "📰 newsletter", "🛡️ engagement"]
 
-with tab_rep:
+section = st.segmented_control(
+    "section",
+    options=SECTIONS,
+    default=SECTIONS[0],
+    key="app-section",
+    label_visibility="collapsed",
+)
+# On the very first script run of a fresh session, segmented_control can
+# return None for one rerun before its frontend component echoes back the
+# default (the page briefly renders with nothing selected below the nav).
+# Falling back to the default here avoids a blank-body flash / e2e race.
+section = section or SECTIONS[0]
+
+if section == "📊 reporting":
     from app import tab_reporting  # noqa: PLC0415
     tab_reporting.run()
-
-with tab_ed:
+elif section == "📅 editorial":
     from app import tab_editorial  # noqa: PLC0415
     tab_editorial.run()
-
-with tab_plan:
+elif section == "📅 planning":
     from app import tab_planning  # noqa: PLC0415
     tab_planning.run()
-
-with tab_news:
+elif section == "📰 newsletter":
     from app import tab_newsletter  # noqa: PLC0415
     tab_newsletter.run()
-
-with tab_eng:
+elif section == "🛡️ engagement":
     from app import tab_engagement  # noqa: PLC0415
     tab_engagement.run()
