@@ -689,7 +689,11 @@ def main() -> None:  # pragma: no cover
     args = parser.parse_args()
 
     force_utf8_stdio()
-    setup_logger("engagement.linkedin.scrape", level=logging.DEBUG if args.debug else logging.INFO, file_logging=True)
+    # Configure the package-root logger so siblings (engagement.db,
+    # engagement.classify.*, engagement.reputation) propagate into the same log
+    # file. Naming a leaf here leaves them with no configured ancestor, so they
+    # fall through to logging.lastResort — stderr-only, WARNING+ (issue #160).
+    setup_logger("engagement", level=logging.DEBUG if args.debug else logging.INFO, file_logging=True)
     logging.getLogger().setLevel(logging.DEBUG if args.debug else logging.INFO)
 
     cfg = load_config().get("engagement", {})
