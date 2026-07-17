@@ -6,6 +6,12 @@
 docs/*
 !docs/*.md
 !docs/architecture.mmd
+# Track the generated control-panel screenshots + their manifest (issue #110)
+# — and nothing else that lands in docs/screenshots/.
+!docs/screenshots/
+docs/screenshots/*
+!docs/screenshots/manifest.json
+!docs/screenshots/*-desktop.png
 logs/
 
 # Ignore config.json file and .env file in the process directory
