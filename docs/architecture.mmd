@@ -95,7 +95,9 @@ flowchart TB
     CFGLOADER["loader.py\nconfig.json + mapping.json"]
     CHROMELAUNCH["chrome_launch.py +\nchrome_profile_lock.py"]
     LOGCFG["logger_config.py + console.py"]
+    DOCCAP["doc_capture/\nmanifest-driven masked screenshots\n-> docs/screenshots + README tour"]
   end
+  DOCCAP -->|"captures via localhost:8501"| APP
   reporting_mod -.-> shared
   planning_mod -.-> shared
   newsletter_mod -.-> shared

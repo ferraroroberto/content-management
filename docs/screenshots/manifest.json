@@ -1,0 +1,142 @@
+{
+  "_readme": "Contract for config/doc_capture (issue #110). Per feature: description/title feed the README block; source_globs drive input-hash idempotency; reach/wait drive navigation; mask is REQUIRED — an entry without mask selectors is refused, never captured raw. input_hash/captured_at/files are engine-maintained.",
+  "app": {
+    "base_url": "http://localhost:8501",
+    "start_hint": "launch_app.bat"
+  },
+  "features": {
+    "reporting": {
+      "title": "📊 Reporting",
+      "description": "Daily-numbers pipeline: pulls the day's metrics from the social APIs into Supabase, syncs Notion, and posts the Substack followers Note. Date picker, skip-Substack and debug toggles, and the live streamed log panel.",
+      "source_globs": [
+        "app/app.py",
+        "app/process_runner.py",
+        "app/tab_reporting.py"
+      ],
+      "reach": {
+        "label": "reporting",
+        "click": false
+      },
+      "wait": {
+        "text": "daily numbers"
+      },
+      "mask": [
+        "[data-testid=\"stCode\"]",
+        "[data-testid=\"stAlertContainer\"]",
+        "[data-testid=\"stAlert\"]",
+        "[data-testid=\"stDateInput\"]"
+      ],
+      "input_hash": "07d910478f2eb63e35d76ed4955845b36d8d726b6ea45b22a26f008294d754e0",
+      "captured_at": "2026-07-17T13:56:45+00:00",
+      "files": [
+        "docs/screenshots/reporting-desktop.png"
+      ]
+    },
+    "editorial": {
+      "title": "📅 Editorial",
+      "description": "Seeds the Notion editorial calendar: adds any missing day-rows (day · date · DoW) for the current + next calendar month. Idempotent — re-running only fills gaps.",
+      "source_globs": [
+        "app/app.py",
+        "app/process_runner.py",
+        "app/tab_editorial.py"
+      ],
+      "reach": {
+        "label": "editorial"
+      },
+      "wait": {
+        "text": "seed calendar rows"
+      },
+      "mask": [
+        "[data-testid=\"stCode\"]",
+        "[data-testid=\"stAlertContainer\"]",
+        "[data-testid=\"stAlert\"]"
+      ],
+      "input_hash": "b8a2c9f6b9c457b46ed471d665f36d53b64c5e7aeb763030cd683daddafbea9b",
+      "captured_at": "2026-07-17T13:56:48+00:00",
+      "files": [
+        "docs/screenshots/editorial-desktop.png"
+      ]
+    },
+    "planning": {
+      "title": "📅 Planning",
+      "description": "Weekly content scheduler: walks every WIP-* row in the Notion editorial DB across LinkedIn, Instagram (story + post), Twitter, Threads and the weekly video clip — dry-run or live, with per-platform skip toggles.",
+      "source_globs": [
+        "app/app.py",
+        "app/process_runner.py",
+        "app/tab_planning.py"
+      ],
+      "reach": {
+        "label": "planning"
+      },
+      "wait": {
+        "text": "weekly content scheduler"
+      },
+      "mask": [
+        "[data-testid=\"stCode\"]",
+        "[data-testid=\"stAlertContainer\"]",
+        "[data-testid=\"stAlert\"]"
+      ],
+      "input_hash": "4e78e6b82097944b54c804ed34d457c02520d8d8db334021b07021500cd5caba",
+      "captured_at": "2026-07-17T13:56:51+00:00",
+      "files": [
+        "docs/screenshots/planning-desktop.png"
+      ]
+    },
+    "newsletter": {
+      "title": "📰 Newsletter",
+      "description": "Weekly newsletter pipeline: bootstrap the dedicated Chrome, archive the open article tabs into Notion, normalize author names + URLs, and build the HTML issue — each step runnable alone or chained.",
+      "source_globs": [
+        "app/app.py",
+        "app/process_runner.py",
+        "app/tab_newsletter.py"
+      ],
+      "reach": {
+        "label": "newsletter"
+      },
+      "wait": {
+        "text": "weekly archive + build"
+      },
+      "mask": [
+        "[data-testid=\"stCode\"]",
+        "[data-testid=\"stAlertContainer\"]",
+        "[data-testid=\"stAlert\"]"
+      ],
+      "input_hash": "105672753992096fc9f30ca934e5d30402d9b98a817c85bf30048623d23dfae6",
+      "captured_at": "2026-07-17T13:56:54+00:00",
+      "files": [
+        "docs/screenshots/newsletter-desktop.png"
+      ]
+    },
+    "engagement": {
+      "title": "🛡️ Engagement",
+      "description": "LinkedIn comment triage: scrape the comments on your recent posts, classify each as human / AI / unknown, and review the queues — canned acknowledgements are staged for copy-paste, never auto-sent.",
+      "source_globs": [
+        "app/app.py",
+        "app/process_runner.py",
+        "app/tab_engagement.py",
+        "engagement/ui.py"
+      ],
+      "reach": {
+        "label": "engagement",
+        "expand": [
+          "engagement filters + counts"
+        ]
+      },
+      "wait": {
+        "text": "engagement filters + counts"
+      },
+      "mask": [
+        "[data-testid=\"stCode\"]",
+        "[data-testid=\"stAlertContainer\"]",
+        "[data-testid=\"stAlert\"]",
+        "[data-testid=\"stMetric\"]",
+        "[data-testid=\"stDataFrame\"]"
+      ],
+      "input_hash": "b45820fbeafc6b7cf3b1250518518ec77674260948fc389893f6d27da77ee26d",
+      "captured_at": "2026-07-17T13:58:19+00:00",
+      "files": [
+        "docs/screenshots/engagement-desktop.png"
+      ]
+    }
+  }
+}

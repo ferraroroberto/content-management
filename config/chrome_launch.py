@@ -90,4 +90,68 @@ def stealth_launch_kwargs(user_data_dir: str, *, headless: bool = False) -> dict
     }
 
 
-__all__ = ["stealth_launch_kwargs", "STEALTH_INIT_SCRIPT"]
+# ── doc-capture variant ─────────────────────────────────────────────
+#
+# Used by ``config/doc_capture`` (issue #110) to screenshot the Streamlit
+# control panel for the README. Deliberately NOT the stealth profile above:
+# doc capture drives our own localhost app, so there is nothing to hide
+# from — what matters is determinism (identical pixels for identical
+# inputs) and isolation (never touch the logged-in scraping profiles).
+
+
+# Injected into the page before every capture: kill animations, transitions
+# and the text caret so two captures of the same state are byte-comparable.
+DOC_CAPTURE_SETTLE_CSS = """
+*, *::before, *::after {
+    transition: none !important;
+    animation: none !important;
+    caret-color: transparent !important;
+}
+html { scroll-behavior: auto !important; }
+"""
+
+
+def doc_capture_launch_kwargs(*, headless: bool = True) -> dict[str, Any]:
+    """Build the kwargs dict for ``pw.chromium.launch(**kwargs)``.
+
+    Clean, **non-persistent** launch (no ``user_data_dir``): pair with
+    ``browser.new_context(**doc_capture_context_kwargs())``. Real Chrome
+    (``channel="chrome"``) so the rendering matches what the user sees;
+    ``--force-color-profile=srgb`` + ``--hide-scrollbars`` remove the two
+    remaining sources of pixel drift between machines/runs.
+    """
+    return {
+        "channel": "chrome",
+        "headless": headless,
+        "args": [
+            "--force-color-profile=srgb",
+            "--hide-scrollbars",
+            "--disable-features=Translate",
+            "--no-default-browser-check",
+            "--no-first-run",
+            "--lang=en-US",
+        ],
+    }
+
+
+def doc_capture_context_kwargs() -> dict[str, Any]:
+    """Context options for the doc-capture browser: one fixed wide desktop
+    viewport (Streamlit isn't meaningfully responsive), fixed scale factor,
+    forced light scheme + reduced motion, pinned locale/timezone."""
+    return {
+        "viewport": {"width": 1600, "height": 1000},
+        "device_scale_factor": 1,
+        "reduced_motion": "reduce",
+        "color_scheme": "light",
+        "locale": "en-US",
+        "timezone_id": "UTC",
+    }
+
+
+__all__ = [
+    "stealth_launch_kwargs",
+    "STEALTH_INIT_SCRIPT",
+    "doc_capture_launch_kwargs",
+    "doc_capture_context_kwargs",
+    "DOC_CAPTURE_SETTLE_CSS",
+]
