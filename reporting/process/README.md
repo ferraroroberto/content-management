@@ -110,8 +110,36 @@ Applies Row Level Security (RLS) policies to all existing tables in Supabase:
 **Command Line Options:**
 - `--environment`: Choose between local/cloud database (default: cloud)
 - `--dry-run`: Preview what would be done without executing
+- `--check`: Detect RLS / policy / view-security drift and exit non-zero on any drift (read-only, no changes)
 - `--force`: Drop existing policies before creating new ones
 - `--debug`: Enable detailed debug logging
+
+**Drift detection (`--check`):**
+
+`--check` is a read-only gate that asserts the current security posture instead
+of changing it. For every public table it verifies RLS is enabled **and** all
+four `anon_*_all` policies exist; for every public view it verifies
+`security_invoker = on`. It exits `0` when everything conforms and non-zero,
+with an emoji-prefixed per-object summary of what drifted, when anything is
+missing. This catches a newly-created table or view that slipped through
+without RLS on the project's own clock, rather than waiting for the weekly
+Supabase security-advisor email.
+
+The daily reporting pipeline (`reporting_pipeline.py`, Step 7) runs this same
+check on every run: drift is folded into the pipeline's consolidated failure
+alert and makes the pipeline exit non-zero, so a red daily run is the signal.
+
+**Remediation runbook** — when `--check` (or the pipeline's Step 7) reports
+drift:
+
+1. Re-apply the policies by running `reporting/process/supabase_policy_script.sql`
+   in Supabase → SQL Editor, or run `python supabase_policy_script.py` (without
+   `--check`) to enable RLS + create the missing policies and set
+   `security_invoker = on` on views.
+2. Re-run `python supabase_policy_script.py --check` and confirm it exits `0`.
+
+Remediation stays a deliberate human action — the check only reports; it never
+auto-remediates, so an unintended schema change can't be silently papered over.
 
 ### 🧪 Database Test Utilities
 
@@ -199,6 +227,9 @@ Apply Row Level Security policies to all existing tables:
 ```bash
 # Preview what would be done without executing
 python supabase_policy_script.py --dry-run
+
+# Detect drift only (read-only; exits non-zero if any table/view drifted)
+python supabase_policy_script.py --check
 
 # Apply policies to all tables (skips tables that already have policies)
 python supabase_policy_script.py

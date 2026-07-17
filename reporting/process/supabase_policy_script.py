@@ -130,6 +130,128 @@ def check_table_policies(connection, table_name):
         logger.error(f"❌ Error checking policies for table {table_name}: {e}")
         return None
 
+def check_view_security_invoker(connection, view_name):
+    """
+    Check whether a view runs with security_invoker enabled.
+
+    security_invoker=on makes a view execute with the querying role's
+    permissions, so the underlying tables' RLS applies through the view. It is
+    stored as a reloption on the view's pg_class row.
+
+    Args:
+        connection: Database connection
+        view_name (str): Name of the view to check
+
+    Returns:
+        Optional[bool]: True if security_invoker is on, False if off/unset,
+            None on query error (caller should treat None as drift, fail-closed).
+    """
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT c.reloptions
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'public' AND c.relname = %s AND c.relkind = 'v'
+            """, (view_name,))
+            row = cursor.fetchone()
+
+        reloptions = row[0] if row else None
+        if not reloptions:
+            return False
+        for opt in reloptions:
+            key, _, value = opt.partition('=')
+            if key.strip().lower() == 'security_invoker':
+                return value.strip().lower() in ('on', 'true', '1', 'yes')
+        return False
+
+    except Exception as e:
+        logger.error(f"❌ Error checking security_invoker for view {view_name}: {e}")
+        return None
+
+def check_policy_drift(connection):
+    """
+    Detect RLS / policy / view-security drift across the public schema.
+
+    Read-only. For every table it asserts RLS is enabled and all four
+    ``anon_*_all`` policies exist (reusing ``check_table_policies``); for every
+    view it asserts ``security_invoker = on``. Query errors on an individual
+    object are treated as drift (fail-closed) so a broken check never reports
+    a clean schema.
+
+    Args:
+        connection: Database connection
+
+    Returns:
+        dict: {
+            'clean': bool,                 # True only when nothing drifted
+            'table_issues': [ {'name', 'rls_missing', 'missing_policies', 'error'} ],
+            'view_issues': [ {'name', 'error'} ],
+            'total_tables': int,
+            'total_views': int,
+        }
+    """
+    tables = get_all_tables(connection)
+    views = get_all_views(connection)
+
+    table_issues = []
+    for table_name in tables:
+        status = check_table_policies(connection, table_name)
+        if status is None:
+            table_issues.append({'name': table_name, 'rls_missing': False,
+                                 'missing_policies': [], 'error': True})
+            continue
+        rls_missing = not status['rls_enabled']
+        missing_policies = status['missing_policies']
+        if rls_missing or missing_policies:
+            table_issues.append({'name': table_name, 'rls_missing': rls_missing,
+                                 'missing_policies': missing_policies, 'error': False})
+
+    view_issues = []
+    for view_name in views:
+        secure = check_view_security_invoker(connection, view_name)
+        if secure is None:
+            view_issues.append({'name': view_name, 'error': True})
+        elif not secure:
+            view_issues.append({'name': view_name, 'error': False})
+
+    return {
+        'clean': not table_issues and not view_issues,
+        'table_issues': table_issues,
+        'view_issues': view_issues,
+        'total_tables': len(tables),
+        'total_views': len(views),
+    }
+
+def summarize_drift(result):
+    """
+    Flatten a ``check_policy_drift`` result into human-readable drift lines.
+
+    Args:
+        result (dict): Output of ``check_policy_drift``.
+
+    Returns:
+        List[Tuple[str, str]]: ``(kind, summary)`` pairs where kind is
+            ``'table'`` or ``'view'`` and summary names the object and what is
+            wrong, suitable for logging or a Slack alert.
+    """
+    items = []
+    for issue in result['table_issues']:
+        if issue.get('error'):
+            reason = 'policy check errored'
+        else:
+            parts = []
+            if issue['rls_missing']:
+                parts.append('RLS disabled')
+            if issue['missing_policies']:
+                parts.append('missing policies: ' + ', '.join(issue['missing_policies']))
+            reason = '; '.join(parts)
+        items.append(('table', f"{issue['name']} ({reason})"))
+    for issue in result['view_issues']:
+        reason = 'security check errored' if issue.get('error') else 'security_invoker off'
+        items.append(('view', f"{issue['name']} ({reason})"))
+    return items
+
 def apply_table_policies(connection, table_name, force=False):
     """
     Apply Row Level Security (RLS) policies to a table.
@@ -377,6 +499,8 @@ def main():
     parser.add_argument("--environment", choices=["local", "cloud"], default="cloud",
                         help="Database environment to use (default: cloud)")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be done without executing")
+    parser.add_argument("--check", action="store_true",
+                        help="Detect RLS / policy / view-security drift and exit non-zero on any drift (read-only, no changes)")
     parser.add_argument("--force", action="store_true", help="Drop existing policies before creating new ones")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
@@ -402,7 +526,27 @@ def main():
         sys.exit(1)
     
     try:
-        if args.dry_run:
+        if args.check:
+            logger.info("🔍 CHECK MODE - detecting RLS / policy / view-security drift (no changes)")
+            result = check_policy_drift(connection)
+            drift = summarize_drift(result)
+            if drift:
+                logger.error(
+                    f"❌ RLS/policy drift detected: {len(result['table_issues'])} table(s), "
+                    f"{len(result['view_issues'])} view(s)"
+                )
+                for kind, summary in drift:
+                    logger.error(f"❌ Drift: {kind} {summary}")
+                logger.error(
+                    "❌ Remediate by re-running reporting/process/supabase_policy_script.sql "
+                    "(or this script without --check), then re-run with --check."
+                )
+                sys.exit(1)
+            logger.info(
+                f"✅ No RLS/policy/view drift — {result['total_tables']} table(s) and "
+                f"{result['total_views']} view(s) all conform"
+            )
+        elif args.dry_run:
             logger.info("🔍 DRY RUN MODE - No changes will be made to database")
             result = dry_run_policy_application(connection)
             if not result.get('success', True):

@@ -58,15 +58,21 @@ class PipelineFailures:
       absent for the date (recorded by ``check_posts_coverage``); this catches
       the case where the raw file exists but holds no post the consolidator can
       match (e.g. the day's note was dropped before it reached the DB).
+    * ``policy_drift`` — a public table lost RLS / an ``anon_*_all`` policy, or
+      a view lost ``security_invoker`` (recorded by ``check_policy_drift_coverage``);
+      this catches Supabase security drift on the project's own clock instead of
+      waiting for the weekly security-advisor email (issue #50).
     """
 
     def __init__(self) -> None:
         self.step_failures: list[tuple[str, str]] = []
         self.missing_endpoints: list[str] = []
         self.missing_post_metrics: list[str] = []
+        self.policy_drift: list[str] = []
 
     def any(self) -> bool:
-        return bool(self.step_failures or self.missing_endpoints or self.missing_post_metrics)
+        return bool(self.step_failures or self.missing_endpoints
+                    or self.missing_post_metrics or self.policy_drift)
 
 
 def _load_config() -> dict | None:
@@ -142,6 +148,44 @@ def check_posts_coverage(processing_date: str, failures: "PipelineFailures") -> 
         logger.error(f"❌ Posts-coverage check failed: {e}")  # type: ignore
 
 
+def check_policy_drift_coverage(failures: "PipelineFailures") -> None:
+    """Record any Supabase RLS / policy / view-security drift for the run.
+
+    Reuses ``supabase_policy_script.check_policy_drift`` (read-only) so a public
+    table that lost RLS or an ``anon_*_all`` policy — or a view that lost
+    ``security_invoker`` — is caught on the daily run instead of via the weekly
+    security-advisor email (issue #50). DB errors degrade gracefully (logged) —
+    mirrors ``check_posts_coverage``; the run is never crashed by this posture
+    check. Remediation stays a deliberate human action: re-run
+    ``reporting/process/supabase_policy_script.sql``, then re-run the pipeline.
+    """
+    try:
+        from reporting.process.supabase_uploader import get_db_connection
+        from reporting.process.supabase_policy_script import check_policy_drift, summarize_drift
+        connection = get_db_connection()
+        if not connection:
+            logger.error("❌ Policy-drift check: no DB connection — skipped")  # type: ignore
+            return
+        try:
+            result = check_policy_drift(connection)
+        finally:
+            connection.close()
+
+        drift = summarize_drift(result)
+        if not drift:
+            logger.info(  # type: ignore
+                f"✅ Policy-drift: RLS + policies intact across {result['total_tables']} "
+                f"tables, {result['total_views']} views"
+            )
+            return
+
+        for kind, summary in drift:
+            failures.policy_drift.append(f"{kind} {summary}")
+            logger.error(f"❌ Policy-drift: {kind} {summary}")  # type: ignore
+    except Exception as e:
+        logger.error(f"❌ Policy-drift check failed: {e}")  # type: ignore
+
+
 def _resolve_reporting_channel(config: dict | None) -> str:
     """Slack target: ``slack.reporting_channel`` → falls back to ``slack.autoheal_channel``."""
     slack_cfg = config.get("slack", {}) if config else {}
@@ -173,8 +217,8 @@ def _load_slack_notify():
 
 
 def _build_alert_message(failures: "PipelineFailures", processing_date: str) -> str:
-    """Deterministic, mobile-skimmable alert body listing date, steps, endpoints."""
-    lines = [f"🚨 Reporting pipeline dropped data — {processing_date}"]
+    """Deterministic, mobile-skimmable alert body: date, steps, endpoints, drift."""
+    lines = [f"🚨 Reporting pipeline finished with failures — {processing_date}"]
     if failures.step_failures:
         lines.append("")
         lines.append("Failed steps:")
@@ -190,6 +234,11 @@ def _build_alert_message(failures: "PipelineFailures", processing_date: str) -> 
         lines.append("No post metrics (platform):")
         for platform in failures.missing_post_metrics:
             lines.append(f"• {platform}")
+    if failures.policy_drift:
+        lines.append("")
+        lines.append("RLS/policy drift:")
+        for entry in failures.policy_drift:
+            lines.append(f"• {entry}")
     return "\n".join(lines)
 
 
@@ -373,6 +422,12 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
                 raise
     else:
         logger.info("⏭️ Skipping Substack Daily Pipeline step")  # type: ignore
+
+    # Posture check: Supabase RLS / policy / view-security drift (issue #50).
+    # Read-only and independent of the daily data; runs every pipeline so drift
+    # surfaces on the project's own clock, not via the weekly advisor email.
+    logger.info("🔒 Step 7: Checking Supabase RLS / policy drift")  # type: ignore
+    check_policy_drift_coverage(failures)
 
     # Notify only on failure: one consolidated alert + a non-zero exit signal.
     if failures.any():
