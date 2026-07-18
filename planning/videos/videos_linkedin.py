@@ -22,6 +22,8 @@ from playwright.sync_api import Page, TimeoutError as PWTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from planning.linkedin.linkedin_composer import (  # noqa: E402
+    FEED_ENTRY_CLICK_TIMEOUT_MS,
+    FEED_ENTRY_EFFECT_TIMEOUT_MS,
     click_feed_entry,
     fill_caption_with_mentions,
     wait_for_upload_complete,
@@ -77,8 +79,21 @@ def _click_video_button(page: Page) -> None:
     cold-start race on the first feed action of a freshly-navigated session
     (issue #27) and the share-box rehydration swap; a warm affordance still
     returns on the first attempt in ~1 s.
+
+    Also mirrors ``_click_add_photo``'s ``expect_file_chooser`` guard: this
+    click can fire a native ``<input type="file">`` click under the hood, and
+    without an active listener Playwright doesn't intercept it at the CDP
+    level, so Chrome renders the real OS "Open" dialog and it's left
+    dangling on screen (``_upload_video`` below sets the file directly on the
+    hidden input via CDP regardless, so the post still succeeds). A timeout
+    here is non-fatal — it just means this click didn't trigger a native
+    chooser this time.
     """
-    click_feed_entry(page, VIDEO_TEXT_RE, "Video")
+    try:
+        with page.expect_file_chooser(timeout=FEED_ENTRY_CLICK_TIMEOUT_MS + FEED_ENTRY_EFFECT_TIMEOUT_MS):
+            click_feed_entry(page, VIDEO_TEXT_RE, "Video")
+    except PWTimeoutError:
+        logger.debug("No native file chooser observed for the 'Video' click.")
 
 
 def _upload_video(page: Page, video_path: Path) -> None:

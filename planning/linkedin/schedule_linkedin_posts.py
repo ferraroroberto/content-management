@@ -61,6 +61,8 @@ from planning.linkedin.linkedin_carousel_pdf import (  # noqa: E402
     locate_pdf,
 )
 from planning.linkedin.linkedin_composer import (  # noqa: E402
+    FEED_ENTRY_CLICK_TIMEOUT_MS,
+    FEED_ENTRY_EFFECT_TIMEOUT_MS,
     click_feed_entry,
     fill_caption_with_mentions,
     wait_for_upload_complete,
@@ -415,7 +417,22 @@ def _click_add_photo(page: Page) -> None:
     # swallowed, so `_upload_photo`'s `input[type="file"]` wait times out with
     # no composer ever having opened (issue #150). `click_feed_entry` retries
     # in that case instead of returning a false success.
-    click_feed_entry(page, PHOTO_TEXT_RE, "Photo", expect_selector='input[type="file"]')
+    #
+    # LinkedIn's 'Photo' click fires a native <input type="file"> click under
+    # the hood. Without an active file-chooser listener, Playwright doesn't
+    # intercept that at the CDP level, so Chrome renders the real OS "Open"
+    # dialog on screen. `_upload_photo` below sets the file directly on the
+    # hidden input via CDP, which works regardless — so the post still
+    # succeeds — but the orphaned native dialog never gets dismissed and
+    # lingers on the desktop. `expect_file_chooser` suppresses it before it
+    # can render, mirroring the guard `_share_document_choose_file` already
+    # uses for the carousel/PDF route. A timeout here is non-fatal: it just
+    # means LinkedIn didn't trigger a native chooser this time.
+    try:
+        with page.expect_file_chooser(timeout=FEED_ENTRY_CLICK_TIMEOUT_MS + FEED_ENTRY_EFFECT_TIMEOUT_MS):
+            click_feed_entry(page, PHOTO_TEXT_RE, "Photo", expect_selector='input[type="file"]')
+    except PWTimeoutError:
+        logger.debug("No native file chooser observed for the 'Photo' click.")
 
 
 def _upload_photo(page: Page, image_path: Path) -> None:
