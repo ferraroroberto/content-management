@@ -106,8 +106,9 @@ def start_pipeline(name: str, cmd: list[str], *, cwd: Optional[Path] = None) -> 
 
     creationflags = 0
     if sys.platform == "win32":
-        # CREATE_NEW_PROCESS_GROUP so we can send CTRL_BREAK_EVENT for graceful stop.
-        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+        # CREATE_NEW_PROCESS_GROUP so we can send CTRL_BREAK_EVENT for graceful stop;
+        # CREATE_NO_WINDOW so the console-less Streamlit host doesn't flash a window.
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
 
     proc = subprocess.Popen(
         cmd,

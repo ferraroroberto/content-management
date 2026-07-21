@@ -89,6 +89,7 @@ def pids_holding_profile(user_data_dir: Path) -> list[int]:
         proc = subprocess.run(
             [powershell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
             capture_output=True, text=True, timeout=20,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         )
     except (OSError, subprocess.SubprocessError) as err:
         logging.getLogger("chrome_profile_lock").warning(
