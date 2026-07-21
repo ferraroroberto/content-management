@@ -152,6 +152,7 @@ def run(skill_cmd: str, log_path: Path, model: str, claude_exe: str,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 stdin=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
             )
         except OSError as exc:
             _emit(fh, f"[autoheal spawn error] {exc} — is the `claude` CLI on PATH?")

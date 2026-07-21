@@ -80,6 +80,7 @@ def _kill_pids(pids: list[int]) -> None:
         subprocess.run(
             ["taskkill", "/PID", str(pid), "/F", "/T"],
             capture_output=True, text=True,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         )
 
 
