@@ -391,28 +391,6 @@ def _expand_all_comments(page: Page, *, max_clicks: int = 30, settle_ms: int = 1
     return top + replies
 
 
-def _parse_relative_time(text: str, now: Optional[datetime] = None) -> Optional[str]:
-    """LinkedIn shows '2h', '5m', '3d', '1w', '2mo', '1y'. Best-effort absolute ISO timestamp."""
-    if not text:
-        return None
-    now = now or datetime.now(timezone.utc)
-    m = re.match(r"(\d+)\s*(s|m|h|d|w|mo|y)\b", text.strip().lower())
-    if not m:
-        return None
-    n = int(m.group(1))
-    unit = m.group(2)
-    delta = {
-        "s": timedelta(seconds=n),
-        "m": timedelta(minutes=n),
-        "h": timedelta(hours=n),
-        "d": timedelta(days=n),
-        "w": timedelta(weeks=n),
-        "mo": timedelta(days=30 * n),
-        "y": timedelta(days=365 * n),
-    }[unit]
-    return (now - delta).isoformat()
-
-
 _URN_RE = re.compile(r"urn:li:comment:\(.+?\)")
 
 
@@ -428,16 +406,6 @@ def _extract_comment_id(component_key: Optional[str], fallback_seed: str) -> str
             return m.group(0)
     import hashlib
     return "fallback:" + hashlib.sha1(fallback_seed.encode("utf-8", errors="replace")).hexdigest()[:24]
-
-
-def _canon_account_url(href: str) -> str:
-    if not href:
-        return ""
-    h = href.split("?", 1)[0].rstrip("/")
-    # Make absolute if relative
-    if h.startswith("/"):
-        h = "https://www.linkedin.com" + h
-    return h
 
 
 def _my_handle_from_config() -> str:

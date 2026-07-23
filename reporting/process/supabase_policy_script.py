@@ -11,10 +11,8 @@ import logging
 from pathlib import Path
 import sys
 import psycopg2
-import psycopg2.extras
 from psycopg2 import sql
 import argparse
-from typing import Dict, List, Any, Optional, Tuple, Set
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
