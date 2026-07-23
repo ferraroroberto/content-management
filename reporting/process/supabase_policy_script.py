@@ -274,35 +274,36 @@ def apply_table_policies(connection, table_name, force=False):
             logger.debug(f"🔒 Table {table_name} already has all required policies")
             return True
         
+        table_ident = sql.Identifier('public', table_name)
+
         # Drop existing policies if force=True or if some policies exist
         if force or policy_status['existing_policies']:
-            drop_policies_sql = f"""
-            DROP POLICY IF EXISTS anon_select_all ON public."{table_name}";
-            DROP POLICY IF EXISTS anon_insert_all ON public."{table_name}";
-            DROP POLICY IF EXISTS anon_update_all ON public."{table_name}";
-            DROP POLICY IF EXISTS anon_delete_all ON public."{table_name}";
-            """
-            
+            drop_policies_sql = [
+                sql.SQL('DROP POLICY IF EXISTS anon_select_all ON {};').format(table_ident),
+                sql.SQL('DROP POLICY IF EXISTS anon_insert_all ON {};').format(table_ident),
+                sql.SQL('DROP POLICY IF EXISTS anon_update_all ON {};').format(table_ident),
+                sql.SQL('DROP POLICY IF EXISTS anon_delete_all ON {};').format(table_ident),
+            ]
+
             with connection.cursor() as cursor:
-                cursor.execute(drop_policies_sql)
-            
+                for statement in drop_policies_sql:
+                    cursor.execute(statement)
+
             logger.debug(f"🗑️  Dropped existing policies from table {table_name}")
-        
+
         # Enable RLS and create new policies
-        policies_sql = f"""
-        -- Enable RLS on the table
-        ALTER TABLE public."{table_name}" ENABLE ROW LEVEL SECURITY;
-        
-        -- Create policies for anon access
-        CREATE POLICY anon_select_all ON public."{table_name}" FOR SELECT TO anon USING (true);
-        CREATE POLICY anon_insert_all ON public."{table_name}" FOR INSERT TO anon WITH CHECK (true);
-        CREATE POLICY anon_update_all ON public."{table_name}" FOR UPDATE TO anon USING (true) WITH CHECK (true);
-        CREATE POLICY anon_delete_all ON public."{table_name}" FOR DELETE TO anon USING (true);
-        """
-        
+        policies_sql = [
+            sql.SQL('ALTER TABLE {} ENABLE ROW LEVEL SECURITY;').format(table_ident),
+            sql.SQL('CREATE POLICY anon_select_all ON {} FOR SELECT TO anon USING (true);').format(table_ident),
+            sql.SQL('CREATE POLICY anon_insert_all ON {} FOR INSERT TO anon WITH CHECK (true);').format(table_ident),
+            sql.SQL('CREATE POLICY anon_update_all ON {} FOR UPDATE TO anon USING (true) WITH CHECK (true);').format(table_ident),
+            sql.SQL('CREATE POLICY anon_delete_all ON {} FOR DELETE TO anon USING (true);').format(table_ident),
+        ]
+
         with connection.cursor() as cursor:
-            cursor.execute(policies_sql)
-        
+            for statement in policies_sql:
+                cursor.execute(statement)
+
         logger.info(f"🔒 Applied RLS policies to table {table_name}")
         return True
         

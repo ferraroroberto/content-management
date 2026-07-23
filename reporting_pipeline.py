@@ -398,28 +398,18 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
     if not skip_notion:
         logger.info("📘 Step 5: Running Notion Update")  # type: ignore
         configure_notion_logger(debug_mode)
-        try:
-            logger.info(f"🗓️  Using date for Notion update: {processing_date}")  # type: ignore
-            notion_extra_args = [processing_date]
-            if auto_confirm:
-                notion_extra_args.append('--yes')
-            run_module(run_notion_update, "Notion Update", debug_mode, notion_extra_args, failures=failures)
-        except Exception as e:
-            logger.error(f"❌ Error in Notion Update: {e}")  # type: ignore
-            if debug_mode:
-                raise
+        logger.info(f"🗓️  Using date for Notion update: {processing_date}")  # type: ignore
+        notion_extra_args = [processing_date]
+        if auto_confirm:
+            notion_extra_args.append('--yes')
+        run_module(run_notion_update, "Notion Update", debug_mode, notion_extra_args, failures=failures)
     else:
         logger.info("⏭️ Skipping Notion Update step")  # type: ignore
 
     # Step 6: Publish Substack Note (follower scrape now happens in step 1 via reporting/scrape_client/substack.py)
     if not skip_substack:
         logger.info("📰 Step 6: Running Substack Daily Pipeline")  # type: ignore
-        try:
-            run_module(run_substack_daily_pipeline, "Substack Daily Pipeline", debug_mode, extra_args=date_args, failures=failures)
-        except Exception as e:
-            logger.error(f"❌ Error in Substack Daily Pipeline: {e}")  # type: ignore
-            if debug_mode:
-                raise
+        run_module(run_substack_daily_pipeline, "Substack Daily Pipeline", debug_mode, extra_args=date_args, failures=failures)
     else:
         logger.info("⏭️ Skipping Substack Daily Pipeline step")  # type: ignore
 
