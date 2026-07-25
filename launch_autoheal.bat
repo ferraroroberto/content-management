@@ -11,6 +11,9 @@ REM   launch_autoheal.bat twitter          - dry-run, twitter only
 REM   launch_autoheal.bat twitter live     - LIVE, twitter only
 
 setlocal EnableDelayedExpansion
+REM Fail closed: a path reaching :END without a completed Python run (missing
+REM venv) exits non-zero. Only the Python call overwrites this with its own code.
+set RC=1
 set SCOPE=all
 set MODE=--dry-run
 
@@ -32,7 +35,8 @@ goto PARSE_ARGS
 cd /d "%~dp0"
 set VENV_DIR=.\.venv
 if not exist "%VENV_DIR%\Scripts\python.exe" (
-    echo [ERROR] Virtual environment not found at %VENV_DIR%
+    echo [ERROR] Virtual environment not found at %VENV_DIR%\Scripts\python.exe
+    echo [ERROR] Recreate it with: python -m venv .venv ^&^& .venv\Scripts\python.exe -m pip install -r requirements.txt
     goto END
 )
 
@@ -40,10 +44,21 @@ echo ========================================
 echo Self-healing scheduler: /schedule-autoheal %SCOPE% %MODE%
 echo ========================================
 echo.
+REM Keep this call at top level, NOT inside an if/else: %ERRORLEVEL% inside a
+REM parenthesised block is expanded at parse time and reads stale.
 "%VENV_DIR%\Scripts\python.exe" app\autoheal_console.py --skill-cmd "/schedule-autoheal %SCOPE% %MODE%"
+REM Capture on the very next line — any intervening command overwrites it.
+set RC=%ERRORLEVEL%
 
 :END
 echo.
+echo ========================================
+echo Autoheal finished ^(exit %RC%^)
+echo ========================================
+echo.
 echo Press any key to close this window...
 pause >nul
-endlocal
+REM Propagate the exit code so the scheduler records a crashed run as failed.
+REM endlocal discards RC, so both commands must sit on ONE parsed line: %RC%
+REM is substituted before endlocal executes.
+endlocal & exit /b %RC%

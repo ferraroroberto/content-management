@@ -163,6 +163,13 @@ open at the end so you can inspect the output.
 .\launch_planning.bat live auto
 ```
 
+Every launcher **propagates its pipeline's exit code**, so a scheduler records a
+crashed run as failed rather than green. A missing or broken `.venv` is a hard
+stop with a non-zero exit — never a silent fallback to a system Python, which
+would run against unpinned dependencies. `tests/test_launcher_exit_codes.py`
+enforces both, plus the CRLF line endings `cmd` needs to execute a `.bat`
+correctly.
+
 ## 🖼️ Control panel tour
 
 Generated, masked screenshots of each control-panel section — captured by the

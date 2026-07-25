@@ -28,7 +28,8 @@ cd /d "%~dp0"
 
 set VENV_DIR=.\.venv
 if not exist "%VENV_DIR%\Scripts\python.exe" (
-    echo [ERROR] Virtual environment not found at %VENV_DIR%
+    echo [ERROR] Virtual environment not found at %VENV_DIR%\Scripts\python.exe
+    echo [ERROR] Recreate it with: python -m venv .venv ^&^& .venv\Scripts\python.exe -m pip install -r requirements.txt
     pause
     exit /b 1
 )
@@ -49,5 +50,8 @@ echo.
 echo Press any key to close this window...
 pause >nul
 
-endlocal
-exit /b %RC%
+REM Propagate the pipeline's exit code so the scheduler records a crashed run
+REM as failed instead of green. endlocal discards RC, so both commands must sit
+REM on ONE parsed line: %RC% is substituted before endlocal executes. Split
+REM across two lines this silently exits 0 on a failed run.
+endlocal & exit /b %RC%
