@@ -15,6 +15,16 @@ set never produces a useless model.
 The featurizer (`featurize_one`) is the single source of truth, used at both
 train and inference time. It re-uses the per-comment helpers from `rules.py`
 so the two layers can never drift.
+
+A pickled sklearn pipeline is bound to the version that wrote it, not to the
+version range whose API the training code uses: scikit-learn guarantees pickle
+portability across patch releases only. Crossing a minor boundary unpickles
+with an `InconsistentVersionWarning` and then predicts from a silently degraded
+model — which this pipeline reads as "uncertain batch", so nothing errors and
+nothing gets classified. `train()` therefore records the writing version in the
+sidecar and `_load_model_cached()` refuses to load an artefact whose
+(major, minor) doesn't match the runtime, raising `ModelVersionMismatch`
+instead of degrading quietly.
 """
 
 from __future__ import annotations
@@ -22,6 +32,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import warnings
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
@@ -41,6 +52,61 @@ SCALAR_COLS = [
     "sub_2_min",
     "exact_text_duplicate",
 ]
+
+
+# ---------- Artefact / runtime version contract ----------
+
+class ModelVersionMismatch(RuntimeError):
+    """The persisted pipeline was pickled by an incompatible scikit-learn."""
+
+
+def _major_minor(version: str) -> Optional[tuple[int, int]]:
+    parts = version.split(".")
+    try:
+        return int(parts[0]), int(parts[1])
+    except (IndexError, ValueError):
+        return None
+
+
+def _versions_compatible(trained: str, runtime: str) -> bool:
+    """True when `trained` can safely unpickle under `runtime`. sklearn keeps
+    pickles portable across patch releases but not across minor ones, so
+    compare (major, minor) — falling back to an exact match if either version
+    string doesn't parse."""
+    a, b = _major_minor(trained), _major_minor(runtime)
+    if a is None or b is None:
+        return trained == runtime
+    return a == b
+
+
+def _recorded_sklearn_version() -> Optional[str]:
+    """The scikit-learn version that pickled the artefact, from the sidecar.
+    None for an artefact trained before the sidecar recorded it — those are
+    caught by sklearn's own unpickle warning instead."""
+    if not META_PATH.exists():
+        return None
+    try:
+        meta = json.loads(META_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as err:
+        logger.warning("⚠️ local_model metadata unreadable: %s", err)
+        return None
+    version = meta.get("sklearn_version")
+    return str(version) if version else None
+
+
+def _version_mismatch_error(trained: str, runtime: str) -> ModelVersionMismatch:
+    """Build the mismatch error, logging it first so the breadcrumb lands in the
+    run's log file even where the caller only sees the traceback."""
+    message = (
+        f"local model artefact was pickled by scikit-learn {trained} but this "
+        f"environment runs scikit-learn {runtime}. A pickled sklearn pipeline is "
+        f"not portable across minor versions — loading it would degrade every "
+        f"prediction without erroring. Retrain with "
+        f"`python -m engagement.classify.local_model train`, or install "
+        f"scikit-learn=={trained}."
+    )
+    logger.error("❌ %s", message)
+    return ModelVersionMismatch(message)
 
 
 # ---------- Features ----------
@@ -149,11 +215,15 @@ def train(platform: str = "linkedin") -> dict:
     pipeline.fit(df, y)
 
     import joblib
+    import sklearn
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(pipeline, MODEL_PATH)
 
     meta = {
         "trained_at": datetime.now(timezone.utc).isoformat(),
+        # The pickle is bound to this version — the loader compares it against
+        # the runtime and refuses a minor-version skew.
+        "sklearn_version": sklearn.__version__,
         "platform": platform,
         "n_ai": n_ai,
         "n_human": n_human,
@@ -222,19 +292,51 @@ def evaluate(platform: str = "linkedin") -> dict:
 def _load_model_cached():
     """Return the persisted pipeline, or None if no model has been trained.
     Cached for the lifetime of the process — `train()` clears the cache after
-    overwriting the file."""
+    overwriting the file.
+
+    Raises `ModelVersionMismatch` when the artefact was pickled by an
+    incompatible scikit-learn. "Not trained yet" stays a soft None (the rules
+    pass is lossless without a model); a version-skewed artefact is not — it
+    would classify everything as uncertain, so it fails loudly instead."""
     if not MODEL_PATH.exists():
         return None
-    try:
-        import joblib
-        return joblib.load(MODEL_PATH)
-    except Exception as err:
-        logger.warning("⚠️ local_model load failed: %s", err)
-        return None
+
+    import sklearn
+    from sklearn.exceptions import InconsistentVersionWarning
+
+    runtime = sklearn.__version__
+    trained = _recorded_sklearn_version()
+    if trained is not None and not _versions_compatible(trained, runtime):
+        raise _version_mismatch_error(trained, runtime)
+
+    # Second gate for artefacts whose sidecar predates `sklearn_version`:
+    # sklearn announces the writing version through its own unpickle warning.
+    # Recorded rather than raised so a harmless patch-level skew still loads.
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", InconsistentVersionWarning)
+        try:
+            import joblib
+            model = joblib.load(MODEL_PATH)
+        except Exception as err:
+            logger.warning("⚠️ local_model load failed: %s", err)
+            return None
+
+    for entry in caught:
+        skew = entry.message
+        if isinstance(skew, InconsistentVersionWarning) and not _versions_compatible(
+            skew.original_sklearn_version, runtime
+        ):
+            raise _version_mismatch_error(skew.original_sklearn_version, runtime)
+
+    return model
 
 
 def predict_one(comment: dict, duplicate_texts: set, phrases: Optional[dict] = None) -> Optional[float]:
-    """Return P(AI) for one comment, or None if no model is loaded."""
+    """Return P(AI) for one comment, or None if no model is loaded.
+
+    Raises `ModelVersionMismatch` if the artefact is version-skewed — the load
+    happens outside the try/except below on purpose, so the skew isn't
+    swallowed into the same silent None that a genuine prediction error gets."""
     model = _load_model_cached()
     if model is None:
         return None
@@ -251,6 +353,10 @@ def predict_one(comment: dict, duplicate_texts: set, phrases: Optional[dict] = N
 
 
 def model_is_available() -> bool:
+    """True if a usable model is on disk. Raises `ModelVersionMismatch` on a
+    version-skewed artefact — `classify_pending` calls this before touching the
+    database, so the skew aborts the run rather than writing 'unknown' verdicts
+    derived from a degraded model."""
     return _load_model_cached() is not None
 
 

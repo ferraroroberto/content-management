@@ -74,6 +74,7 @@ Score ≥ `ai_classification_threshold` (default 0.50) → **AI**. Below → **u
 - Threshold to upgrade to AI: `local_model_ai_threshold` (default 0.70). Conservative so canned replies aren't wrongly staged.
 - Requires `local_model_min_train_per_class` (default 20) of each class before training is allowed.
 - Persisted as `engagement/classify/local_model.joblib` (gitignored — user-specific artifact). If the file isn't on disk yet, the classify pass is lossless: behaviour is identical to rules-only.
+- The pickle is bound to the scikit-learn that wrote it (pinned to one minor line in `requirements.txt`). If you upgrade sklearn, the loader refuses the stale artifact and names both versions — retrain rather than classifying from a degraded model.
 - The featurizer (`local_model.featurize_one`) re-imports the per-comment helpers from `rules.py`, so train-time and inference-time signals **can't drift**. Tune a rule → retrain the model.
 
 **Layer 3 — LLM fallback** (Phase 3, future). Structured-output call to a small LLM (Gemini Flash-Lite or Haiku 4.5) for the ~10% genuine ambiguous middle, cached by `(commenter_url, comment_hash)`. Not implemented yet.
