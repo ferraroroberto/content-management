@@ -13,6 +13,9 @@ REM in one platform does NOT stop the others. The markdown summary lands at
 REM results\planning\YYYY-MM-DD-HHMMSS-summary.md.
 
 setlocal EnableDelayedExpansion
+REM Fail closed: a path reaching :END without a completed Python run (missing
+REM venv) exits non-zero. Only the Python call overwrites this with its own code.
+set RC=1
 set AUTO_MODE=0
 set LIVE_MODE=0
 
@@ -53,22 +56,30 @@ if "%LIVE_MODE%"=="1" (
 )
 
 if not exist "%VENV_DIR%\Scripts\python.exe" (
-    echo [ERROR] Virtual environment not found at %VENV_DIR%
+    echo [ERROR] Virtual environment not found at %VENV_DIR%\Scripts\python.exe
+    echo [ERROR] Recreate it with: python -m venv .venv ^&^& .venv\Scripts\python.exe -m pip install -r requirements.txt
     goto END
 )
 
 echo [INFO] Running: python planning_pipeline.py %EXTRA_ARGS%
 echo.
+REM Keep this call at top level, NOT inside an if/else: %ERRORLEVEL% inside a
+REM parenthesised block is expanded at parse time and reads stale.
 "%VENV_DIR%\Scripts\python.exe" planning_pipeline.py %EXTRA_ARGS%
+REM Capture on the very next line — any intervening command overwrites it.
+set RC=%ERRORLEVEL%
 
 :END
 echo.
 echo ========================================
-echo Planning pipeline finished
+echo Planning pipeline finished ^(exit %RC%^)
 echo ========================================
 if "%AUTO_MODE%"=="1" goto EOL
 echo.
 echo Press any key to close this window...
 pause >nul
 :EOL
-endlocal
+REM Propagate the pipeline's exit code so the scheduler records a crashed run
+REM as failed instead of green. endlocal discards RC, so both commands must sit
+REM on ONE parsed line: %RC% is substituted before endlocal executes.
+endlocal & exit /b %RC%

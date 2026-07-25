@@ -17,6 +17,11 @@ REM
 REM In auto mode the window still stays open at the end so the output is visible
 REM when you check on it.
 
+REM Fail closed: every path that reaches :END without an explicit result
+REM (bad date, missing venv) exits non-zero. Only a completed Python run
+REM overwrites this with the interpreter's own exit code.
+set RC=1
+
 set AUTO_MODE=0
 if /I "%~1"=="auto"   set AUTO_MODE=1
 if /I "%~1"=="--auto" set AUTO_MODE=1
@@ -93,23 +98,30 @@ echo.
 REM Path to your virtual environment (adjust if different)
 set VENV_DIR=.\.venv
 
-REM Check if virtual environment exists
+REM A missing venv is a hard stop, never a fallback to system Python: the
+REM system interpreter has none of this project's pinned dependencies, so
+REM the run cannot succeed, and a run that *did* limp along would write to
+REM the real datastore with unpinned versions.
 if not exist "%VENV_DIR%\Scripts\python.exe" (
-    echo [WARNING] Virtual environment not found at %VENV_DIR%
-    echo [INFO] Using system Python installation...
-    echo.
-    python reporting_pipeline.py --date %TARGET_DATE% %YES_FLAG%
-) else (
-    echo [INFO] Using virtual environment at %VENV_DIR%
-    echo [INFO] Running script with venv Python...
-    echo.
-    REM Run the script with Python from the venv (no activation needed)
-    "%VENV_DIR%\Scripts\python.exe" reporting_pipeline.py --date %TARGET_DATE% %YES_FLAG%
+    echo [ERROR] Virtual environment not found at %VENV_DIR%\Scripts\python.exe
+    echo [ERROR] Recreate it with: python -m venv .venv ^&^& .venv\Scripts\python.exe -m pip install -r requirements.txt
+    goto FINISH
 )
 
+echo [INFO] Using virtual environment at %VENV_DIR%
+echo [INFO] Running script with venv Python...
+echo.
+REM Run the script with Python from the venv (no activation needed).
+REM This call must stay at top level, NOT inside an if/else: %ERRORLEVEL%
+REM inside a parenthesised block is expanded at parse time and reads stale.
+"%VENV_DIR%\Scripts\python.exe" reporting_pipeline.py --date %TARGET_DATE% %YES_FLAG%
+REM Capture on the very next line — any intervening command overwrites it.
+set RC=%ERRORLEVEL%
+
+:FINISH
 echo.
 echo ========================================
-echo Pipeline finished
+echo Pipeline finished (exit %RC%)
 echo ========================================
 echo.
 
@@ -117,3 +129,8 @@ echo.
 REM Keep the window open so the output can be inspected after the run.
 echo Press any key to close this window...
 pause >nul
+
+REM Propagate the pipeline's exit code so the scheduler records a crashed
+REM run as failed. reporting_pipeline.py deliberately sys.exit(1)s on any
+REM step failure "so the launcher / scheduler can react" — this is that.
+exit /b %RC%
