@@ -167,8 +167,20 @@ attach helper. See:
   log a misleading `"Role 'post_url_th' not present"` warning — that
   warning is reserved for *real* `editorial_columns` regressions
   (e.g. a `post_url_li` entry accidentally deleted from `config.json`).
+- **The LI composer does not reliably close within 20 s of `Schedule`.** The
+  wait that confirms a scheduled post is shared with the photo/carousel
+  driver — `linkedin_composer.wait_for_schedule_confirmation`, one copy so the
+  two drivers can't disagree about what counts as scheduled. It runs to 45 s
+  and accepts LinkedIn's own `Post scheduled` toast as the authoritative
+  signal, because the composer disappearing is circumstantial: a real
+  `--live` run reported 2 of 7 rows as failures that had in fact been
+  scheduled, and the caller then skipped their Work-in-Progress untick,
+  queueing both for a duplicate (issue #178). Same class of bug as the
+  Instagram Reels URL-only check further down, and the same fix — confirm on
+  the platform's own signal, not on a side effect. Full account in
+  [`planning/linkedin/README.md`](../linkedin/README.md).
 - **LinkedIn keeps uploading the video AFTER the composer closes.** The
-  composer disappears as soon as `Schedule` is clicked, but LinkedIn
+  composer disappears shortly after `Schedule` is clicked, but LinkedIn
   finishes the .mp4 upload in the background. If the Playwright context
   tears down before that completes, the scheduled post is created with
   no media and opening the scheduled-post detail in the LI Scheduled

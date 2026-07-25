@@ -164,6 +164,18 @@ FINAL_SCHEDULE_BTN_RE = re.compile(r"^(?:schedule|programar)$", re.I)
 # 'Discard' on the save-as-draft prompt.
 DISCARD_BTN_RE = re.compile(r"^(?:discard|descartar)$", re.I)
 
+# LinkedIn's own toast after a successful schedule — "Post scheduled. View
+# scheduled posts". This is the only *positive* confirmation the UI gives; the
+# composer disappearing is merely circumstantial, and on a slow row it is not
+# observable inside any reasonable budget (issue #178). Matched page-wide by
+# text rather than scoped to a toast container: the container's class names are
+# hashed and were never probed, whereas the copy is stable and the sibling
+# ``_UPLOAD_COMPLETE_TEXT_RE`` in ``linkedin_composer`` already matches this way.
+POST_SCHEDULED_TOAST_RE = re.compile(
+    r"post scheduled|publicaci[óo]n programada|post programado",
+    re.I,
+)
+
 
 # ---------- Localized date / time strings ----------
 
@@ -252,6 +264,7 @@ __all__ = [
     "CONFIRM_BTN_RE",
     "FINAL_SCHEDULE_BTN_RE",
     "DISCARD_BTN_RE",
+    "POST_SCHEDULED_TOAST_RE",
     "schedule_date_candidates",
     "month_token_candidates",
     "time_picker_candidates",

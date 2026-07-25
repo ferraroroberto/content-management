@@ -65,6 +65,8 @@ from planning.linkedin.linkedin_composer import (  # noqa: E402
     FEED_ENTRY_EFFECT_TIMEOUT_MS,
     click_feed_entry,
     fill_caption_with_mentions,
+    schedule_pre_state,
+    wait_for_schedule_confirmation,
     wait_for_upload_complete,
 )
 from planning.linkedin.linkedin_labels import (  # noqa: E402
@@ -942,22 +944,19 @@ def _finalize_schedule(
         pass
 
     composer_locator = _composer_dialog(page)
-    pre_count = composer_locator.count()
+    pre_state = schedule_pre_state(page, composer_locator)
 
     _click_final_schedule(page)
 
-    deadline = page.evaluate("() => Date.now()") + 20000
-    while page.evaluate("() => Date.now()") < deadline:
-        if composer_locator.count() < pre_count:
-            break
-        page.wait_for_timeout(400)
-    else:
+    try:
+        signal = wait_for_schedule_confirmation(
+            page, composer_locator, pre_state, label=day_label,
+        )
+    except RuntimeError as err:
         shot = out_dir / f"{day_label}-live-FAIL.png"
         page.screenshot(path=str(shot), full_page=False)
-        raise RuntimeError(
-            f"Composer did not close within 20s after clicking Schedule — "
-            f"post likely NOT scheduled. See {shot}"
-        )
+        raise RuntimeError(f"{err} See {shot}")
+    logger.info("🔔 %s: schedule confirmed via %s", day_label, signal)
 
     page.wait_for_timeout(1500)
     if wait_for_upload:
