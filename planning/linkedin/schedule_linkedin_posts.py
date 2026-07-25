@@ -69,20 +69,24 @@ from planning.linkedin.linkedin_composer import (  # noqa: E402
 )
 from planning.linkedin.linkedin_labels import (  # noqa: E402
     ADD_BTN_RE,
-    ADD_DOCUMENT_BTN_RE,
     ALT_TEXT_BTN_RE,
     CHOOSE_FILE_BTN_RE,
+    CONFIRM_BTN_RE,
+    DATE_INPUT_SEL,
+    DIALOG_SEL,
     DISCARD_BTN_RE,
+    DOCUMENT_BTN_RE,
     DONE_BTN_RE,
+    EXPAND_CONTENT_TYPES_RE,
     FINAL_SCHEDULE_BTN_RE,
-    MORE_BTN_RE,
-    NEXT_BTN_RE,
-    NEXT_MONTH_BTN_RE,
     PHOTO_TEXT_RE,
-    SCHEDULE_POST_BTN_RE,
+    SCHEDULE_CLOCK_SEL,
+    SCHEDULE_SUMMARY_SEL,
     START_POST_TEXT_RE,
-    calendar_day_aria_re,
-    calendar_header_candidates,
+    TIME_INPUT_SEL,
+    TIME_MENU_SEL,
+    month_token_candidates,
+    schedule_date_candidates,
     time_picker_candidates,
 )
 from planning.linkedin.linkedin_posts_body import (  # noqa: E402
@@ -396,14 +400,55 @@ def resolve_image_path(illustrations_folder: str, image_filename: str) -> Path:
 
 # ---------- LinkedIn UI flow ----------
 
-def _dialog_button(page: Page, name_re: re.Pattern):
-    """Find a button matching `name_re` scoped to any open dialog.
+def _dialog(page: Page):
+    """Locator for whatever modal container LinkedIn currently renders.
 
-    LinkedIn's feed leaves carousel arrow buttons (aria-label="Next") visible
-    behind the modal — those would otherwise win `get_by_role` resolution and
+    Scoping matters: the feed leaves carousel arrow buttons (aria-label="Next")
+    visible behind the modal, and those would otherwise win resolution and
     cause spurious clicks.
+
+    ``DIALOG_SEL`` matches both the legacy ``<div role="dialog">`` and the
+    native ``<dialog open>`` LinkedIn's 2026 rebuild replaced it with — see
+    ``linkedin_labels.DIALOG_SEL`` for the full account (issue #178).
+
+    Always chain off this locator (``_dialog(page).locator("button…")``)
+    rather than interpolating ``DIALOG_SEL`` into a bigger selector string:
+    the constant is a comma-separated selector list, so ``f'{DIALOG_SEL}
+    button'`` would parse as ``[role="dialog"]`` OR ``dialog[open] button``
+    and silently match the hidden video.js modals left in the feed.
     """
-    return page.locator('[role="dialog"]').get_by_role("button", name=name_re)
+    return page.locator(DIALOG_SEL)
+
+
+def _dialog_button(page: Page, name_re: re.Pattern):
+    """Find a button matching `name_re` scoped to any open dialog."""
+    return _dialog(page).get_by_role("button", name=name_re)
+
+
+def _composer_dialog(page: Page):
+    """The post-composer modal, identified by the caption editor it contains.
+
+    Both the photo/carousel and the video flows watch this locator's count
+    drop to confirm the composer actually closed after the final Schedule
+    click — a post-scheduled signal that doesn't depend on any copy string.
+    Expressed as a ``filter(has=…)`` rather than a ``:has()`` CSS suffix so it
+    composes with the two-branch ``DIALOG_SEL`` without re-parsing it.
+    """
+    return _dialog(page).filter(
+        has=page.locator('div[role="textbox"][contenteditable="true"]')
+    )
+
+
+def _dialog_next_button(page: Page):
+    """The dialog's primary 'Next' / 'Siguiente' button, matched by visible text.
+
+    Not by accessible name: the feed's carousel arrow also carries
+    aria-label="Next" but renders no visible text, so ``:has-text``
+    disambiguates correctly across locales.
+    """
+    return _dialog(page).locator(
+        'button:has-text("Next"), button:has-text("Siguiente")'
+    )
 
 
 def _click_add_photo(page: Page) -> None:
@@ -459,21 +504,25 @@ def _set_alt_text(page: Page, alt_text: str) -> None:
 
     # The ALT dialog contains a single textarea. EN placeholder is 'How would
     # you describe this image?'; ES is 'describe la imagen' / 'describirías
-    # esta imagen'. Fall back to any textarea scoped to the top dialog so the
-    # selector survives further LinkedIn copy edits.
+    # esta imagen'. Fall back to any textarea in the dialog so the selector
+    # survives further LinkedIn copy edits.
     try:
-        ta = page.locator(
+        ta = _dialog(page).locator(
             "textarea[placeholder*='describe this image' i], "
             "textarea[placeholder*='describe' i], "
             "textarea[placeholder*='imagen' i], "
-            "[role='dialog'] textarea"
+            "textarea"
         )
         ta.first.wait_for(state="visible", timeout=10000)
         ta.first.fill(alt_text)
     except Exception as err:
         raise RuntimeError(f"Could not fill ALT textarea: {err}")
 
-    # Close ALT dialog via its 'Add' button (NOT the photo-editor 'Add' for new images).
+    # Close ALT dialog via its 'Add' button. The ALT panel replaces the editor
+    # body inside the same dialog, so while it is open its 'Add' is the only
+    # ``^add$`` accessible-name match — the editor's add-another-image button
+    # (aria-label="Add") is unmounted. ``.last`` is kept as belt-and-braces for
+    # a LinkedIn build that stacks the panels instead of swapping them.
     try:
         _dialog_button(page, ADD_BTN_RE).last.click(timeout=10000)
     except Exception as err:
@@ -482,14 +531,8 @@ def _set_alt_text(page: Page, alt_text: str) -> None:
 
 def _click_next_after_photo_editor(page: Page) -> None:
     """Click 'Next' / 'Siguiente' in the photo editor → goes to the composer."""
-    # Scope to dialog and to a button whose visible TEXT contains 'Next' or
-    # 'Siguiente' — the carousel arrow button has aria-label='Next' but empty
-    # visible text, so :has-text disambiguates correctly across locales.
     try:
-        page.locator(
-            '[role="dialog"] button:has-text("Next"), '
-            '[role="dialog"] button:has-text("Siguiente")'
-        ).first.click(timeout=10000)
+        _dialog_next_button(page).first.click(timeout=10000)
     except Exception as err:
         raise RuntimeError(f"Could not click 'Next' in the photo editor: {err}")
 
@@ -509,139 +552,177 @@ def _fill_caption(page: Page, caption: str) -> None:
 
 
 def _open_schedule_dialog(page: Page) -> None:
-    """Click the schedule clock icon in the composer."""
-    # The clock has aria-label='Schedule post' / 'Programar publicación'.
+    """Click the composer's clock affordance to open the Schedule dialog."""
+    # Matched structurally by the icon it wraps — its accessible name is a
+    # live counter ("Scheduled (2)"), see ``SCHEDULE_CLOCK_SEL``.
     try:
-        page.get_by_role(
-            "button", name=SCHEDULE_POST_BTN_RE
-        ).first.click(timeout=10000)
+        _dialog(page).locator(SCHEDULE_CLOCK_SEL).first.click(timeout=10000)
     except Exception as err:
         raise RuntimeError(f"Could not open the Schedule dialog: {err}")
 
 
-def _set_schedule_datetime(page: Page, target: date, hour: int, minute: int) -> None:
-    """Set Date and Time in the Schedule dialog.
+def _schedule_summary(page: Page) -> str:
+    """LinkedIn's own "Posting at Tue, Jul 28, 6:30 AM" line, or ''.
 
-    Validated against the live LinkedIn UI:
-    * Date — click ``input[name='artdeco-date']`` to open the calendar, then
-      click the day by its aria-label (e.g. ``Monday, May 18, 2026.``).
-      Clicking the day closes the calendar and sets the input value.
-      We never press Escape here: Escape bubbles to the composer and triggers
-      the "Save this post as a draft?" prompt, which blocks every following
-      click.
-    * Time — ``input[name='timepicker']`` is a ``role='combobox'`` typeahead.
-      Clicking it reveals a ``.artdeco-typeahead__results-list`` whose
-      populated instance (``data-count != "0"``) contains all 15-min slots.
-      We click the ``<li>`` whose visible text matches (e.g. ``6:30 AM``).
+    Empty means LinkedIn has not accepted the current date+time pair — it is
+    the authoritative signal, since the raw input keeps whatever string was
+    typed whether or not it parsed.
     """
-    # Locale-aware aria/text candidates (LinkedIn renders these in the
-    # account's UI language; see planning/linkedin/linkedin_labels.py).
-    header_candidates = calendar_header_candidates(target)
-    day_aria_re = calendar_day_aria_re(target)
-    time_candidates = time_picker_candidates(hour, minute)
-
-    # --- Date via calendar click ---
-    di = page.locator('input[name="artdeco-date"]').first
     try:
-        di.click(timeout=10000)
-        page.wait_for_timeout(600)
-        # Advance the calendar to the target month. LinkedIn's calendar header
-        # is an ``<h1 class="artdeco-calendar__month">`` (e.g. "May 2026" /
-        # "mayo de 2026"), rendered in the artdeco calendar popover which is
-        # NOT inside ``[role="dialog"]`` — so we read it document-wide. The old
-        # code scoped an ``h2``/``div`` match to the dialog; it never matched
-        # (the header is an h1 outside the dialog), so the loop ran Next-month
-        # straight into LinkedIn's 3-month scheduling limit and overshot the
-        # target. The calendar opens on the current month and we only ever
-        # schedule forward.
-        header_loc = page.locator("h1.artdeco-calendar__month")
-        header_lc = [h.lower() for h in header_candidates]
-        for _ in range(18):  # generous safety bound (~1.5 years forward)
-            try:
-                current = (header_loc.first.inner_text(timeout=2000) or "").strip().lower()
-            except Exception:
-                current = ""
-            if any(h in current for h in header_lc):
-                break
-            try:
-                page.get_by_role(
-                    "button", name=NEXT_MONTH_BTN_RE
-                ).first.click(timeout=2000)
-                page.wait_for_timeout(250)
-            except Exception:
-                break
-        day_btn = page.get_by_role("button", name=day_aria_re)
-        day_btn.first.click(timeout=10000)
-        page.wait_for_timeout(500)
+        loc = page.locator(SCHEDULE_SUMMARY_SEL).first
+        if loc.count() == 0:
+            return ""
+        return (loc.inner_text(timeout=2000) or "").strip()
+    except Exception:
+        return ""
+
+
+def _summary_matches(summary: str, target: date) -> bool:
+    """True when LinkedIn's summary line describes ``target``.
+
+    Guards the one case a non-empty summary alone would not: a date like 8/7
+    parses under both M/D and D/M orderings, so "it parsed" does not mean "it
+    parsed as the day we meant". Requires the day number as a standalone token
+    AND a month name from either supported locale.
+    """
+    if not summary:
+        return False
+    low = summary.lower()
+    if not re.search(rf"\b{target.day}\b", low):
+        return False
+    return any(tok.lower() in low for tok in month_token_candidates(target))
+
+
+def _wait_for_summary_match(page: Page, target: date, *, timeout_ms: int = 4000) -> bool:
+    """Poll the summary line until it describes ``target``, or give up.
+
+    Polled rather than slept: the summary is re-rendered asynchronously after
+    the field changes, and a single fixed wait is a coin flip — a 700 ms sleep
+    passed for five rows in a row and then failed on a date LinkedIn was in
+    fact accepting. Polling also returns as soon as it lands, so the happy path
+    is faster than the sleep it replaces.
+    """
+    deadline = page.evaluate("() => Date.now()") + timeout_ms
+    while True:
+        if _summary_matches(_schedule_summary(page), target):
+            return True
+        if page.evaluate("() => Date.now()") >= deadline:
+            return False
+        page.wait_for_timeout(200)
+
+
+def _set_schedule_date(page: Page, target: date) -> None:
+    """Type the date into the rebuilt Schedule dialog's free-text date field.
+
+    The field's accepted format is locale-dependent (en-US ``M/D/YYYY``, es-ES
+    ``D/M/YYYY``) and LinkedIn exposes the active locale nowhere reliable, so
+    we try each candidate rendering and keep the first that LinkedIn itself
+    confirms in the summary line. A wrong-but-parseable ordering is rejected by
+    ``_summary_matches``, so this converges on the right day rather than
+    silently scheduling a post three weeks off.
+
+    ``fill()``, not ``type()``: the field normalizes keystrokes as they arrive
+    (typing "6:30 AM" into the sibling time field yields "6:30AM"), and
+    ``fill()`` sets the value atomically and fires the input event React wants.
+    """
+    di = page.locator(DATE_INPUT_SEL).first
+    try:
+        di.wait_for(state="visible", timeout=10000)
     except Exception as err:
-        raise RuntimeError(f"Could not set Date via calendar: {err}")
+        raise RuntimeError(f"Schedule dialog has no date input: {err}")
 
-    # --- Time via typeahead ---
-    ti = page.locator('input[name="timepicker"]').first
+    candidates = schedule_date_candidates(target)
+    for cand in candidates:
+        try:
+            di.fill("")
+            # Let the controlled input settle before the real value: two
+            # back-to-back fills can coalesce and swallow the parse.
+            page.wait_for_timeout(150)
+            di.fill(cand)
+        except Exception:
+            continue
+        if _wait_for_summary_match(page, target):
+            logger.debug("📅 date accepted as %s", cand)
+            return
+    raise RuntimeError(
+        f"Could not set Date {target:%Y-%m-%d}: LinkedIn rejected every "
+        f"candidate format {candidates} (summary={_schedule_summary(page)!r})"
+    )
+
+
+def _set_schedule_time(page: Page, hour: int, minute: int) -> None:
+    """Pick the time from the dialog's 15-minute-slot menu.
+
+    Typed input is unreliable here — the field re-formats each keystroke and
+    ends up rejecting even the exact string it displays by default — so we open
+    the menu and click the slot, which is also locale-proof.
+    """
+    ti = page.locator(TIME_INPUT_SEL).first
+    candidates = time_picker_candidates(hour, minute)
     try:
-        # Use force=True in case the calendar popup tail is still being torn down.
-        ti.click(force=True, timeout=10000)
-        page.wait_for_timeout(800)
-        results = page.locator(
-            '.artdeco-typeahead__results-list:not([data-count="0"])'
+        ti.click(timeout=10000)
+        menu = page.locator(TIME_MENU_SEL).first
+        menu.wait_for(state="visible", timeout=10000)
+    except Exception as err:
+        raise RuntimeError(f"Could not open the time picker: {err}")
+
+    for cand in candidates:
+        entry = menu.get_by_text(re.compile(rf"^\s*{re.escape(cand)}\s*$", re.I))
+        if entry.count() == 0:
+            continue
+        try:
+            entry.first.scroll_into_view_if_needed(timeout=5000)
+            entry.first.click(timeout=5000)
+            page.wait_for_timeout(600)
+            return
+        except Exception:
+            continue
+    raise RuntimeError(
+        f"No time-picker slot matched any locale candidate {candidates}"
+    )
+
+
+def _set_schedule_datetime(page: Page, target: date, hour: int, minute: int) -> None:
+    """Set Date and Time in the rebuilt Schedule dialog, then verify both.
+
+    Date first: the time menu offers only future slots, so a stale date can
+    hide the slot we want.
+    """
+    _set_schedule_date(page, target)
+    _set_schedule_time(page, hour, minute)
+
+    if not _wait_for_summary_match(page, target):
+        raise RuntimeError(
+            f"Schedule did not stick for {target:%Y-%m-%d} {hour:02d}:{minute:02d} — "
+            f"LinkedIn summary reads {_schedule_summary(page)!r}"
         )
-        results.first.wait_for(state="visible", timeout=8000)
-        # Try each candidate (12h EN, 24h ES, 12h ES) — the input value the
-        # widget actually accepted may differ from the EN form.
-        target_li = None
-        for cand in time_candidates:
-            li = results.first.locator(f'li:has-text("{cand}")')
-            if li.count() > 0:
-                target_li = li
-                break
-        if target_li is None:
-            raise RuntimeError(
-                f"No time-picker entry matched any locale candidate {time_candidates}"
-            )
-        target_li.first.scroll_into_view_if_needed(timeout=3000)
-        target_li.first.click(timeout=5000)
-        page.wait_for_timeout(400)
-    except Exception as err:
-        raise RuntimeError(f"Could not set Time via typeahead: {err}")
-
-    actual_date = di.input_value()
-    actual_time = ti.input_value()
-    date_str = f"{target.month}/{target.day}/{target.year}"
-    if actual_date != date_str:
-        logger.warning("⚠️ Date didn't stick: wanted=%s actual=%s", date_str, actual_date)
-    if actual_time not in time_candidates:
-        logger.warning(
-            "⚠️ Time didn't stick: wanted one of %s actual=%s",
-            time_candidates, actual_time,
-        )
+    logger.info("🗓️ %s", _schedule_summary(page))
 
 
-def _click_schedule_next(page: Page) -> None:
-    """Click Next / Siguiente in the Schedule dialog."""
-    # 'Next' / 'Siguiente' at bottom-right of the Schedule dialog; visible text.
+def _click_schedule_confirm(page: Page) -> None:
+    """Commit the date+time and return to the composer.
+
+    The Schedule dialog's primary action is 'Confirm' since the rebuild ('Next'
+    before it); ``CONFIRM_BTN_RE`` carries both. It stays ``disabled`` until
+    LinkedIn has parsed both fields, so a click that finds it disabled means
+    ``_set_schedule_datetime`` did not actually take.
+    """
     try:
-        page.locator(
-            '[role="dialog"] button:has-text("Next"), '
-            '[role="dialog"] button:has-text("Siguiente")'
-        ).first.click(timeout=10000)
+        _dialog_button(page, CONFIRM_BTN_RE).first.click(timeout=10000)
     except Exception as err:
-        raise RuntimeError(f"Could not click 'Next' in Schedule dialog: {err}")
+        raise RuntimeError(f"Could not click 'Confirm' in Schedule dialog: {err}")
 
 
 def _click_final_schedule(page: Page) -> None:
     """Click the final 'Schedule' / 'Programar' button in the composer (live mode).
 
-    After Schedule-Next, the composer's primary action button reads exactly
-    "Schedule" (or "Programar" in Spanish). The small clock icon next to it
-    has accessible name "Schedule post" / "Programar publicación" — we anchor
-    on ``FINAL_SCHEDULE_BTN_RE`` (anchored on ``^...$``) to match the
-    standalone button and explicitly NOT the longer 'Schedule post' clock
-    icon.
+    Once a schedule is attached, the composer's primary action flips from
+    'Post' to exactly 'Schedule' (or 'Programar'). ``FINAL_SCHEDULE_BTN_RE`` is
+    anchored on ``^...$`` so it matches that standalone button and not the
+    'Schedule post' tab inside the Schedule dialog.
     """
     try:
-        page.locator('[role="dialog"]').get_by_role(
-            "button", name=FINAL_SCHEDULE_BTN_RE
-        ).first.click(timeout=10000)
+        _dialog_button(page, FINAL_SCHEDULE_BTN_RE).first.click(timeout=10000)
     except Exception as err:
         raise RuntimeError(f"Could not click final 'Schedule' button: {err}")
 
@@ -658,9 +739,7 @@ def _close_dialogs(page: Page) -> None:
         return
     # A discard-confirmation dialog may appear; accept it.
     try:
-        discard = page.locator('[role="dialog"]').get_by_role(
-            "button", name=DISCARD_BTN_RE
-        )
+        discard = _dialog_button(page, DISCARD_BTN_RE)
         if discard.count() > 0:
             discard.first.click(timeout=2000)
             page.wait_for_timeout(500)
@@ -676,31 +755,30 @@ def _close_dialogs(page: Page) -> None:
 # ---------- CAROUSEL UI helpers ----------
 
 def _click_more(page: Page) -> None:
-    """Click the composer's 'More' button to reveal the secondary actions row.
+    """Expand the composer's secondary content types.
 
-    The first row of composer icons shows Photo / Video / Event / +More; the
-    'Add a document' button only appears after expanding 'More'.
+    The composer's icon row shows only Photo (plus Enhance/emoji) until this
+    '+' toggle is expanded; Document lives in the revealed row. The toggle is
+    named 'Expand content types' since the rebuild, 'More' before it.
     """
     try:
-        page.locator('[role="dialog"]').get_by_role(
-            "button", name=MORE_BTN_RE
-        ).first.click(timeout=10000)
+        _dialog_button(page, EXPAND_CONTENT_TYPES_RE).first.click(timeout=10000)
     except Exception as err:
-        raise RuntimeError(f"Could not click 'More' on the composer: {err}")
+        raise RuntimeError(f"Could not expand the composer content types: {err}")
 
 
 def _click_add_a_document(page: Page) -> None:
-    """Click 'Add a document' from the expanded composer actions row.
+    """Click Document in the expanded composer actions row.
 
-    After 'More', the secondary tray exposes Document among the icons; the
-    visible label reads exactly 'Add a document'.
+    Deliberately NOT ``_dialog_button``: the rebuilt affordance is an
+    ``<a aria-label="Document">``, i.e. a *link*, so a ``role="button"`` anchor
+    finds nothing. ``get_by_label`` matches on the accessible label whatever
+    element carries it, which also covers the older 'Add a document' button.
     """
     try:
-        page.locator('[role="dialog"]').get_by_role(
-            "button", name=ADD_DOCUMENT_BTN_RE
-        ).first.click(timeout=10000)
+        _dialog(page).get_by_label(DOCUMENT_BTN_RE).first.click(timeout=10000)
     except Exception as err:
-        raise RuntimeError(f"Could not click 'Add a document': {err}")
+        raise RuntimeError(f"Could not click the Document content type: {err}")
 
 
 def _share_document_choose_file(page: Page, pdf_path: Path) -> None:
@@ -726,34 +804,47 @@ def _share_document_choose_file(page: Page, pdf_path: Path) -> None:
 
     try:
         with page.expect_file_chooser(timeout=10000) as fc_info:
-            page.locator('[role="dialog"]').get_by_role(
-                "button", name=CHOOSE_FILE_BTN_RE
-            ).first.click(timeout=5000)
+            _dialog_button(page, CHOOSE_FILE_BTN_RE).first.click(timeout=5000)
         fc_info.value.set_files(str(pdf_path))
     except Exception as err:
         raise RuntimeError(f"Could not push PDF to 'Share a document' dialog: {err}")
 
 
-def _wait_for_pdf_upload(page: Page, *, timeout_ms: int = 180000) -> None:
-    """Wait for the Share-a-document dialog's PDF processing to complete.
+def _button_is_enabled(btn) -> bool:
+    """True when a located button is actually clickable.
 
-    The 'Done' button is disabled until LinkedIn finishes processing the PDF
-    (the dialog shows a thin progress bar under the file row). We poll the
-    Done button until clickable; bail with a clear error on timeout.
+    ``get_attribute("disabled")`` returns ``""`` for ``<button disabled>`` —
+    an *empty string*, which is falsy — so the obvious ``if not disabled``
+    test reports every disabled button as ready. That is why the PDF wait
+    below used to return instantly and hand a still-processing dialog to the
+    next step. Presence, not truthiness, is the test.
+    """
+    try:
+        if btn.get_attribute("disabled") is not None:
+            return False
+        aria_dis = btn.get_attribute("aria-disabled")
+        return aria_dis is None or aria_dis.lower() == "false"
+    except Exception:
+        return False
+
+
+def _wait_for_pdf_upload(page: Page, *, timeout_ms: int = 180000) -> None:
+    """Wait until the Share-a-document dialog will accept 'Done'.
+
+    Must run *after* the title is filled, not before: 'Done' gates on the
+    title as well as on PDF processing, so polling it first deadlocks until
+    the timeout. Called in the right order it is the single accurate signal
+    that both the upload and the title are satisfied.
     """
     deadline = page.evaluate("() => Date.now()") + timeout_ms
     while page.evaluate("() => Date.now()") < deadline:
+        done_btn = _dialog_button(page, DONE_BTN_RE).first
         try:
-            done_btn = page.locator('[role="dialog"]').get_by_role(
-                "button", name=DONE_BTN_RE
-            ).first
-            if done_btn.count():
-                disabled = done_btn.get_attribute("disabled")
-                aria_dis = done_btn.get_attribute("aria-disabled")
-                if not disabled and (aria_dis is None or aria_dis.lower() == "false"):
-                    return
+            ready = done_btn.count() and _button_is_enabled(done_btn)
         except Exception:
-            pass
+            ready = False
+        if ready:
+            return
         page.wait_for_timeout(1000)
     raise RuntimeError("PDF processing did not finish within the timeout window.")
 
@@ -761,38 +852,51 @@ def _wait_for_pdf_upload(page: Page, *, timeout_ms: int = 180000) -> None:
 def _fill_document_title(page: Page, doc_title: str) -> None:
     """Fill the 'Document title' input in the Share-a-document dialog.
 
-    Selector list defensive against LI rollouts: textbox role + several
-    placeholder/aria fallbacks. The dialog itself scopes the search so a
-    rogue caption editor on the page can't win.
+    Anchored primarily on the visible ``<label>Document title*</label>``,
+    which the input is bound to by ``for=`` — the input itself carries no
+    ``name``, no ``aria-label`` and no ``data-testid``, only a generated id.
+    Placeholder and last-resort text-input selectors follow, and the dialog
+    scopes the search so a rogue caption editor can't win.
+
+    Waits for the input rather than assuming it: the dialog mounts before
+    LinkedIn has finished rendering the PDF preview, and the previous code
+    raced it and reported "could not locate" for an input that simply had not
+    appeared yet.
     """
     if not doc_title:
         raise RuntimeError("Empty document title — refusing to submit.")
+
+    dlg = _dialog(page)
     candidates = (
-        '[role="dialog"] input[name*="title" i]',
-        '[role="dialog"] input[aria-label*="title" i]',
-        '[role="dialog"] input[aria-label*="título" i]',
-        '[role="dialog"] input[placeholder*="title" i]',
-        '[role="dialog"] input[placeholder*="título" i]',
-        '[role="dialog"] input[type="text"]',
+        dlg.get_by_label(re.compile(r"document title|título del documento", re.I)),
+        dlg.locator('input[placeholder*="title" i]'),
+        dlg.locator('input[placeholder*="título" i]'),
+        dlg.locator('input[name*="title" i]'),
+        dlg.locator('input[aria-label*="title" i]'),
+        dlg.locator('input[type="text"]'),
     )
-    for sel in candidates:
-        try:
-            loc = page.locator(sel).first
-            if loc.count():
-                loc.wait_for(state="visible", timeout=3000)
-                loc.fill(doc_title)
+
+    last_err: Optional[Exception] = None
+    deadline = page.evaluate("() => Date.now()") + 30000
+    while page.evaluate("() => Date.now()") < deadline:
+        for loc in candidates:
+            try:
+                if not loc.count():
+                    continue
+                loc.first.wait_for(state="visible", timeout=2000)
+                loc.first.fill(doc_title)
                 return
-        except Exception:
-            continue
-    raise RuntimeError("Could not locate the Document title input.")
+            except Exception as err:
+                last_err = err
+                continue
+        page.wait_for_timeout(500)
+    raise RuntimeError(f"Could not locate the Document title input (last error: {last_err})")
 
 
 def _click_document_done(page: Page) -> None:
     """Click 'Done' in the Share-a-document dialog → returns to composer with PDF attached."""
     try:
-        page.locator('[role="dialog"]').get_by_role(
-            "button", name=DONE_BTN_RE
-        ).first.click(timeout=10000)
+        _dialog_button(page, DONE_BTN_RE).first.click(timeout=10000)
     except Exception as err:
         raise RuntimeError(f"Could not click 'Done' on the document dialog: {err}")
 
@@ -828,7 +932,7 @@ def _finalize_schedule(
     ``wait_for_upload`` adds the explicit-signal-or-60s-fallback wait used
     for media-attached posts (CAROUSEL PDFs), borrowing the videos pattern.
     """
-    _click_schedule_next(page)
+    _click_schedule_confirm(page)
     page.wait_for_timeout(1500)
 
     pre_shot = out_dir / f"{day_label}-live-pre.png"
@@ -837,9 +941,7 @@ def _finalize_schedule(
     except Exception:
         pass
 
-    composer_locator = page.locator(
-        '[role="dialog"]:has(div[role="textbox"][contenteditable="true"])'
-    )
+    composer_locator = _composer_dialog(page)
     pre_count = composer_locator.count()
 
     _click_final_schedule(page)
@@ -958,9 +1060,11 @@ def schedule_one_carousel_row(
     _click_add_a_document(page)
     page.wait_for_timeout(1200)
     _share_document_choose_file(page, doc.pdf_path)
-    _wait_for_pdf_upload(page)
+    # Title first: 'Done' gates on the title as well as on PDF processing, so
+    # waiting for it before typing one would deadlock (see _wait_for_pdf_upload).
     _fill_document_title(page, doc.doc_title)
     page.wait_for_timeout(400)
+    _wait_for_pdf_upload(page)
     _click_document_done(page)
     page.wait_for_timeout(2500)
 

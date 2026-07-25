@@ -35,9 +35,12 @@ from planning.linkedin.linkedin_session import (  # noqa: E402
     load_linkedin_config,
 )
 from planning.linkedin.schedule_linkedin_posts import (  # noqa: E402
+    _button_is_enabled,
     _click_final_schedule,
-    _click_schedule_next,
+    _click_schedule_confirm,
     _close_dialogs,
+    _composer_dialog,
+    _dialog_next_button,
     _open_schedule_dialog,
     _set_schedule_datetime,
 )
@@ -131,15 +134,16 @@ def _wait_for_video_ready(page: Page, timeout_ms: int = 180000) -> None:
     """
     deadline = page.evaluate("() => Date.now()") + timeout_ms
     while page.evaluate("() => Date.now()") < deadline:
+        next_btn = _dialog_next_button(page).first
         try:
-            next_btn = page.locator('[role="dialog"] button:has-text("Next"), [role="dialog"] button:has-text("Siguiente")').first
-            if next_btn.count():
-                disabled = next_btn.get_attribute("disabled")
-                aria_dis = next_btn.get_attribute("aria-disabled")
-                if not disabled and (aria_dis is None or aria_dis.lower() == "false"):
-                    return
+            # ``_button_is_enabled`` because get_attribute("disabled") returns
+            # "" — falsy — for a disabled button, so the naive truthiness test
+            # this used to run reported a still-transcoding editor as ready.
+            ready = next_btn.count() and _button_is_enabled(next_btn)
         except Exception:
-            pass
+            ready = False
+        if ready:
+            return
         page.wait_for_timeout(1500)
     raise RuntimeError("LinkedIn video processing did not finish within the timeout window.")
 
@@ -147,7 +151,7 @@ def _wait_for_video_ready(page: Page, timeout_ms: int = 180000) -> None:
 def _click_video_next(page: Page) -> None:
     """Click 'Next' in the video editor → goes to the composer."""
     try:
-        page.locator('[role="dialog"] button:has-text("Next"), [role="dialog"] button:has-text("Siguiente")').first.click(timeout=10000)
+        _dialog_next_button(page).first.click(timeout=10000)
     except Exception as err:
         raise RuntimeError(f"Could not click 'Next' in the video editor: {err}")
 
@@ -194,12 +198,10 @@ def schedule_one_video(
         _close_dialogs(page)
         return "LI:DRY"
 
-    _click_schedule_next(page)
+    _click_schedule_confirm(page)
     page.wait_for_timeout(1500)
 
-    composer_locator = page.locator(
-        '[role="dialog"]:has(div[role="textbox"][contenteditable="true"])'
-    )
+    composer_locator = _composer_dialog(page)
     pre_count = composer_locator.count()
 
     _click_final_schedule(page)
