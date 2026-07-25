@@ -43,7 +43,7 @@ flowchart LR
 | `python -m engagement.linkedin.scrape_comments --days 5` | Scrape last 5 calendar days **including today** of LI comments → Supabase. Headful by default. `--days N` means N total days, so `--days 1` = today only. |
 | `python -m engagement.linkedin.scrape_comments --days 1 --limit 1 --dry-run` | Smoke test against 1 post (today only); writes `results/engagement/dryrun-*.json` instead of upserting. |
 | `python -m engagement.classify.rules` | Re-classify all `pending` `unknown` rows using current `phrases.json`. If a local model is on disk, it runs as a second pass on the rows the rules layer left as `unknown`. |
-| `python -m engagement.classify.local_model train` | Train the local sklearn classifier on accumulated whitelist/blacklist labels. Refuses to train below `rules.local_model_min_train_per_class` per class. Writes `engagement/classify/local_model.joblib` (gitignored) + a metadata sidecar. |
+| `python -m engagement.classify.local_model train` | Train the local sklearn classifier on accumulated whitelist/blacklist labels. Refuses to train below `rules.local_model_min_train_per_class` per class. Writes `engagement/classify/local_model.joblib` (gitignored) + a metadata sidecar recording the scikit-learn version that pickled it. |
 | `python -m engagement.classify.local_model eval` | 5-fold stratified CV on the same labeled set; prints AUC + precision/recall/F1 at the configured threshold. |
 | `python -m engagement.reputation.update` | Recompute rolling per-commenter signals + counters + reputation_score from the `comments` table and upsert into `commenters`. Idempotent; preserves manual whitelist/blacklist. |
 | `& .\.venv\Scripts\python.exe -m streamlit run engagement\review_app.py` | Launch the review UI on `http://localhost:8501`. |
@@ -64,9 +64,10 @@ No new secrets needed — uses `config.supabase.service_role_key` and `config.no
 - **Relative time parsing is approximate.** LinkedIn shows `2h`, `5m`, `1d`. We reconstruct an absolute timestamp from scrape time, so `posted_at` drifts up to ~one tick of the LI display unit. Fine for cadence rules.
 - **Unknown ≠ AI.** Comments that score below the AI threshold (and below the local-model threshold, if a model is loaded) stay `unknown` and surface in the real-comments tab by default. Bias is toward human review — better to over-surface than wrongly stage a canned reply.
 - **Local model is lossless when missing.** If `local_model.joblib` isn't on disk yet, the rules pass is the only classifier and the verdict reasons match Phase 1 exactly. Train it by running `python -m engagement.classify.local_model train` once you have ≥20 whitelist + ≥20 blacklist commenters.
+- **The artifact is pinned to its scikit-learn.** `local_model.joblib` is a pickle, and sklearn only guarantees pickle portability across *patch* releases — which is why `requirements.txt` pins `scikit-learn` to one minor line. Crossing a minor boundary used to unpickle with a warning and then score every comment from a degraded model, so nothing errored and nothing got classified (`ai=0 human=0 unknown=N` — the diagnostic tell). `train()` now records the writing version in the sidecar and the loader refuses a mismatch, naming both versions. If you see that error, retrain: `python -m engagement.classify.local_model train`. "No model on disk" stays a soft fallback; a version-skewed model does not.
 - **Featurizer is the single source of truth.** `local_model.featurize_one` re-imports `_seconds_after`, `_is_emoji_only`, `_generic_praise_hits`, `_has_personal_token` from `rules.py` so train-time and inference-time signals can never drift. If you tune one of those rules in `phrases.json` (or the helper logic), retrain before relying on the model.
 - **Whitelist/blacklist cascades.** Marking a commenter triggers a retroactive reclassification of their pending comments (`cascade_blacklist_pending` / `cascade_whitelist_pending`).
-- **No tests yet.** Single-user pipeline; verification is a real scrape + manual eyeball.
+- **Thin test coverage.** `tests/` covers the scrape exit-status contract and the classifier's artifact/runtime version guard; everything else is verified by a real scrape + manual eyeball.
 
 ## Files
 
@@ -82,7 +83,7 @@ engagement/
 │   ├── llm_fallback.py               # Phase 3 — local-hub LLM, fires only inside the local-model uncertainty window
 │   ├── phrases.json                  # generic-praise list, weights, thresholds, reply templates
 │   ├── local_model.joblib            # (gitignored) trained pipeline — user-specific artifact
-│   ├── local_model.json              # (gitignored) training metadata sidecar
+│   ├── local_model.json              # (gitignored) training metadata sidecar, incl. the sklearn version that pickled the artifact
 │   └── .llm_cache.json               # (gitignored) per-machine cache of LLM verdicts
 ├── reputation/
 │   └── update.py                     # rolling signals + reputation_score recomputer (Phase 3)
