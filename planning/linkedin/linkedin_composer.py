@@ -12,7 +12,14 @@ written inside ``planning/videos/videos_linkedin.py``:
   upload (video or PDF) signals completion, with an explicit-signal
   fast path and a 60-second fallback.
 
-Both are pure Playwright drivers; nothing in here is route-specific.
+It also owns the post-Schedule confirmation wait
+(``schedule_pre_state`` + ``wait_for_schedule_confirmation``). That one lives
+here rather than in either driver because both drivers ran a byte-identical
+copy of it and the copies have to agree: they encode when a row counts as
+scheduled, and a driver that disagreed would either drop a post or duplicate
+one (issue #178).
+
+All are pure Playwright drivers; nothing in here is route-specific.
 Living in ``planning/linkedin`` (instead of ``planning/videos``) reflects
 that these are LI-composer concerns, not video-only ones.
 """
@@ -25,6 +32,8 @@ import time
 from typing import Optional
 
 from playwright.sync_api import Page
+
+from planning.linkedin.linkedin_labels import POST_SCHEDULED_TOAST_RE
 
 logger = logging.getLogger("linkedin_composer")
 
@@ -441,8 +450,116 @@ def wait_for_upload_complete(page: Page, *, timeout_ms: int = 420000) -> bool:
     return False
 
 
+# ---------- Post-Schedule confirmation wait ----------
+
+# Budget for confirming a scheduled post after the final Schedule click.
+#
+# The previous 20 s was tuned against the dry run, which discards instead of
+# scheduling and therefore never exercised this wait at all. The first real
+# ``--live`` run put 2 of 7 rows over it (issue #178) — and both had in fact
+# been scheduled: their failure screenshots are indistinguishable from the
+# successful rows' (composer gone, feed restored, LinkedIn's own "Post
+# scheduled" toast on screen). So the wait was reporting a false negative on a
+# post that had landed, and because the caller only unticks Work-in-Progress on
+# success, those rows stayed queued for a duplicate on the next run.
+SCHEDULE_CONFIRM_TIMEOUT_MS = 45000
+
+# Gap between polls. The confirmation is a human-scale UI transition; polling
+# faster just burns CDP round-trips.
+SCHEDULE_CONFIRM_POLL_MS = 400
+
+
+def schedule_pre_state(page: Page, composer) -> tuple[int, bool]:
+    """Snapshot the two signals ``wait_for_schedule_confirmation`` compares against.
+
+    Must be called immediately BEFORE the final Schedule click.
+
+    Returns ``(composer_count, toast_already_visible)``:
+
+    * ``composer_count`` — how many composer dialogs are open right now. The
+      wait looks for this to *drop*, which is only meaningful relative to a
+      non-zero baseline (see the guard in the waiter).
+    * ``toast_already_visible`` — whether a "Post scheduled" toast is *already*
+      on screen, left over from the previous row in the same session. When it
+      is, the toast cannot confirm THIS row and the waiter ignores it.
+    """
+    try:
+        count = composer.count()
+    except Exception:
+        count = 0
+    try:
+        toast_visible = page.get_by_text(POST_SCHEDULED_TOAST_RE).count() > 0
+    except Exception:
+        toast_visible = False
+    return count, toast_visible
+
+
+def wait_for_schedule_confirmation(
+    page: Page,
+    composer,
+    pre_state: tuple[int, bool],
+    *,
+    label: str,
+    timeout_ms: int = SCHEDULE_CONFIRM_TIMEOUT_MS,
+) -> str:
+    """Block until LinkedIn confirms the post was scheduled. Return the signal.
+
+    Two independent signals, either of which ends the wait:
+
+    * ``"toast"`` — LinkedIn's own "Post scheduled" toast appears. This is the
+      authoritative one; the UI is telling us directly.
+    * ``"composer-closed"`` — the composer dialog count drops below the
+      pre-click baseline.
+
+    The composer signal is only consulted when the baseline was non-zero. A
+    zero baseline means the composer wasn't matched at snapshot time, so "the
+    count dropped" can never become true and "the count is zero" was already
+    true before the click — neither is evidence of anything. In that case only
+    the toast can confirm the row, which is deliberate: reporting success
+    without positive evidence is how a *missing* post would get silently
+    unticked and dropped from the next run.
+
+    Raises ``RuntimeError`` on timeout, worded so the operator knows the post
+    may nonetheless have been scheduled — the caller leaves the row's
+    Work-in-Progress flag set, so an unconfirmed row is retried rather than
+    lost, at the cost of a possible duplicate that needs checking by hand.
+    """
+    pre_count, toast_was_visible = pre_state
+    if not pre_count:
+        logger.warning(
+            "⚠️ %s: composer not matched before the Schedule click — relying on "
+            "LinkedIn's confirmation toast alone for this row.", label,
+        )
+    toast = page.get_by_text(POST_SCHEDULED_TOAST_RE)
+    deadline = page.evaluate("() => Date.now()") + timeout_ms
+    while page.evaluate("() => Date.now()") < deadline:
+        if not toast_was_visible:
+            try:
+                if toast.count() > 0:
+                    return "toast"
+            except Exception:
+                pass
+        if pre_count:
+            try:
+                if composer.count() < pre_count:
+                    return "composer-closed"
+            except Exception:
+                pass
+        page.wait_for_timeout(SCHEDULE_CONFIRM_POLL_MS)
+    raise RuntimeError(
+        f"No schedule confirmation within {timeout_ms // 1000}s of clicking "
+        f"Schedule (composer still open, no 'Post scheduled' toast). The post "
+        f"MAY still have been scheduled — check LinkedIn's Scheduled posts "
+        f"before re-running, as this row stays flagged Work-in-Progress and "
+        f"the next run would schedule it again."
+    )
+
+
 __all__ = [
     "click_feed_entry",
     "fill_caption_with_mentions",
     "wait_for_upload_complete",
+    "schedule_pre_state",
+    "wait_for_schedule_confirmation",
+    "SCHEDULE_CONFIRM_TIMEOUT_MS",
 ]
