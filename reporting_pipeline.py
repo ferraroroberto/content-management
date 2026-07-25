@@ -17,6 +17,7 @@ import importlib.util
 import logging
 from pathlib import Path
 from datetime import datetime, timedelta
+from typing import Optional
 
 # Add the current directory to the Python path
 sys.path.append(str(Path(__file__).parent))
@@ -107,6 +108,37 @@ def check_endpoint_coverage(config: dict, processing_date: str, failures: "Pipel
 COVERAGE_PLATFORMS = ("linkedin", "instagram", "twitter", "threads", "substack")
 
 
+def _substack_had_editorial_content(day_yyyymmdd: str) -> Optional[bool]:
+    """Whether a Substack editorial row with body text existed for ``day_yyyymmdd``.
+
+    Unlike the other platforms, Substack Notes aren't scheduled automation —
+    ``post_substack_note.py`` publishes only when the day's editorial row exists
+    with non-empty body text, and treats a missing row as a normal no-op (rc=4),
+    not a failure. So a day with no editorial row genuinely has nothing to post,
+    and the resulting gap in ``posts`` is expected, not a coverage bug.
+
+    Returns ``True``/``False``, or ``None`` if the check itself couldn't run
+    (Notion unreachable, config missing) — callers should then fall back to
+    treating the missing metrics as a real failure rather than silently
+    downgrading it on an unverifiable guess.
+    """
+    try:
+        from planning.substack.substack_session import load_notion_token, load_substack_config
+        from reporting.notion.editorial import get_field, get_row_by_day, init_notion_client
+        cfg = load_substack_config()
+        notion = init_notion_client(load_notion_token())
+        if notion is None:
+            return None
+        row = get_row_by_day(notion, cfg["editorial_db_id"], day_yyyymmdd, cfg["notion_columns"])
+        if row is None:
+            return False
+        body_text = get_field(row, "text_body", cfg["notion_columns"]) or ""
+        return bool(str(body_text).strip())
+    except Exception as e:
+        logger.warning(f"⚠️ Could not verify Substack editorial content for {day_yyyymmdd}: {e}")  # type: ignore
+        return None
+
+
 def check_posts_coverage(processing_date: str, failures: "PipelineFailures") -> None:
     """Record any platform whose consolidated post metrics are absent for the date.
 
@@ -116,6 +148,10 @@ def check_posts_coverage(processing_date: str, failures: "PipelineFailures") -> 
     Here we read the consolidated ``posts`` row that actually feeds Notion and
     flag any platform with neither a video nor a non-video ``post_id``. DB
     errors degrade gracefully (logged) — the run is never crashed by the check.
+
+    Substack is special-cased: if the editorial calendar genuinely had nothing
+    queued for the day these metrics would cover (``processing_date - 1``),
+    the gap is logged as an alert, not recorded as a failure (issue #182).
     """
     try:
         from reporting.process.supabase_uploader import get_db_connection
@@ -139,9 +175,16 @@ def check_posts_coverage(processing_date: str, failures: "PipelineFailures") -> 
         data = dict(zip(columns, row))
         for platform in COVERAGE_PLATFORMS:
             has_metrics = data.get(f"post_id_{platform}_no_video") or data.get(f"post_id_{platform}_video")
-            if not has_metrics:
-                failures.missing_post_metrics.append(platform)
-                logger.error(f"❌ Posts-coverage: no post metrics for {platform} on {processing_date}")  # type: ignore
+            if has_metrics:
+                continue
+            if platform == "substack":
+                covered_day = (datetime.strptime(processing_date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y%m%d")
+                had_content = _substack_had_editorial_content(covered_day)
+                if had_content is False:
+                    logger.warning(f"⚠️ Posts-coverage: substack had no editorial content queued for {covered_day} — no post metrics for {processing_date} is expected, not a failure")  # type: ignore
+                    continue
+            failures.missing_post_metrics.append(platform)
+            logger.error(f"❌ Posts-coverage: no post metrics for {platform} on {processing_date}")  # type: ignore
         if not failures.missing_post_metrics:
             logger.info(f"✅ Posts-coverage: all {len(COVERAGE_PLATFORMS)} platforms have post metrics for {processing_date}")  # type: ignore
     except Exception as e:
