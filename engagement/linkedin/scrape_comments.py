@@ -439,8 +439,15 @@ def _dump_debug(page: Page, post_url: str, *, prefix: str) -> None:
         logger.warning("dump failed: %s", err)
 
 
-def scrape_post_comments(page: Page, post_url: str, post_posted_at: Optional[str]) -> tuple[list[dict], list[dict]]:
-    """Return (comments_rows, commenters_rows) for a single post URL."""
+def scrape_post_comments(
+    page: Page, post_url: str, post_posted_at: Optional[str]
+) -> tuple[list[dict], list[dict], Optional[str]]:
+    """Return (comments_rows, commenters_rows, structural_error) for a single post URL.
+
+    `structural_error` is the extractor's `error` key (e.g. `no_list_container`)
+    when the DOM didn't match expected shape at all — the discriminator `run()`
+    uses to tell a quiet day (0 comments, no error) from a broken scrape (0
+    comments because extraction never found what it was looking for)."""
     logger.info("➡️ scraping %s", post_url)
     page.goto(post_url, wait_until="domcontentloaded", timeout=45_000)
 
@@ -526,7 +533,7 @@ def scrape_post_comments(page: Page, post_url: str, post_posted_at: Optional[str
     if result.get("error"):
         logger.warning("⚠️ extractor reported %s on %s — dumping page for inspection", result["error"], post_url)
         _dump_debug(page, post_url, prefix="miss")
-        return [], []
+        return [], [], result["error"]
 
     records = result.get("records") or []
     if not records:
@@ -574,10 +581,22 @@ def scrape_post_comments(page: Page, post_url: str, post_posted_at: Optional[str
     # Stamp post_posted_at into each row's verdict_reasons-friendly side channel for the classifier.
     for r in comments_rows:
         r["_post_posted_at"] = post_posted_at  # consumed by classifier only; stripped before upsert
-    return comments_rows, list(commenters_seen.values())
+    return comments_rows, list(commenters_seen.values()), None
 
 
 # ---------- Orchestrator ----------
+
+def _evaluate_scrape_health(total_posts: int, structural_errors: list[str]) -> str:
+    """Return `"broken"` when every attempted post's outcome was a structural
+    extractor error (or an unhandled exception) rather than a legitimate empty
+    result. This is the discriminator that separates a dead selector (18
+    consecutive `no_list_container` runs went unnoticed — issue #175) from an
+    ordinary quiet day where posts were visited and simply have no comments
+    yet. Comment count alone is deliberately not part of the check — only the
+    extractor's own `error` key is, since it is the one signal that tells
+    "the DOM didn't match" apart from "there was nothing to find"."""
+    return "broken" if total_posts > 0 and len(structural_errors) == total_posts else "ok"
+
 
 def run(days: int, *, headless: bool = False, dry_run: bool = False, limit: Optional[int] = None) -> dict:
     li_cfg = load_linkedin_config()
@@ -586,10 +605,18 @@ def run(days: int, *, headless: bool = False, dry_run: bool = False, limit: Opti
         posts = posts[:limit]
     if not posts:
         logger.warning("⚠️ no posts to scrape")
-        return {"posts": 0, "comments": 0, "commenters": 0}
+        return {
+            "posts": 0, "comments": 0, "commenters": 0,
+            "structural_failures": 0, "status": _evaluate_scrape_health(0, []),
+        }
 
     all_comments: list[dict] = []
     all_commenters: dict[str, dict] = {}
+    # Per-post structural-error tracking (issue #175) — the extractor's `error`
+    # key, not comment count, is the reliable "did extraction actually work"
+    # signal. A post-level exception counts as structural too: the scrape never
+    # produced a real result for it either.
+    structural_errors: list[str] = []
 
     with LinkedInSession(li_cfg, headless=headless) as session:
         try:
@@ -600,13 +627,18 @@ def run(days: int, *, headless: bool = False, dry_run: bool = False, limit: Opti
 
         for p in posts:
             try:
-                comments, commenters = scrape_post_comments(session.page, p["post_url"], p["post_posted_at"])
+                comments, commenters, structural_error = scrape_post_comments(
+                    session.page, p["post_url"], p["post_posted_at"]
+                )
                 all_comments.extend(comments)
                 for c in commenters:
                     all_commenters.setdefault(c["account_url"], c)
+                if structural_error:
+                    structural_errors.append(structural_error)
             except Exception as err:
                 logger.exception("❌ failed scraping %s: %s", p["post_url"], err)
                 session.screenshot_failure(f"scrape-fail-{p.get('day') or 'na'}")
+                structural_errors.append(f"exception:{type(err).__name__}")
 
     # Strip side-channel fields before persisting comments.
     persistable_comments = [{k: v for k, v in c.items() if not k.startswith("_")} for c in all_comments]
@@ -644,7 +676,20 @@ def run(days: int, *, headless: bool = False, dry_run: bool = False, limit: Opti
         except Exception as err:  # never let classify failure mask scrape success
             logger.warning("post-scrape classify failed: %s", err)
 
-    return {"posts": len(posts), "comments": len(persistable_comments), "commenters": len(all_commenters)}
+    status = _evaluate_scrape_health(len(posts), structural_errors)
+    if status == "broken":
+        logger.error(
+            "❌ scrape structurally broken — all %d attempted post(s) failed with a structural error: %s",
+            len(posts), ", ".join(structural_errors),
+        )
+
+    return {
+        "posts": len(posts),
+        "comments": len(persistable_comments),
+        "commenters": len(all_commenters),
+        "structural_failures": len(structural_errors),
+        "status": status,
+    }
 
 
 def main() -> None:  # pragma: no cover
@@ -668,6 +713,12 @@ def main() -> None:  # pragma: no cover
     days = args.days if args.days is not None else cfg.get("default_days", 5)
     result = run(days=days, headless=args.headless, dry_run=args.dry_run, limit=args.limit)
     print(json.dumps(result, indent=2))
+
+    # Issue #175: a scrape where every attempted post came back structurally
+    # broken (extractor error / exception on all of them) must fail the run
+    # instead of reporting green — that's what let an 18-run outage go unseen.
+    if result.get("status") == "broken":
+        sys.exit(1)
 
 
 if __name__ == "__main__":
