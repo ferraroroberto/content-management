@@ -36,7 +36,9 @@ See `docs/substack-native-api.md` for the design, endpoint map, and fragility no
 Modules:
 
 ```
-api_client.py        — session loader + fetch_follower_count() + SubstackAPI (pull/create/publish)
+api_client.py        — session loader + fetch_follower_count() + fetch_own_notes()
+                       + publish_note()/delete_note()
+                       + SubstackAPI (pull/create/publish)
 extract_session.py   — harvest cookies+UA from the Chrome profile → api_session.json (gitignored)
 api_pull.py          — manual CLI: dump a post archive to JSON
 api_create.py        — manual CLI: create a draft edition (publish only with --confirm)
@@ -60,15 +62,35 @@ the browser User-Agent that `cf_clearance` is bound to). When the cookie expires
 the API returns 401/403 and the helpers raise `SessionExpiredError` telling you to
 re-run `extract_session`.
 
-### Daily follower count via the API
+### Daily follower count + note engagement via the API
 
 Set `substack_profile.source` to `"native"` in `config.json` (leave the other
 keys — the endpoint loop still needs `api_url` present). The reporting pipeline
 then routes the follower count through
 `reporting/scrape_client/substack_native.py::fetch_profile`, which returns the
 same `{"num_followers": N}` envelope as the Playwright scraper. Flip back to
-`"playwright"` to use the browser scrape. (`substack_posts` / note engagement
-stays on Playwright — the Notes endpoints aren't reverse-engineered yet.)
+`"playwright"` to use the browser scrape.
+
+The same flag on `substack_posts` routes the daily **note engagement** through
+`substack_native.py::fetch_posts` (issue #185), returning the identical
+`{"posts": [...]}` envelope. Verified by running both paths back-to-back against
+the live account: 10/10 records identical on every field, 0.9 s vs 37.0 s. Same
+one-flag rollback.
+
+### Posting the daily Note via the API
+
+Set `substack.note_source` to `"native"` in `config.json` to publish the daily
+Note over the HTTP API instead of driving the Chrome composer (default stays
+`"playwright"`; flip back to roll it back). The Notion read, the idempotence
+guard, the empty-body refusal and the `post_url` write-back are shared by both
+backends — only the publish step differs. The native one also records the
+permalink of the note it *just created* rather than re-reading the profile and
+taking whatever is topmost.
+
+Because a Note has no draft state, publishing is immediate and public;
+`--dry-run` is enforced before the publish call, so it never reaches Substack.
+**Video** notes (`post_substack_video_note.py`) remain Playwright-only — they
+upload through a separate mux pipeline that isn't reverse-engineered.
 
 ### Manual archive + create
 
@@ -132,6 +154,7 @@ above.
 | `illustrations_folder` | Absolute folder containing the daily image. Joined with `image_filename`. |
 | `editorial_db_id` | Notion editorial database id. |
 | `notion_columns` | Role-to-column map. Roles: `title_day`, `text_body`, `image_filename`, `post_url`. The `follow SB` follower column is **not** in this map — it is populated by the reporting pipeline (`reporting/scrape_client/substack.py::fetch_profile` → `data_processor` → `notion_update`, mapped from `profile.num_followers_substack`) like every other platform's follower count. |
+| `note_source` | Optional, `"playwright"` (default) or `"native"`. Which backend publishes the daily Note — the Chrome composer, or the HTTP API with the harvested cookie. Video notes ignore this and always use Playwright. |
 | `headless` | Optional bool (default `false`). |
 | `dry_run_default` | Optional bool (default `false`). When `true`, step 1 always runs as a dry-run unless `--force` is passed. |
 
@@ -147,7 +170,7 @@ first filename is used.
 ```
 - Default date is today (local).
 - Idempotent: if the editorial row's `post_url` is already populated, the script exits 0 unless `--force` is supplied.
-- `--dry-run` composes the Note (text + image) but **does not** click Post. A screenshot is saved under `results/substack/<date>-dryrun.png`.
+- `--dry-run` composes the Note (text + image) but **does not** click Post. A screenshot is saved under `results/substack/<date>-dryrun.png`. Under `note_source: "native"` there is no browser to screenshot, so the dry-run logs what *would* be published and returns before any HTTP write.
 
 ### Follower scrape (now in the reporting pipeline)
 The Substack follower count is no longer scraped from here. See

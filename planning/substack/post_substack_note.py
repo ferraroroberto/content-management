@@ -6,6 +6,21 @@ CLI:
 Default date is today (local). The script is idempotent: if the editorial
 row's ``post_url`` column is already populated, it exits 0 unless ``--force``
 is set.
+
+**Two publish backends**, chosen by ``substack.note_source`` in ``config.json``
+(same pattern as the reporting pipeline's ``source`` flag, and the same one-key
+rollback):
+
+* ``"playwright"`` (default) — drives the real-Chrome Note composer.
+* ``"native"`` — posts over Substack's HTTP API with the harvested cookie (no
+  browser). Also *exact*: it writes the permalink of the note it just created,
+  where the Playwright path re-reads the profile afterwards and takes whatever
+  is topmost.
+
+Everything either side of publishing — the Notion read, the idempotence guard,
+the empty-body refusal, the image resolution and the ``post_url`` write-back —
+is shared, so the two backends differ only in how the Note reaches Substack.
+Video notes are Playwright-only (see ``post_substack_video_note.py``).
 """
 
 from __future__ import annotations
@@ -38,6 +53,30 @@ from planning.substack.substack_session import (  # noqa: E402
 )
 
 logger = logging.getLogger("substack_post_note")
+
+
+def _publish_native(cfg: dict, body_text: str, image_path: Path) -> str:
+    """Publish the Note over the HTTP API; return its permalink.
+
+    Raises rather than returning ``None`` — every failure mode here (expired
+    cookie, upload rejected, no resolvable handle) is a real error the caller
+    turns into a non-zero exit code.
+
+    Imported lazily so the Playwright path never pays for it and a missing
+    ``api_session.json`` can't break the default backend.
+    """
+    from planning.substack.api_client import (
+        fetch_self_handle,
+        note_permalink,
+        publish_note,
+    )
+
+    note = publish_note(body_text, image_path=image_path)
+    # The create response does NOT echo the handle (verified live), so fall back
+    # to config and then to the API — the same source the reporting pipeline
+    # builds its post_id from, so the two can't disagree.
+    handle = note.get("handle") or cfg.get("handle") or fetch_self_handle()
+    return note_permalink(handle, note["id"])
 
 
 def parse_args() -> argparse.Namespace:
@@ -267,6 +306,33 @@ def post_note(
     image_path = _resolve_image_path(cfg["illustrations_folder"], image_filename)
     logger.info("🖼️ Using image: %s", image_path)
     logger.info("📝 Body length: %d chars", len(str(body_text)))
+
+    note_source = str(cfg.get("note_source", "playwright")).lower()
+    if note_source not in ("playwright", "native"):
+        logger.error(
+            "❌ Unknown substack.note_source %r — expected 'playwright' or 'native'.",
+            note_source,
+        )
+        return 2
+
+    if note_source == "native":
+        if dry_run:
+            logger.info(
+                "✅ DRY-RUN (native): would publish %d chars + %s — nothing was posted.",
+                len(str(body_text)), image_path.name,
+            )
+            return 0
+        logger.info("🔌 Publishing the Note via the native HTTP API (no browser).")
+        try:
+            note_url = _publish_native(cfg, str(body_text), image_path)
+        except Exception as err:  # noqa: BLE001
+            logger.error("❌ Native note publish failed: %s", err)
+            return 9
+        logger.info("🔗 Published note URL: %s", note_url)
+        prop_type = get_property_type(row, "post_url", columns)
+        set_field(notion, page_id, "post_url", note_url, columns, prop_type)
+        logger.info("✅ Wrote post_url to Notion editorial row.")
+        return 0
 
     owned_session = session is None
     s = session or SubstackSession(cfg)

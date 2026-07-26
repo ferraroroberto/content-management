@@ -76,8 +76,9 @@ flowchart TB
 
 ## Supported platforms
 
-LinkedIn · Instagram · Twitter/X · Threads · Substack (Note + scraped
-follower count). All five have a Notion editorial column set; four have a
+LinkedIn · Instagram · Twitter/X · Threads · Substack (Note posting, follower
+count and note engagement — all three with a browser-free path over Substack's
+own HTTP API). All five have a Notion editorial column set; four have a
 native-scheduler driver under `planning/`.
 
 ## Project structure
@@ -301,7 +302,8 @@ flowchart LR
   independent of the daily data, so it has no `--skip-*` flag.
 - Each of the 10 `<platform>_<data_type>` endpoints in `config/config.json`
   carries a `"source"` key picking which collector runs — `"rapidapi"`
-  (paid HTTP fetcher) or `"playwright"` (free logged-in-Chrome scraper).
+  (paid HTTP fetcher), `"playwright"` (free logged-in-Chrome scraper), or
+  `"native"` (the platform's own HTTP API with cookie auth — Substack only).
   See [Choosing the data source](#choosing-the-data-source-rapidapi-vs-playwright)
   for how to flip per platform and roll back.
 - **Fails loudly when it drops data.** The run sends **one** Slack alert and
@@ -367,14 +369,22 @@ either makes the HTTP call (`"rapidapi"`), delegates to the matching
 delegates to `reporting.scrape_client.<platform>_native.fetch_<data_type>`
 (`"native"` — the platform's own HTTP API with cookie auth, no browser).
 
-**Substack native API:** `substack_profile.source` defaults to `"native"`,
-fetching the follower count via a single authenticated GET instead of a headed
-Chrome scrape. It needs a one-time cookie harvest
-(`python -m planning.substack.extract_session`, re-run ~quarterly when the
-cookie expires); flip back to `"playwright"` to use the browser scrape. See
-[`docs/substack-native-api.md`](docs/substack-native-api.md) and
-[`planning/substack/README.md`](planning/substack/README.md). `"native"` is
-Substack-only for now (the follower count); other platforms use rapidapi/playwright.
+**Substack native API:** both Substack blocks can run natively —
+`substack_profile` (follower count, one authenticated GET) and `substack_posts`
+(note engagement, a couple of GETs instead of a feed scroll plus one page load
+per note). The note path was verified record-for-record against the Playwright
+scrape on the live account — 10/10 identical, 0.9 s vs 37.0 s. Both need the
+one-time cookie harvest (`python -m planning.substack.extract_session`, re-run
+~quarterly when the cookie expires); flip either back to `"playwright"` to use
+the browser scrape. See [`docs/substack-native-api.md`](docs/substack-native-api.md)
+and [`planning/substack/README.md`](planning/substack/README.md). `"native"` is
+Substack-only for now; other platforms use rapidapi/playwright.
+
+Note *posting* has its own flag, `substack.note_source` (`"playwright"` default
+/ `"native"`), because it is a **write** to a public platform rather than a
+read. The native backend publishes the daily Note over the same HTTP API and
+records the permalink of the note it just created, instead of re-reading the
+profile and taking whatever is topmost. Video notes stay Playwright-only.
 
 The downstream pipeline is source-agnostic — `data_processor` reads the
 JSON envelope from `results/raw/<platform>_<data_type>_<YYYY-MM-DD>.json`
