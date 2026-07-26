@@ -26,8 +26,8 @@
         "[data-testid=\"stAlert\"]",
         "[data-testid=\"stDateInput\"]"
       ],
-      "input_hash": "07d910478f2eb63e35d76ed4955845b36d8d726b6ea45b22a26f008294d754e0",
-      "captured_at": "2026-07-17T13:56:45+00:00",
+      "input_hash": "14fb23fe37c328a8fdb935376f275024a3f943c6d5a76bd78051fa6381983ab3",
+      "captured_at": "2026-07-26T13:36:40+00:00",
       "files": [
         "docs/screenshots/reporting-desktop.png"
       ]
@@ -51,8 +51,8 @@
         "[data-testid=\"stAlertContainer\"]",
         "[data-testid=\"stAlert\"]"
       ],
-      "input_hash": "b8a2c9f6b9c457b46ed471d665f36d53b64c5e7aeb763030cd683daddafbea9b",
-      "captured_at": "2026-07-17T13:56:48+00:00",
+      "input_hash": "a8044536781052c37902810f84e7b95c421bad9c9e9f42b5c9b535d35dcc503d",
+      "captured_at": "2026-07-26T13:36:43+00:00",
       "files": [
         "docs/screenshots/editorial-desktop.png"
       ]
@@ -76,8 +76,8 @@
         "[data-testid=\"stAlertContainer\"]",
         "[data-testid=\"stAlert\"]"
       ],
-      "input_hash": "4e78e6b82097944b54c804ed34d457c02520d8d8db334021b07021500cd5caba",
-      "captured_at": "2026-07-17T13:56:51+00:00",
+      "input_hash": "bc0b98a9c7c0596ddbc2bc1c4a8f327993d0a7745e9331ead9c1ecd502edf080",
+      "captured_at": "2026-07-26T13:36:46+00:00",
       "files": [
         "docs/screenshots/planning-desktop.png"
       ]
@@ -101,8 +101,8 @@
         "[data-testid=\"stAlertContainer\"]",
         "[data-testid=\"stAlert\"]"
       ],
-      "input_hash": "105672753992096fc9f30ca934e5d30402d9b98a817c85bf30048623d23dfae6",
-      "captured_at": "2026-07-17T13:56:54+00:00",
+      "input_hash": "dc44be47ce22c93d04c85f71e988bd89f33f9485249392cfcbdf3818586c9273",
+      "captured_at": "2026-07-26T13:36:49+00:00",
       "files": [
         "docs/screenshots/newsletter-desktop.png"
       ]
@@ -132,8 +132,8 @@
         "[data-testid=\"stMetric\"]",
         "[data-testid=\"stDataFrame\"]"
       ],
-      "input_hash": "b45820fbeafc6b7cf3b1250518518ec77674260948fc389893f6d27da77ee26d",
-      "captured_at": "2026-07-17T13:58:19+00:00",
+      "input_hash": "47f49a48555b491ce0a8d0ea1892bdaf3c27b0cdb3f20925efefe9df0f84f10b",
+      "captured_at": "2026-07-26T13:36:56+00:00",
       "files": [
         "docs/screenshots/engagement-desktop.png"
       ]
