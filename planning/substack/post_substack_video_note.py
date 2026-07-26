@@ -2,15 +2,24 @@
 
 Triggered from the daily Substack pipeline on video days (rows where
 ``Work in Progress Video`` is checked AND ``clip SB(v)`` is populated).
-Resolves the shared clip page once, then drives the same Note composer
-used by ``post_substack_note`` — but uses the camera/video toolbar icon
-(screenshot 4) instead of the image icon, and uploads the .mp4 from the
-clip's ``clipPC``/``filePC`` properties. On success, writes
-``link SB(v)`` on the editorial row so the videos orchestrator's next run
-can untick the shared ``Work in Progress Video`` checkbox.
+Resolves the shared clip page once, then either publishes natively or drives
+the same Note composer used by ``post_substack_note`` (the camera/video
+toolbar icon instead of the image icon), uploading the .mp4 from the clip's
+``clipPC``/``filePC`` properties. On success, writes ``link SB(v)`` on the
+editorial row so the videos orchestrator's next run can untick the shared
+``Work in Progress Video`` checkbox.
 
 The video Note's caption is the clip page's ``Text`` property (the same
 short caption that feeds IG/TW/TH).
+
+**Two publish backends**, chosen by ``substack.note_source`` in
+``config.json`` (same flag and one-key rollback as ``post_substack_note.py``):
+
+* ``"playwright"`` (default) — drives the real-Chrome Note composer.
+* ``"native"`` — chunked multipart upload to Substack's HTTP API + Mux
+  transcode, no browser at request time (issue #189). The video's duration
+  is probed via ffprobe (``planning.videos.videos_session.probe_duration_seconds``)
+  before the upload, since the transcode call needs it up front.
 
 CLI (standalone — same flags shape as ``post_substack_note``):
 
@@ -58,6 +67,26 @@ from reporting.notion.editorial import (  # noqa: E402
 )
 
 logger = logging.getLogger("substack_post_video_note")
+
+
+def _publish_native(cfg: dict, body_text: str, video_path: Path) -> str:
+    """Publish the video Note over the HTTP API; return its permalink.
+
+    Same shape as ``post_substack_note.py::_publish_native`` — imported
+    lazily so the Playwright path never pays for it and a missing
+    ``api_session.json`` can't break the default backend.
+    """
+    from planning.substack.api_client import (
+        fetch_self_handle,
+        note_permalink,
+        publish_note,
+    )
+    from planning.videos.videos_session import probe_duration_seconds
+
+    duration = probe_duration_seconds(video_path)
+    note = publish_note(body_text, video_path=video_path, video_duration_seconds=duration)
+    handle = note.get("handle") or cfg.get("handle") or fetch_self_handle()
+    return note_permalink(handle, note["id"])
 
 
 def parse_args() -> argparse.Namespace:
@@ -207,6 +236,36 @@ def _post_video_note_for_row(
     if not payload.caption_short:
         logger.error("❌ Clip page has empty 'Text' caption — refusing to post empty Note.")
         return 5
+
+    note_source = str(cfg.get("note_source", "playwright")).lower()
+    if note_source not in ("playwright", "native"):
+        logger.error(
+            "❌ Unknown substack.note_source %r — expected 'playwright' or 'native'.",
+            note_source,
+        )
+        return 2
+
+    if note_source == "native":
+        if dry_run:
+            logger.info(
+                "✅ DRY-RUN (native): would publish video %s (%d chars caption) — nothing was posted.",
+                payload.video_path.name, len(payload.caption_short),
+            )
+            return 0
+        logger.info("🔌 Publishing the video Note via the native HTTP API (no browser).")
+        try:
+            note_url = _publish_native(cfg, payload.caption_short, payload.video_path)
+        except Exception as err:  # noqa: BLE001
+            logger.error("❌ Native video note publish failed: %s", err)
+            return 9
+        logger.info("🔗 Published video note URL: %s", note_url)
+        try:
+            set_field(notion, page_id, "post_url_sb", note_url, video_cols, "url")
+            sb_col = video_cols.get("post_url_sb", "link SB")
+            logger.info("✅ Wrote %s on editorial row.", sb_col)
+        except Exception as err:
+            logger.warning("⚠️ Posted OK but failed to write SB post URL: %s", err)
+        return 0
 
     try:
         session.goto_with_login_check(cfg["profile_url"])

@@ -39,6 +39,7 @@ import mimetypes
 import os
 import re
 import tempfile
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -62,6 +63,7 @@ logger = logging.getLogger("substack_api")
 
 __all__ = [
     "SessionExpiredError",
+    "VideoTranscodeError",
     "load_session",
     "fetch_follower_count",
     "fetch_own_notes",
@@ -271,17 +273,130 @@ def _create_note_attachment(session: requests.Session, image_url: str) -> str:
     return attachment_id
 
 
+class VideoTranscodeError(RuntimeError):
+    """Raised when Substack's Mux transcode of an uploaded video fails or times out."""
+
+
+# A part every 50MB (server-observed, issue #189 — parts scale as
+# ceil(fileSize / 50_000_000)); S3 multipart only requires order-preserving,
+# >=5MB-except-last parts, so slicing into exactly as many equal parts as the
+# server hands back URLs for is correct regardless of the server's own
+# internal chunk-size convention (verified live with a real 2-part upload).
+VIDEO_PART_UPLOAD_TIMEOUT_S = 180
+VIDEO_TRANSCODE_POLL_INTERVAL_S = 3
+VIDEO_TRANSCODE_TIMEOUT_S = 300
+
+
+def _upload_video(session: requests.Session, video_path: Path, duration_seconds: float) -> str:
+    """Upload a video through Substack's chunked multipart pipeline and kick off
+    the Mux transcode. Returns the ``media_upload_id``.
+
+    Mirrors what the real composer does (issue #189), captured by driving it
+    with a network listener attached (the write routes are lazily-imported
+    webpack chunks, invisible to a bundle grep — same lesson as #185):
+
+    1. ``POST /video/upload?filetype=&fileSize=&fileName=`` — no body; the
+       response hands back a ready-to-use ``media_upload_id`` plus one
+       presigned S3 PUT URL per part (no client-side AWS signing needed).
+    2. ``PUT`` each part directly to its presigned URL, collecting the
+       ``ETag`` response header per part.
+    3. ``POST /video/upload/{id}/transcode`` with the source duration, the
+       multipart upload id, and the collected ETags — this both completes
+       the S3 multipart upload and kicks off Mux transcoding.
+    """
+    size = video_path.stat().st_size
+    mime = mimetypes.guess_type(str(video_path))[0] or "video/mp4"
+    resp = _check(session.post(
+        f"{BASE_URL}/video/upload",
+        params={"filetype": mime, "fileSize": size, "fileName": video_path.name},
+        timeout=60,
+    ))
+    data = resp.json() or {}
+    media_upload_id = (data.get("mediaUpload") or {}).get("id")
+    multipart_upload_id = data.get("multipartUploadId")
+    urls = data.get("multipartUploadUrls") or []
+    if not media_upload_id or not multipart_upload_id or not urls:
+        raise RuntimeError(
+            "Substack /video/upload returned no media upload id / part URLs — "
+            "endpoint may have changed."
+        )
+
+    file_bytes = video_path.read_bytes()
+    n_parts = len(urls)
+    part_size = -(-len(file_bytes) // n_parts)  # ceil division
+    etags = []
+    for i, part_url in enumerate(urls):
+        chunk = file_bytes[i * part_size:(i + 1) * part_size]
+        put_resp = session.put(part_url, data=chunk, timeout=VIDEO_PART_UPLOAD_TIMEOUT_S)
+        put_resp.raise_for_status()
+        etag = put_resp.headers.get("ETag")
+        if not etag:
+            raise RuntimeError(f"S3 part {i + 1}/{n_parts} upload returned no ETag header.")
+        etags.append(etag)
+
+    _check(session.post(
+        f"{BASE_URL}/video/upload/{media_upload_id}/transcode",
+        json={
+            "duration": duration_seconds,
+            "multipart_upload_id": multipart_upload_id,
+            "multipart_upload_etags": etags,
+        },
+        timeout=60,
+    ))
+    return media_upload_id
+
+
+def _wait_for_video_transcode(
+    session: requests.Session,
+    media_upload_id: str,
+    *,
+    timeout_s: int = VIDEO_TRANSCODE_TIMEOUT_S,
+) -> None:
+    """Poll ``GET /video/upload/{id}`` until Mux reports ``state == "transcoded"``."""
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        data = _check(session.get(f"{BASE_URL}/video/upload/{media_upload_id}", timeout=30)).json()
+        state = data.get("state")
+        if state == "transcoded":
+            return
+        if state in ("errored", "failed"):
+            raise VideoTranscodeError(
+                f"Substack video transcode failed (state={state!r}) for media_upload_id={media_upload_id}."
+            )
+        time.sleep(VIDEO_TRANSCODE_POLL_INTERVAL_S)
+    raise VideoTranscodeError(
+        f"Video {media_upload_id} did not reach 'transcoded' within {timeout_s}s."
+    )
+
+
+def _create_video_attachment(session: requests.Session, media_upload_id: str) -> str:
+    """Turn a transcoded media upload into a Note attachment id."""
+    resp = _check(session.post(
+        f"{BASE_URL}/comment/attachment",
+        json={"mediaUploadId": media_upload_id, "type": "video"},
+        timeout=30,
+    ))
+    attachment_id = (resp.json() or {}).get("id")
+    if not attachment_id:
+        raise RuntimeError(
+            "Substack /comment/attachment (video) returned no 'id' — endpoint may have changed."
+        )
+    return attachment_id
+
+
 def publish_note(
     text: str,
     *,
     image_path: Optional[Path] = None,
+    video_path: Optional[Path] = None,
+    video_duration_seconds: Optional[float] = None,
     session_file: Path = SESSION_FILE,
 ) -> dict:
     """Publish a Substack Note over the native API. Returns the created note dict.
 
     **This is immediately public** — a Note has no draft state, so there is no
-    dry-run at this layer; callers own that gate (``post_substack_note.py``
-    short-circuits before reaching here).
+    dry-run at this layer; callers own that gate (``post_substack_note.py``/
+    ``post_substack_video_note.py`` short-circuit before reaching here).
 
     A Note is a ``comment`` of ``type == "feed"``. With an image it is three
     calls, mirroring exactly what the web composer sends:
@@ -290,14 +405,22 @@ def publish_note(
     2. ``POST /comment/attachment`` — that URL → an attachment id.
     3. ``POST /comment/feed`` — ``bodyJson`` + ``attachmentIds``.
 
+    With a video, the attachment step is a chunked multipart upload + Mux
+    transcode instead (issue #189) — see :func:`_upload_video`. Pass exactly
+    one of ``image_path``/``video_path``; ``video_path`` requires
+    ``video_duration_seconds`` (the transcode call needs it up front, before
+    Mux has produced anything to derive it from — get it via
+    ``planning.videos.videos_session.probe_duration_seconds``).
+
     Unlike the Playwright path this returns the created note's **own** id, so
     the permalink is exact rather than "whatever is topmost on the profile a
     moment later".
-
-    Video notes are **not** supported here — they upload through a separate mux
-    pipeline that is not reverse-engineered; ``post_substack_video_note.py``
-    stays on Playwright.
     """
+    if image_path and video_path:
+        raise ValueError("publish_note: pass image_path or video_path, not both.")
+    if video_path and video_duration_seconds is None:
+        raise ValueError("publish_note: video_path requires video_duration_seconds.")
+
     body_json = build_note_body_json(text)  # validate before any network call
     session, _ = load_session(session_file)
 
@@ -310,6 +433,14 @@ def publish_note(
         payload["attachmentIds"] = [
             _create_note_attachment(session, _upload_note_image(session, image_path))
         ]
+    elif video_path:
+        video_path = Path(video_path)
+        if not video_path.exists():
+            raise FileNotFoundError(f"Note video not found: {video_path}")
+        logger.info("📤 Uploading note video: %s (%.1fs)", video_path.name, video_duration_seconds)
+        media_upload_id = _upload_video(session, video_path, video_duration_seconds)
+        _wait_for_video_transcode(session, media_upload_id)
+        payload["attachmentIds"] = [_create_video_attachment(session, media_upload_id)]
 
     resp = _check(session.post(f"{BASE_URL}/comment/feed", json=payload, timeout=60))
     data = resp.json() or {}

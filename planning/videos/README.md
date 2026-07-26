@@ -271,8 +271,10 @@ attach helper. See:
 - `__init__.py` — empty package marker.
 - `videos_session.py` — config loader, Notion token loader, `ClipPayload`
   dataclass, `load_clip_payload(notion, editorial_row, video_cols, clip_cols)`,
-  OneDrive hydration (`ensure_local_file`), and platform-safe transcode
-  (`ensure_platform_safe_clip`).
+  OneDrive hydration (`ensure_local_file`), platform-safe transcode
+  (`ensure_platform_safe_clip`), and clip duration probing
+  (`probe_duration_seconds`, via ffprobe — used by the native Substack video
+  Note path, `planning/substack/post_substack_video_note.py`).
 - `schedule_videos_posts.py` — orchestrator entry point. Implements the
   `main() -> tuple[int, list[dict]]` contract consumed by
   `planning_pipeline.py`.

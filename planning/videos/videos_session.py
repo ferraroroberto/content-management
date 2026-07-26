@@ -353,6 +353,28 @@ def _probe_video(path: Path) -> Optional[dict]:
     }
 
 
+def probe_duration_seconds(path: Path) -> float:
+    """Return a clip's duration in seconds via ffprobe.
+
+    Needed by the native Substack video-Note path (issue #189): the
+    ``/video/upload/{id}/transcode`` call requires the source duration
+    up front, before Mux has transcoded anything to derive it from.
+    """
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        raise RuntimeError("ffprobe not found on PATH — required to read the clip's duration.")
+    proc = subprocess.run(
+        [ffprobe, "-v", "error", "-show_entries", "format=duration", "-of", "json", str(path)],
+        check=True, capture_output=True, timeout=60,
+        creationflags=_no_window_flags(),
+    )
+    data = json.loads(proc.stdout or b"{}")
+    duration = (data.get("format") or {}).get("duration")
+    if duration is None:
+        raise RuntimeError(f"ffprobe returned no duration for {path}.")
+    return float(duration)
+
+
 def _needs_transcode(probe: dict, tcfg: dict) -> tuple[bool, str]:
     """Decide whether a probed master trips a platform-safety threshold."""
     size_mb = probe["size"] / 1_048_576
@@ -577,4 +599,5 @@ __all__ = [
     "load_clip_payload",
     "load_notion_token",
     "load_videos_config",
+    "probe_duration_seconds",
 ]

@@ -75,6 +75,11 @@ to avoid the library's construction-time round-trips.
 | Delete a Note | `DELETE /comment/{id}` | Returns `{}`. |
 | React to ("like") a Note | `POST /comment/{id}/reaction` | Body `{"reaction": "❤"}` — the only reaction type the composer sends. Idempotent (a second POST is a no-op). |
 | Remove a reaction | `DELETE /comment/{id}/reaction` | Same body. Idempotent (a DELETE with no existing reaction is a no-op). |
+| Start a video upload | `POST /video/upload?filetype=&fileSize=&fileName=` | No body. Returns `{mediaUpload: {id, state: "created", ...}, multipartUploadId, multipartUploadUrls: [...]}` — one **ready-to-use, presigned** S3 PUT URL per part. No client-side AWS signing needed. |
+| Upload a part | `PUT <presigned S3 URL>` | Raw bytes as the body. Response `ETag` header must be collected per part. |
+| Complete upload + kick off transcode | `POST /video/upload/{id}/transcode` | Body `{"duration": <seconds>, "multipart_upload_id": ..., "multipart_upload_etags": [...]}`. |
+| Poll transcode status | `GET /video/upload/{id}` | `state` goes `created` → `uploaded` → `transcoded`. |
+| Make a video Note attachment | `POST /comment/attachment` | Body `{"mediaUploadId": <id>, "type": "video"}` (vs. `{"url", "type": "image"}` for images) → `{id}`. |
 
 ## Notes: a Note is a `comment`, and engagement comes free
 
@@ -179,6 +184,61 @@ browser at all, confirming the minimal body `{"reaction": "❤"}` is sufficient
 probe created one throwaway note, reacted/un-reacted, then deleted it —
 nothing was left on the account.
 
+### Video Notes: chunked multipart upload + Mux transcode (issue #189)
+
+**Verdict: go.** The video-Note upload pipeline is reverse-engineered and
+shipped — `substack.note_source = "native"` now covers video Notes too, via
+`post_substack_video_note.py`'s native branch (same flag, same one-key
+rollback to `"playwright"` as the text/image path).
+
+The write routes were captured the same way as #185's — the composer is a
+lazily-imported webpack chunk, invisible to a bundle grep — by driving the
+real video Note composer with a network listener attached, attaching a
+synthetic throwaway clip (2s solid color + silence, zero real content), and
+observing the sequence:
+
+1. `POST /video/upload?filetype=&fileSize=&fileName=` (empty body) — the
+   response hands back a `media_upload_id`, a `multipartUploadId`, and one
+   **already-presigned** S3 PUT URL per part. No AWS credentials or
+   client-side SigV4 signing needed — Substack signs the URLs server-side.
+2. `PUT` the file's bytes directly to each presigned URL (S3 multipart
+   upload), collecting the response `ETag` header per part.
+3. `POST /video/upload/{id}/transcode` with the source duration + the
+   multipart upload id + the collected ETags. This both completes the S3
+   multipart upload and kicks off Mux transcoding.
+4. Poll `GET /video/upload/{id}` until `state == "transcoded"`.
+5. `POST /comment/attachment` with `{"mediaUploadId": <id>, "type": "video"}`
+   (vs. `{"url", "type": "image"}` for images) → an attachment id, then
+   `POST /comment/feed` exactly as for an image Note.
+
+**How many parts, and how are they split?** The server decides: part count
+scales as `ceil(fileSize / 50_000_000)` (empirically confirmed by scanning
+declared `fileSize` values from 5MB to 500MB — file sizes of 50MB, 90MB,
+100MB, 150MB, 200MB and 500MB produced 1, 2, 2, 3, 4 and 10 parts
+respectively). The client only needs to slice the file into **exactly as
+many parts as URLs came back**, in order — S3 multipart upload only requires
+order-preserving parts of at least 5MB (except the last), not that part
+boundaries match the server's own internal chunk-size assumption. An
+equal-`ceil`-division slice was verified live with a real 2-part (~54MB)
+upload: the reconstructed video's duration and resolution matched the
+source exactly, confirming the byte-boundary choice doesn't have to mirror
+the server's internal accounting.
+
+**The duration must be supplied by the caller.** The transcode call needs it
+up front, before Mux has produced anything to derive it from.
+`post_substack_video_note.py`'s native branch gets it via
+`planning.videos.videos_session.probe_duration_seconds` (ffprobe), matching
+the fleet's Windows console-suppression convention.
+
+Verified live, end-to-end, through the actual shipped code (not just the
+discovery probe): `publish_note(text, video_path=..., video_duration_seconds=...)`
+uploads, transcodes, attaches, and publishes a throwaway video Note; the
+published note verifies as `is_video=True` with the correct `mediaUpload`
+state via `fetch_own_notes()`; the note is then deleted and its absence
+confirmed. Every probe used a synthetic clip generated locally with `ffmpeg`
+(solid color + silence, or a `testsrc` test pattern for the larger
+multi-part test) — no real or unreleased content was ever touched.
+
 ### Verified by A/B against the browser path
 
 Both `fetch_posts` implementations were run back-to-back against the live
@@ -245,9 +305,13 @@ Article titles are emitted as **literal text nodes**, never run through
 - Beware: a `GET` on a POST-only route returns **404, not 405** (Express routes
   per method), so "GET says 404" is *not* evidence that a write route is absent.
   An early pass in the spike drew the wrong conclusion from exactly this.
-- Video Notes remain Playwright-only (separate mux upload pipeline).
 - No rate limiting was observed across the spike's calls (including a 12-page
   cursor walk over 144 notes), but it is unmeasured at daily-cron scale.
+- The video-upload part-size scaling (`ceil(fileSize / 50_000_000)`) was
+  observed empirically, not documented anywhere — a future Substack change to
+  that threshold wouldn't break anything (the client always slices into
+  exactly as many parts as URLs the server returns), but is worth knowing if
+  upload timing shifts unexpectedly.
 
 ## Scope today vs. follow-ups
 
@@ -269,5 +333,8 @@ Both keep Playwright as a one-key rollback.
 Also shipped (#186): native **"like" support** — `react_to_note` /
 `unreact_to_note` in `api_client.py`, exposed as the manual `api_like.py` CLI.
 
-Deferred: native **video** Note posting (mux upload pipeline, still Playwright;
-tracked in #189).
+Also shipped (#189): native **video** Note posting — chunked multipart
+upload + Mux transcode, wired into `post_substack_video_note.py` behind the
+same `substack.note_source` flag, Playwright kept as the rollback.
+
+Nothing deferred from the #91/#185/#186/#189 spike chain remains outstanding.
