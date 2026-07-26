@@ -203,6 +203,7 @@
         }
     },
     "substack": {
+        "note_source": "playwright",
         "handle": "your_substack_handle",
         "publish_url": "https://your-publication.substack.com/publish/home",
         "profile_url": "https://substack.com/@your_substack_handle",

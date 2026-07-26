@@ -32,9 +32,12 @@ must never be committed (public repo).
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
+import mimetypes
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Optional
@@ -61,10 +64,23 @@ __all__ = [
     "SessionExpiredError",
     "load_session",
     "fetch_follower_count",
+    "fetch_own_notes",
+    "fetch_self_handle",
+    "build_note_body_json",
+    "note_permalink",
+    "publish_note",
+    "delete_note",
     "build_section_nodes",
     "SubstackAPI",
     "SESSION_FILE",
 ]
+
+# The profile feed pages at 12 items; cap the cursor walk so a pagination
+# change can never spin forever.
+NOTES_PAGE_CAP = 12
+
+# Who may reply to a published Note. "everyone" is what the web composer sends.
+NOTE_REPLY_ROLE = "everyone"
 
 
 class SessionExpiredError(RuntimeError):
@@ -121,6 +137,193 @@ def fetch_follower_count(session_file: Path = SESSION_FILE) -> int:
             f"(got {type(count).__name__}). Endpoint may have changed."
         )
     return count
+
+
+def _fetch_self(session: requests.Session) -> dict:
+    """``/user/profile/self`` with the two fields we depend on validated."""
+    data = _check(session.get(f"{BASE_URL}/user/profile/self", timeout=30)).json()
+    if not data.get("id") or not data.get("handle"):
+        raise RuntimeError(
+            "Unexpected /user/profile/self shape — no 'id'/'handle'. "
+            "Endpoint may have changed."
+        )
+    return data
+
+
+def fetch_self_handle(*, session_file: Path = SESSION_FILE) -> str:
+    """Our own handle, straight from the API.
+
+    Authoritative fallback for building note permalinks: the note-create
+    response does **not** echo the handle, and this is the same source
+    ``fetch_own_notes`` uses, so permalinks written at publish time and
+    permalinks read back by the reporting pipeline cannot diverge.
+    """
+    session, _ = load_session(session_file)
+    return _fetch_self(session)["handle"]
+
+
+def fetch_own_notes(
+    limit: int = 20, *, session_file: Path = SESSION_FILE
+) -> tuple[str, list[dict]]:
+    """Return ``(handle, comments)`` — our own published Notes, newest first.
+
+    Walks ``/reader/feed/profile/{user_id}?types[]=note``, following ``nextCursor``
+    until ``limit`` notes are collected or the feed is exhausted. Each element is
+    the raw ``comment`` payload (a Note is a ``comment`` of ``type == "feed"``);
+    :func:`reporting.scrape_client.substack_native.note_record` maps it to the
+    reporting record shape.
+
+    The handle comes from ``/user/profile/self`` rather than ``config.json`` so
+    the permalinks we build are guaranteed to match the account the cookie
+    belongs to.
+
+    Equivalent to the Playwright feed-walk + per-note permalink visit, but as
+    ``1 + ceil(limit/12)`` GETs instead of one browser launch and ~12 page loads.
+    """
+    session, _ = load_session(session_file)
+    self_data = _fetch_self(session)
+    user_id = self_data["id"]
+    handle = self_data["handle"]
+
+    url = f"{BASE_URL}/reader/feed/profile/{user_id}?types%5B%5D=note"
+    comments: list[dict] = []
+    cursor: Optional[str] = None
+    for _ in range(NOTES_PAGE_CAP):
+        page_url = url if cursor is None else f"{url}&cursor={cursor}"
+        data = _check(session.get(page_url, timeout=30)).json()
+        for item in data.get("items") or []:
+            comment = item.get("comment")
+            if comment:
+                comments.append(comment)
+        if len(comments) >= limit:
+            break
+        cursor = data.get("nextCursor")
+        if not cursor:
+            break
+    return handle, comments[:limit]
+
+
+def note_permalink(handle: str, note_id) -> str:
+    """The public URL of a Note — the same value the editorial ``post_url`` holds."""
+    return f"https://substack.com/@{handle}/note/c-{note_id}"
+
+
+def build_note_body_json(text: str) -> dict:
+    """Build a Note's ProseMirror ``bodyJson`` from plain text.
+
+    Blank-line-separated blocks become separate ``paragraph`` nodes, which is
+    exactly how Substack's own composer stores a multi-paragraph Note (verified
+    against published notes' stored ``body_json``).
+
+    Text is inserted **literally** — no markdown parsing — for the same reason
+    the newsletter's section builder does it: the body comes from a Notion
+    column and may legitimately contain ``*``, ``[`` or backticks.
+
+    Pure (no session, no network) so it can be unit-tested on its own.
+    """
+    blocks = [b.strip() for b in re.split(r"\n\s*\n", (text or "").strip()) if b.strip()]
+    if not blocks:
+        raise ValueError("Refusing to build an empty Note body.")
+    return {
+        "type": "doc",
+        "attrs": {"schemaVersion": "v1", "title": None},
+        "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": block}]}
+            for block in blocks
+        ],
+    }
+
+
+def _image_data_uri(image_path: Path) -> str:
+    """Read an image file into the ``data:<mime>;base64,…`` form the API expects."""
+    mime = mimetypes.guess_type(str(image_path))[0] or "image/png"
+    encoded = base64.b64encode(Path(image_path).read_bytes()).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
+
+
+def _upload_note_image(session: requests.Session, image_path: Path) -> str:
+    """Upload an image and return its CDN URL (step 1 of the attachment flow)."""
+    resp = _check(session.post(
+        f"{BASE_URL}/image",
+        json={"image": _image_data_uri(image_path)},
+        timeout=120,
+    ))
+    url = (resp.json() or {}).get("url")
+    if not url:
+        raise RuntimeError("Substack /image returned no 'url' — endpoint may have changed.")
+    return url
+
+
+def _create_note_attachment(session: requests.Session, image_url: str) -> str:
+    """Turn an uploaded image URL into a Note attachment id (step 2)."""
+    resp = _check(session.post(
+        f"{BASE_URL}/comment/attachment",
+        json={"url": image_url, "type": "image"},
+        timeout=60,
+    ))
+    attachment_id = (resp.json() or {}).get("id")
+    if not attachment_id:
+        raise RuntimeError(
+            "Substack /comment/attachment returned no 'id' — endpoint may have changed."
+        )
+    return attachment_id
+
+
+def publish_note(
+    text: str,
+    *,
+    image_path: Optional[Path] = None,
+    session_file: Path = SESSION_FILE,
+) -> dict:
+    """Publish a Substack Note over the native API. Returns the created note dict.
+
+    **This is immediately public** — a Note has no draft state, so there is no
+    dry-run at this layer; callers own that gate (``post_substack_note.py``
+    short-circuits before reaching here).
+
+    A Note is a ``comment`` of ``type == "feed"``. With an image it is three
+    calls, mirroring exactly what the web composer sends:
+
+    1. ``POST /image`` — the file as a base64 data URI → a CDN URL.
+    2. ``POST /comment/attachment`` — that URL → an attachment id.
+    3. ``POST /comment/feed`` — ``bodyJson`` + ``attachmentIds``.
+
+    Unlike the Playwright path this returns the created note's **own** id, so
+    the permalink is exact rather than "whatever is topmost on the profile a
+    moment later".
+
+    Video notes are **not** supported here — they upload through a separate mux
+    pipeline that is not reverse-engineered; ``post_substack_video_note.py``
+    stays on Playwright.
+    """
+    body_json = build_note_body_json(text)  # validate before any network call
+    session, _ = load_session(session_file)
+
+    payload: dict = {"bodyJson": body_json, "replyMinimumRole": NOTE_REPLY_ROLE}
+    if image_path:
+        image_path = Path(image_path)
+        if not image_path.exists():
+            raise FileNotFoundError(f"Note image not found: {image_path}")
+        logger.info("📤 Uploading note image: %s", image_path.name)
+        payload["attachmentIds"] = [
+            _create_note_attachment(session, _upload_note_image(session, image_path))
+        ]
+
+    resp = _check(session.post(f"{BASE_URL}/comment/feed", json=payload, timeout=60))
+    data = resp.json() or {}
+    note = data.get("comment") if isinstance(data.get("comment"), dict) else data
+    if not note.get("id"):
+        raise RuntimeError(
+            f"Note POST succeeded but no id in the response (keys: {sorted(data)}) — "
+            "endpoint may have changed."
+        )
+    return note
+
+
+def delete_note(note_id, *, session_file: Path = SESSION_FILE) -> None:
+    """Delete a published Note. Used to clean up throwaway verification notes."""
+    session, _ = load_session(session_file)
+    _check(session.delete(f"{BASE_URL}/comment/{note_id}", timeout=30))
 
 
 def _text_node(text: str, href: Optional[str] = None) -> dict:

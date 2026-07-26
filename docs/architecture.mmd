@@ -37,6 +37,7 @@ flowchart TB
   RPIPE --> SC
   SC -->|"source: rapidapi"| RAPIDAPI[("RapidAPI\n(paid HTTP)")]
   SC -->|"source: playwright / native"| SCRAPE
+  SCRAPE -->|"followers + note engagement\n(cookie auth, no browser)"| SBAPI[("Substack private HTTP API")]
   SC --> RAW[["results/raw/*.json"]]
   RAW --> PROC
   PROC --> SUPA[("Supabase / PostgreSQL")]
@@ -49,7 +50,7 @@ flowchart TB
     IG["instagram/\nschedule_instagram_posts +\nclone_to_other_platforms"]
     TW["twitter/schedule_twitter_posts"]
     TH["threads/schedule_threads_posts"]
-    SUBSTACKDAILY["substack/\ndaily_pipeline (invoked from reporting) +\npost_substack_note / post_substack_video_note"]
+    SUBSTACKDAILY["substack/\ndaily_pipeline (invoked from reporting) +\npost_substack_note (note_source: playwright | native) /\npost_substack_video_note (playwright only)"]
     VIDEOS["videos/schedule_videos_posts\n(weekly cross-platform clip: LI+IG+TW+TH @19:00)"]
   end
   NOTION -->|"WIP-* checkboxes"| PPIPE
@@ -57,6 +58,7 @@ flowchart TB
   IG -.->|"clone captions/illustrations\nTW/TH/SB Notion columns"| TW
   IG -.-> TH
   IG -.-> SUBSTACKDAILY
+  SUBSTACKDAILY -->|"note_source: native\npublish Note, no browser"| SBAPI
   LI --> CHROME[("Real Chrome\nper-platform persistent profile\nplanning/<p>/chrome_user_data/")]
   IG --> CHROME
   TW --> CHROME
@@ -78,7 +80,7 @@ flowchart TB
   NBUILD --> RESULTSNEWS[["results/newsletter/N{NNN}.html"]]
   NPIPE -->|"substack-draft"| NSBDRAFT
   NSBDRAFT -->|"same grouped articles"| NOTION
-  NSBDRAFT -->|"create_draft_from_sections\n(cookie auth, no browser)"| SBAPI[("Substack private HTTP API\nprivate draft — never published")]
+  NSBDRAFT -->|"create_draft_from_sections\nprivate draft — never published"| SBAPI
 
   subgraph engagement_mod["engagement/ — anti-AI comment triage"]
     ESCRAPE["linkedin/scrape_comments.py"]

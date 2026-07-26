@@ -14,9 +14,12 @@ section in the main README. This document is the *implementation* memory.
 
 Every endpoint key in `config/config.json`
 (`linkedin_profile`, `linkedin_posts`, …, `substack_posts`) carries a
-`"source": "rapidapi" | "playwright"` field. `social_api_client.get_api_data`
-inspects it and either makes the HTTP call (RapidAPI) or imports
-`reporting.scrape_client.<platform>` and calls `fetch_<profile|posts>(date)`.
+`"source": "rapidapi" | "playwright" | "native"` field. `social_api_client.get_api_data`
+inspects it and either makes the HTTP call (RapidAPI), or imports
+`reporting.scrape_client.<platform>` and calls `fetch_<profile|posts>(date)`, or
+— for `"native"` — imports `reporting.scrape_client.<platform>_native` and calls
+the same function name there (Substack only; see
+[`substack-native-api.md`](substack-native-api.md)).
 The scraper returns just the `data` payload dict — the outer envelope
 (`{date, platform, data_type, data}`) is added by the existing
 `save_results`. Downstream, `data_processor` reads the JSON file and
@@ -71,6 +74,11 @@ not look like a bot" rule in `~/.claude/CLAUDE.md` reinforces it.
 * **Video detection:** `<video>` element on the permalink page.
 
 ### Substack
+
+> **Both Substack scrapes now have a native-API path** (`source: "native"` →
+> `substack_native.py`), which is the recommended source: no browser, no
+> selectors, and verified record-for-record identical to the scrape below. The
+> DOM notes here remain the memory for the `"playwright"` rollback path.
 
 * **Follower count = "Total followers", not "subscribers":** these are two distinct metrics on Substack. RapidAPI returned `subscriberCountNumber` (mailing list, ~9.8K). The Playwright scraper returns the "Total followers (N)" line from `stats_audience_url` (~14.6K) — that's the metric the legacy `planning/substack/update_substack_followers.py` always reported. The fold-in keeps the legacy semantic; if you ever need the subscriber-list count again, that's a separate field/mapping. The relevant config key is `substack.stats_audience_url` (per-publication URL — not the same as the public profile URL).
 * **Posts — skip only a true teaser, not the first note (issue #84):** we *used* to drop the first unique `c-<id>` code unconditionally as "the newsletter teaser". That was wrong for the daily-Note workflow — the scrape (pipeline step 1) runs *before* the day's Note is published (step 6), so the top entry is *yesterday's* real note, which is exactly the row the posts consolidator needs (`posted_at = date - 1 day`). Dropping it left every `*_substack_no_video` column NULL → blank Notion fields. Now we keep all notes and drop a note **only** when it embeds a `/p/` newsletter post preview (`<a href*='/p/'>` inside the note container) — the signal a genuine announcement/restack note carries and ordinary daily notes never do.
