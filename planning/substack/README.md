@@ -91,8 +91,15 @@ taking whatever is topmost.
 
 Because a Note has no draft state, publishing is immediate and public;
 `--dry-run` is enforced before the publish call, so it never reaches Substack.
-**Video** notes (`post_substack_video_note.py`) remain Playwright-only — they
-upload through a separate mux pipeline that isn't reverse-engineered.
+
+**Video** notes (`post_substack_video_note.py`) support the same
+`note_source` flag (issue #189): `"native"` does a chunked multipart upload
++ Mux transcode over the HTTP API — no browser at request time — via the
+same `POST /comment/feed` publish step once the upload transcodes. The
+video's duration is probed with ffprobe
+(`planning.videos.videos_session.probe_duration_seconds`) before the upload,
+since the transcode call needs it up front. `"playwright"` (default) stays
+the one-key rollback.
 
 ### Manual archive + create
 
