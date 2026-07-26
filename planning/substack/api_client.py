@@ -70,6 +70,8 @@ __all__ = [
     "note_permalink",
     "publish_note",
     "delete_note",
+    "react_to_note",
+    "unreact_to_note",
     "build_section_nodes",
     "SubstackAPI",
     "SESSION_FILE",
@@ -324,6 +326,34 @@ def delete_note(note_id, *, session_file: Path = SESSION_FILE) -> None:
     """Delete a published Note. Used to clean up throwaway verification notes."""
     session, _ = load_session(session_file)
     _check(session.delete(f"{BASE_URL}/comment/{note_id}", timeout=30))
+
+
+# The heart is the only reaction the web composer sends — Notes have no other
+# reaction type (verified live, issue #186).
+NOTE_REACTION_HEART = "❤"
+
+
+def react_to_note(note_id, *, session_file: Path = SESSION_FILE) -> None:
+    """React ("like") to a Note. Idempotent — reacting twice leaves the count
+    unchanged (verified live: two consecutive POSTs both return 200, count
+    stays at 1)."""
+    session, _ = load_session(session_file)
+    _check(session.post(
+        f"{BASE_URL}/comment/{note_id}/reaction",
+        json={"reaction": NOTE_REACTION_HEART},
+        timeout=30,
+    ))
+
+
+def unreact_to_note(note_id, *, session_file: Path = SESSION_FILE) -> None:
+    """Remove a reaction from a Note. Idempotent — un-reacting when not
+    reacted is a no-op (verified live, same as the double-POST case)."""
+    session, _ = load_session(session_file)
+    _check(session.delete(
+        f"{BASE_URL}/comment/{note_id}/reaction",
+        json={"reaction": NOTE_REACTION_HEART},
+        timeout=30,
+    ))
 
 
 def _text_node(text: str, href: Optional[str] = None) -> dict:

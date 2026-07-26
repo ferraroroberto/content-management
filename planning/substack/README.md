@@ -38,10 +38,12 @@ Modules:
 ```
 api_client.py        — session loader + fetch_follower_count() + fetch_own_notes()
                        + publish_note()/delete_note()
+                       + react_to_note()/unreact_to_note()
                        + SubstackAPI (pull/create/publish)
 extract_session.py   — harvest cookies+UA from the Chrome profile → api_session.json (gitignored)
 api_pull.py          — manual CLI: dump a post archive to JSON
 api_create.py        — manual CLI: create a draft edition (publish only with --confirm)
+api_like.py          — manual CLI: react to / remove a reaction from a Note
 ```
 
 The weekly newsletter has its own consumer of this client:
@@ -105,6 +107,16 @@ upload through a separate mux pipeline that isn't reverse-engineered.
 
 `api_create` defaults to draft + pre-publish validation and never publishes
 without `--confirm`; it is never wired into the daily cron.
+
+### Reacting to a Note
+
+```powershell
+& .\.venv\Scripts\python.exe -m planning.substack.api_like --note NOTE_ID_OR_URL
+& .\.venv\Scripts\python.exe -m planning.substack.api_like --note NOTE_ID_OR_URL --unlike
+```
+
+No existing "like" workflow to slot into (issue #186), so this is a standalone
+manual tool, not wired into any pipeline. Both calls are idempotent.
 
 ## Module layout
 

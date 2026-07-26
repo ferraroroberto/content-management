@@ -73,6 +73,8 @@ to avoid the library's construction-time round-trips.
 | Make a Note attachment | `POST /comment/attachment` | Body `{"url": <cdn url>, "type": "image"}` → `{id}`. |
 | Publish a Note | `POST /comment/feed` | Body `{"bodyJson": …, "attachmentIds": […], "replyMinimumRole": "everyone"}`. **Immediately public** — Notes have no draft state. |
 | Delete a Note | `DELETE /comment/{id}` | Returns `{}`. |
+| React to ("like") a Note | `POST /comment/{id}/reaction` | Body `{"reaction": "❤"}` — the only reaction type the composer sends. Idempotent (a second POST is a no-op). |
+| Remove a reaction | `DELETE /comment/{id}/reaction` | Same body. Idempotent (a DELETE with no existing reaction is a no-op). |
 
 ## Notes: a Note is a `comment`, and engagement comes free
 
@@ -149,6 +151,33 @@ Caveats worth knowing:
 - **Video notes are not supported natively.** They upload through a separate mux
   pipeline (`mux_asset_id` / `mux_playback_id` on the attachment) that was not
   reverse-engineered; `post_substack_video_note.py` stays on Playwright.
+
+### Reacting to ("liking") a Note (issue #186)
+
+`react_to_note(note_id)` / `unreact_to_note(note_id)` in `api_client.py` wrap
+`POST` / `DELETE /comment/{id}/reaction`. There is no existing "like" workflow
+in this repo to slot into, so these are exposed as a small manual CLI,
+`api_like.py`, alongside `api_pull.py`/`api_create.py` — not wired into any
+pipeline.
+
+The write route was **not** discoverable from the JS bundles either (same
+lesson as the Note-publish routes) — found by driving the real composer with
+a `page.on("request")` listener attached while clicking the heart icon on a
+throwaway note. A note permalink page renders a *feed* (the subject note plus
+recommended notes), each with its own Like button, so the click was scoped to
+the subject note's own container the same way
+`reporting/scrape_client/substack.py::_scrape_note_permalink` already scopes
+its engagement read — via the timestamp anchor pointing at `/note/c-<id>`,
+walked up to the smallest ancestor owning a `button[aria-label='Like']`.
+
+Verified live, end-to-end, three separate ways: (1) the browser-driven
+capture itself (click → `POST .../reaction` → `reaction_count` 0→1; click
+again → `DELETE .../reaction` → 0), (2) a pure-HTTP round trip with no
+browser at all, confirming the minimal body `{"reaction": "❤"}` is sufficient
+(no `tabId`/`publication_id` needed, despite the browser sending them), and
+(3) double-POST / double-DELETE idempotency (no error, count unchanged). Every
+probe created one throwaway note, reacted/un-reacted, then deleted it —
+nothing was left on the account.
 
 ### Verified by A/B against the browser path
 
@@ -237,5 +266,8 @@ Also shipped (#185): native **note engagement**
 **Note posting** (`substack.note_source = "native"` → `post_substack_note.py`).
 Both keep Playwright as a one-key rollback.
 
-Deferred: native **video** Note posting (mux upload pipeline, still Playwright);
-"like" support (#186).
+Also shipped (#186): native **"like" support** — `react_to_note` /
+`unreact_to_note` in `api_client.py`, exposed as the manual `api_like.py` CLI.
+
+Deferred: native **video** Note posting (mux upload pipeline, still Playwright;
+tracked in #189).
