@@ -18,7 +18,7 @@ flowchart TB
 
   RPIPE["reporting_pipeline.py"]
   PPIPE["planning_pipeline.py --all-wip"]
-  NPIPE["newsletter_pipeline.py\nbootstrap / archive / normalize / build"]
+  NPIPE["newsletter_pipeline.py\nbootstrap / archive / normalize / build /\nsubstack-draft"]
   APP["app/app.py — Streamlit control panel\ntab_reporting · tab_planning · tab_newsletter ·\ntab_editorial · tab_engagement"]
   AUTOHEAL["app/autoheal_console.py"]
 
@@ -70,11 +70,15 @@ flowchart TB
     NARCHIVE["chrome_tabs + extractor +\nauthor_resolver + summarizer/llm"]
     NNORM["normalize_names + normalize_url"]
     NBUILD["build_newsletter.py"]
+    NSBDRAFT["substack_draft.py\n(optional, explicit step)"]
   end
   NPIPE --> NBOOT --> NARCHIVE --> NNORM --> NBUILD
   NARCHIVE -->|"readability-lxml extraction"| NOTION
   NARCHIVE --> LLMHUB[("local LLM hub\n127.0.0.1:8000\ntopic + 3-line summary")]
   NBUILD --> RESULTSNEWS[["results/newsletter/N{NNN}.html"]]
+  NPIPE -->|"substack-draft"| NSBDRAFT
+  NSBDRAFT -->|"same grouped articles"| NOTION
+  NSBDRAFT -->|"create_draft_from_sections\n(cookie auth, no browser)"| SBAPI[("Substack private HTTP API\nprivate draft — never published")]
 
   subgraph engagement_mod["engagement/ — anti-AI comment triage"]
     ESCRAPE["linkedin/scrape_comments.py"]

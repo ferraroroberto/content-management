@@ -61,6 +61,7 @@ __all__ = [
     "SessionExpiredError",
     "load_session",
     "fetch_follower_count",
+    "build_section_nodes",
     "SubstackAPI",
     "SESSION_FILE",
 ]
@@ -120,6 +121,60 @@ def fetch_follower_count(session_file: Path = SESSION_FILE) -> int:
             f"(got {type(count).__name__}). Endpoint may have changed."
         )
     return count
+
+
+def _text_node(text: str, href: Optional[str] = None) -> dict:
+    """One ProseMirror text node, optionally carrying a link mark."""
+    node: dict = {"type": "text", "text": text}
+    if href:
+        node["marks"] = [{"type": "link", "attrs": {"href": href}}]
+    return node
+
+
+def build_section_nodes(
+    sections: list[tuple[str, list[tuple[str, str]]]],
+    *,
+    intro: Optional[str] = None,
+) -> list[dict]:
+    """Build the ProseMirror body nodes for a sectioned edition.
+
+    ``sections`` is ``[(heading, [(link_text, url), ...]), ...]`` — one heading
+    per topic, one linked bullet per article. ``intro``, when given, becomes the
+    first paragraph.
+
+    Text is emitted as **literal** text nodes rather than parsed as markdown:
+    article titles come from arbitrary web pages and routinely contain ``[``,
+    ``*`` or backticks, which markdown parsing would silently mangle.
+
+    Pure (no session, no network) so it can be unit-tested on its own.
+
+    NOTE: the library's ``Post.from_markdown`` cannot express this shape — it
+    folds bullet lines that follow a heading into the heading's own text node,
+    destroying the links. Hence the explicit node construction here.
+    """
+    nodes: list[dict] = []
+    if intro:
+        nodes.append({"type": "paragraph", "content": [_text_node(intro)]})
+    for heading, articles in sections:
+        nodes.append(
+            {
+                "type": "heading",
+                "content": [_text_node(heading)],
+                "attrs": {"level": 2},
+            }
+        )
+        items = [
+            {
+                "type": "list_item",
+                "content": [{"type": "paragraph", "content": [_text_node(name, url)]}],
+            }
+            for name, url in articles
+        ]
+        # An empty bullet_list is not valid ProseMirror — emit the heading alone
+        # for a topic that collected no articles.
+        if items:
+            nodes.append({"type": "bullet_list", "content": items})
+    return nodes
 
 
 class SubstackAPI:
@@ -224,6 +279,28 @@ class SubstackAPI:
             url = uploaded.get("url")
             if url:
                 post.add({"type": "captionedImage", "src": url})
+        return self._api.post_draft(post.get_draft())
+
+    def create_draft_from_sections(
+        self,
+        title: str,
+        subtitle: str,
+        sections: list[tuple[str, list[tuple[str, str]]]],
+        *,
+        intro: Optional[str] = None,
+        audience: str = "everyone",
+    ) -> dict:
+        """Create a newsletter edition DRAFT laid out as headed link sections.
+
+        The weekly-newsletter counterpart to :meth:`create_draft` (which is
+        paragraph-shaped and drives the manual ``api_create`` CLI). Private —
+        emails no one. Returns the created draft dict (carries ``id``).
+
+        See :func:`build_section_nodes` for the body shape and why the nodes are
+        built explicitly rather than through the library's markdown path.
+        """
+        post = Post(title, subtitle, self.user_id, audience=audience)
+        post.draft_body["content"].extend(build_section_nodes(sections, intro=intro))
         return self._api.post_draft(post.get_draft())
 
     def update_draft(self, draft_id: int, **fields) -> dict:

@@ -14,6 +14,8 @@ Subcommands::
                                      [--must-read 1|2|3 | --no-must-read]
     newsletter_pipeline.py create    --newsletter NNN [--days 14] [--debug]
     newsletter_pipeline.py all       [--newsletter NNN] [--days 14] [--debug]
+    newsletter_pipeline.py substack-draft --newsletter NNN [--title T] [--subtitle S]
+                                     [--must-read 1|2|3] [--delete-after] [--debug]
 
 * ``bootstrap`` launches the dedicated newsletter Chrome on :9222 **without**
   killing the everyday browser (see ``newsletter/bootstrap_chrome.py``).
@@ -23,6 +25,9 @@ Subcommands::
   "open your tabs, press Enter" pause (you can't archive tabs that aren't open
   yet) -> archive -> normalize -> build with the interactive must-read prompt.
 * No subcommand defaults to ``all`` so existing muscle memory keeps working.
+* ``substack-draft`` pushes the built lists into a private Substack draft over
+  the native HTTP API. Deliberately **not** part of ``create`` / ``all``: it
+  writes to an external platform, so it stays an explicit, re-runnable step.
 
 Mirrors the shape of ``reporting_pipeline.py`` / ``planning_pipeline.py``.
 """
@@ -45,6 +50,7 @@ force_utf8_stdio()
 from newsletter import bootstrap_chrome  # noqa: E402
 from newsletter import build_newsletter, normalize_names, normalize_url  # noqa: E402
 from newsletter import pipeline as archive_pipeline  # noqa: E402
+from newsletter import substack_draft  # noqa: E402
 
 logger = logging.getLogger("newsletter_pipeline")
 
@@ -113,6 +119,21 @@ def step_build(newsletter_number: str | None, debug: bool, *,
         open_browser=open_browser, must_read=must_read,
     )
     print(f"🎉 Newsletter HTML: {out_path}")
+    return 0
+
+
+def step_substack_draft(newsletter_number: str, debug: bool, *,
+                        title: str | None, subtitle: str,
+                        must_read: int | None, delete_after: bool) -> int:
+    _banner("create Substack draft edition (private — nothing is sent)")
+    try:
+        substack_draft.run(
+            newsletter_number, title=title, subtitle=subtitle,
+            must_read=must_read, delete_after=delete_after, debug=debug,
+        )
+    except substack_draft.SessionExpiredError as err:
+        print(f"❌ {err}")
+        return 2
     return 0
 
 
@@ -203,6 +224,18 @@ def main(argv: list[str] | None = None) -> int:
     _add_days(p_create)
     p_create.add_argument("--debug", action="store_true")
 
+    p_sbd = sub.add_parser("substack-draft",
+                           help="Create a private Substack draft edition from the newsletter")
+    _add_newsletter(p_sbd, required=True)
+    p_sbd.add_argument("--title", default=None,
+                       help="Draft title (defaults to the newsletter number)")
+    p_sbd.add_argument("--subtitle", default="")
+    p_sbd.add_argument("--must-read", type=int, choices=(1, 2, 3), default=None,
+                       help="Compose the must-read line as the opening paragraph")
+    p_sbd.add_argument("--delete-after", action="store_true",
+                       help="Delete the draft after creating it (smoke test)")
+    p_sbd.add_argument("--debug", action="store_true")
+
     p_all = sub.add_parser("all", help="Full interactive console sequence")
     _add_newsletter(p_all, required=False)
     _add_days(p_all)
@@ -226,6 +259,12 @@ def main(argv: list[str] | None = None) -> int:
             interactive_must_read=interactive,
             open_browser=not args.no_open,
             must_read=args.must_read,
+        )
+    if cmd == "substack-draft":
+        return step_substack_draft(
+            args.newsletter, debug=debug,
+            title=args.title, subtitle=args.subtitle,
+            must_read=args.must_read, delete_after=args.delete_after,
         )
     if cmd == "create":
         return run_create(days=args.days, newsletter_number=args.newsletter, debug=debug)

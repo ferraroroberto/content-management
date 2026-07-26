@@ -30,7 +30,10 @@ Four pipelines, one repo:
   tweet domains. **Build** emits the ready-to-paste HTML at
   `results/newsletter/N{NNN}.html`, opens it in the browser, and lets you
   compose the must-read line (interactively in a console, or via the
-  app's picker fed by a topics sidecar).
+  app's picker fed by a topics sidecar). **substack-draft** (optional,
+  separate step) pushes those same grouped lists into a *private*
+  Substack draft edition over the native HTTP API — closing the last
+  manual copy-paste. It never publishes.
 - **Engagement** (`engagement/`) — defends comment threads against
   AI-generated noise using a layered classifier (rules → local sklearn
   model → LLM fallback via the local hub). Scrapes LinkedIn comments
@@ -96,6 +99,7 @@ content-management/                   # repo root
 ├── newsletter/                       # weekly newsletter pipeline (archive + normalize + build)
 │                                     # archive=chrome tabs → notion; normalize_names + normalize_url
 │                                     # rewrite titles + clean URLs; build_newsletter renders HTML
+│                                     # substack_draft pushes the same lists to a private Substack draft
 ├── engagement/                       # anti-AI comment triage (rules → sklearn → LLM fallback)
 │   ├── linkedin/                     # LinkedIn comment scraper
 │   ├── classify/                     # layered classifier + phrase config

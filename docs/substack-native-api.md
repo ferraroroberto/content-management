@@ -64,6 +64,7 @@ to avoid the library's construction-time round-trips.
 | List published posts | `GET /<pub>/post_management/published` | Returns an envelope `{posts, total, …}`; posts carry `title`/`slug`/`post_date`/`type`/`audience` but **no** body or `canonical_url`. |
 | Full post body | `GET /<pub>/posts/by-id/{id}` | Adds `body_html` + `canonical_url`. One extra GET per post (`--with-body`). |
 | Create draft | `POST /<pub>/drafts` | Private; emails no one. |
+| Read draft back | `GET /<pub>/drafts/{id}` | Used to verify the stored body round-trips (see *Body shape* below). |
 | Edit draft | `PUT /<pub>/drafts/{id}` | |
 | Pre-publish validate | `GET /<pub>/drafts/{id}/prepublish` | Returns `{errors, suggestions}`; does not publish. |
 | Publish | `POST /<pub>/drafts/{id}/publish` | **Irreversible** — emails the whole list. Gated behind explicit `--confirm`; never in the cron. |
@@ -84,6 +85,34 @@ envelope, so `save_results` → `data_processor` → `profile_aggregator` →
 back to the browser scrape. The block keeps its `api_url`/`api_key` keys because
 the endpoint loop only iterates blocks that have an `api_url`.
 
+## Body shape: ProseMirror, built explicitly
+
+A draft body is ProseMirror JSON, not HTML or markdown. The weekly newsletter's
+sectioned layout (a heading per topic, a bullet list of linked article titles) is
+built node-by-node in `planning/substack/api_client.py::build_section_nodes`:
+
+```
+paragraph    — optional intro (the must-read line)
+heading      — attrs.level = 2, one per topic
+bullet_list  — list_item > paragraph > text node carrying a `link` mark
+```
+
+Two findings from building it, both verified against the live API:
+
+- **`Post.from_markdown` cannot express this shape.** Given a `##` heading
+  followed by `- [title](url)` lines, it folds the bullet lines into the
+  *heading's own text node* — the list and every link are destroyed, silently.
+  The nodes are therefore constructed directly. `tests/test_substack_draft_sections.py`
+  pins the resulting structure so a refactor back to `from_markdown` fails loudly.
+- **Node names are snake_case** (`bullet_list`, `list_item`), not the camelCase
+  many ProseMirror schemas use. Confirmed by creating a draft and reading it back
+  via `GET /drafts/{id}`: the stored body matched what was sent, link marks
+  intact.
+
+Article titles are emitted as **literal text nodes**, never run through
+`parse_inline`. Titles are scraped from arbitrary sites and routinely contain
+`*`, `[` or backticks that markdown parsing would mangle.
+
 ## Known fragility (be honest)
 
 - Endpoints are undocumented and can change without notice. Concrete example: the
@@ -101,6 +130,14 @@ the endpoint loop only iterates blocks that have an `api_url`.
 ## Scope today vs. follow-ups
 
 Shipped: native follower count (daily default) + manual archive pull + manual
-draft create/edit/prepublish/publish. Deferred: wiring create/publish to the
-Notion editorial database; migrating Note posting + note-engagement off Playwright;
-"like" support. Tracked on issue #91.
+draft create/edit/prepublish/publish (issue #91), and the weekly newsletter's
+`substack-draft` step (issue #184) — `newsletter/substack_draft.py` builds a
+private draft edition from the Notion articles DB, never publishing.
+
+Note that the *editorial* database was the wrong source for an edition: it has no
+newsletter/edition columns (its Substack columns drive the daily short-form
+Note). The newsletter's own articles + newsletter DBs are the real source, which
+is why the step lives in `newsletter/` rather than `planning/substack/`.
+
+Deferred: migrating Note posting + note-engagement off Playwright (#185);
+"like" support (#186).

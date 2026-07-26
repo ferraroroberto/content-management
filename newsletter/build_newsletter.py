@@ -265,7 +265,7 @@ def format_must_read_line(three_names: Sequence[str], must_read: int) -> str:
 
 def topics_sidecar_path(newsletter_number: str) -> Path:
     """Path of the topics sidecar JSON for a newsletter number (``057``/``N057``)."""
-    return RESULTS_DIR / f"{_normalize_newsletter_number(newsletter_number)}.topics.json"
+    return RESULTS_DIR / f"{normalize_newsletter_number(newsletter_number)}.topics.json"
 
 
 def _write_topics_sidecar(
@@ -339,7 +339,9 @@ def prompt_must_read_line(topics: Sequence[str],
 # ---------------------------------------------------------------- entry points
 
 
-def _normalize_newsletter_number(raw: str) -> str:
+def normalize_newsletter_number(raw: str) -> str:
+    """Normalise ``057``/``N057`` to the canonical ``N057``. Shared with
+    :mod:`newsletter.substack_draft`, which keys the draft title off it."""
     val = raw.strip().upper()
     if re.fullmatch(r"\d{3}", val):
         return f"N{val}"
@@ -364,7 +366,7 @@ def run(newsletter_number: str, debug: bool = False, *,
     * else → write the HTML + sidecar only (the app's non-blocking path).
     """
     _setup_logging(debug)
-    nl_num = _normalize_newsletter_number(newsletter_number)
+    nl_num = normalize_newsletter_number(newsletter_number)
     builder = NotionNewsletterBuilder()
     _, grouped = builder.build_newsletter(nl_num)
 

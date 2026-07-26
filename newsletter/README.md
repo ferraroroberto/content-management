@@ -31,7 +31,12 @@ flowchart LR
         L --> M[render HTML<br/>results/newsletter/N{NNN}.html]
         M --> N[prompt must-read<br/>copy line to clipboard]
     end
+    subgraph S5[5. Substack draft — optional]
+        O[same grouped articles] --> P[native HTTP API<br/>cookie auth]
+        P --> Q[private draft edition<br/>never published]
+    end
     S1 --> S2 --> S3 --> S4
+    S4 -.-> S5
 ```
 
 ## One-time setup
@@ -112,6 +117,7 @@ The pipeline is split into independent, non-interactive subcommands (issue #59)
 | `newsletter_pipeline.py build --newsletter 057 [--no-open] [--must-read 1\|2\|3 \| --no-must-read]` | Render HTML + write the topics sidecar. |
 | `newsletter_pipeline.py create --newsletter 057 [--days 14]` | archive → normalize → build (non-interactive). |
 | `newsletter_pipeline.py all [--newsletter 057] [--days 14]` | Full interactive console sequence (default when no subcommand). |
+| `newsletter_pipeline.py substack-draft --newsletter 057 [--title T] [--subtitle S] [--must-read 1\|2\|3] [--delete-after]` | Create a **private** Substack draft edition from the same Notion content. Never publishes. |
 
 Lower-level module entry points:
 
@@ -126,6 +132,7 @@ Lower-level module entry points:
 | `python -m newsletter.normalize_names --days 14 [--dry-run]` | Rewrite article titles to sentence case. |
 | `python -m newsletter.normalize_url --days 14 [--dry-run] [--testing]` | Strip URL query params; `--testing` HEAD/GETs each cleaned URL. |
 | `python -m newsletter.build_newsletter --newsletter 057` | Render HTML for newsletter 057 and copy the must-read line to clipboard. |
+| `python -m newsletter.substack_draft --newsletter 057` | Create the private Substack draft edition directly. |
 
 Add `--debug` to any of the above for verbose logs. All runs append to
 `logs/newsletter_archive.log` (archive entry points) or stdout (the
@@ -219,3 +226,37 @@ byline. The fallback exists so the pipeline never invents people.
   cases + common words.
 - `normalize_url.py` — URL query-param stripper with preserve list.
 - `build_newsletter.py` — HTML builder + must-read line; writes the `N{NNN}.topics.json` sidecar the app's must-read picker reads.
+- `substack_draft.py` — pushes the same grouped article lists into a private Substack draft edition over the native HTTP API.
+
+## Substack draft edition
+
+The last step of the weekly run used to be manual: open
+`results/newsletter/N{NNN}.html`, copy it, paste into the Substack editor.
+`substack-draft` does that over Substack's native HTTP API instead — no browser,
+no DOM selectors.
+
+```powershell
+& .\.venv\Scripts\python.exe newsletter_pipeline.py substack-draft --newsletter 057 --must-read 1
+```
+
+It reads exactly what `build` reads (the Notion articles + newsletter DBs) and
+reuses the same grouping/sorting, so the draft and the HTML can't drift. Each
+topic becomes an `<h2>`-equivalent heading followed by a bullet list of linked
+article titles; `--must-read N` prepends the composed must-read line as the
+opening paragraph.
+
+- **It never publishes.** The draft is private and emails no one — publishing
+  stays a deliberate action in the Substack editor. There is no `--confirm`
+  flag here by design (`planning/substack/api_create.py` is the manual path that
+  can publish).
+- **Not part of `create` / `all`.** It writes to an external platform, so it
+  stays an explicit, separately re-runnable step.
+- `--delete-after` creates and immediately deletes the draft — the smoke test
+  for "is my cookie still good and does the body build cleanly?".
+- Needs the harvested API session (`planning/substack/api_session.json`, ~89-day
+  cookie). On expiry the step exits `2` with a single line telling you to re-run
+  `python -m planning.substack.extract_session`.
+
+Article titles are inserted as **literal text**, never parsed as markdown —
+titles scraped from arbitrary sites routinely contain `*`, `[` or backticks that
+markdown parsing would mangle.

@@ -42,6 +42,12 @@ api_pull.py          — manual CLI: dump a post archive to JSON
 api_create.py        — manual CLI: create a draft edition (publish only with --confirm)
 ```
 
+The weekly newsletter has its own consumer of this client:
+`newsletter/substack_draft.py` (`newsletter_pipeline.py substack-draft`) builds a
+private draft edition from the Notion articles DB via
+`SubstackAPI.create_draft_from_sections`. It never publishes — see
+[`newsletter/README.md`](../../newsletter/README.md).
+
 One-time / once-per-~89-days setup (the `substack.sid` cookie lives ~89 days):
 
 ```powershell
@@ -86,10 +92,16 @@ substack/
 ├── README.md                       — this file
 ├── substack_session.py             — Playwright context + storage_state lifecycle
 ├── bootstrap_session.py            — one-time headed login; writes storage_state.json
-├── notion_editorial.py             — read/write editorial rows (role→column map)
 ├── post_substack_note.py           — publish Note
+├── post_substack_video_note.py     — video-day branch for the weekly clip
 └── daily_pipeline.py               — orchestrator; CLI entry
 ```
+
+Editorial rows are read through the shared helper
+`reporting/notion/editorial.py` (`get_row_by_day` / `get_field` / `set_field`,
+resolved against the `notion_columns` role map below) — this package has no
+Notion module of its own. The native-API modules are listed in the section
+above.
 
 ## Prerequisites
 
