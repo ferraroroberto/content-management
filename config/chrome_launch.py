@@ -64,6 +64,10 @@ def stealth_launch_kwargs(user_data_dir: str, *, headless: bool = False) -> dict
       a Spanish-language account, the account setting wins and must be
       flipped to English manually once (Settings → Account preferences →
       Language).
+    * ``chromium_sandbox=True`` — enables Playwright's sandbox (the default
+      ``False`` implicitly injects ``--no-sandbox``, which pops Chrome's
+      "unsupported command-line flag" infobar — itself a bot tell of the
+      same class as the automation infobar above).
     """
     return {
         "user_data_dir": user_data_dir,
@@ -80,13 +84,9 @@ def stealth_launch_kwargs(user_data_dir: str, *, headless: bool = False) -> dict
         "ignore_default_args": [
             "--enable-automation",
             "--enable-blink-features=IdleDetection",
-            # Stops the yellow "You are using an unsupported command-line flag:
-            # --no-sandbox. Stability and security will suffer." infobar. The
-            # sandbox is still effectively disabled by Playwright's process
-            # model — this just hides Chrome's protest about that.
-            "--no-sandbox",
         ],
         "viewport": {"width": 1280, "height": 900},
+        "chromium_sandbox": True,
     }
 
 
@@ -119,6 +119,8 @@ def doc_capture_launch_kwargs(*, headless: bool = True) -> dict[str, Any]:
     (``channel="chrome"``) so the rendering matches what the user sees;
     ``--force-color-profile=srgb`` + ``--hide-scrollbars`` remove the two
     remaining sources of pixel drift between machines/runs.
+    ``chromium_sandbox=True`` enables Playwright's sandbox rather than
+    letting it silently inject ``--no-sandbox``.
     """
     return {
         "channel": "chrome",
@@ -131,6 +133,7 @@ def doc_capture_launch_kwargs(*, headless: bool = True) -> dict[str, Any]:
             "--no-first-run",
             "--lang=en-US",
         ],
+        "chromium_sandbox": True,
     }
 
 
