@@ -40,6 +40,7 @@ from typing import Optional
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from planning.videos.videos_session import (  # noqa: E402
     ClipPayload,
+    VideoRow,
     configure_logger,
     first_clip_relation_id,
     load_clip_payload,
@@ -53,6 +54,12 @@ from reporting.notion.editorial import (  # noqa: E402
     set_field,
 )
 from reporting.notion.notion_update import format_database_id  # noqa: E402
+from planning._dates import (  # noqa: E402
+    date_to_day_title,
+    next_monday,
+    parse_single_date,
+    parse_week_start,
+)
 
 logger = logging.getLogger("videos_schedule")
 
@@ -62,31 +69,6 @@ PLATFORMS_SCHEDULED = ("li", "ig", "tw", "th")  # SB is owned by the daily Subst
 # populated (i.e. the row has a video planned at all). The shared clip page
 # resolves identically regardless of which relation it was followed through.
 PLATFORMS_TAG_ALONG = frozenset({"th"})
-
-
-def next_monday(today: Optional[date] = None) -> date:
-    today = today or date.today()
-    days_ahead = (7 - today.weekday()) % 7
-    if days_ahead == 0:
-        days_ahead = 7
-    return today + timedelta(days=days_ahead)
-
-
-def parse_week_start(s: Optional[str]) -> date:
-    if not s:
-        return next_monday()
-    return datetime.strptime(s, "%Y-%m-%d").date()
-
-
-def parse_single_date(s: str) -> date:
-    s = s.strip()
-    if "-" in s:
-        return datetime.strptime(s, "%Y-%m-%d").date()
-    return datetime.strptime(s, "%Y%m%d").date()
-
-
-def date_to_day_title(d: date) -> str:
-    return d.strftime("%Y%m%d")
 
 
 class _RowState:
@@ -245,7 +227,6 @@ def _rows_for_platform(rows: list[_RowState], platform: str, force: bool) -> lis
     (link <P>(v) is empty OR --force). Already-failed (payload-failed)
     rows are excluded since they have nothing to schedule.
     """
-    from planning.videos.videos_linkedin import VideoRow  # local to avoid cycle
     eligible = []
     for row in rows:
         if row.driver_status.get(platform) == "FAIL":

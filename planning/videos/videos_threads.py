@@ -12,10 +12,7 @@ from __future__ import annotations
 import logging
 import re
 import sys
-from dataclasses import dataclass
-from datetime import date
 from pathlib import Path
-from typing import Optional
 
 from playwright.sync_api import TimeoutError as PWTimeoutError
 
@@ -42,22 +39,10 @@ from planning.threads.schedule_threads_posts import (  # noqa: E402
 )
 from planning.videos.videos_session import (  # noqa: E402
     VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS,
-    ClipPayload,
+    VideoRow,
 )
 
 logger = logging.getLogger("videos_threads")
-
-
-@dataclass
-class VideoRow:
-    page_id: str
-    day: date
-    payload: ClipPayload
-    existing_post_url: Optional[str]
-
-    @property
-    def day_title(self) -> str:
-        return self.day.strftime("%Y%m%d")
 
 
 def schedule_one_video(

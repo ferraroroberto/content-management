@@ -13,7 +13,9 @@ from dotenv import load_dotenv
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from config.loader import load_full_config
 from config.logger_config import setup_logger
+from reporting.notion._client import extract_property_value
 from reporting.process.supabase_uploader import get_db_connection, load_db_config
 
 # Set up logger - will use existing logger if available
@@ -43,19 +45,28 @@ class NotionSupabaseSync:
         self.last_sync_times = {}  # Track last sync time per database
         
     def _load_config(self, config_path: str = None) -> dict:  # type: ignore
-        """Load configuration from JSON file."""
+        """Load configuration from JSON file.
+
+        With no override, reads through ``config.loader`` (the project's
+        single-source loader) so the default path stays in exactly one place.
+        The ``--config`` override still reads its own path directly, since
+        that's not something ``config.loader`` supports.
+        """
         if config_path is None:
-            config_path = Path(__file__).parent.parent.parent / "config" / "config.json"
-        
+            logger.debug("📂 Loading configuration via config.loader (config/config.json)")
+            config = load_full_config()
+            logger.info("✅ Configuration loaded successfully")
+            return config
+
         logger.debug(f"📂 Loading configuration from {config_path}")
-        
+
         if not os.path.exists(config_path):
             logger.error(f"❌ Configuration file not found: {config_path}")
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
-        
+
         with open(config_path, 'r') as f:
             config = json.load(f)
-        
+
         logger.info("✅ Configuration loaded successfully")
         return config
     
@@ -132,95 +143,12 @@ class NotionSupabaseSync:
         
         return self._notion_api_call(f"databases/{database_id}/query", method="POST", data=data)
     
-    def _extract_property_value(self, prop: dict) -> Any:
-        """Extract the actual value from a Notion property."""
-        prop_type = prop.get("type")
-        
-        if prop_type == "title":
-            texts = prop.get("title", [])
-            return "".join([t.get("plain_text", "") for t in texts])
-        elif prop_type == "rich_text":
-            texts = prop.get("rich_text", [])
-            return "".join([t.get("plain_text", "") for t in texts])
-        elif prop_type == "number":
-            return prop.get("number")
-        elif prop_type == "select":
-            select = prop.get("select")
-            return select.get("name") if select else None
-        elif prop_type == "multi_select":
-            return [opt.get("name") for opt in prop.get("multi_select", [])]
-        elif prop_type == "date":
-            date_obj = prop.get("date")
-            if date_obj:
-                start_date = date_obj.get("start")
-                # Return None for empty dates instead of empty string
-                return start_date if start_date else None
-            return None
-        elif prop_type == "checkbox":
-            return prop.get("checkbox", False)
-        elif prop_type == "url":
-            url = prop.get("url")
-            # Return None for empty URLs
-            return url if url else None
-        elif prop_type == "email":
-            email = prop.get("email")
-            return email if email else None
-        elif prop_type == "phone_number":
-            phone = prop.get("phone_number")
-            return phone if phone else None
-        elif prop_type == "formula":
-            formula = prop.get("formula", {})
-            return self._extract_formula_value(formula)
-        elif prop_type == "relation":
-            return [rel.get("id") for rel in prop.get("relation", [])]
-        elif prop_type == "rollup":
-            rollup = prop.get("rollup", {})
-            return self._extract_rollup_value(rollup)
-        elif prop_type == "people":
-            return [person.get("id") for person in prop.get("people", [])]
-        elif prop_type == "files":
-            files = prop.get("files", [])
-            return [f.get("file", {}).get("url") or f.get("external", {}).get("url") for f in files]
-        elif prop_type == "created_time":
-            created = prop.get("created_time")
-            return created if created else None
-        elif prop_type == "created_by":
-            return prop.get("created_by", {}).get("id")
-        elif prop_type == "last_edited_time":
-            edited = prop.get("last_edited_time")
-            return edited if edited else None
-        elif prop_type == "last_edited_by":
-            return prop.get("last_edited_by", {}).get("id")
-        elif prop_type == "status":
-            status = prop.get("status")
-            return status.get("name") if status else None
-        else:
-            # For unknown types, store as JSONB
-            return prop
-    
-    def _extract_formula_value(self, formula: dict) -> Any:
-        """Extract value from formula property."""
-        formula_type = formula.get("type")
-        if formula_type == "string":
-            return formula.get("string")
-        elif formula_type == "number":
-            return formula.get("number")
-        elif formula_type == "boolean":
-            return formula.get("boolean")
-        elif formula_type == "date":
-            date_obj = formula.get("date")
-            return date_obj.get("start") if date_obj else None
-        return None
-    
-    def _extract_rollup_value(self, rollup: dict) -> Any:
-        """Extract value from rollup property."""
-        rollup_type = rollup.get("type")
-        if rollup_type == "number":
-            return rollup.get("number")
-        elif rollup_type == "array":
-            return [self._extract_property_value(item) for item in rollup.get("array", [])]
-        return None
-    
+    # Property-value conversion (title/rich_text/rollup/formula/etc.) lives in
+    # ``reporting.notion._client.extract_property_value`` — this was one of
+    # three drifted, independent copies (this one was the most complete, so
+    # it's the one that got promoted); imported as a module-level function
+    # above rather than redefined as a method here.
+
     def _normalize_column_name(self, name: str) -> str:
         """Normalize Notion property names to valid PostgreSQL column names."""
         # Replace spaces and special characters with underscores
@@ -249,7 +177,7 @@ class NotionSupabaseSync:
         
         for prop_name, prop_value in properties.items():
             col_name = self._normalize_column_name(prop_name)
-            value = self._extract_property_value(prop_value)
+            value = extract_property_value(prop_value)
             
             # Handle complex types that don't fit well in regular columns
             if isinstance(value, (list, dict)):

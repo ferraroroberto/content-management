@@ -21,6 +21,8 @@ from typing import Any, Iterable, Optional
 # Add the repo root to sys.path to allow importing the shared config loader.
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from config.loader import load_full_config as load_config  # noqa: E402
+# Leaf module (no dependency on this module) — safe to import without a cycle.
+from engagement.classify.phrases_io import pick_thanks_reply  # noqa: E402
 
 logger = logging.getLogger("engagement.db")
 
@@ -168,29 +170,13 @@ def set_commenter_classification(platform: str, account_url: str, classification
         sb.table("commenters").update(payload).eq("platform", platform).eq("account_url", account_url).execute()
 
 
-def _pick_thanks_reply(display_name: Optional[str]) -> Optional[str]:
-    """Inline canned-reply generator — mirrors engagement.classify.rules._pick_reply
-    but inlined here to avoid a circular import (rules.py already imports from client.py)."""
-    import json as _json
-    import random as _random
-    from pathlib import Path as _Path
-    first = (display_name or "there").strip().split()[0] if display_name else "there"
-    try:
-        phrases_path = _Path(__file__).resolve().parent.parent / "classify" / "phrases.json"
-        with open(phrases_path, "r", encoding="utf-8") as fp:
-            templates = _json.load(fp).get("reply_templates", {}).get("like_and_thanks", [])
-        return _random.choice(templates).format(first_name=first) if templates else f"Thanks {first}! 🙏"
-    except Exception:
-        return f"Thanks {first}! 🙏"
-
-
 def cascade_blacklist_pending(platform: str, account_url: str) -> int:
     """When a commenter is blacklisted: reclassify their pending comments as
     ai/like_and_thanks AND auto-approve them with a canned reply pre-filled.
     User explicitly trusts blacklist → no need to click 'approve' on each."""
     sb = supabase_client()
     commenter = fetch_commenter(platform, account_url)
-    reply = _pick_thanks_reply((commenter or {}).get("display_name"))
+    reply = pick_thanks_reply((commenter or {}).get("display_name"))
     res = (
         sb.table("comments")
         .update(

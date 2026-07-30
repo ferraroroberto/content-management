@@ -35,8 +35,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-PROJECT_CONFIG = REPO_ROOT / "config" / "config.json"
+from config.loader import load_full_config
+
 WORDS_CONFIG = Path(__file__).parent / "normalize_names_words.json"
 
 
@@ -58,8 +58,7 @@ class NotionNameNormalizer:
 
     @staticmethod
     def _load_config() -> Dict[str, Any]:
-        with PROJECT_CONFIG.open("r", encoding="utf-8") as f:
-            proj = json.load(f)
+        proj = load_full_config()
         with WORDS_CONFIG.open("r", encoding="utf-8") as f:
             words = json.load(f)
         archive = proj.get("newsletter_archive", {})

@@ -35,8 +35,9 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import requests
 
+from config.loader import load_full_config
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
-PROJECT_CONFIG = REPO_ROOT / "config" / "config.json"
 RESULTS_DIR = REPO_ROOT / "results" / "newsletter"
 
 TOPICS: List[str] = [
@@ -76,8 +77,7 @@ class NotionNewsletterBuilder:
 
     @staticmethod
     def _load_config() -> Dict[str, Any]:
-        with PROJECT_CONFIG.open("r", encoding="utf-8") as f:
-            proj = json.load(f)
+        proj = load_full_config()
         archive = proj.get("newsletter_archive", {})
         return {
             "notion_api_key": proj["notion"]["api_token"],

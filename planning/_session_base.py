@@ -26,7 +26,6 @@ single-source here — never re-inline it in a platform module.
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -36,6 +35,7 @@ from playwright.sync_api import BrowserContext, Page, Playwright, sync_playwrigh
 
 from config.chrome_launch import STEALTH_INIT_SCRIPT
 from config.chrome_profile_lock import launch_persistent_context_with_lock_wait
+from config.loader import load_block, load_full_config
 from config.logger_config import setup_logger
 
 # Repo root is two levels up from this file: planning/_session_base.py -> repo.
@@ -63,11 +63,10 @@ def load_notion_token() -> str:
 
     Single-source for every platform session — platform modules re-export this
     name so existing ``from planning.<P>.<P>_session import load_notion_token``
-    imports keep resolving unchanged.
+    imports keep resolving unchanged. Reads through ``config.loader`` (the
+    project's single-source loader) rather than re-opening config.json here.
     """
-    with open(CONFIG_PATH, "r", encoding="utf-8") as fp:
-        cfg = json.load(fp)
-    token = cfg.get("notion", {}).get("api_token")
+    token = load_full_config().get("notion", {}).get("api_token")
     if not token:
         raise RuntimeError("Missing 'notion.api_token' in config.json")
     return token
@@ -80,14 +79,9 @@ def load_config_block(name: str) -> dict:
     same open/parse/raise body differing only by the block name. Platform
     modules define a thin one-liner — ``return load_config_block("<name>")``
     — so the logic lives once here. Re-export the per-platform name so
-    call sites are untouched.
+    call sites are untouched. Thin wrapper around ``config.loader.load_block``.
     """
-    with open(CONFIG_PATH, "r", encoding="utf-8") as fp:
-        cfg = json.load(fp)
-    block = cfg.get(name)
-    if not block:
-        raise RuntimeError(f"Missing '{name}' block in config.json")
-    return block
+    return load_block(name)
 
 
 def _resolve_user_data_dir(rel_or_abs: str, *, example_subdir: str = "<platform>/chrome_user_data") -> Path:

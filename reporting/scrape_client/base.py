@@ -8,25 +8,18 @@ the single source of truth.
 
 from __future__ import annotations
 
-import json
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
+from config.loader import load_full_config
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-CONFIG_PATH = REPO_ROOT / "config" / "config.json"
 
 
 class ScrapeError(RuntimeError):
     """Raised when a required field cannot be extracted from the page."""
-
-
-def load_full_config() -> dict:
-    """Load the full config.json."""
-    with open(CONFIG_PATH, "r", encoding="utf-8") as fp:
-        return json.load(fp)
 
 
 def load_platform_block(platform: str) -> dict:

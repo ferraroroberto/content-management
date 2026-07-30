@@ -26,8 +26,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -50,13 +49,11 @@ from planning.twitter.twitter_session import (  # noqa: E402
     load_twitter_config,
 )
 from reporting.notion.editorial import (  # noqa: E402
-    get_field,
     init_notion_client,
-    query_rows_by_filter,
-    retrieve_page,
     set_field,
 )
 from reporting.notion.notion_update import format_database_id  # noqa: E402
+from planning._dates import parse_single_date, parse_week_start  # noqa: E402
 
 logger = logging.getLogger("twitter_schedule")
 
@@ -66,156 +63,23 @@ _MONTH_NAMES = [
 ]
 
 
-# ---------- Date helpers ----------
+# ---------- Row model / payload resolution ----------
 
-def next_monday(today: Optional[date] = None) -> date:
-    today = today or date.today()
-    days_ahead = (7 - today.weekday()) % 7
-    if days_ahead == 0:
-        days_ahead = 7
-    return today + timedelta(days=days_ahead)
+from planning._wip_rows import (  # noqa: E402
+    PostPayload,
+    ScheduleRow,
+    fetch_wip_rows as _fetch_wip_rows,
+    resolve_payload as _resolve_payload,
+)
 
-
-def parse_week_start(s: Optional[str]) -> date:
-    if not s:
-        return next_monday()
-    return datetime.strptime(s, "%Y-%m-%d").date()
-
-
-def parse_single_date(s: str) -> date:
-    s = s.strip()
-    if "-" in s:
-        return datetime.strptime(s, "%Y-%m-%d").date()
-    return datetime.strptime(s, "%Y%m%d").date()
-
-
-def date_to_day_title(d: date) -> str:
-    return d.strftime("%Y%m%d")
-
-
-# ---------- Row model ----------
-
-@dataclass
-class ScheduleRow:
-    page_id: str
-    day: date
-    illustration_tw_ids: list[str]
-    text_tw: str
-    existing_post_url: Optional[str]
-
-    @property
-    def day_title(self) -> str:
-        return date_to_day_title(self.day)
-
-
-@dataclass
-class PostPayload:
-    image_path: Path
-    caption: str
-
-
-# ---------- Notion query / payload resolution ----------
 
 def fetch_wip_tw_rows(notion, db_id: str, ed_cols: dict, days: Optional[list[date]]) -> list[ScheduleRow]:
-    """Fetch WIP-TW rows. If ``days`` is None, returns every WIP-TW row
-    (used by ``--all-wip`` mode); otherwise filters by title-equals per day."""
-    wip_col = ed_cols["wip_checkbox"]
-    title_col = ed_cols["title_day"]
-    illust_col = ed_cols["illustration_rel"]
-    text_col = ed_cols["caption_text"]
-    post_url_col = ed_cols["post_url"]
-
-    rows: list[ScheduleRow] = []
-
-    def _row_day(r: dict) -> Optional[date]:
-        title_prop = r.get("properties", {}).get(title_col, {}) or {}
-        segs = title_prop.get("title", []) or []
-        text = "".join(seg.get("plain_text", "") for seg in segs).strip()
-        if not text:
-            return None
-        try:
-            return datetime.strptime(text, "%Y%m%d").date()
-        except ValueError:
-            return None
-
-    def _ingest(results, default_day: Optional[date]):
-        for r in results:
-            props = r.get("properties", {})
-            row_day = default_day or _row_day(r)
-            if row_day is None:
-                logger.warning("⚠️  Skipping row %s: unparseable day title.", r.get("id"))
-                continue
-            illust_rels = props.get(illust_col, {}).get("relation", []) or []
-            text_rt = props.get(text_col, {}).get("rich_text", []) or []
-            text_val = "".join(seg.get("plain_text", "") for seg in text_rt).strip()
-            url_obj = props.get(post_url_col, {})
-            existing_url = url_obj.get("url") if url_obj.get("type") == "url" else None
-            rows.append(
-                ScheduleRow(
-                    page_id=r["id"],
-                    day=row_day,
-                    illustration_tw_ids=[rel["id"] for rel in illust_rels],
-                    text_tw=text_val,
-                    existing_post_url=existing_url,
-                )
-            )
-
-    if days is None:
-        results = query_rows_by_filter(
-            notion,
-            db_id,
-            filter_obj={"property": wip_col, "checkbox": {"equals": True}},
-        )
-        _ingest(results, default_day=None)
-    else:
-        for d in days:
-            title = date_to_day_title(d)
-            results = query_rows_by_filter(
-                notion,
-                db_id,
-                filter_obj={
-                    "and": [
-                        {"property": title_col, "title": {"equals": title}},
-                        {"property": wip_col, "checkbox": {"equals": True}},
-                    ]
-                },
-            )
-            _ingest(results, default_day=d)
-
-    rows.sort(key=lambda r: r.day)
-    return rows
-
-
-def _resolve_image_path(folder: str, image_filename: str) -> Path:
-    """Resolve <folder>/<name>.png. Accepts a name with or without extension."""
-    if not image_filename:
-        raise FileNotFoundError("Illustration row has no filename.")
-    first = str(image_filename).split(",")[0].strip()
-    if first and not first.lower().endswith(".png"):
-        first = f"{first}.png"
-    candidate = Path(folder) / first
-    if not candidate.exists():
-        raise FileNotFoundError(f"Illustration not found: {candidate}")
-    return candidate
-
-
-def _illustration_filename(notion, illustration_page_id: str, illust_cols: dict) -> str:
-    page = retrieve_page(notion, illustration_page_id)
-    name = get_field(page, "image_filename", illust_cols) or ""
-    return str(name).strip()
+    return _fetch_wip_rows(notion, db_id, ed_cols, days, logger=logger)
 
 
 def resolve_payload(notion, cfg: dict, row: ScheduleRow) -> PostPayload:
     """Build the (image path, caption) for the day's 15:00 X post."""
-    illust_cols = cfg["illustration_columns"]
-    folder = cfg["illustrations_folder"]
-    if not row.illustration_tw_ids:
-        raise RuntimeError(f"{row.day_title}: illustration TW is empty.")
-    fname = _illustration_filename(notion, row.illustration_tw_ids[0], illust_cols)
-    return PostPayload(
-        image_path=_resolve_image_path(folder, fname),
-        caption=row.text_tw,
-    )
+    return _resolve_payload(notion, cfg, row, platform_label="TW")
 
 
 # ---------- X composer helpers ----------

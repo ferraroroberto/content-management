@@ -11,10 +11,15 @@ from dotenv import load_dotenv
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.logger_config import setup_logger
 from config.loader import load_full_config as load_config
-from reporting.process.supabase_uploader import get_db_connection
+from reporting.process.supabase_uploader import execute_sql, get_db_connection, run_sql_file
 
-# Set up logger
-logger = None
+SQL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "setup_notion_relations_system.sql")
+
+# Set up logger. Module-scope default is a real (unconfigured) Logger — never
+# None — so `logger.xxx(...)` calls elsewhere in this module are plain Logger
+# calls with no Optional to work around. `configure_logger()` replaces it
+# with the fully-configured (handlers + formatter) instance.
+logger = logging.getLogger("setup_notion_relations_system")
 
 def configure_logger(debug_mode=False):
     """Set up logger with appropriate level based on debug mode."""
@@ -22,32 +27,6 @@ def configure_logger(debug_mode=False):
     log_level = logging.DEBUG if debug_mode else logging.INFO
     logger = setup_logger("setup_notion_relations_system", file_logging=False, level=log_level)
     return logger
-
-def read_sql_from_file():
-    """Read the SQL content from the existing SQL file."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(script_dir, "setup_notion_relations_system.sql")
-    
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            sql_content = f.read()
-        return sql_content
-    except Exception as e:
-        logger.error(f"❌ Error reading SQL file: {e}")
-        return None
-
-def execute_sql(connection, sql_content):
-    """Execute the SQL on the Supabase database."""
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(sql_content)
-        connection.commit()
-        logger.info("✅ SQL executed successfully")
-        return True
-    except Exception as e:
-        logger.error(f"❌ Error executing SQL: {e}")
-        connection.rollback()
-        return False
 
 def fetch_debug_log_entries(connection, limit=100):
     """Fetch recent debug log entries from the database."""
@@ -84,33 +63,25 @@ def main(args=None):
     # Load configuration
     config = load_config()
 
-    # Read SQL from file
-    logger.info("📝 Reading SQL from file")
-    sql_content = read_sql_from_file()
-    
-    if not sql_content:
-        logger.error("❌ Failed to read SQL file")
-        return
-    
     # Connect to database
     connection = get_db_connection()
     if not connection:
         logger.error("❌ Failed to connect to database")
         return
-    
-    # Execute SQL to create functions, tables, etc.
+
+    # Read + execute the setup SQL (creates functions, tables, etc.)
     logger.info("🔄 Executing setup SQL for Notion relations system")
-    setup_success = execute_sql(connection, sql_content)
-    
+    setup_success = run_sql_file(connection, SQL_PATH, logger=logger)
+
     if not setup_success:
         connection.close()
         logger.error("❌ Setup SQL execution failed")
         return
-    
+
     # Run the final initialization query to activate the script
     init_query = "SELECT setup_notion_relations_system();"
     logger.info("⚙️  Running initialization query to activate the system")
-    init_success = execute_sql(connection, init_query)
+    init_success = execute_sql(connection, init_query, logger=logger)
     
     # Fetch recent debug log entries if initialization succeeded
     if init_success:

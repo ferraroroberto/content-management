@@ -14,8 +14,11 @@ from config.logger_config import setup_logger
 from config.loader import load_full_config as load_config
 from reporting.process.supabase_uploader import upload_all_dataframes
 
-# Set up logger
-logger = None
+# Set up logger. Module-scope default is a real (unconfigured) Logger — never
+# None — so `logger.xxx(...)` calls elsewhere in this module are plain Logger
+# calls with no Optional to work around. `configure_logger()` replaces it
+# with the fully-configured (handlers + formatter) instance.
+logger = logging.getLogger("data_processor")
 
 def configure_logger(debug_mode=False):
     """Set up logger with appropriate level based on debug mode."""

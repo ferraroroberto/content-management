@@ -20,8 +20,9 @@ from typing import Dict, List, Any, Optional, Tuple, Set
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from config.loader import load_full_config
 from config.logger_config import setup_logger
-from reporting.process.supabase_uploader import get_db_connection, load_db_config
+from reporting.process.supabase_uploader import get_db_connection, load_db_config, run_sql_file
 
 # Set up logger - will use existing logger if available
 logger = logging.getLogger("notion_relations_python_setup")
@@ -38,19 +39,28 @@ class NotionRelationsPythonSetup:
         self.connection = None
         
     def _load_config(self, config_path: str = None) -> dict:
-        """Load configuration from JSON file."""
+        """Load configuration from JSON file.
+
+        With no override, reads through ``config.loader`` (the project's
+        single-source loader) so the default path stays in exactly one place.
+        The ``--config`` override still reads its own path directly, since
+        that's not something ``config.loader`` supports.
+        """
         if config_path is None:
-            config_path = Path(__file__).parent.parent.parent / "config" / "config.json"
-        
+            logger.debug("📂 Loading configuration via config.loader (config/config.json)")
+            config = load_full_config()
+            logger.info("✅ Configuration loaded successfully")
+            return config
+
         logger.debug(f"📂 Loading configuration from {config_path}")
-        
+
         if not os.path.exists(config_path):
             logger.error(f"❌ Configuration file not found: {config_path}")
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
-        
+
         with open(config_path, 'r') as f:
             config = json.load(f)
-        
+
         logger.info("✅ Configuration loaded successfully")
         return config
     
@@ -71,54 +81,6 @@ class NotionRelationsPythonSetup:
             logger.error(f"❌ Error connecting to database: {e}")
             return None
     
-    def _read_sql_file(self, file_path: str) -> str:
-        """Read SQL file content."""
-        try:
-            sql_file = Path(__file__).parent / file_path
-            if not sql_file.exists():
-                logger.error(f"❌ SQL file not found: {sql_file}")
-                return None
-            
-            with open(sql_file, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            logger.debug(f"✅ Read SQL file: {file_path}")
-            return content
-            
-        except Exception as e:
-            logger.error(f"❌ Error reading SQL file {file_path}: {e}")
-            return None
-    
-    def _execute_sql_script(self, connection, sql_content: str, script_name: str) -> bool:
-        """Execute SQL script content."""
-        if not sql_content:
-            logger.error(f"❌ No SQL content to execute for {script_name}")
-            return False
-        
-        try:
-            with connection.cursor() as cursor:
-                # Split SQL by semicolons and execute each statement
-                statements = [stmt.strip() for stmt in sql_content.split(';') if stmt.strip()]
-                
-                for i, statement in enumerate(statements):
-                    if statement and not statement.startswith('--'):
-                        try:
-                            cursor.execute(statement)
-                            logger.debug(f"✅ Executed statement {i+1}/{len(statements)} in {script_name}")
-                        except Exception as e:
-                            # Skip statements that might fail (like DROP IF EXISTS)
-                            if "does not exist" not in str(e).lower():
-                                logger.warning(f"⚠️ Statement {i+1} in {script_name} failed: {e}")
-                
-                connection.commit()
-                logger.info(f"✅ Successfully executed SQL script: {script_name}")
-                return True
-                
-        except Exception as e:
-            logger.error(f"❌ Error executing SQL script {script_name}: {e}")
-            connection.rollback()
-            return False
-    
     def setup_core_system(self) -> bool:
         """Set up the core simplified relations system."""
         logger.info("🚀 Setting up core simplified Notion relations system...")
@@ -130,13 +92,10 @@ class NotionRelationsPythonSetup:
         try:
             # Step 1: Load and execute core functions
             logger.info("📦 Step 1: Loading core functions...")
-            core_sql = self._read_sql_file("auto_relations_detector.sql")
-            if not core_sql:
+            core_sql_path = Path(__file__).parent / "auto_relations_detector.sql"
+            if not run_sql_file(self.connection, core_sql_path, logger=logger):
                 return False
-            
-            if not self._execute_sql_script(self.connection, core_sql, "auto_relations_detector.sql"):
-                return False
-            
+
             logger.info("✅ Core functions loaded successfully")
             return True
             

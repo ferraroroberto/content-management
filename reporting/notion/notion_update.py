@@ -12,12 +12,20 @@ from dotenv import load_dotenv
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.logger_config import setup_logger
 from reporting.process.supabase_uploader import get_db_connection
-# init_notion_client / format_database_id live in the shared _client module;
-# re-exported here so existing importers (e.g. editorial.py) keep working.
-from reporting.notion._client import init_notion_client, format_database_id
+# init_notion_client / format_database_id / extract_property_value live in
+# the shared _client module; re-exported here so existing importers (e.g.
+# editorial.py) keep working.
+from reporting.notion._client import (
+    extract_property_value,
+    format_database_id,
+    init_notion_client,
+)
 
-# Set up logger
-logger = None
+# Set up logger. Module-scope default is a real (unconfigured) Logger — never
+# None — so `logger.xxx(...)` calls elsewhere in this module are plain Logger
+# calls with no Optional to work around. `configure_logger()` replaces it
+# with the fully-configured (handlers + formatter) instance.
+logger = logging.getLogger("notion_update")
 
 def configure_logger(debug_mode=False):
     """Set up logger with appropriate level based on debug mode."""
@@ -25,58 +33,6 @@ def configure_logger(debug_mode=False):
     log_level = logging.DEBUG if debug_mode else logging.INFO
     logger = setup_logger("notion_update", file_logging=False, level=log_level)
     return logger
-
-def extract_property_value(property_item):
-    """Extract the value from a property item based on its type."""
-    prop_type = property_item.get('type', 'unknown')
-    
-    if prop_type == 'title':
-        title_array = property_item.get('title', [])
-        if title_array:
-            return title_array[0].get('plain_text', '')
-        return ''
-    
-    elif prop_type == 'rich_text':
-        text_array = property_item.get('rich_text', [])
-        if text_array:
-            return text_array[0].get('plain_text', '')
-        return ''
-    
-    elif prop_type == 'number':
-        return property_item.get('number', None)
-    
-    elif prop_type == 'select':
-        select_obj = property_item.get('select', {})
-        return select_obj.get('name', '') if select_obj else ''
-    
-    elif prop_type == 'multi_select':
-        multi_select = property_item.get('multi_select', [])
-        return [item.get('name', '') for item in multi_select]
-    
-    elif prop_type == 'date':
-        date_obj = property_item.get('date', {})
-        if date_obj:
-            start = date_obj.get('start', '')
-            end = date_obj.get('end', '')
-            return {'start': start, 'end': end} if end else start
-        return None
-    
-    elif prop_type == 'checkbox':
-        return property_item.get('checkbox', False)
-    
-    elif prop_type == 'url':
-        return property_item.get('url', '')
-    
-    elif prop_type == 'relation':
-        relation_array = property_item.get('relation', [])
-        return [item.get('id', '') for item in relation_array]
-    
-    elif prop_type == 'formula':
-        formula_result = property_item.get('formula', {})
-        result_type = formula_result.get('type', '')
-        return formula_result.get(result_type, None)
-    
-    return None
 
 def parse_date(date_str):
     """Parse date string in either YYYY-MM-DD or YYYYMMDD format."""

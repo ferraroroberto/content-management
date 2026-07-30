@@ -72,36 +72,14 @@ from reporting.notion.notion_update import (  # noqa: E402
     format_database_id,
     prepare_notion_update,
 )
+from planning._dates import (  # noqa: E402
+    date_to_day_title,
+    next_monday,
+    parse_single_date,
+    parse_week_start,
+)
 
 logger = logging.getLogger("instagram_clone")
-
-
-# ---------- Date helpers (copied from linkedin to avoid cross-package import) ----------
-
-def next_monday(today: Optional[date] = None) -> date:
-    """Return the next Monday strictly after `today` (or 7 days from Mon itself)."""
-    today = today or date.today()
-    days_ahead = (7 - today.weekday()) % 7
-    if days_ahead == 0:
-        days_ahead = 7
-    return today + timedelta(days=days_ahead)
-
-
-def parse_week_start(s: Optional[str]) -> date:
-    if not s:
-        return next_monday()
-    return datetime.strptime(s, "%Y-%m-%d").date()
-
-
-def parse_single_date(s: str) -> date:
-    s = s.strip()
-    if "-" in s:
-        return datetime.strptime(s, "%Y-%m-%d").date()
-    return datetime.strptime(s, "%Y%m%d").date()
-
-
-def date_to_day_title(d: date) -> str:
-    return d.strftime("%Y%m%d")
 
 
 # ---------- Row model ----------

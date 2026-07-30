@@ -79,6 +79,43 @@ def get_db_connection(db_config=None, environment="cloud"):
         logger.error(f"❌ Error connecting to database: {e}")
         return None
 
+def execute_sql(connection, sql_content, logger=logger):
+    """Execute a SQL string against ``connection``; commit on success, rollback on error.
+
+    Single-source for the "execute SQL, commit / rollback+log" body that was
+    byte-identical (or a divergent restatement — one copy naively split on
+    ``;`` instead of running the text as one statement) across five modules.
+    Pass the caller's own module logger so log lines stay attributed to the
+    calling pipeline step; defaults to this module's logger otherwise.
+    """
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(sql_content)
+        connection.commit()
+        logger.info("✅ SQL executed successfully")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Error executing SQL: {e}")
+        connection.rollback()
+        return False
+
+
+def run_sql_file(connection, path, logger=logger):
+    """Read the SQL file at ``path`` and execute it against ``connection``.
+
+    Single-source for "read a .sql file next to the caller, then execute it"
+    — the ``read_sql_from_file()`` + :func:`execute_sql` pair that five
+    modules each copy-pasted (or divergently restated) their own version of.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            sql_content = f.read()
+    except Exception as e:
+        logger.error(f"❌ Error reading SQL file {path}: {e}")
+        return False
+
+    return execute_sql(connection, sql_content, logger=logger)
+
 def map_pandas_to_postgres_type(dtype):
     """Map pandas data types to PostgreSQL data types for table creation."""
     if pd.api.types.is_integer_dtype(dtype):
