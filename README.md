@@ -521,8 +521,8 @@ Override default configuration files:
 ### Debug Commands
 
 ```powershell
-# Test database connection
-& .\.venv\Scripts\python.exe -m reporting.process.supabase_test_connect
+# Test database connection (also verifies RLS/policy posture)
+& .\.venv\Scripts\python.exe -m reporting.process.supabase_policy_script --check
 
 # Analyze Notion database structure
 & .\.venv\Scripts\python.exe -m reporting.notion.notion_database_structure --debug
