@@ -14,13 +14,13 @@ from __future__ import annotations
 
 import json
 import logging
-import random
 import re
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
+from engagement.classify.phrases_io import pick_reply_from_templates
 from engagement.db.client import (
     fetch_commenters_by_urls,
     load_engagement_config,
@@ -38,19 +38,13 @@ def load_phrases() -> dict:
         return json.load(fp)
 
 
-def _first_name(display_name: Optional[str]) -> str:
-    if not display_name:
-        return "there"
-    return display_name.strip().split()[0]
-
-
 def _pick_reply(action: str, display_name: Optional[str], phrases: dict) -> Optional[str]:
+    """Thin wrapper — the actual template pick lives in the leaf module
+    ``engagement.classify.phrases_io`` so it has one implementation shared
+    with ``engagement.db.client`` instead of two independently drifting."""
     if action != "like_and_thanks":
         return None
-    templates = phrases.get("reply_templates", {}).get("like_and_thanks", [])
-    if not templates:
-        return f"Thanks {_first_name(display_name)}! 🙏"
-    return random.choice(templates).format(first_name=_first_name(display_name))
+    return pick_reply_from_templates(display_name, phrases)
 
 
 def _generic_praise_hits(text: str, phrases: list[str]) -> int:

@@ -251,54 +251,41 @@ def clear_log(name: str) -> None:
 # ---------- rendering ----------
 
 def render_status_badge(name: str) -> None:
-    if is_running(name):
-        st.info(f"⏳ running  ·  started {_get_meta(name).get('started_at', '')}")
-        return
-    rc = exit_code(name)
-    if rc is None:
-        st.caption("idle  ·  no run yet this session")
-    elif rc == 0:
-        st.success("✅ last run finished cleanly")
-    else:
-        st.error(f"❌ last run failed (exit {rc})")
+    """Single-pipeline status badge — a strict special case of
+    :func:`render_combined_status_badge` for a group of exactly one."""
+    render_combined_status_badge([name])
 
 
 def render_log_panel(name: str, *, height: int = 380, autorefresh_secs: float = 1.0) -> None:
-    """Render the rolling log tail. While the subprocess is alive, sleep + rerun
-    once so the user sees a live stream without clicking refresh.
-
-    Uses a scrollable container + st.code (display element, not a widget) so
-    the body actually updates on every rerun. A keyed st.text_area caches its
-    first-render value in session_state and ignores subsequent `value=` args,
-    which left the panel stuck on "(no output yet)" while the deque filled up.
-    """
-    lines = list(_get_lines(name))
-    body = "\n".join(lines) if lines else "(no output yet)"
-    with st.container(height=height, border=True, autoscroll=True):
-        st.code(body, language=None, wrap_lines=False)
-    with st.container(horizontal=True, gap="small"):
-        st.button("🛑 stop", key=f"_proc_{name}_stop", on_click=stop_pipeline, args=(name,), disabled=not is_running(name))
-        st.button("🧹 clear", key=f"_proc_{name}_clear", on_click=clear_log, args=(name,), disabled=is_running(name))
-    if is_running(name):
-        time.sleep(autorefresh_secs)
-        st.rerun()
+    """Single-pipeline log panel — a strict special case of
+    :func:`render_combined_log_panel` for a group of exactly one."""
+    render_combined_log_panel([name], height=height, autorefresh_secs=autorefresh_secs)
 
 
 def render_combined_status_badge(names: list[str]) -> None:
     """One badge for a group of pipelines that share a UI section. Shows which
     pipeline is currently running (if any) and the worst exit code from the
-    last completed runs (a single nonzero exit wins)."""
+    last completed runs (a single nonzero exit wins).
+
+    For a group of exactly one, this reproduces the plain single-pipeline
+    wording verbatim (no name prefix, exit code shown instead of a name list)
+    — the shape :func:`render_status_badge` delegates to.
+    """
     running = [n for n in names if is_running(n)]
     if running:
         meta = _get_meta(running[0])
-        st.info(f"⏳ {running[0]} running  ·  started {meta.get('started_at', '')}")
+        prefix = f"{running[0]} " if len(names) > 1 else ""
+        st.info(f"⏳ {prefix}running  ·  started {meta.get('started_at', '')}")
         return
     codes = [exit_code(n) for n in names]
     if all(c is None for c in codes):
         st.caption("idle  ·  no run yet this session")
     elif any(c is not None and c != 0 for c in codes):
-        failed = [n for n, c in zip(names, codes) if c not in (None, 0)]
-        st.error(f"❌ last run failed: {', '.join(failed)}")
+        if len(names) == 1:
+            st.error(f"❌ last run failed (exit {codes[0]})")
+        else:
+            failed = [n for n, c in zip(names, codes) if c not in (None, 0)]
+            st.error(f"❌ last run failed: {', '.join(failed)}")
     else:
         st.success("✅ last run finished cleanly")
 

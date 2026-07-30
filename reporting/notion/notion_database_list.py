@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from config.loader import load_full_config
 from config.logger_config import setup_logger
 
 # Set up logger - will use existing logger if available
@@ -32,19 +33,28 @@ class NotionDatabaseLister:
         }
         
     def _load_config(self, config_path: str = None) -> dict:
-        """Load configuration from JSON file."""
+        """Load configuration from JSON file.
+
+        With no override, reads through ``config.loader`` (the project's
+        single-source loader) so the default path stays in exactly one place.
+        The ``--config`` override still reads its own path directly, since
+        that's not something ``config.loader`` supports.
+        """
         if config_path is None:
-            config_path = Path(__file__).parent.parent.parent / "config" / "config.json"
-        
+            logger.debug("📂 Loading configuration via config.loader (config/config.json)")
+            config = load_full_config()
+            logger.info("✅ Configuration loaded successfully")
+            return config
+
         logger.debug(f"📂 Loading configuration from {config_path}")
-        
+
         if not os.path.exists(config_path):
             logger.error(f"❌ Configuration file not found: {config_path}")
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
-        
+
         with open(config_path, 'r') as f:
             config = json.load(f)
-        
+
         logger.info("✅ Configuration loaded successfully")
         return config
     

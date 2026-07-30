@@ -106,17 +106,25 @@ def _open_note_composer(page) -> None:
     page.get_by_role("menuitem", name=re.compile(r"^note$", re.I)).first.click()
 
 
-def _fill_note_dialog(page, body_text: str, image_path: Path) -> None:
-    """Fill the body and attach the image inside the composer.
+# Ancestor of the editor that contains both the Cancel and Post buttons — used
+# to scope file-input / upload-button searches so they don't accidentally hit
+# the page's avatar / cover-photo / other file inputs. Shared between the
+# image-Note and video-Note publishers (identical composer DOM shape).
+COMPOSER_SCOPE_XPATH = (
+    'xpath=ancestor::*[.//button[normalize-space()="Post"] and .//button[normalize-space()="Cancel"]][1]'
+)
+
+
+def _locate_note_editor(page, body_text: str):
+    """Find the Note composer's contenteditable editor, wait for it, click, and fill.
 
     Substack's Note composer is not a true ``role="dialog"`` and the editor is
     a ProseMirror ``contenteditable`` div, not a ``role="textbox"`` — so we
-    target by ``contenteditable`` and fall back through several strategies for
-    the image upload (hidden file input first, then file-chooser via the image
-    button, then OS picker via expect_file_chooser).
+    target by ``contenteditable``, preferring the one whose placeholder
+    mentions "mind" (Substack's "What's on your mind?" prompt) and falling
+    back to the last visible one if no placeholder match. Shared between the
+    image-Note and video-Note publishers — same DOM shape either way.
     """
-    # The editor — prefer the contenteditable whose placeholder mentions "mind",
-    # falling back to the last visible one if no placeholder match.
     editors = page.locator('[contenteditable="true"]')
     editor = None
     for i in range(editors.count()):
@@ -138,6 +146,18 @@ def _fill_note_dialog(page, body_text: str, image_path: Path) -> None:
     editor.wait_for(state="visible", timeout=20000)
     editor.click()
     editor.fill(body_text)
+    return editor
+
+
+def _fill_note_dialog(page, body_text: str, image_path: Path) -> None:
+    """Fill the body and attach the image inside the composer.
+
+    See :func:`_locate_note_editor` for how the composer's editor is found;
+    the image upload (hidden file input first, then file-chooser via the
+    image button, then OS picker via expect_file_chooser) is attempted only
+    inside the composer-scoped container.
+    """
+    editor = _locate_note_editor(page, body_text)
     try:
         actual = editor.inner_text(timeout=2000)
     except Exception:
@@ -146,13 +166,7 @@ def _fill_note_dialog(page, body_text: str, image_path: Path) -> None:
     if actual.strip() != body_text.strip():
         logger.warning("⚠️ Editor content does not match body — text may have landed in the wrong element.")
 
-    # Scope a "composer container" = the nearest ancestor of the editor that
-    # contains both the Cancel and Post buttons. We hunt for the image upload
-    # input only inside this container so we don't accidentally hit the page's
-    # avatar / cover-photo / other file inputs.
-    composer = editor.locator(
-        'xpath=ancestor::*[.//button[normalize-space()="Post"] and .//button[normalize-space()="Cancel"]][1]'
-    )
+    composer = editor.locator(COMPOSER_SCOPE_XPATH)
     if composer.count() == 0:
         logger.warning("⚠️ Could not scope composer container; falling back to page-wide search.")
         composer = page.locator("body")

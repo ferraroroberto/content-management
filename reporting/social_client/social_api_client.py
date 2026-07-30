@@ -15,8 +15,11 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.logger_config import setup_logger
 from config.loader import load_full_config as load_config
 
-# Set up logger
-logger = None
+# Set up logger. Module-scope default is a real (unconfigured) Logger — never
+# None — so `logger.xxx(...)` calls elsewhere in this module are plain Logger
+# calls with no Optional to work around. `configure_logger()` replaces it
+# with the fully-configured (handlers + formatter) instance.
+logger = logging.getLogger("social_api_client")
 
 def interruptible_sleep(seconds: int) -> bool:
     """Sleep up to `seconds`, returning True immediately if user presses 'x'."""

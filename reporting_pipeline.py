@@ -25,6 +25,7 @@ sys.path.append(str(Path(__file__).parent))
 from config.console import force_utf8_stdio  # noqa: E402
 force_utf8_stdio()
 from config.logger_config import setup_logger  # noqa: E402
+from config.loader import load_full_config  # noqa: E402
 from reporting.social_client.social_api_client import (
     main as run_social_api_client,
     configure_logger as configure_social_logger,
@@ -36,8 +37,12 @@ from reporting.process.posts_consolidator import main as run_posts_consolidator,
 from reporting.notion.notion_update import main as run_notion_update, configure_logger as configure_notion_logger
 from planning.substack.daily_pipeline import main as run_substack_daily_pipeline
 
-# Set up logger
-logger: logging.Logger | None = None
+# Set up logger. Module-scope default is a real (unconfigured) Logger —
+# never None — so every `logger.info(...)` call below is a plain Logger
+# method call with no Optional to silence. `configure_logger()` replaces it
+# with the fully-configured (handlers + formatter) instance before the
+# pipeline actually runs.
+logger: logging.Logger = logging.getLogger("init")
 
 def configure_logger(debug_mode=False):
     """Set up logger with appropriate level based on debug mode."""
@@ -77,13 +82,18 @@ class PipelineFailures:
 
 
 def _load_config() -> dict | None:
-    """Load ``config/config.json`` for coverage + Slack channel resolution."""
-    config_path = Path(__file__).parent / "config" / "config.json"
+    """Load ``config/config.json`` for coverage + Slack channel resolution.
+
+    Wraps ``config.loader.load_full_config`` (the project's single-source
+    loader) but, unlike it, degrades to ``None`` on a missing/corrupt
+    config.json rather than raising — coverage checks and the Slack channel
+    resolution are best-effort here; the failure alert must still fire even
+    if config couldn't be read.
+    """
     try:
-        with open(config_path, "r", encoding="utf-8") as file:
-            return json.load(file)
+        return load_full_config()
     except (FileNotFoundError, json.JSONDecodeError) as e:
-        logger.error(f"❌ Could not load config for failure detection: {e}")  # type: ignore
+        logger.error(f"❌ Could not load config for failure detection: {e}")
         return None
 
 
@@ -99,9 +109,9 @@ def check_endpoint_coverage(config: dict, processing_date: str, failures: "Pipel
         exists, _ = check_file_exists_for_date(platform_key, config, processing_date)
         if not exists:
             failures.missing_endpoints.append(platform_key)
-            logger.error(f"❌ Missing expected data file for {platform_key} on {processing_date}")  # type: ignore
+            logger.error(f"❌ Missing expected data file for {platform_key} on {processing_date}")
     if not failures.missing_endpoints:
-        logger.info(f"✅ All {len(config_endpoints)} expected endpoint files present for {processing_date}")  # type: ignore
+        logger.info(f"✅ All {len(config_endpoints)} expected endpoint files present for {processing_date}")
 
 
 # Platforms whose consolidated post metrics we expect on every daily run.
@@ -135,7 +145,7 @@ def _substack_had_editorial_content(day_yyyymmdd: str) -> Optional[bool]:
         body_text = get_field(row, "text_body", cfg["notion_columns"]) or ""
         return bool(str(body_text).strip())
     except Exception as e:
-        logger.warning(f"⚠️ Could not verify Substack editorial content for {day_yyyymmdd}: {e}")  # type: ignore
+        logger.warning(f"⚠️ Could not verify Substack editorial content for {day_yyyymmdd}: {e}")
         return None
 
 
@@ -157,7 +167,7 @@ def check_posts_coverage(processing_date: str, failures: "PipelineFailures") -> 
         from reporting.process.supabase_uploader import get_db_connection
         connection = get_db_connection()
         if not connection:
-            logger.error("❌ Posts-coverage check: no DB connection — skipped")  # type: ignore
+            logger.error("❌ Posts-coverage check: no DB connection — skipped")
             return
         try:
             with connection.cursor() as cursor:
@@ -169,7 +179,7 @@ def check_posts_coverage(processing_date: str, failures: "PipelineFailures") -> 
 
         if not row:
             failures.missing_post_metrics.append("(no consolidated posts row)")
-            logger.error(f"❌ Posts-coverage: no consolidated posts row for {processing_date}")  # type: ignore
+            logger.error(f"❌ Posts-coverage: no consolidated posts row for {processing_date}")
             return
 
         data = dict(zip(columns, row))
@@ -181,14 +191,14 @@ def check_posts_coverage(processing_date: str, failures: "PipelineFailures") -> 
                 covered_day = (datetime.strptime(processing_date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y%m%d")
                 had_content = _substack_had_editorial_content(covered_day)
                 if had_content is False:
-                    logger.warning(f"⚠️ Posts-coverage: substack had no editorial content queued for {covered_day} — no post metrics for {processing_date} is expected, not a failure")  # type: ignore
+                    logger.warning(f"⚠️ Posts-coverage: substack had no editorial content queued for {covered_day} — no post metrics for {processing_date} is expected, not a failure")
                     continue
             failures.missing_post_metrics.append(platform)
-            logger.error(f"❌ Posts-coverage: no post metrics for {platform} on {processing_date}")  # type: ignore
+            logger.error(f"❌ Posts-coverage: no post metrics for {platform} on {processing_date}")
         if not failures.missing_post_metrics:
-            logger.info(f"✅ Posts-coverage: all {len(COVERAGE_PLATFORMS)} platforms have post metrics for {processing_date}")  # type: ignore
+            logger.info(f"✅ Posts-coverage: all {len(COVERAGE_PLATFORMS)} platforms have post metrics for {processing_date}")
     except Exception as e:
-        logger.error(f"❌ Posts-coverage check failed: {e}")  # type: ignore
+        logger.error(f"❌ Posts-coverage check failed: {e}")
 
 
 def check_policy_drift_coverage(failures: "PipelineFailures") -> None:
@@ -207,7 +217,7 @@ def check_policy_drift_coverage(failures: "PipelineFailures") -> None:
         from reporting.process.supabase_policy_script import check_policy_drift, summarize_drift
         connection = get_db_connection()
         if not connection:
-            logger.error("❌ Policy-drift check: no DB connection — skipped")  # type: ignore
+            logger.error("❌ Policy-drift check: no DB connection — skipped")
             return
         try:
             result = check_policy_drift(connection)
@@ -216,7 +226,7 @@ def check_policy_drift_coverage(failures: "PipelineFailures") -> None:
 
         drift = summarize_drift(result)
         if not drift:
-            logger.info(  # type: ignore
+            logger.info(
                 f"✅ Policy-drift: RLS + policies intact across {result['total_tables']} "
                 f"tables, {result['total_views']} views"
             )
@@ -224,9 +234,9 @@ def check_policy_drift_coverage(failures: "PipelineFailures") -> None:
 
         for kind, summary in drift:
             failures.policy_drift.append(f"{kind} {summary}")
-            logger.error(f"❌ Policy-drift: {kind} {summary}")  # type: ignore
+            logger.error(f"❌ Policy-drift: {kind} {summary}")
     except Exception as e:
-        logger.error(f"❌ Policy-drift check failed: {e}")  # type: ignore
+        logger.error(f"❌ Policy-drift check failed: {e}")
 
 
 def _resolve_reporting_channel(config: dict | None) -> str:
@@ -247,7 +257,7 @@ def _load_slack_notify():
     """
     helper = Path.home() / ".claude" / "hooks" / "slack_notify.py"
     if not helper.exists():
-        logger.error(f"❌ Slack helper not found at {helper} — alert not sent")  # type: ignore
+        logger.error(f"❌ Slack helper not found at {helper} — alert not sent")
         return None
     try:
         spec = importlib.util.spec_from_file_location("slack_notify", helper)
@@ -255,7 +265,7 @@ def _load_slack_notify():
         spec.loader.exec_module(module)  # type: ignore
         return module
     except Exception as e:
-        logger.error(f"❌ Could not import Slack helper: {e}")  # type: ignore
+        logger.error(f"❌ Could not import Slack helper: {e}")
         return None
 
 
@@ -292,11 +302,11 @@ def send_failure_alert(failures: "PipelineFailures", processing_date: str, confi
     the non-zero exit in ``main()`` is the independent second signal regardless.
     """
     message = _build_alert_message(failures, processing_date)
-    logger.error("🚨 Pipeline finished with failures:\n%s", message)  # type: ignore
+    logger.error("🚨 Pipeline finished with failures:\n%s", message)
 
     channel = _resolve_reporting_channel(config)
     if not channel:
-        logger.error("❌ No Slack channel configured (slack.reporting_channel / slack.autoheal_channel) — alert not sent")  # type: ignore
+        logger.error("❌ No Slack channel configured (slack.reporting_channel / slack.autoheal_channel) — alert not sent")
         return
 
     slack = _load_slack_notify()
@@ -304,7 +314,7 @@ def send_failure_alert(failures: "PipelineFailures", processing_date: str, confi
         return
 
     if not slack.notify(message, channel=channel):
-        logger.error("❌ Slack alert delivery failed (see slack_notify logs)")  # type: ignore
+        logger.error("❌ Slack alert delivery failed (see slack_notify logs)")
 
 
 def parse_arguments():
@@ -350,9 +360,9 @@ def run_module(module_func, module_name, debug_mode=False, extra_args=None, fail
             
         # Run the module
         module_func()
-        logger.info(f"✅ {module_name} completed successfully")  # type: ignore
+        logger.info(f"✅ {module_name} completed successfully")
     except Exception as e:
-        logger.error(f"❌ Error in {module_name}: {e}")  # type: ignore
+        logger.error(f"❌ Error in {module_name}: {e}")
         if failures is not None:
             failures.step_failures.append((module_name, str(e)))
         if debug_mode:
@@ -377,8 +387,8 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
     failures = PipelineFailures()
     config = _load_config()
 
-    logger.info("🚀 Starting the complete data processing pipeline")  # type: ignore
-    logger.info(f"🐞 Debug mode: {'Enabled' if debug_mode else 'Disabled'}")  # type: ignore
+    logger.info("🚀 Starting the complete data processing pipeline")
+    logger.info(f"🐞 Debug mode: {'Enabled' if debug_mode else 'Disabled'}")
     
     # Use the reference date directly or today's date
     if reference_date:
@@ -388,86 +398,86 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
                 processing_date = reference_date
             else:
                 processing_date = datetime.strptime(reference_date, "%Y%m%d").strftime("%Y-%m-%d")
-            logger.info(f"📅 Using specified date: {processing_date}")  # type: ignore
+            logger.info(f"📅 Using specified date: {processing_date}")
         except ValueError:
-            logger.error(f"❌ Invalid date format: {reference_date}. Using current date.")  # type: ignore
+            logger.error(f"❌ Invalid date format: {reference_date}. Using current date.")
             processing_date = datetime.now().strftime("%Y-%m-%d")
     else:
         processing_date = datetime.now().strftime("%Y-%m-%d")
-        logger.info(f"📅 No date specified. Using current date: {processing_date}")  # type: ignore
+        logger.info(f"📅 No date specified. Using current date: {processing_date}")
     
     # Prepare common arguments
     date_args = ['--date', processing_date]
     
     # Step 1: Fetch data from social media APIs
     if not skip_api:
-        logger.info("📡 Step 1: Running Social API Client")  # type: ignore
+        logger.info("📡 Step 1: Running Social API Client")
         configure_social_logger(debug_mode)
         run_module(run_social_api_client, "Social API Client", debug_mode, extra_args=date_args, failures=failures)
         # Coverage check: which configured endpoints produced no file for the date.
         if config:
             check_endpoint_coverage(config, processing_date, failures)
     else:
-        logger.info("⏭️ Skipping Social API Client step")  # type: ignore
+        logger.info("⏭️ Skipping Social API Client step")
     
     # Step 2: Process the raw data
     if not skip_processing:
-        logger.info("🔄 Step 2: Running Data Processor")  # type: ignore
+        logger.info("🔄 Step 2: Running Data Processor")
         configure_data_processor_logger(debug_mode)
         run_module(run_data_processor, "Data Processor", debug_mode, extra_args=date_args, failures=failures)
     else:
-        logger.info("⏭️ Skipping Data Processor step")  # type: ignore
+        logger.info("⏭️ Skipping Data Processor step")
     
     # Step 3: Aggregate profile data
     if not skip_aggregation:
-        logger.info("📊 Step 3: Running Profile Aggregator")  # type: ignore
+        logger.info("📊 Step 3: Running Profile Aggregator")
         configure_profile_logger()
         run_module(run_profile_aggregator, "Profile Aggregator", debug_mode, failures=failures)
     else:
-        logger.info("⏭️ Skipping Profile Aggregator step")  # type: ignore
+        logger.info("⏭️ Skipping Profile Aggregator step")
     
     # Step 4: Consolidate posts data
     if not skip_consolidation:
-        logger.info("📑 Step 4: Running Posts Consolidator")  # type: ignore
+        logger.info("📑 Step 4: Running Posts Consolidator")
         configure_posts_logger(debug_mode)
         run_module(run_posts_consolidator, "Posts Consolidator", debug_mode, failures=failures)
         # Content-coverage check: did every platform actually land post metrics
         # in the consolidated table (not just produce a raw file)? — issue #84.
         check_posts_coverage(processing_date, failures)
     else:
-        logger.info("⏭️ Skipping Posts Consolidator step")  # type: ignore
+        logger.info("⏭️ Skipping Posts Consolidator step")
         
     # Step 5: Update Notion with processed data
     if not skip_notion:
-        logger.info("📘 Step 5: Running Notion Update")  # type: ignore
+        logger.info("📘 Step 5: Running Notion Update")
         configure_notion_logger(debug_mode)
-        logger.info(f"🗓️  Using date for Notion update: {processing_date}")  # type: ignore
+        logger.info(f"🗓️  Using date for Notion update: {processing_date}")
         notion_extra_args = [processing_date]
         if auto_confirm:
             notion_extra_args.append('--yes')
         run_module(run_notion_update, "Notion Update", debug_mode, notion_extra_args, failures=failures)
     else:
-        logger.info("⏭️ Skipping Notion Update step")  # type: ignore
+        logger.info("⏭️ Skipping Notion Update step")
 
     # Step 6: Publish Substack Note (follower scrape now happens in step 1 via reporting/scrape_client/substack.py)
     if not skip_substack:
-        logger.info("📰 Step 6: Running Substack Daily Pipeline")  # type: ignore
+        logger.info("📰 Step 6: Running Substack Daily Pipeline")
         run_module(run_substack_daily_pipeline, "Substack Daily Pipeline", debug_mode, extra_args=date_args, failures=failures)
     else:
-        logger.info("⏭️ Skipping Substack Daily Pipeline step")  # type: ignore
+        logger.info("⏭️ Skipping Substack Daily Pipeline step")
 
     # Posture check: Supabase RLS / policy / view-security drift (issue #50).
     # Read-only and independent of the daily data; runs every pipeline so drift
     # surfaces on the project's own clock, not via the weekly advisor email.
-    logger.info("🔒 Step 7: Checking Supabase RLS / policy drift")  # type: ignore
+    logger.info("🔒 Step 7: Checking Supabase RLS / policy drift")
     check_policy_drift_coverage(failures)
 
     # Notify only on failure: one consolidated alert + a non-zero exit signal.
     if failures.any():
         send_failure_alert(failures, processing_date, config)
-        logger.error("❌ Complete data processing pipeline finished WITH FAILURES")  # type: ignore
+        logger.error("❌ Complete data processing pipeline finished WITH FAILURES")
     else:
-        logger.info("🎉 Complete data processing pipeline finished")  # type: ignore
+        logger.info("🎉 Complete data processing pipeline finished")
 
     return failures
 

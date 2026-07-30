@@ -11,10 +11,15 @@ from dotenv import load_dotenv
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.logger_config import setup_logger
 from config.loader import load_full_config as load_config
-from reporting.process.supabase_uploader import get_db_connection
+from reporting.process.supabase_uploader import get_db_connection, run_sql_file
 
-# Set up logger
-logger = None
+SQL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notion_unify_data.sql")
+
+# Set up logger. Module-scope default is a real (unconfigured) Logger — never
+# None — so `logger.xxx(...)` calls elsewhere in this module are plain Logger
+# calls with no Optional to work around. `configure_logger()` replaces it
+# with the fully-configured (handlers + formatter) instance.
+logger = logging.getLogger("notion_unify_data")
 
 def configure_logger(debug_mode=False):
     """Set up logger with appropriate level based on debug mode."""
@@ -22,32 +27,6 @@ def configure_logger(debug_mode=False):
     log_level = logging.DEBUG if debug_mode else logging.INFO
     logger = setup_logger("notion_unify_data", file_logging=False, level=log_level)
     return logger
-
-def read_sql_from_file():
-    """Read the SQL content from the existing SQL file."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(script_dir, "notion_unify_data.sql")
-    
-    try:
-        with open(file_path, 'r') as f:
-            sql_content = f.read()
-        return sql_content
-    except Exception as e:
-        logger.error(f"❌ Error reading SQL file: {e}")
-        return None
-
-def execute_sql(connection, sql_content):
-    """Execute the SQL on the Supabase database."""
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(sql_content)
-        connection.commit()
-        logger.info("✅ SQL executed successfully")
-        return True
-    except Exception as e:
-        logger.error(f"❌ Error executing SQL: {e}")
-        connection.rollback()
-        return False
 
 def parse_arguments():
     """Parse command-line arguments."""
@@ -74,24 +53,16 @@ def main(args=None):
     # Load configuration
     config = load_config()
 
-    # Read SQL from file
-    logger.info("📝 Reading SQL from file")
-    sql_content = read_sql_from_file()
-    
-    if not sql_content:
-        logger.error("❌ Failed to read SQL file")
-        return
-    
     # Connect to database using the approach from profile_aggregator
     connection = get_db_connection()
     if not connection:
         logger.error("❌ Failed to connect to database")
         return
-    
-    # Execute SQL
+
+    # Read + execute the unify SQL
     logger.info("🔄 Executing SQL to create unified data table")
-    success = execute_sql(connection, sql_content)
-    
+    success = run_sql_file(connection, SQL_PATH, logger=logger)
+
     # Close connection
     connection.close()
     

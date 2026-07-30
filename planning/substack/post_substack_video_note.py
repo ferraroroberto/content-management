@@ -44,6 +44,8 @@ from playwright.sync_api import TimeoutError as PWTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from planning.substack.post_substack_note import (  # noqa: E402
+    COMPOSER_SCOPE_XPATH,
+    _locate_note_editor,
     _open_note_composer,
     _resolve_published_note_url,
 )
@@ -143,31 +145,9 @@ def _attach_video_via_composer(composer, page, video_path: Path) -> bool:
 
 def _fill_video_note_dialog(page, body_text: str, video_path: Path) -> None:
     """Fill the body and attach the .mp4 inside the open Note composer."""
-    editors = page.locator('[contenteditable="true"]')
-    editor = None
-    for i in range(editors.count()):
-        el = editors.nth(i)
-        try:
-            placeholder = (
-                el.get_attribute("data-placeholder")
-                or el.get_attribute("aria-placeholder")
-                or el.get_attribute("placeholder")
-                or ""
-            )
-        except Exception:
-            placeholder = ""
-        if "mind" in placeholder.lower():
-            editor = el
-            break
-    if editor is None:
-        editor = editors.last
-    editor.wait_for(state="visible", timeout=20000)
-    editor.click()
-    editor.fill(body_text)
+    editor = _locate_note_editor(page, body_text)
 
-    composer = editor.locator(
-        'xpath=ancestor::*[.//button[normalize-space()="Post"] and .//button[normalize-space()="Cancel"]][1]'
-    )
+    composer = editor.locator(COMPOSER_SCOPE_XPATH)
     if composer.count() == 0:
         logger.warning("⚠️ Could not scope composer container; falling back to page-wide search.")
         composer = page.locator("body")

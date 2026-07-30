@@ -31,6 +31,7 @@ import sys
 import tempfile
 import time
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Optional
 
@@ -89,6 +90,25 @@ class ClipPayload:
     thumb_path: Path
     caption_short: str
     caption_long: str
+
+
+@dataclass
+class VideoRow:
+    """One editorial row's worth of input for a per-platform video driver.
+
+    Single-source for all four drivers (linkedin/instagram/twitter/threads)
+    plus the orchestrator — was previously redefined identically in each
+    driver module.
+    """
+
+    page_id: str
+    day: date
+    payload: ClipPayload
+    existing_post_url: Optional[str]
+
+    @property
+    def day_title(self) -> str:
+        return self.day.strftime("%Y%m%d")
 
 
 def configure_logger(name: str = "videos", debug: bool = False) -> logging.Logger:

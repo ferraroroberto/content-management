@@ -13,10 +13,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from dataclasses import dataclass
-from datetime import date
 from pathlib import Path
-from typing import Optional
 
 from playwright.sync_api import Page, TimeoutError as PWTimeoutError
 
@@ -46,7 +43,7 @@ from planning.linkedin.schedule_linkedin_posts import (  # noqa: E402
     _open_schedule_dialog,
     _set_schedule_datetime,
 )
-from planning.videos.videos_session import ClipPayload  # noqa: E402
+from planning.videos.videos_session import VideoRow  # noqa: E402
 
 logger = logging.getLogger("videos_linkedin")
 
@@ -56,20 +53,6 @@ logger = logging.getLogger("videos_linkedin")
 # from ``planning.linkedin.linkedin_composer``.
 _fill_caption_with_mentions = fill_caption_with_mentions
 _wait_for_upload_complete = wait_for_upload_complete
-
-
-@dataclass
-class VideoRow:
-    """One editorial row's worth of input for the per-platform driver."""
-
-    page_id: str
-    day: date
-    payload: ClipPayload
-    existing_post_url: Optional[str]
-
-    @property
-    def day_title(self) -> str:
-        return self.day.strftime("%Y%m%d")
 
 
 def _click_video_button(page: Page) -> None:
