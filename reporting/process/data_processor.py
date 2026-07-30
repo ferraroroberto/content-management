@@ -240,16 +240,17 @@ def process_array_data(data, mapping_config, file_date=None):
                     except:
                         logger.debug(f"DEBUG: Unable to serialize record for logging")
                 
-                # Check if this is a Substack first post (missing num_likes)
-                is_substack_first_post = (
-                    data.get('platform', '').lower() == 'substack' and 
-                    data.get('data_type', '').lower() == 'posts' and 
-                    field_name == 'num_likes'
+                # A field can declare itself optional on the first scraped
+                # record only (e.g. Substack's first post is expected to be
+                # missing num_likes) via "optional_if_first_record" in
+                # mapping.json, rather than a platform-name check here.
+                is_optional_first_record = (
+                    field_config.get('optional_if_first_record', False) and index == 0
                 )
-                
-                if is_substack_first_post:
+
+                if is_optional_first_record:
                     # Silently skip this record without warning
-                    logger.debug(f"Skipping Substack first post (record {index+1}) - missing num_likes is expected")
+                    logger.debug(f"Skipping first record (record {index+1}) - missing '{field_name}' is expected")
                 else:
                     # For other records, log the warning as usual
                     logger.warning(f"⚠️  Required field(s) {', '.join(missing_fields)} not found, skipping record {index+1}")

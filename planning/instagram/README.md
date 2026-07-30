@@ -165,6 +165,7 @@ See `linkedin/README.md` § "How the browser session is hardened against bot det
 | `instagram_session.py` | `InstagramSession` context manager: launches the persistent-profile real-Chrome session and exposes `page` + a `screenshot_failure()` helper. Equivalent to `linkedin/linkedin_session.py`. |
 | `clone_to_other_platforms.py` | Notion-only step: replicate IG plan to TW/TH/SB columns. Independent of Playwright. |
 | `schedule_instagram_posts.py` | The Meta planner driver. Queries Notion, resolves images + captions, drives the calendar UI for story + post, writes back the WIP-IG untick. |
+| `instagram_reels.py` | The Reels composer driver (issue #118) — the "Create reel" full-page wizard used for video. Split out of `schedule_instagram_posts.py` (issue #198); consumed by `planning/videos/videos_instagram.py`, not by this package's own story/post flow. |
 | `chrome_user_data/` | (auto-created, gitignored) The dedicated Chrome profile. |
 | `README.md` | This file. |
 

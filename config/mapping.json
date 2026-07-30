@@ -354,7 +354,8 @@
             "num_likes": {
                 "path": "comment.reaction_count",
                 "type": "integer",
-                "required": true
+                "required": true,
+                "optional_if_first_record": true
             },
             "num_comments": {
                 "path": "comment.children_count",

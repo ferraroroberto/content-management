@@ -34,8 +34,10 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from config.loader import load_block
 from newsletter.build_newsletter import (
-    NotionNewsletterBuilder,
+    TOPICS,
+    NotionClient,
     format_must_read_line,
+    group_articles_by_topic,
     normalize_newsletter_number,
     top_article_names_by_topic,
 )
@@ -98,10 +100,16 @@ def run(
     _setup_logging(debug)
     nl_num = normalize_newsletter_number(newsletter_number)
 
-    builder = NotionNewsletterBuilder()
-    _, grouped = builder.build_newsletter(nl_num)
-    sections = build_sections(grouped, builder.topics)
-    intro = compose_intro(builder.topics, grouped, must_read)
+    client = NotionClient()
+    nl = client.find_newsletter_by_title(nl_num)
+    if not nl:
+        raise ValueError(f"Newsletter '{nl_num}' not found")
+    articles = client.get_related_articles(nl["id"])
+    if not articles:
+        raise ValueError(f"No articles found for newsletter '{nl_num}'")
+    grouped = group_articles_by_topic(articles)
+    sections = build_sections(grouped, TOPICS)
+    intro = compose_intro(TOPICS, grouped, must_read)
 
     total = sum(len(articles) for _, articles in sections)
     logging.info("📝 Building Substack draft for %s — %d articles across %d sections",

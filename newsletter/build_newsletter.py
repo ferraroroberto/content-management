@@ -57,7 +57,15 @@ _MUST_READ_PERM: Dict[int, Tuple[int, int, int]] = {
 }
 
 
-class NotionNewsletterBuilder:
+class NotionClient:
+    """Notion HTTP + pagination for the two databases the newsletter reads.
+
+    Holds only connection state (auth headers, db ids) — no article
+    extraction, grouping, or rendering logic lives here so each concern can
+    be tested and reused on its own (``newsletter/substack_draft.py`` reuses
+    :func:`group_articles_by_topic` without importing this class at all).
+    """
+
     def __init__(self):
         self.config = self._load_config()
         self.notion_api_key = self.config["notion_api_key"]
@@ -70,7 +78,6 @@ class NotionNewsletterBuilder:
             "Notion-Version": "2022-06-28",
             "Content-Type": "application/json",
         }
-        self.topics = TOPICS
         logging.info("✅ Newsletter builder initialized")
         logging.info(f"📊 Articles DB: {self.articles_db_id}")
         logging.info(f"📊 Newsletter DB: {self.newsletter_db_id}")
@@ -126,91 +133,107 @@ class NotionNewsletterBuilder:
         logging.info(f"📊 Found {len(results)} articles")
         return results
 
-    @staticmethod
-    def extract_article_data(article: Dict[str, Any]
-                             ) -> Optional[Tuple[str, str, str, bool, List[str]]]:
-        try:
-            props = article.get("properties", {})
-            title_prop = props.get("article", {})
-            if title_prop.get("type") != "title":
-                return None
-            title_content = title_prop.get("title", [])
-            if not title_content:
-                return None
-            name = title_content[0].get("plain_text", "").strip()
 
-            url_prop = props.get("link", {})
-            if url_prop.get("type") != "url":
-                return None
-            url = (url_prop.get("url") or "").strip()
-            if not url:
-                return None
+# ---------------------------------------------------------- article extraction
 
-            topic_prop = props.get("topic", {})
-            if topic_prop.get("type") != "select":
-                return None
-            topic_obj = topic_prop.get("select")
-            if not topic_obj:
-                return None
-            topic = topic_obj.get("name", "").strip()
 
-            star_prop = props.get("star", {})
-            star = bool(star_prop.get("checkbox", False)) if star_prop.get("type") == "checkbox" else False
+def extract_article_data(article: Dict[str, Any]
+                         ) -> Optional[Tuple[str, str, str, bool, List[str]]]:
+    """Pull ``(name, url, topic, star, niche)`` out of one Notion article page."""
+    try:
+        props = article.get("properties", {})
+        title_prop = props.get("article", {})
+        if title_prop.get("type") != "title":
+            return None
+        title_content = title_prop.get("title", [])
+        if not title_content:
+            return None
+        name = title_content[0].get("plain_text", "").strip()
 
-            niche_prop = props.get("niche", {})
-            niche: List[str] = []
-            if niche_prop.get("type") == "multi_select":
-                niche = [o.get("name", "").strip() for o in niche_prop.get("multi_select", []) if o.get("name")]
-            return name, url, topic, star, niche
-        except Exception as e:
-            logging.error(f"❌ Error extracting article data: {e}")
+        url_prop = props.get("link", {})
+        if url_prop.get("type") != "url":
+            return None
+        url = (url_prop.get("url") or "").strip()
+        if not url:
             return None
 
-    def group_articles_by_topic(self, articles: List[Dict[str, Any]]
-                                ) -> Dict[str, List[Tuple[str, str]]]:
-        grouped: Dict[str, List[Tuple[str, str, bool, List[str]]]] = {t: [] for t in self.topics}
-        for art in articles:
-            data = self.extract_article_data(art)
-            if not data:
-                continue
-            name, url, topic, star, niche = data
-            if topic in self.topics:
-                grouped[topic].append((name, url, star, niche))
+        topic_prop = props.get("topic", {})
+        if topic_prop.get("type") != "select":
+            return None
+        topic_obj = topic_prop.get("select")
+        if not topic_obj:
+            return None
+        topic = topic_obj.get("name", "").strip()
 
-        for topic in self.topics:
-            grouped[topic].sort(key=lambda x: (
-                -x[2],
-                sorted(x[3])[0] if x[3] else "",
-                x[0].lower(),
-            ))
-            if grouped[topic]:
-                logging.info(f"📋 Topic '{topic}' sorted order:")
-                for i, (name, _url, star, niche) in enumerate(grouped[topic], 1):
-                    niche_str = ", ".join(sorted(niche)) if niche else "none"
-                    star_str = "⭐" if star else "⚪"
-                    logging.info(f"  {i}. {star_str} {name} (niche: {niche_str})")
+        star_prop = props.get("star", {})
+        star = bool(star_prop.get("checkbox", False)) if star_prop.get("type") == "checkbox" else False
 
-        return {t: [(n, u) for n, u, _s, _ni in grouped[t]] for t in self.topics}
+        niche_prop = props.get("niche", {})
+        niche: List[str] = []
+        if niche_prop.get("type") == "multi_select":
+            niche = [o.get("name", "").strip() for o in niche_prop.get("multi_select", []) if o.get("name")]
+        return name, url, topic, star, niche
+    except Exception as e:
+        logging.error(f"❌ Error extracting article data: {e}")
+        return None
 
-    def generate_html_lists(self, grouped: Dict[str, List[Tuple[str, str]]]) -> str:
-        out: List[str] = []
-        for topic in self.topics:
-            heading = topic[0].upper() + topic[1:]
-            out.append(f"<h2>{heading}</h2>")
-            articles = grouped[topic]
-            if articles:
-                out.append("<ul>")
-                for name, url in articles:
-                    out.append(f'  <li><a href="{url}">{name}</a></li>')
-                out.append("</ul>")
-            else:
-                out.append("<ul></ul>")
-            out.append("")
-        return "\n".join(out)
 
-    def generate_complete_html(self, grouped: Dict[str, List[Tuple[str, str]]]) -> str:
-        html_content = self.generate_html_lists(grouped)
-        return f"""<!DOCTYPE html>
+def group_articles_by_topic(articles: List[Dict[str, Any]], topics: Sequence[str] = TOPICS
+                            ) -> Dict[str, List[Tuple[str, str]]]:
+    """Group + sort raw Notion article pages by topic (star desc → niche asc → title asc).
+
+    Pure — no Notion, no rendering — so it is unit-testable and reusable on its
+    own (``newsletter/substack_draft.py`` reuses this to keep the Substack draft
+    and the HTML build from drifting apart).
+    """
+    grouped: Dict[str, List[Tuple[str, str, bool, List[str]]]] = {t: [] for t in topics}
+    for art in articles:
+        data = extract_article_data(art)
+        if not data:
+            continue
+        name, url, topic, star, niche = data
+        if topic in grouped:
+            grouped[topic].append((name, url, star, niche))
+
+    for topic in topics:
+        grouped[topic].sort(key=lambda x: (
+            -x[2],
+            sorted(x[3])[0] if x[3] else "",
+            x[0].lower(),
+        ))
+        if grouped[topic]:
+            logging.info(f"📋 Topic '{topic}' sorted order:")
+            for i, (name, _url, star, niche) in enumerate(grouped[topic], 1):
+                niche_str = ", ".join(sorted(niche)) if niche else "none"
+                star_str = "⭐" if star else "⚪"
+                logging.info(f"  {i}. {star_str} {name} (niche: {niche_str})")
+
+    return {t: [(n, u) for n, u, _s, _ni in grouped[t]] for t in topics}
+
+
+# ---------------------------------------------------------------- HTML render
+
+
+def generate_html_lists(grouped: Dict[str, List[Tuple[str, str]]], topics: Sequence[str] = TOPICS) -> str:
+    out: List[str] = []
+    for topic in topics:
+        heading = topic[0].upper() + topic[1:]
+        out.append(f"<h2>{heading}</h2>")
+        articles = grouped[topic]
+        if articles:
+            out.append("<ul>")
+            for name, url in articles:
+                out.append(f'  <li><a href="{url}">{name}</a></li>')
+            out.append("</ul>")
+        else:
+            out.append("<ul></ul>")
+        out.append("")
+    return "\n".join(out)
+
+
+def generate_complete_html(grouped: Dict[str, List[Tuple[str, str]]], topics: Sequence[str] = TOPICS) -> str:
+    html_content = generate_html_lists(grouped, topics)
+    return f"""<!DOCTYPE html>
 <html lang=\"en\">
 <head>
     <meta charset=\"UTF-8\">
@@ -229,18 +252,6 @@ class NotionNewsletterBuilder:
 {html_content}
 </body>
 </html>"""
-
-    def build_newsletter(self, newsletter_title: str
-                         ) -> Tuple[str, Dict[str, List[Tuple[str, str]]]]:
-        logging.info(f"🚀 Building newsletter: {newsletter_title}")
-        nl = self.find_newsletter_by_title(newsletter_title)
-        if not nl:
-            raise ValueError(f"Newsletter '{newsletter_title}' not found")
-        articles = self.get_related_articles(nl["id"])
-        if not articles:
-            raise ValueError(f"No articles found for newsletter '{newsletter_title}'")
-        grouped = self.group_articles_by_topic(articles)
-        return self.generate_html_lists(grouped), grouped
 
 
 # ---------------------------------------------------------------- helpers
@@ -367,16 +378,24 @@ def run(newsletter_number: str, debug: bool = False, *,
     """
     _setup_logging(debug)
     nl_num = normalize_newsletter_number(newsletter_number)
-    builder = NotionNewsletterBuilder()
-    _, grouped = builder.build_newsletter(nl_num)
 
-    complete_html = builder.generate_complete_html(grouped)
+    logging.info(f"🚀 Building newsletter: {nl_num}")
+    client = NotionClient()
+    nl = client.find_newsletter_by_title(nl_num)
+    if not nl:
+        raise ValueError(f"Newsletter '{nl_num}' not found")
+    articles = client.get_related_articles(nl["id"])
+    if not articles:
+        raise ValueError(f"No articles found for newsletter '{nl_num}'")
+    grouped = group_articles_by_topic(articles)
+
+    complete_html = generate_complete_html(grouped)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     out_path = RESULTS_DIR / f"{nl_num}.html"
     out_path.write_text(complete_html, encoding="utf-8")
     logging.info(f"💾 HTML saved to: {out_path}")
 
-    top_names = top_article_names_by_topic(builder.topics, grouped)
+    top_names = top_article_names_by_topic(TOPICS, grouped)
     sidecar = _write_topics_sidecar(nl_num, TOPIC_HEADINGS, top_names)
     logging.info(f"🗂️ Topics sidecar: {sidecar}")
 
@@ -392,7 +411,7 @@ def run(newsletter_number: str, debug: bool = False, *,
             copy_to_clipboard(line)
             logging.info(f"📋 Must-read line (copied to clipboard): {line}")
     elif interactive_must_read:
-        prompt_must_read_line(builder.topics, grouped)
+        prompt_must_read_line(TOPICS, grouped)
 
     return out_path
 

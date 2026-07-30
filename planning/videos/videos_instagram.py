@@ -8,8 +8,9 @@ The feed-post composer is deliberately not used for video: Instagram rejects
 vertical 9:16 clips there ("doesn't fit within Instagram's accepted aspect
 ratio range of 4:5 to 16:9", Schedule never enables) and duplicates a single
 upload into two tiles. The Reels composer accepts 9:16 and attaches one tile
-per file. The reel-specific composer helpers (and the shared date/time +
-caption helpers) all live in ``planning.instagram.schedule_instagram_posts``.
+per file. The reel-specific composer helpers live in
+``planning.instagram.instagram_reels``; the shared caption/menu/session
+helpers reused here still live in ``planning.instagram.schedule_instagram_posts``.
 """
 
 from __future__ import annotations
@@ -26,18 +27,20 @@ from planning.instagram.instagram_session import (  # noqa: E402
     LoginRequiredError,
     load_instagram_config,
 )
-from planning.instagram.schedule_instagram_posts import (  # noqa: E402
-    _cancel_composer,
+from planning.instagram.instagram_reels import (  # noqa: E402
     _click_reel_footer,
     _dismiss_reel_success_dialog,
-    _fill_post_text,
-    _open_day_schedule_menu,
     _reel_add_video,
     _select_reel_schedule_option,
     _set_reel_schedule_datetime,
     _wait_reel_composer_closes,
     _wait_reel_footer_enabled,
     _wait_reels_composer_ready,
+)
+from planning.instagram.schedule_instagram_posts import (  # noqa: E402
+    _cancel_composer,
+    _fill_post_text,
+    _open_day_schedule_menu,
     dismiss_meta_verified_modal,
     return_to_planner,
 )
