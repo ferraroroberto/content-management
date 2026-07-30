@@ -29,7 +29,7 @@ from playwright.sync_api import Page, TimeoutError as PWTimeoutError, sync_playw
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO_ROOT))
 
-from config.chrome_launch import STEALTH_INIT_SCRIPT, stealth_launch_kwargs  # noqa: E402
+from config.chrome_launch import doc_capture_context_kwargs, doc_capture_launch_kwargs  # noqa: E402
 from config.console import force_utf8_stdio  # noqa: E402
 from engagement.db.client import supabase_client  # noqa: E402
 
@@ -88,13 +88,15 @@ def run() -> int:
 
     fails = 0
     with sync_playwright() as pw:
-        # Fresh context, no persistent profile — local app, no auth needed.
-        kwargs = stealth_launch_kwargs(str(out_dir / "_browser"), headless=True)
-        # Drop persistent_context dir — we just want a clean throwaway context.
-        kwargs.pop("user_data_dir", None)
-        browser = pw.chromium.launch(channel=kwargs.get("channel"), headless=True, args=kwargs.get("args"))
-        context = browser.new_context(viewport={"width": 1400, "height": 1800})
-        context.add_init_script(STEALTH_INIT_SCRIPT)
+        # Fresh context, no persistent profile — drives our own localhost
+        # Streamlit app, so the doc-capture profile applies (determinism and
+        # isolation, not stealth — there's nothing to hide from on localhost).
+        browser = pw.chromium.launch(**doc_capture_launch_kwargs(headless=True))
+        context_kwargs = doc_capture_context_kwargs()
+        # Taller viewport than the doc-capture default — this app's cards
+        # need more vertical room than the control-panel screenshots do.
+        context_kwargs["viewport"] = {"width": 1400, "height": 1800}
+        context = browser.new_context(**context_kwargs)
         page = context.new_page()
 
         print("\n📱 step 1 — open the app")
