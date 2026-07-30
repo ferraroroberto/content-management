@@ -10,9 +10,12 @@ This module contains several components:
 2. **Supabase Uploader** - Handles database connections and data uploads
 3. **Profile Aggregator** - Consolidates profile data from multiple platforms
 4. **Posts Consolidator** - Merges posts data across platforms
-5. **Supabase Relations Creator** - Creates relational structure from Notion database relations
-6. **Supabase Policy Script** - Applies RLS policies to all database tables
-7. **Database Utilities** - Test connections and manage database operations
+5. **Supabase Policy Script** - Applies RLS policies to all database tables
+
+Notion relation/junction-table creation now lives entirely in the SQL
+auto-detector system (`reporting/notion/setup_notion_relations_system.{py,sql,md}`).
+The Python relations creator and the ad hoc DB test scripts that used to live
+in this module were removed as stale/broken (issue #196).
 
 ## 📊 Components
 
@@ -64,30 +67,6 @@ Merges posts data from all platforms:
 - Creates a wide-format table with all platform data
 - Links posts to their URLs
 - Filters for posts from the previous day
-
-### 🔗 supabase_relations_creator.py
-
-Creates relational structure in Supabase from Notion database relations:
-- Loads Notion database list and relations data from JSON files
-- Creates junction tables for many-to-many relationships
-- Supports both local and cloud database environments
-- Provides dry-run mode for previewing changes
-- Handles table deduplication and cleanup operations
-
-**Key Features:**
-- Automatic junction table creation based on relation configurations
-- Support for self-referential relationships
-- Bidirectional relationship handling with option for deduplication
-- Comprehensive logging with emoji indicators
-- Environment-based configuration management
-- Dry-run mode for safe testing
-
-**Command Line Options:**
-- `--environment`: Choose between local/cloud database (default: cloud)
-- `--dry-run`: Preview changes without executing them
-- `--drop-all`: Remove all tables without recreating them
-- `--debug`: Enable detailed debug logging
-- `--de-duplicate`: Deduplicate junction tables (default: False)
 
 ### 🔒 supabase_policy_script.py
 
@@ -141,12 +120,6 @@ drift:
 Remediation stays a deliberate human action — the check only reports; it never
 auto-remediates, so an unintended schema change can't be silently papered over.
 
-### 🧪 Database Test Utilities
-
-- `supabase_test_connect.py` - Test database connectivity
-- `supabase_test_create_table.py` - Create test tables
-- `supabase_drop_all_tables.py` - Clean up database
-
 ## ⚙️ Setup
 
 ### 📋 Prerequisites
@@ -197,27 +170,6 @@ Process all JSON files and create DataFrames:
 
 ```bash
 python -m reporting.process.data_processor
-```
-
-### 🔗 Creating Database Relations
-
-Create relational structure from Notion database relations:
-
-```bash
-# Preview changes without executing
-python supabase_relations_creator.py --dry-run
-
-# Create relations in cloud environment
-python supabase_relations_creator.py --environment cloud
-
-# Enable debug mode for detailed logging
-python supabase_relations_creator.py --debug
-
-# Deduplicate junction tables
-python supabase_relations_creator.py --de-duplicate
-
-# Drop all tables (use with caution)
-python supabase_relations_creator.py --drop-all
 ```
 
 ### 🔒 Applying RLS Policies
@@ -305,7 +257,6 @@ python -m reporting.process.posts_consolidator --debug
 3. **Output**:
    - CSV/Excel files in `results/processed/`
    - Database tables in Supabase
-   - Relational structure with junction tables
 
 ## 🗄️ Database Schema
 
@@ -321,12 +272,6 @@ python -m reporting.process.posts_consolidator --debug
 - **profile**: Consolidated follower counts across all platforms
 - **posts**: Unified posts data with video/non-video separation
 
-### 🔗 Junction Tables
-
-- **{table1}_to_{table2}**: Many-to-many relationships between different tables
-- **{table}_relations**: Self-referential relationships within the same table
-- **Deduplication**: Option to create single junction table for bidirectional relationships
-
 ## ❌ Error Handling
 
 The module includes comprehensive error handling:
@@ -337,7 +282,6 @@ The module includes comprehensive error handling:
 - Missing required fields
 - Type conversion errors
 - Network timeouts
-- Relation creation failures
 
 All errors are logged with descriptive messages and emoji indicators.
 
@@ -359,7 +303,6 @@ Uses custom logger with:
 - 🔄 Aggregation operations
 - 📊 Progress updates
 - 🐞 Debug mode
-- 🔗 Relation operations
 - 🗑️ Cleanup operations
 
 ## 🔧 Development
@@ -371,13 +314,6 @@ Uses custom logger with:
 3. Run data processor to test transformation
 4. Verify database table creation
 
-### 🔗 Adding New Relations
-
-1. Update Notion database relations configuration
-2. Run relations creator in dry-run mode to preview
-3. Execute relations creation
-4. Verify junction table structure
-
 ### 🚀 Extending Functionality
 
 The module is designed to be extensible:
@@ -385,7 +321,6 @@ The module is designed to be extensible:
 - Create custom field transformations in mapping
 - Add new aggregation SQL files
 - Implement additional consolidators
-- Extend relation creation logic
 
 ## 🐛 Troubleshooting
 
@@ -406,12 +341,7 @@ The module is designed to be extensible:
    - Check for null/missing values
    - Review date format handling
 
-4. **Relation Creation Failures**
-   - Verify Notion database list and relations files exist
-   - Check database IDs match between files
-   - Review junction table naming conflicts
-
-5. **Policy Application Issues**
+4. **Policy Application Issues**
    - Ensure database user has sufficient privileges
    - Check for existing policy conflicts
    - Use dry-run mode to preview changes
@@ -422,7 +352,6 @@ The module is designed to be extensible:
 Enable debug mode for detailed logging:
 ```bash
 python -m reporting.process.data_processor --debug
-python supabase_relations_creator.py --debug
 ```
 
 This provides:
@@ -430,5 +359,3 @@ This provides:
 - Raw data samples
 - SQL queries being executed
 - Detailed error messages
-- Relation creation breakdown
-- Junction table analysis

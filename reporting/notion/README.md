@@ -4,14 +4,20 @@ This folder contains a comprehensive collection of Python scripts for automating
 
 ## 🚀 Overview
 
-The Notion automation suite consists of six main tools:
+The Notion automation suite consists of five main tools:
 
 1. **notion_update.py** - Updates Notion database entries with data from Supabase
 2. **notion_supabase_sync.py** - Continuously syncs Notion databases to Supabase PostgreSQL
 3. **notion_database_structure.py** - Analyzes and exports Notion database structures
 4. **notion_database_list.py** - Lists and manages all Notion databases
-5. **notion_database_relations.py** - Extracts and analyzes database relationships
-6. **notion_unify_data.py** - Executes SQL to unify editorial data into consolidated tables
+5. **notion_unify_data.py** - Executes SQL to unify editorial data into consolidated tables
+
+Database-relationship discovery is handled by the SQL auto-detector system —
+see `setup_notion_relations_system.py` below. The old `notion_database_relations.py`
+(JSON-file relation extractor feeding the now-removed Python relations creator)
+and `notion_relations_python_setup.py` (a broken duplicate setup wrapper that
+read a SQL file that never existed in this repo) were removed as stale/broken
+(issue #196).
 
 The folder also ships a handful of **one-time setup and manual diagnostic
 scripts** that are *not* part of any pipeline orchestrator — see
@@ -195,23 +201,7 @@ python -m reporting.notion.notion_database_list --debug
 - Generates `notion_database_list.json` for sync operations
 - Handles pagination for large numbers of databases
 
-### 5. notion_database_relations.py
-
-Extracts and analyzes database relationships from existing structure files.
-
-**Usage:**
-```bash
-python notion_database_relations.py
-```
-
-**Features:**
-- Processes existing database structure files in `database_sample/`
-- Identifies relation-type properties across databases
-- Maps related database IDs to Supabase table names
-- Generates relationship analysis for data modeling
-- Supports both hyphenated and non-hyphenated UUID formats
-
-### 6. notion_unify_data.py
+### 5. notion_unify_data.py
 
 Executes SQL scripts to unify editorial data into consolidated tables.
 
@@ -252,17 +242,6 @@ companion `setup_notion_relations_system.md` for the SQL design.
 
 ```bash
 python -m reporting.notion.setup_notion_relations_system [--debug]
-```
-
-### notion_relations_python_setup.py — one-time setup wrapper / verifier
-
-A Python CLI wrapper (`NotionRelationsPythonSetup`) over the same relations
-system, offering `setup` / `test` / `verify` / `demo` actions. An alternative
-entry point to the SQL-runner above for setting up and sanity-checking the
-relations system from Python. One-time / ad hoc — not a pipeline step.
-
-```bash
-python -m reporting.notion.notion_relations_python_setup [setup|test|verify|demo]
 ```
 
 ### add_editorial_dates.py — seed editorial-calendar rows
@@ -375,7 +354,7 @@ All scripts use a centralized logging configuration with:
 3. **Monitor Logs**: Check logs regularly for warnings or errors
 4. **Incremental Syncs**: Use incremental syncs for regular updates to minimize API calls
 5. **Database List**: Keep `notion_database_list.json` updated with current database IDs
-6. **Relationship Analysis**: Use `notion_database_relations.py` to understand data dependencies
+6. **Relationship Analysis**: Query the SQL auto-detector views (`setup_notion_relations_system.py`/`.sql`) to understand data dependencies
 7. **Data Unification**: Run `notion_unify_data.py` after major sync operations to consolidate data
 
 ## 🔧 Development
@@ -401,7 +380,7 @@ To add new field mappings for `notion_update.py`:
 1. Run `notion_database_list.py` to discover new databases
 2. Review and edit `notion_database_list.json` to set replication flags
 3. Use `notion_database_structure.py` to analyze new database schemas
-4. Run `notion_database_relations.py` to identify relationships
+4. Run `setup_notion_relations_system.py` (or the SQL directly) to (re)detect relationships
 5. Execute `notion_supabase_sync.py` to sync data
 6. Use `notion_unify_data.py` to consolidate related data
 
