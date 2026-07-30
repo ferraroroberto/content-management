@@ -294,6 +294,13 @@
             "expand_max_clicks": 30,
             "expand_settle_ms": 1200,
             "page_settle_ms": 2500
+        },
+        "llm_fallback": {
+            "enabled": true,
+            "base_url": "http://127.0.0.1:8000",
+            "model": "claude_haiku",
+            "cache_path": "engagement/classify/.llm_cache.json",
+            "timeout_seconds": 20
         }
     },
     "slack": {
