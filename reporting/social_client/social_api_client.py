@@ -122,6 +122,31 @@ def _fetch_via_native(platform_key, reference_date):
         return None
 
 
+# Retries for the playwright/native scrape sources, run between attempts. A
+# transient timing hiccup (cold browser profile, slow page load on the 06:00
+# scheduled run) shouldn't permanently drop a day's data — mirrors the
+# resilience the RapidAPI branch below already has, just with a shorter
+# backoff since each attempt re-launches a full browser session.
+SCRAPE_RETRY_BACKOFF = [20, 60]  # seconds between attempts
+
+
+def _fetch_scrape_with_retries(fetch_fn, platform_key, reference_date):
+    """Retry a Playwright/native scrape fetch on failure before giving up."""
+    attempts = len(SCRAPE_RETRY_BACKOFF) + 1
+    for attempt in range(attempts):
+        data = fetch_fn(platform_key, reference_date)
+        if data:
+            return data
+        if attempt < attempts - 1:
+            wait_time = SCRAPE_RETRY_BACKOFF[attempt]
+            logger.info(f"⏳ Retrying {platform_key} in {wait_time} seconds (attempt {attempt+2}/{attempts})...")
+            if interruptible_sleep(wait_time):
+                logger.info(f"⏩ {platform_key} skipped by user")
+                return None
+    logger.error(f"❌ All {attempts} attempts failed for {platform_key}")
+    return None
+
+
 def get_api_data(platform_key, config, reference_date=None):
     """Fetch data for the specified platform with retries and exponential backoff.
 
@@ -130,10 +155,12 @@ def get_api_data(platform_key, config, reference_date=None):
     * ``"playwright"`` → delegates to ``reporting.scrape_client.<platform>.fetch_<data_type>``
       which drives the platform's persistent Chrome profile via the existing
       ``planning/<platform>/<platform>_session.py`` session class (stealth
-      launch comes from ``config/chrome_launch.py``).
+      launch comes from ``config/chrome_launch.py``). Retried per
+      ``SCRAPE_RETRY_BACKOFF``.
     * ``"native"`` → delegates to ``reporting.scrape_client.<platform>_native.fetch_<data_type>``
       which calls the platform's own HTTP API directly with cookie auth (no
-      browser). Used by Substack's follower count.
+      browser). Used by Substack's follower count. Retried per
+      ``SCRAPE_RETRY_BACKOFF``.
     * anything else (including the default when the key is absent) → RapidAPI
       HTTP call as before.
     """
@@ -145,9 +172,9 @@ def get_api_data(platform_key, config, reference_date=None):
 
     source = api_config.get('source', 'rapidapi')
     if source == 'playwright':
-        return _fetch_via_playwright(platform_key, reference_date)
+        return _fetch_scrape_with_retries(_fetch_via_playwright, platform_key, reference_date)
     if source == 'native':
-        return _fetch_via_native(platform_key, reference_date)
+        return _fetch_scrape_with_retries(_fetch_via_native, platform_key, reference_date)
     if source != 'rapidapi':
         logger.error(f"❌ Unknown source '{source}' for {platform_key} — expected 'rapidapi', 'playwright', or 'native'")
         return None
