@@ -1,6 +1,6 @@
 ---
 name: schedule-autoheal
-description: Run a planning scheduler and autonomously self-heal selector breakage caused by platform UI drift. Runs the scheduler (dry-run or live), classifies any failure, and for UI-drift it probes the live DOM, applies a selector-only fix, re-validates with a dry-run, and — when confident — files an issue, opens a PR, and merges end-to-end. When not confident (ambiguous DOM, login-required, or data errors) it pings the user on Slack and stops for interactive handling. Use when running the weekly planning schedulers unattended, e.g. "/schedule-autoheal all --dry-run", "/schedule-autoheal twitter --live".
+description: Run a planning scheduler unattended and self-heal selector breakage from platform UI drift — probe the live DOM, apply a selector-only fix, re-validate by dry-run, then when confident file an issue, open a PR and merge; when not confident, ping Slack and stop. E.g. "/schedule-autoheal all --dry-run", "/schedule-autoheal twitter --live".
 ---
 
 # schedule-autoheal
@@ -59,8 +59,8 @@ Heal at most **one platform per invocation cycle**; re-run to pick up the next.
      `planning/<platform>/schedule_<platform>_posts.py`. Search for the old accessible
      name / role call near the failing step.
 4. **Apply a selector-only edit.** Re-anchor the role/text selector on the new accessible
-   name from the probe. Prefer role + name anchors; **never** anchor on a class (the
-   READMEs warn class names rotate). The diff MUST be a pure selector-string change — no
+   name from the probe. Prefer role + name anchors; **never** anchor on a class (class
+   names rotate — the READMEs warn). The diff MUST be a pure selector-string change — no
    control-flow, scheduling-logic, or unrelated edits. A reviewer should read it in seconds.
 5. **Re-validate:** re-run that platform `--dry-run`. Bounded retries — **max 2** heal
    attempts per row; if still failing, **escalate** (Step 5).
@@ -107,11 +107,11 @@ Pass the bare channel id (the helper also accepts a pasted archive URL). The mes
 contain: platform, failing step, the screenshot path, the probe's top candidates, and
 exactly what you need decided.
 
-Why the bot and not the Slack MCP connector: the MCP connector posts **as the user**, so
-Slack never fires a notification for it and the escalation lands silently — defeating the
-point of an unattended scheduler. The bot posts as a separate identity, which actually
-notifies. The bot token lives in `~/.claude/settings.json` env (`SLACK_BOT_TOKEN`), never
-in this repo; see `fleet-config/docs/slack-workflow.md`.
+Use the bot, not the Slack MCP connector: the MCP connector posts **as the user**, so
+Slack never fires a notification and the escalation lands silently — defeating an
+unattended scheduler. The bot posts as a separate identity, which actually notifies. Its
+token lives in `~/.claude/settings.json` env (`SLACK_BOT_TOKEN`), never in this repo; see
+`fleet-config/docs/slack-workflow.md`.
 
 If `autoheal_channel` is blank **or** the helper reports a failure (missing token, API
 error), surface that plainly in the run output and still **stop**. Either way: do not
