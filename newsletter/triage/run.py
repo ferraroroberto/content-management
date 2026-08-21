@@ -193,7 +193,7 @@ def build_candidates(records: Sequence[gm.EmailRecord], priors: sc.Priors, notio
                 if canonical in seen_in_email:
                     continue          # same article via two anchors (resolved after extraction-time dedupe)
                 seen_in_email.add(canonical)
-            dom = fx.domain_of(link.best_url)
+            dom = gm.publication_domain(link.best_url, rec.sender_address)   # each Substack publication = own domain (#220)
             bonus, _ = priors.domain(dom)
             c = rk.Candidate(cid=f"{rec.message_id}:{i}", message_id=rec.message_id, sender_name=rec.sender_name,
                              sender_address=rec.sender_address, subject=rec.subject, email_ts=rec.timestamp,
@@ -343,7 +343,7 @@ def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: D
                 canon = canonicalize_url(gm.canonical_substack(f.final_url))
                 if canon in notion_urls:
                     c.in_notion = True
-                c.domain = fx.domain_of(f.final_url) or c.domain
+                c.domain = gm.publication_domain(f.final_url, c.sender_address) or c.domain
             if f.title and _norm(f.title) in notion_titles:
                 c.in_notion = True
         stats["fetched"] = len(stage_b)
