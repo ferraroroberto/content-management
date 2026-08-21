@@ -47,6 +47,14 @@ class CriteriaTests(unittest.TestCase):
         self.assertEqual(floor, ["news@alumni.example.edu"])  # ≥20 emails, 0 picks
         self.assertEqual(crit["window"]["match_rate"], 0.9)
 
+    def test_owner_overrides_are_merged(self) -> None:
+        crit = cr.build_criteria(_STATS)
+        ov = crit["sender_overrides"]
+        self.assertEqual(ov["gustavorazzetti@substack.com"]["tier"], "never")   # paywalled — owner rule
+        self.assertIn("paywall", cr.RULES)
+        self.assertIn("cadence", cr.RULES)
+        self.assertIn("feedback_loop", cr.RULES)
+
     def test_domain_priors_merge_topics_and_stars(self) -> None:
         crit = cr.build_criteria(_STATS)
         self.assertEqual(crit["domain_priors"][0],

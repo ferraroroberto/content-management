@@ -86,7 +86,6 @@
     ],
     "signature_domains": [
      "hbr.org",
-     "think.fearlessculture.design",
      "psychsafety.com",
      "mikefisher.substack.com",
      "rishad.substack.com",
@@ -208,6 +207,36 @@
   "backfill": {
    "next_checkbox_pool": true,
    "classics": true
+  },
+  "paywall": {
+   "rule": "never link paywalled content — a paywalled pick is promotion, not content for the reader",
+   "detect": [
+    "Substack 'This post is for paid subscribers' / paywall block",
+    "hard subscribe-to-read walls",
+    "truncated body with a subscription CTA"
+   ],
+   "metered_is_ok": "HBR-style metered/registration walls are accessible and were picked 151 times — only hard walls are excluded",
+   "known_paywalled_senders": "see overrides.json (tier=never, reason=paywalled) — Fearless Culture since 2026"
+  },
+  "cadence": {
+   "rule": "one run covers one review window (last watermark → now, normally one week) and fills ONE edition (8/8/8); a backlog of N weeks yields N windows and N editions, oldest first — never drain the whole inbox into one edition",
+   "window_anchor": "Saturday edition day: the run on Friday covers last Saturday → today and feeds the next edition, so the queue stays one edition ahead"
+  },
+  "feedback_loop": {
+   "rule": "after the owner reviews a report (tick = yes, untick = no), ingest the decisions: update sender tiers/weights in overrides.json, log every decision to results/newsletter/triage/feedback.jsonl; the weekly Notion re-sync (history.py) refreshes the data priors",
+   "new_senders": "a sender with no history is flagged NEW in the report, scored on content + criteria only, and listed for a manual tier decision (always/usually/rarely/never/review) that persists in overrides.json"
+  }
+ },
+ "sender_overrides": {
+  "gustavorazzetti@substack.com": {
+   "tier": "never",
+   "reason": "paywalled since 2026 — the newsletter never links paywalled content (it would be promotion, not content)",
+   "since": "2026-08-21"
+  },
+  "gustavorazzetti+fearless-culture@substack.com": {
+   "tier": "never",
+   "reason": "paywalled since 2026 — same publication as gustavorazzetti@substack.com",
+   "since": "2026-08-21"
   }
  },
  "sender_priors": {

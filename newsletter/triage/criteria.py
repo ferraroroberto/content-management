@@ -78,7 +78,7 @@ RULES: Dict[str, Any] = {
             "themes": ["psychological safety", "culture and change", "feedback and difficult conversations", "trust",
                        "meetings and decision-making", "managers and teams", "emotions at work", "power, politics and influence",
                        "delegation and accountability", "humor and humanity at work", "hiring, performance and careers of others"],
-            "signature_domains": ["hbr.org", "think.fearlessculture.design", "psychsafety.com", "mikefisher.substack.com",
+            "signature_domains": ["hbr.org", "psychsafety.com", "mikefisher.substack.com",
                                   "rishad.substack.com", "knowledge.insead.edu", "newsletter.weskao.com", "imd.org", "library.hbs.edu",
                                   "strategy-business.com", "gallup.com", "corporate-rebels.com", "leadingsapiens.com"],
             "anti_themes": ["executive-education brochures", "program/course promos", "alumni news"],
@@ -122,7 +122,33 @@ RULES: Dict[str, Any] = {
         "one star per topic, the must-read is usually personal development or leadership (innovation 2/48)",
     ],
     "backfill": {"next_checkbox_pool": True, "classics": True},
+    "paywall": {
+        "rule": "never link paywalled content — a paywalled pick is promotion, not content for the reader",
+        "detect": ["Substack 'This post is for paid subscribers' / paywall block", "hard subscribe-to-read walls",
+                   "truncated body with a subscription CTA"],
+        "metered_is_ok": "HBR-style metered/registration walls are accessible and were picked 151 times — only hard walls are excluded",
+        "known_paywalled_senders": "see overrides.json (tier=never, reason=paywalled) — Fearless Culture since 2026",
+    },
+    "cadence": {
+        "rule": "one run covers one review window (last watermark → now, normally one week) and fills ONE edition (8/8/8); "
+                "a backlog of N weeks yields N windows and N editions, oldest first — never drain the whole inbox into one edition",
+        "window_anchor": "Saturday edition day: the run on Friday covers last Saturday → today and feeds the next edition, so the queue stays one edition ahead",
+    },
+    "feedback_loop": {
+        "rule": "after the owner reviews a report (tick = yes, untick = no), ingest the decisions: update sender tiers/weights in overrides.json, "
+                "log every decision to results/newsletter/triage/feedback.jsonl; the weekly Notion re-sync (history.py) refreshes the data priors",
+        "new_senders": "a sender with no history is flagged NEW in the report, scored on content + criteria only, and listed for a manual tier "
+                       "decision (always/usually/rarely/never/review) that persists in overrides.json",
+    },
 }
+
+OVERRIDES_PATH = Path(__file__).with_name("overrides.json")
+
+
+def load_overrides() -> Dict[str, Any]:
+    if OVERRIDES_PATH.exists():
+        return json.loads(OVERRIDES_PATH.read_text(encoding="utf-8"))
+    return {"senders": {}}
 
 # Gmail senders that are system notifications, alumni bulletins or pure promos
 # — kept in the report but ranked at the floor (0 picks in 54 weeks each).
@@ -171,6 +197,7 @@ def build_criteria(stats: Dict[str, Any]) -> Dict[str, Any]:
                    "first_email": w.get("first_email"), "last_email": w.get("last_email"),
                    "match_rate": stats.get("match", {}).get("rate")},
         "rules": RULES,
+        "sender_overrides": load_overrides().get("senders", {}),
         "sender_priors": _sender_priors(stats),
         "domain_priors": _domain_priors(stats),
         "topic_authors": stats.get("topic_authors", {}),
@@ -194,7 +221,8 @@ def main(argv=None) -> int:
     crit = build_criteria(stats)
     Path(args.out).write_text(json.dumps(crit, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     print(f"✅ criteria.json written: {len(crit['sender_priors']['ranked'])} ranked senders, "
-          f"{len(crit['sender_priors']['floor'])} floor senders, {len(crit['domain_priors'])} domains → {args.out}")
+          f"{len(crit['sender_priors']['floor'])} floor senders, {len(crit['sender_overrides'])} overrides, "
+          f"{len(crit['domain_priors'])} domains → {args.out}")
     if args.print:
         for r in crit["sender_priors"]["ranked"][:25]:
             print(f"  {r['hit_rate_per_email']:.2f}/email  {r['picks']:3} picks / {r['emails']:3} emails  {r['name'][:40]}")

@@ -1,0 +1,15 @@
+{
+  "_doc": "Owner-maintained sender decisions, merged into criteria.json by `python -m newsletter.triage.criteria` and applied by the ranker BEFORE the data-derived priors. Keyed by sender address (lowercase). tier: never | rarely | usually | always | review. Updated by the Step-2 feedback loop (report ticks) and by hand for new senders.",
+  "senders": {
+    "gustavorazzetti@substack.com": {
+      "tier": "never",
+      "reason": "paywalled since 2026 — the newsletter never links paywalled content (it would be promotion, not content)",
+      "since": "2026-08-21"
+    },
+    "gustavorazzetti+fearless-culture@substack.com": {
+      "tier": "never",
+      "reason": "paywalled since 2026 — same publication as gustavorazzetti@substack.com",
+      "since": "2026-08-21"
+    }
+  }
+}
