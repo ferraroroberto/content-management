@@ -73,12 +73,19 @@ flowchart TB
     NNORM["normalize_names + normalize_url"]
     NBUILD["build_newsletter.py"]
     NSBDRAFT["substack_draft.py\n(optional, explicit step)"]
-    NTRIAGE["triage/ — gmail.py + history.py\n(label ingest, link decode, 54-week\nground truth + criteria)"]
+    NTRIAGE["triage/ — gmail.py + history.py + criteria.py\n(label ingest, link decode, 54-week\nground truth → criteria.json + overrides.json)"]
+    NTRIAGERUN["triage/run.py — weekly engine\nfetch + score (2 stages) + rank + report\n+ feedback.py (ticks → sender tiers)"]
   end
   NPIPE --> NBOOT --> NARCHIVE --> NNORM --> NBUILD
   NTRIAGE -->|"gmail.readonly via vendored\ngmail_readonly/ + google_oauth_common/"| GMAILAPI[("Gmail API\nlabel 'newsletters'")]
   NTRIAGE -->|"positives: articles + editions"| NOTION
   NTRIAGE --> RESULTSTRIAGE[["results/newsletter/triage/\nhistory/ + redirects.json"]]
+  NTRIAGE -->|"criteria.json"| NTRIAGERUN
+  NTRIAGERUN --> GMAILAPI
+  NTRIAGERUN -->|"dedupe: article URLs (read-only)"| NOTION
+  NTRIAGERUN -->|"stage A/B scoring\n(claude_haiku alias)"| LLMHUB
+  NTRIAGERUN --> TRIAGEREPORT[["results/newsletter/triage/\ntriage-<window>.md (review surface)"]]
+  TRIAGESKILL["newsletter-triage skill\n(.claude/skills/, .agents/skills/)"] --> NTRIAGERUN
   NARCHIVE -->|"readability-lxml extraction"| NOTION
   NARCHIVE --> LLMHUB[("local LLM hub\n127.0.0.1:8000\ntopic + 3-line summary")]
   NBUILD --> RESULTSNEWS[["results/newsletter/N{NNN}.html"]]

@@ -294,7 +294,13 @@
         "min_anchor_chars": 12,
         "redirect_workers": 8,
         "redirect_timeout_s": 10,
-        "redirect_budget_history": 6000
+        "redirect_budget_history": 6000,
+        "llm_hub_base_url": "http://127.0.0.1:8000",
+        "llm_model": "claude_haiku",
+        "stage_b_top_k": 90,
+        "fetch_workers": 8,
+        "fetch_timeout_s": 15,
+        "llm_workers": 3
     },
     "engagement": {
         "default_days": 5,

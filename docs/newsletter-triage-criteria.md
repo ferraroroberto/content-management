@@ -2,7 +2,7 @@
 
 The weekly newsletter picks 8 articles × 3 topics (leadership and management · personal development · innovation), stars one per topic and names one must-read. This document states the criteria that reproduce those picks, **each with the number it was measured on**, so a reader (or the Step-2 ranker, which consumes the machine-readable twin `newsletter/triage/criteria.json`) can tell a rule from a guess.
 
-**Ground truth** (`python -m newsletter.triage.history`, built 2026-08-21): Gmail label `newsletters`, 2025-08-08 → 2026-08-21 — 4,383 emails (median 82/week, min 25 in the opening week, max 102), 57,849 non-noise links; Notion editions N174–N229 (58 rows, 54 complete) with 1,317 picks. 93.9% of picks were traced to the email that offered them (45% exact URL, 27% Substack slug, 8% anchor-title fuzzy, 14% by the sender's domain in the window); the 80 unmatched are mostly Rishad/Mike Fisher posts whose email anchor is an image or a one-word title.
+**Ground truth** (`python -m newsletter.triage.history`, built 2026-08-21): Gmail label `newsletters`, 2025-08-08 → 2026-08-21 — 4,383 emails (median 82/week, min 25 in the opening week, max 102), 57,849 non-noise links; Notion editions N174–N229 (58 rows, 54 complete) with 1,317 picks. 94.7% of picks were traced to the email that offered them (46% exact URL, 26% Substack slug, 8% anchor-title fuzzy, 14% by the sender's domain in the window); the 70 unmatched are mostly Rishad/Mike Fisher posts whose email anchor is an image or a one-word title.
 
 Regenerate: `python -m newsletter.triage.history --no-gmail --reextract --no-resolve` (cached HTML, no network) then `python -m newsletter.triage.criteria`.
 

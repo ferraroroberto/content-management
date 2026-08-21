@@ -260,8 +260,50 @@ is scored against, under `newsletter/triage/`:
 | Command | What it does |
 |---|---|
 | `python -m newsletter.triage.history` | Full build with `newsletter_triage.history_weeks` (54) and `redirect_budget_history`. |
-| `python -m newsletter.triage.history --no-gmail --reextract --no-resolve` | Re-run extraction + join + stats from the cached HTML after a rule change (no network). |
+| `python -m newsletter.triage.history --no-gmail --reextract --budget 0` | Re-run extraction + join + stats from the cached HTML after a rule change (redirects re-applied from the cache, no new network). |
 | `python -m newsletter.triage.history --limit 150 --budget 100` | Smoke test. |
+| `python -m newsletter.triage.criteria` | Rebuild `criteria.json` from `stats.json` + `overrides.json`. |
+
+### Weekly engine (Step 2/3, issue #211)
+
+`run.py` turns one review window into one edition-sized shortlist — the owner's
+cadence rule: the run covers last watermark → now (normally Saturday → Friday)
+and fills **one** edition (8/8/8); a backlog of N weeks is split into N 7-day
+windows, oldest first, one report each. Nothing is written to Notion, Gmail or
+Chrome (that is Step 3).
+
+Pipeline per window: emails → non-noise links (decoded / resolved) → drop
+already-in-Notion → sender/domain priors (`criteria.json` + `overrides.json`) →
+**stage A** batched metadata scoring via the hub (`llm_model`, default
+`claude_haiku`) → fetch + **stage B** content scoring for the top-K
+(`stage_b_top_k`, 90) with paywall detection (`fetch.py`) → vetoes (`tier: never`,
+paywalled, promo) → caps (HBR ≤ 3, same author ≤ 2, same domain ≤ 3, one pick
+per email except digests) → 8 per topic + ⭐/🏆 suggestions →
+`results/newsletter/triage/triage-<start>_<end>.md`.
+
+| Command | What it does |
+|---|---|
+| `python -m newsletter.triage.run` | Live: window from `state.json → reviewed_until` (else today−7) to today, one report per 7-day window. |
+| `python -m newsletter.triage.run --since 2026-08-08 --until 2026-08-22` | Explicit range (split into windows). |
+| `python -m newsletter.triage.run --backtest N224,N225,N226,N227` | Offline replay from the history cache: precision of the shortlist vs real picks, recall of the edition's picks sourced in the window. |
+| `python -m newsletter.triage.run --no-llm` | Rule-only report (sender/domain priors) when the hub is down. |
+| `python -m newsletter.triage.feedback <report.md>` | Ingest the reviewed report (tick = yes): sender tiers in `overrides.json` + `results/newsletter/triage/feedback.jsonl`. |
+
+First dry run (2026-08-21, `claude_haiku`, 2-week windows ending 7 days before
+each edition): N224 precision 54 % / recall 16 %, N225 54 % / 26 %, N226 62 % /
+50 %, N227 42 % / 29 % (+runners-up 21–56 %). Precision = share of the 24
+suggestions that were real picks in some edition; recall = share of the
+edition's picks sourced in the window that made the shortlist. Misses are mostly
+caps doing their job (HBR ≤ 3 where the edition had 4, author ≤ 2) and picks
+ranked just below the fold — the feedback loop and wider stage-B depth are the
+levers.
+
+The report is the review surface: shortlist per topic with checkboxes (ticked =
+suggested), runners-up, a "new senders — set a tier" list, then every email in
+inbox order with every link and its verdict (`selected / runner-up / candidate /
+low / vetoed / duplicate / unknown`) — an unfetchable or unscorable link is
+`unknown`, never "skipped". Skill: `/newsletter-triage`
+(`.claude/skills/newsletter-triage/SKILL.md`, mirrored in `.agents/skills/`).
 
 ### Gmail one-time setup
 

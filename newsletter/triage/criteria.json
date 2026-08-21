@@ -6,7 +6,7 @@
   "positives": 1317,
   "first_email": "2025-08-08",
   "last_email": "2026-08-21",
-  "match_rate": 0.939
+  "match_rate": 0.947
  },
  "rules": {
   "edition": {
@@ -601,6 +601,20 @@
     }
    },
    {
+    "address": "lenny@substack.com",
+    "name": "Lenny's Newsletter",
+    "emails": 123,
+    "picks": 50,
+    "hit_rate_per_email": 0.41,
+    "hit_rate_per_link": 0.015,
+    "stars": 6,
+    "topics": {
+     "innovation": 29,
+     "leadership and management": 11,
+     "personal development": 10
+    }
+   },
+   {
     "address": "hello@gorick.com",
     "name": "Gorick Ng",
     "emails": 66,
@@ -618,13 +632,14 @@
     "address": "dwarkesh@substack.com",
     "name": "Dwarkesh Patel",
     "emails": 32,
-    "picks": 12,
-    "hit_rate_per_email": 0.38,
-    "hit_rate_per_link": 0.005,
+    "picks": 13,
+    "hit_rate_per_email": 0.41,
+    "hit_rate_per_link": 0.006,
     "stars": 1,
     "topics": {
      "innovation": 11,
-     "personal development": 1
+     "personal development": 1,
+     "leadership and management": 1
     }
    },
    {
@@ -691,20 +706,6 @@
      "leadership and management": 14,
      "personal development": 4,
      "innovation": 3
-    }
-   },
-   {
-    "address": "lenny@substack.com",
-    "name": "Lenny's Newsletter",
-    "emails": 123,
-    "picks": 39,
-    "hit_rate_per_email": 0.32,
-    "hit_rate_per_link": 0.01,
-    "stars": 5,
-    "topics": {
-     "innovation": 22,
-     "leadership and management": 10,
-     "personal development": 7
     }
    },
    {
@@ -775,19 +776,6 @@
     }
    },
    {
-    "address": "email@stratechery.com",
-    "name": "Ben Thompson",
-    "emails": 78,
-    "picks": 17,
-    "hit_rate_per_email": 0.22,
-    "hit_rate_per_link": 0.013,
-    "stars": 2,
-    "topics": {
-     "innovation": 15,
-     "personal development": 2
-    }
-   },
-   {
     "address": "ash@leanstack.com",
     "name": "ash@leanstack.com",
     "emails": 60,
@@ -812,6 +800,19 @@
     }
    },
    {
+    "address": "email@stratechery.com",
+    "name": "Ben Thompson",
+    "emails": 78,
+    "picks": 16,
+    "hit_rate_per_email": 0.21,
+    "hit_rate_per_link": 0.012,
+    "stars": 2,
+    "topics": {
+     "innovation": 15,
+     "personal development": 1
+    }
+   },
+   {
     "address": "marketoon@marketoonist.com",
     "name": "Tom Fishburne",
     "emails": 44,
@@ -822,20 +823,6 @@
     "topics": {
      "innovation": 7,
      "leadership and management": 1,
-     "personal development": 1
-    }
-   },
-   {
-    "address": "review@firstround.com",
-    "name": "First Round Review",
-    "emails": 44,
-    "picks": 9,
-    "hit_rate_per_email": 0.2,
-    "hit_rate_per_link": 0.045,
-    "stars": 0,
-    "topics": {
-     "innovation": 6,
-     "leadership and management": 2,
      "personal development": 1
     }
    },
@@ -862,6 +849,20 @@
     "stars": 0,
     "topics": {
      "personal development": 5,
+     "leadership and management": 1
+    }
+   },
+   {
+    "address": "review@firstround.com",
+    "name": "First Round Review",
+    "emails": 44,
+    "picks": 8,
+    "hit_rate_per_email": 0.18,
+    "hit_rate_per_link": 0.04,
+    "stars": 0,
+    "topics": {
+     "innovation": 6,
+     "personal development": 1,
      "leadership and management": 1
     }
    },
@@ -959,12 +960,12 @@
     "address": "superhuman@mail.joinsuperhuman.ai",
     "name": "Superhuman – Zain Kahn",
     "emails": 372,
-    "picks": 51,
-    "hit_rate_per_email": 0.14,
+    "picks": 50,
+    "hit_rate_per_email": 0.13,
     "hit_rate_per_link": 0.007,
     "stars": 4,
     "topics": {
-     "innovation": 41,
+     "innovation": 40,
      "personal development": 5,
      "leadership and management": 5
     }
@@ -1048,6 +1049,18 @@
     }
    },
    {
+    "address": "lenny+how-i-ai@substack.com",
+    "name": "Lenny's Newsletter",
+    "emails": 56,
+    "picks": 3,
+    "hit_rate_per_email": 0.05,
+    "hit_rate_per_link": 0.005,
+    "stars": 0,
+    "topics": {
+     "innovation": 3
+    }
+   },
+   {
     "address": "simonw@substack.com",
     "name": "Simon Willison from Simon Willison’s Newsletter",
     "emails": 19,
@@ -1057,18 +1070,6 @@
     "stars": 1,
     "topics": {
      "innovation": 1
-    }
-   },
-   {
-    "address": "lenny+how-i-ai@substack.com",
-    "name": "Lenny's Newsletter",
-    "emails": 56,
-    "picks": 2,
-    "hit_rate_per_email": 0.04,
-    "hit_rate_per_link": 0.003,
-    "stars": 0,
-    "topics": {
-     "innovation": 2
     }
    },
    {

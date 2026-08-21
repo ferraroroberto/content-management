@@ -444,6 +444,13 @@ def decode_local(link: Link) -> None:
         if url:
             link.target, link.via = url, "b64"
             return
+    # Substack link previews (and some plain-text newsletters) print the target
+    # URL as the anchor text — that *is* the destination, no network needed.
+    label = (link.text or "").strip()
+    if label.lower().startswith(("http://", "https://")) and " " not in label and is_redirector(href) \
+            and not is_redirector(label):
+        link.target, link.via = (label.split("?utm_")[0] if "?utm_" in label else label), "anchor-url"
+        return
     if not is_redirector(href):
         link.target, link.via = href, "direct"
 
