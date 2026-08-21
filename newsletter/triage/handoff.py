@@ -95,8 +95,9 @@ def plan_open(urls: Sequence[str], already_open: Sequence[str]) -> Tuple[List[st
     return to_open, skipped
 
 
-def open_in_chrome(urls: Sequence[str], *, debug_port: int = 9222) -> Dict[str, Any]:
-    """Ensure the newsletter Chrome, open one tab per URL not already open. Returns counts + the skipped list."""
+def open_in_chrome(urls: Sequence[str], *, debug_port: int = 9222, dry_run: bool = False) -> Dict[str, Any]:
+    """Ensure the newsletter Chrome, open one tab per URL not already open. Returns counts + the skipped list.
+    ``dry_run`` does everything except opening: ensure Chrome, connect, list tabs, print the plan."""
     from newsletter import chrome_tabs  # noqa: PLC0415 — Playwright, imported only when opening
     from newsletter.bootstrap_chrome import ensure_chrome  # noqa: PLC0415
 
@@ -107,6 +108,15 @@ def open_in_chrome(urls: Sequence[str], *, debug_port: int = 9222) -> Dict[str, 
     try:
         open_urls = [t.url for t in chrome_tabs.list_tabs(browser)]
         to_open, skipped = plan_open(urls, open_urls)
+        logger.info("🔎 Chrome :%d has %d tab(s) open · %d to open · %d already open", debug_port, len(open_urls),
+                    len(to_open), len(skipped))
+        if dry_run:
+            for u in to_open:
+                logger.info("   would open · %s", u[:110])
+            for u in skipped:
+                logger.info("   already open · %s", u[:110])
+            return {"opened": 0, "would_open": len(to_open), "skipped_open": len(skipped), "skipped": skipped,
+                    "total": len(urls), "dry_run": True}
         context = browser.contexts[0] if browser.contexts else browser.new_context()
         opened = 0
         for u in to_open:
@@ -184,6 +194,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--run", type=int, required=True, help="stored run id (control panel → stored run)")
     ap.add_argument("--open", action="store_true", help="open the ticked URLs as tabs in the :9222 Chrome")
     ap.add_argument("--mark-reviewed", action="store_true", help="write the watermark comment on the Notion task page")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="with --open: ensure Chrome, connect, list tabs and print the plan — open nothing")
     ap.add_argument("--debug", action="store_true")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO,
@@ -208,7 +220,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     until = window_until(args.run)
     line = watermark_line(until, window=window) if until else None
 
-    if args.open:
+    if args.open and args.dry_run:
+        res = open_in_chrome(urls, dry_run=True)
+        print(f"🌐 dry run: would open {res['would_open']} tab(s), {res['skipped_open']} already open — nothing opened")
+    elif args.open:
         res = open_in_chrome(urls)
         print(f"🌐 opened {res['opened']} tab(s), {res['skipped_open']} already open — now run `newsletter_pipeline.py archive`")
     else:

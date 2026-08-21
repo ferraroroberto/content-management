@@ -84,6 +84,28 @@ class HandoffTests(unittest.TestCase):
         self.assertEqual(state["reviewed_until"], "2026-08-22")
         self.assertEqual(state["watermarks"][0]["comment_id"], "c-1")
 
+    def test_open_in_chrome_dry_run_opens_nothing(self) -> None:
+        import types
+        page = unittest.mock.MagicMock()
+        tab = types.SimpleNamespace(url="https://b.com/y", title="t", page=page)
+        browser = unittest.mock.MagicMock()
+        ctx = unittest.mock.MagicMock()
+        browser.contexts = [ctx]
+        fake_tabs = types.SimpleNamespace(connect=lambda port: browser, list_tabs=lambda b: [tab],
+                                          close_browser=lambda b: None)
+        fake_boot = types.SimpleNamespace(ensure_chrome=lambda: 0)
+        with unittest.mock.patch.dict(sys.modules, {"newsletter.chrome_tabs": fake_tabs,
+                                                    "newsletter.bootstrap_chrome": fake_boot}):
+            res = ho.open_in_chrome(["https://a.com/x", "https://b.com/y?utm_source=z"], dry_run=True)
+            self.assertEqual((res["would_open"], res["skipped_open"], res["opened"]), (1, 1, 0))
+            ctx.new_page.assert_not_called()
+            res = ho.open_in_chrome(["https://a.com/x", "https://b.com/y?utm_source=z"])
+            self.assertEqual((res["opened"], res["skipped_open"]), (1, 1))
+            ctx.new_page.assert_called_once()
+            fake_boot.ensure_chrome = lambda: 3
+            with self.assertRaises(RuntimeError):
+                ho.open_in_chrome(["https://a.com/x"])
+
     def test_mark_reviewed_needs_page_id(self) -> None:
         with unittest.mock.patch.object(ho, "load_block", return_value={}):
             with self.assertRaises(RuntimeError):
