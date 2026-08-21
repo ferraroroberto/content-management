@@ -301,7 +301,8 @@
         "fetch_workers": 8,
         "fetch_timeout_s": 15,
         "llm_workers": 3,
-        "lessons_model": "claude_sonnet"
+        "lessons_model": "claude_sonnet",
+        "notion_task_page_id": "your_notion_task_page_id_here"
     },
     "engagement": {
         "default_days": 5,

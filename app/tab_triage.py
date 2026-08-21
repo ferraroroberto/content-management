@@ -246,6 +246,24 @@ def _render_review(run: dict) -> None:
     if prior:
         st.caption(f"last applied {str(prior.get('reviewed_at', ''))[:16]} · {prior.get('n_pick')} picks · "
                    + (f"{len(prior.get('tier_changes') or [])} tier change(s)"))
+    # hand-off (issue #212): the two external writes, each an explicit click, streamed into the log panel
+    # like every other pipeline step (Playwright + Notion run in the subprocess, never in the Streamlit thread)
+    handoff = [str(VENV_PY), "-m", "newsletter.triage.handoff", "--run", str(run_id)]
+    running = is_running(PIPELINE_NAME)
+    with st.container(horizontal=True, gap="small"):
+        st.button("🌐 Open ticked in Chrome (:9222)", key=f"triage-open-{run_id}", disabled=running or prior is None,
+                  on_click=_launch, args=(handoff + ["--open"],),
+                  help="ensure_chrome() then one tab per ticked URL (already-open tabs skipped) — then run "
+                       "② Archive → Notion in the newsletter tab as usual.")
+        st.button("📝 Mark reviewed in Notion", key=f"triage-mark-{run_id}", disabled=running or prior is None
+                  or run.get("kind") != "live",
+                  on_click=_launch, args=(handoff + ["--mark-reviewed"],),
+                  help="Writes exactly one 'until <newest e-mail> > included' comment on the newsletters task page "
+                       "and advances the local watermark. Without clicking, the run only prints the line.")
+        st.button("👀 Dry run (Chrome plan)", key=f"triage-preview-{run_id}", disabled=running,
+                  on_click=_launch, args=(handoff + ["--open", "--dry-run"],),
+                  help="Ensure Chrome, connect, list its tabs and print what would open / is already open, plus the "
+                       "watermark line — opens nothing, writes nothing. Follow it in ▶ run.")
     _render_lessons(run_id, start, end)
     _render_new_senders(run_id)
     report_path = run.get("report_path")
@@ -309,12 +327,22 @@ def run() -> None:
         st.error(f"triage store unavailable: {str(err)[:300]}")
         st.caption("Apply `newsletter/triage/schema.sql` once in the Supabase SQL editor if the tables are missing.")
         runs = []
-    _render_run_controls(runs)
-    st.divider()
+
+    # Two sub-sections (owner request): the run side and the review side stay separate. segmented_control
+    # rather than st.tabs() — same fix as app.py's top-level routing (issue #157).
+    SUB_SECTIONS = ["▶ run", "📋 review"]
+    sub = st.segmented_control("triage sub-section", options=SUB_SECTIONS, default=SUB_SECTIONS[0],
+                               key="triage-sub-section", label_visibility="collapsed")
+    sub = sub or SUB_SECTIONS[0]
+    if sub == "▶ run":
+        _render_run_controls(runs)
+        return
     if not runs:
-        st.info("no stored runs yet — run a week above, or import history: "
+        st.info("no stored runs yet — run a week in ▶ run, or import history: "
                 "`python -m newsletter.triage.db import-history` then `python -m newsletter.triage.run --backtest N224,N225,N226,N227`")
         return
+    if is_running(PIPELINE_NAME):
+        st.info("a triage process is running — follow it in ▶ run; stored runs below refresh when it finishes")
     options = {f"{r['window_start']} → {r['window_end']} · {r['kind']}"
                + (f" {r.get('edition')}" if r.get("edition") else "")
                + f" · {r['status']} · {r.get('picks') if r.get('picks') is not None else '?'} picks"

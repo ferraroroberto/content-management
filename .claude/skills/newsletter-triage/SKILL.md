@@ -5,19 +5,21 @@ description: Triage the 'newsletters' Gmail label into an edition-sized shortlis
 
 # newsletter-triage
 
-**Goal:** replace the manual inbox review with a stored, reviewable shortlist. Run the deterministic engine once, synchronously, read the report it wrote, summarise the shortlist in chat, and stop. The interactive review (tick / untick / promote, Apply, distil lessons) is the control panel's **🧭 triage** tab — this skill never writes to Notion, Gmail or Chrome (that is `--open` / `--mark-reviewed`, issue #212).
+**Goal:** replace the manual inbox review with a stored, reviewable shortlist. Run the deterministic engine once, synchronously, read the report it wrote, summarise the shortlist in chat, and stop. The interactive review (tick / untick / promote, Apply, distil lessons) is the control panel's **🧭 triage** tab. The only external writes are the two explicit hand-off flags — `--open` (tabs in the `:9222` Chrome) and `--mark-reviewed` (one Notion comment) — never run without the owner asking for them in this conversation.
 
 This is a **public repo** — never put secrets, tokens or private identifiers in issues, PRs, commits or the report.
 
 ## Arguments
 
-`[--days N] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--force] [--backtest N226[,N227]] [--feedback <report.md>] [--lessons <run-id>] [--no-llm] [--source cache]`
+`[--days N] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--force] [--backtest N226[,N227]] [--feedback <report.md>] [--lessons <run-id>] [--open <run-id>] [--mark-reviewed <run-id>] [--no-llm] [--source cache]`
 
 - default = window from the last watermark (`results/newsletter/triage/state.json → reviewed_until`, else today−7) to today, split into 7-day windows oldest first — **one report per window, one edition per report** (owner rule: never drain the inbox into one edition).
 - a window already stored in Supabase is **refused** (exit 3) unless `--force` — say so and ask before forcing; the owner's decisions survive a re-run.
 - `--backtest` = replay past editions offline from the history cache (stored as `kind=backtest` with the real picks as decisions) and print precision/recall.
 - `--feedback <report>` = ingest the owner's ticks from a markdown report → `triage_decisions` + `newsletter/triage/overrides.json` sender tiers.
 - `--lessons <run-id>` = distil the applied review of a stored run into ≤ 3 proposed criteria notes (hub alias `claude_sonnet`); list them — the owner accepts them in the tab or with `-m newsletter.triage.lessons --accept <ids>`.
+- `--open <run-id>` = `-m newsletter.triage.handoff --run <id> --open`: ensure the newsletter Chrome, one tab per ticked URL of the applied review (already-open tabs skipped); the unchanged `newsletter_pipeline.py archive` then takes over. With no applied review it falls back to the engine's suggested picks and says so.
+- `--mark-reviewed <run-id>` = `-m newsletter.triage.handoff --run <id> --mark-reviewed`: exactly one `until <newest e-mail, Gmail style> > included` comment on the task page + `state.json → reviewed_until`. `-m newsletter.triage.handoff --run <id>` alone prints both (URLs + line) and writes nothing.
 
 ## Step 1 — pre-flight
 
@@ -45,7 +47,7 @@ Then point the owner to the **🧭 triage** tab to review + Apply (or, for a mar
 
 ## Guardrails (non-negotiable)
 
-- Read-only towards Notion / Gmail / Chrome; the only writes are the Supabase `triage_*` rows, the markdown report, `overrides.json` / `lessons.json` when the owner decides.
+- Read-only towards Notion / Gmail / Chrome unless the owner explicitly asks for `--open` / `--mark-reviewed` in this conversation (the only external writes: tabs in the `:9222` Chrome, one Notion comment); everything else writes only the Supabase `triage_*` rows, the markdown report, `overrides.json` / `lessons.json` when the owner decides.
 - Paywalled content is never a pick (criteria §8); `overrides.json` `tier: never` wins over every score.
 - One window → one edition. Do not merge windows. Never `--force` without saying which stored run gets replaced.
 - Lessons are proposed, never auto-accepted.
