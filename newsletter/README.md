@@ -289,6 +289,15 @@ per email except digests) → 8 per topic + ⭐/🏆 suggestions →
 | `python -m newsletter.triage.run --no-llm` | Rule-only report (sender/domain priors) when the hub is down. |
 | `python -m newsletter.triage.feedback <report.md>` | Ingest the reviewed report (tick = yes): sender tiers in `overrides.json` + `results/newsletter/triage/feedback.jsonl`. |
 
+First dry run (2026-08-21, `claude_haiku`, 2-week windows ending 7 days before
+each edition): N224 precision 54 % / recall 16 %, N225 54 % / 26 %, N226 62 % /
+50 %, N227 42 % / 29 % (+runners-up 21–56 %). Precision = share of the 24
+suggestions that were real picks in some edition; recall = share of the
+edition's picks sourced in the window that made the shortlist. Misses are mostly
+caps doing their job (HBR ≤ 3 where the edition had 4, author ≤ 2) and picks
+ranked just below the fold — the feedback loop and wider stage-B depth are the
+levers.
+
 The report is the review surface: shortlist per topic with checkboxes (ticked =
 suggested), runners-up, a "new senders — set a tier" list, then every email in
 inbox order with every link and its verdict (`selected / runner-up / candidate /
