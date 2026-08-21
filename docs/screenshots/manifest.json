@@ -162,8 +162,8 @@
         "[data-testid=\"stTextArea\"]",
         "[data-testid=\"stExpander\"]"
       ],
-      "input_hash": "96cea244bf1c048b283415cf9396feaef7dbbb4f3350ea46a298c1b944c52561",
-      "captured_at": "2026-08-21T16:10:57+00:00",
+      "input_hash": "b04c3aea47508002c828e397d8e281f926e792dfc23b1ea5ca44feb7f4fad18e",
+      "captured_at": "2026-08-21T16:41:10+00:00",
       "files": [
         "docs/screenshots/triage-desktop.png"
       ]

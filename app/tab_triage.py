@@ -203,15 +203,16 @@ def _render_review(run: dict) -> None:
         num_rows="fixed",
         width="stretch",
         height=min(900, 60 + 36 * len(frame)),
-        column_order=["topic", "pick", "star", "must_read", "score", "title", "sender", "summary", "why", "note", "suggested"],
+        column_order=["topic", "pick", "star", "must_read", "score", "title", "url", "sender", "summary", "why", "note", "suggested"],
         disabled=["cid", "topic", "score", "title", "url", "sender", "summary", "why", "suggested", "canonical", "sender_address"],
         column_config={
-            "topic": st.column_config.TextColumn("topic", width="small"),
+            "topic": st.column_config.TextColumn("topic", width="medium"),
             "pick": st.column_config.CheckboxColumn("✅", help="include in the edition", width="small"),
             "star": st.column_config.CheckboxColumn("⭐", help="star (one per topic)", width="small"),
             "must_read": st.column_config.CheckboxColumn("🏆", help="must-read (one per edition)", width="small"),
             "score": st.column_config.NumberColumn("score", format="%.1f", width="small"),
-            "title": st.column_config.LinkColumn("title", display_text=None, width="large"),
+            "title": st.column_config.TextColumn("title", width="large"),
+            "url": st.column_config.LinkColumn("link", display_text="open ↗", width="small"),
             "sender": st.column_config.TextColumn("sender", width="small"),
             "summary": st.column_config.TextColumn("summary", width="large"),
             "why": st.column_config.TextColumn("why", width="medium"),
@@ -219,7 +220,6 @@ def _render_review(run: dict) -> None:
             "suggested": st.column_config.TextColumn("engine", width="small"),
         },
     )
-    # LinkColumn shows the URL unless display_text maps it — keep the title readable via a second look-up
     comment_key = f"triage-comment-{run_id}"
     prior = _review(start, end)
     st.text_area("why these choices (feeds the lessons step)", value=(prior or {}).get("comment") or "",

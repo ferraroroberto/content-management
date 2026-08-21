@@ -273,9 +273,15 @@ def save_decisions(start: Any, end: Any, rows: Sequence[Dict[str, Any]]) -> int:
 
 
 def decision_tally() -> Dict[str, Tuple[int, int]]:
-    """``{sender_address: (n_decisions, n_yes)}`` over every stored decision — feeds ``feedback.tier_for``."""
+    """``{sender_address: (n_decisions, n_yes)}`` over every stored decision — feeds ``feedback.tier_for``.
+    One vote per article: the same canonical URL decided in two windows (overlapping backtest windows,
+    a link offered twice) counts once, latest decision wins."""
+    latest: Dict[str, Dict[str, Any]] = {}
+    for r in _fetch_all("triage_decisions", "canonical,sender_address,pick,decided_at", order=("decided_at", False)):
+        if r.get("canonical"):
+            latest[r["canonical"]] = r
     counts: Dict[str, List[int]] = {}
-    for r in _fetch_all("triage_decisions", "sender_address,pick"):
+    for r in latest.values():
         addr = (r.get("sender_address") or "").lower()
         if not addr:
             continue

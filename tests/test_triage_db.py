@@ -251,6 +251,9 @@ class StoreTests(unittest.TestCase):
             # backtest-style run on another window adds decisions → tier flips
             for k, (s, e) in enumerate((("2026-07-04", "2026-07-11"), ("2026-07-11", "2026-07-18"))):
                 db.save_decisions(s, e, [{"canonical": f"https://m.com/{k}", "sender_address": "MEH@x.com", "pick": True}])
+            # the same article decided again in an overlapping window counts once (latest wins)
+            db.save_decisions("2026-07-18", "2026-07-25", [{"canonical": "https://m.com/1", "sender_address": "meh@x.com", "pick": True}])
+            self.assertEqual(db.decision_tally()["meh@x.com"], (4, 3))
             changes = fb.apply_tiers(db.decision_tally(), overrides_path=ov)
             self.assertEqual(json.loads(ov.read_text(encoding="utf-8"))["senders"]["meh@x.com"]["tier"], "usually")
             self.assertTrue(any("meh@x.com" in c for c in changes))
