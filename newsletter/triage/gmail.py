@@ -473,6 +473,29 @@ def canonical_substack(url: str) -> str:
     return url
 
 
+_SUBSTACK_SHARED_HOSTS = {"substack.com", "open.substack.com"}
+_OPEN_SUBSTACK_PUB = re.compile(r"^/pub/([^/?#]+)")
+
+
+def publication_domain(url: str, sender_address: str = "") -> str:
+    """The source a link belongs to, for caps / priors / display — every Substack publication is its own
+    domain (issue #220): ``open.substack.com/pub/<pub>/…`` → ``<pub>.substack.com``; bare ``substack.com``
+    app-links / unresolved redirects → the sender's ``<pub>@substack.com`` → ``<pub>.substack.com``; any
+    other host → host without ``www.``."""
+    parts = urlsplit(url or "")
+    host = parts.netloc.lower()
+    if host.startswith("www."):
+        host = host[4:]
+    if host in _SUBSTACK_SHARED_HOSTS:
+        m = _OPEN_SUBSTACK_PUB.match(parts.path or "")
+        if m:
+            return f"{m.group(1).lower()}.substack.com"
+        local, _, sdom = (sender_address or "").lower().rpartition("@")
+        if sdom == "substack.com" and local:
+            return f"{local.split('+')[0]}.substack.com"
+    return host
+
+
 # ---------------------------------------------------------------------------
 # redirect resolution — HTTP, cached, bounded
 

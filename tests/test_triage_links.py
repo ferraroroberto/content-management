@@ -103,6 +103,20 @@ class ExtractionTests(unittest.TestCase):
         self.assertTrue(gm.is_redirector(link.href))
 
 
+class PublicationDomainTests(unittest.TestCase):
+    def test_every_substack_publication_is_its_own_domain(self) -> None:
+        self.assertEqual(gm.publication_domain("https://open.substack.com/pub/adamgrant/p/the-truth?utm_source=x"), "adamgrant.substack.com")
+        self.assertEqual(gm.publication_domain("https://open.substack.com/pub/TheGoodBusy/p/slug"), "thegoodbusy.substack.com")
+        # unresolved redirect / app-link → the sender's publication
+        self.assertEqual(gm.publication_domain("https://substack.com/redirect/abc?j=x", "mikefisher@substack.com"), "mikefisher.substack.com")
+        self.assertEqual(gm.publication_domain("https://substack.com/app-link/post?publication_id=1", "rishad+tag@substack.com"), "rishad.substack.com")
+        # nothing to derive from → the shared host stays (still one bucket, but only for truly unknown links)
+        self.assertEqual(gm.publication_domain("https://substack.com/redirect/abc", "someone@gmail.com"), "substack.com")
+        # everything else: host without www.
+        self.assertEqual(gm.publication_domain("https://www.hbr.org/2026/08/x?deliveryName=y", "x@hbr.org"), "hbr.org")
+        self.assertEqual(gm.publication_domain("https://thegoodbusy.substack.com/p/x"), "thegoodbusy.substack.com")
+
+
 class RuleTests(unittest.TestCase):
     def test_is_redirector_labels(self) -> None:
         self.assertTrue(gm.is_redirector("https://link.mail.beehiiv.com/v2/c/x"))
