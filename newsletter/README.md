@@ -344,6 +344,13 @@ markdown report renders in an expander (one source, no second copy).
 | `python -m newsletter.triage.db import-history` | Load `triage_editions` + `triage_picks` from `results/newsletter/triage/history/`. |
 | `python -m newsletter.triage.run --backtest N224,N225,N226,N227 --force` | Store the four backtests with the real picks as decisions (the first knowledge base). |
 | `python -m newsletter.triage.lessons --run <id>` / `--accept 1,2` / `--list` | Distil / accept / list lessons from the CLI. |
+| `python -m newsletter.triage.handoff --run <id>` | Hand-off preview (issue #212): the ticked URLs + the `until <newest e-mail> > included` watermark line — no writes. |
+| `python -m newsletter.triage.handoff --run <id> --open` | `ensure_chrome()` then one tab per ticked URL in the `:9222` Chrome (already-open tabs skipped) → run ② Archive as usual. |
+| `python -m newsletter.triage.handoff --run <id> --mark-reviewed` | Exactly one watermark comment on the `newsletters processing` task page (`notion_task_page_id`) + `state.json → reviewed_until`. |
+
+The tab's **🌐 Open ticked in Chrome** / **📝 Mark reviewed in Notion** /
+**👀 Preview hand-off** buttons run the same commands in the `triage` log
+panel (enabled once a review is applied; mark-reviewed only for live runs).
 
 ### Gmail one-time setup
 

@@ -90,6 +90,8 @@ flowchart TB
   NTRIAGEREVIEW -->|"triage_decisions / reviews /\nlessons / editions / picks"| SUPA
   NTRIAGEREVIEW -->|"distil review comment\n(claude_sonnet alias)"| LLMHUB
   APP -->|"🧭 triage tab: run (slot 'triage'),\neditable table → Apply, distil, tiers"| NTRIAGEREVIEW
+  NTRIAGEREVIEW -->|"handoff.py --open: ticked URLs\nas tabs (then archive, unchanged)"| NBOOT
+  NTRIAGEREVIEW -->|"handoff.py --mark-reviewed:\none 'until … > included' comment"| NOTION
   TRIAGESKILL["newsletter-triage skill\n(.claude/skills/, .agents/skills/)"] --> NTRIAGERUN
   NARCHIVE -->|"readability-lxml extraction"| NOTION
   NARCHIVE --> LLMHUB[("local LLM hub\n127.0.0.1:8000\ntopic + 3-line summary")]

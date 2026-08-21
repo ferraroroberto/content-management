@@ -246,6 +246,22 @@ def _render_review(run: dict) -> None:
     if prior:
         st.caption(f"last applied {str(prior.get('reviewed_at', ''))[:16]} · {prior.get('n_pick')} picks · "
                    + (f"{len(prior.get('tier_changes') or [])} tier change(s)"))
+    # hand-off (issue #212): the two external writes, each an explicit click, streamed into the log panel
+    # like every other pipeline step (Playwright + Notion run in the subprocess, never in the Streamlit thread)
+    handoff = [str(VENV_PY), "-m", "newsletter.triage.handoff", "--run", str(run_id)]
+    running = is_running(PIPELINE_NAME)
+    with st.container(horizontal=True, gap="small"):
+        st.button("🌐 Open ticked in Chrome (:9222)", key=f"triage-open-{run_id}", disabled=running or prior is None,
+                  on_click=_launch, args=(handoff + ["--open"],),
+                  help="ensure_chrome() then one tab per ticked URL (already-open tabs skipped) — then run "
+                       "② Archive → Notion in the newsletter tab as usual.")
+        st.button("📝 Mark reviewed in Notion", key=f"triage-mark-{run_id}", disabled=running or prior is None
+                  or run.get("kind") != "live",
+                  on_click=_launch, args=(handoff + ["--mark-reviewed"],),
+                  help="Writes exactly one 'until <newest e-mail> > included' comment on the newsletters task page "
+                       "and advances the local watermark. Without clicking, the run only prints the line.")
+        st.button("👀 Preview hand-off", key=f"triage-preview-{run_id}", disabled=running,
+                  on_click=_launch, args=(handoff,), help="Print the URLs and the watermark line — no writes.")
     _render_lessons(run_id, start, end)
     _render_new_senders(run_id)
     report_path = run.get("report_path")
