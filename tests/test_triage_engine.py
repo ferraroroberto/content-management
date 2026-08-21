@@ -70,6 +70,21 @@ class RankTests(unittest.TestCase):
         self.assertEqual(pay.reason, "paywalled")
         self.assertEqual(sel.picks["innovation"], [good])
 
+    def test_same_article_different_tracking_params_dedupes(self) -> None:
+        a = _cand(1, topic="innovation", score=9.0, domain="hbr.org", sender="a@x.com")
+        b = _cand(2, topic="innovation", score=8.0, domain="hbr.org", sender="b@x.com")
+        a.url = a.canonical = "https://hbr.org/2026/08/article?deliveryName=NL_1"
+        b.url = b.canonical = "https://hbr.org/2026/08/article?deliveryName=NL_2"
+        sel = rk.select([a, b], RULES)
+        self.assertEqual((a.verdict, b.verdict), ("selected", "duplicate"))
+
+    def test_slug_title_when_label_is_a_url(self) -> None:
+        c = _cand(1, topic="innovation", score=9.0)
+        c.title, c.label = "", "https://rishad.substack.com/p/from-caterpillar-to-butterfly?utm_source=x"
+        c.url = c.label
+        self.assertEqual(c.display_title, "From caterpillar to butterfly")
+        self.assertEqual(rk.slug_title("https://x.com/abc"), "https://x.com/abc")
+
     def test_one_pick_per_email_except_digests(self) -> None:
         a = _cand(1, topic="innovation", score=9.0, msg="same", sender="x@y.com")
         b = _cand(2, topic="innovation", score=8.0, msg="same", sender="x@y.com")
