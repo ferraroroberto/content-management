@@ -227,6 +227,66 @@ byline. The fallback exists so the pipeline never invents people.
 - `normalize_url.py` — URL query-param stripper with preserve list.
 - `build_newsletter.py` — HTML builder + must-read line; writes the `N{NNN}.topics.json` sidecar the app's must-read picker reads.
 - `substack_draft.py` — pushes the same grouped article lists into a private Substack draft edition over the native HTTP API.
+- `triage/gmail.py` — read-only Gmail label ingestion + link extraction / redirect decoding (adapter over the vendored `gmail_readonly/`).
+- `triage/history.py` — 54-week ground-truth dataset (Notion positives ⋈ Gmail offered links) + `stats.md`.
+- `triage/criteria.json` — machine-readable selection criteria (twin of `docs/newsletter-triage-criteria.md`).
+
+## Triage — Gmail history + criteria (issue #210, Step 1/3)
+
+The weekly inbox review (label `newsletters`, ~80 emails/week) is being
+automated in three steps. Step 1 builds the **ground truth** the later ranker
+is scored against, under `newsletter/triage/`:
+
+- `gmail.py` — read-only Gmail adapter over the vendored `gmail_readonly/` +
+  `google_oauth_common/` packages (byte-for-byte from whatsapp-radar — never
+  edit them here; extend in this adapter). Raw MIME walk, `<a href>` extraction,
+  noise filter (unsubscribe / share / social / app-store / …), tracking-redirect
+  decoding: local first (ConvertKit/Kit/HBR base64 path, Substack `redirect/2/`
+  JSON, McKinsey host rewrite, Substack `post_id` dedupe), then a bounded, cached
+  HTTP hop (`results/newsletter/triage/redirects.json`) for opaque redirectors
+  (Substack `redirect/`, beehiiv, SendGrid, Mailchimp, ActiveCampaign, …).
+- `history.py` — pulls the label over N weeks (incremental, HTML cached gzipped
+  under `results/newsletter/triage/history/raw/`), loads the Notion positives
+  (every article with an edition relation: topic, author, star, must-read from
+  the edition title), joins positives → source email (canonical URL → Substack
+  slug → fuzzy anchor-vs-title), and writes `stats.json` + `stats.md` (per-sender
+  hit-rates, per-edition caps observed, topic/star/must-read patterns, lag,
+  unmatched list).
+- `criteria.json` — the machine-readable criteria the Step-2 ranker consumes;
+  the human-readable rationale lives in
+  [`docs/newsletter-triage-criteria.md`](../docs/newsletter-triage-criteria.md).
+
+| Command | What it does |
+|---|---|
+| `python -m newsletter.triage.history` | Full build with `newsletter_triage.history_weeks` (54) and `redirect_budget_history`. |
+| `python -m newsletter.triage.history --no-gmail --reextract --no-resolve` | Re-run extraction + join + stats from the cached HTML after a rule change (no network). |
+| `python -m newsletter.triage.history --limit 150 --budget 100` | Smoke test. |
+
+### Gmail one-time setup
+
+```powershell
+& .\.venv\Scripts\python.exe -m pip install -r requirements.txt   # google-api-python-client, google-auth-*
+```
+
+Copy `credentials.json` + `token.json` from the sibling repo's `auth/gmail/`
+into this repo's gitignored `auth/gmail/` (same OAuth client, own token file
+refreshed independently — the pattern grocery-shopping-automation uses). If the
+token is missing or revoked, re-consent (opens a browser, requests
+`gmail.readonly` only):
+
+```powershell
+& .\.venv\Scripts\python.exe -m gmail_readonly.oauth --credentials auth\gmail\credentials.json --token auth\gmail\token.json
+```
+
+Gotchas: an OAuth app left in *Testing* issues refresh tokens that expire after
+7 days — the client is in production. Refresh tokens also die on grant
+revocation, a Google password change, or 6 months unused; recovery = remove the
+grant at `myaccount.google.com/connections`, delete only `auth/gmail/token.json`,
+re-run the command above. Vendored-package drift check:
+`git diff --no-index -- E:\automation\whatsapp-radar\gmail_readonly gmail_readonly`
+(and the same for `google_oauth_common`) — empty output means byte-identical.
+The portable contract test `tests/test_gmail_readonly.py` is pytest-style
+(`& .\.venv\Scripts\python.exe -m pytest tests\test_gmail_readonly.py`).
 
 ## Substack draft edition
 

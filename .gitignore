@@ -60,3 +60,6 @@ engagement/classify/local_model.json
 engagement/classify/.llm_cache.json
 # Launcher scratch (ephemeral images/logs written by the tray launcher)
 .launcher-tmp/
+
+# Google OAuth client + tokens (Gmail read-only for newsletter triage) — never commit
+auth/

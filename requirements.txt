@@ -52,3 +52,8 @@ scikit-learn>=1.9,<1.10
 # routed through the local LLM hub at http://127.0.0.1:8000 using the
 # version-free alias "claude_haiku" — no direct vendor traffic.
 anthropic
+# Read-only Gmail access for the newsletter triage (vendored gmail_readonly/ +
+# google_oauth_common/ from whatsapp-radar, byte-for-byte — see newsletter/README.md).
+google-api-python-client>=2.100
+google-auth-httplib2>=0.2
+google-auth-oauthlib>=1.2
