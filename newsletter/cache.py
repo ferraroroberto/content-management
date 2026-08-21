@@ -22,6 +22,7 @@ TRACKING_PARAM_PREFIXES = ("utm_", "mc_", "_hsenc", "_hsmi")
 TRACKING_PARAM_EXACT = {
     "ref", "gclid", "fbclid", "yclid", "msclkid",
     "ref_src", "ref_url", "triedredirect", "source",
+    "deliveryname", "ab", "_bhlid", "vgo_ee", "stcr", "__hscid__", "__hrlid__", "rw_tt_thread",
 }
 
 

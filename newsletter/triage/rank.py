@@ -11,7 +11,20 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from urllib.parse import urlsplit
+
 from newsletter.triage.score import ContentScore, MetaScore
+
+
+def slug_title(url: str) -> str:
+    """``…/p/from-caterpillar-to-butterfly`` → ``From caterpillar to butterfly`` (display only)."""
+    path = urlsplit(url or "").path.rstrip("/")
+    seg = path.rsplit("/", 1)[-1] if path else ""
+    seg = seg.rsplit(".", 1)[0] if "." in seg else seg
+    words = [w for w in seg.replace("_", "-").split("-") if w and not w.isdigit()]
+    if len(words) < 2:
+        return (url or "")[:160]
+    return " ".join(words).capitalize()[:160]
 
 TOPICS = ("leadership and management", "personal development", "innovation")
 MIN_SCORE = 3.0          # below this a link is a "candidate", never auto-selected
@@ -60,7 +73,17 @@ class Candidate:
 
     @property
     def display_title(self) -> str:
-        return (self.title or self.label or self.url)[:160]
+        for t in (self.title, self.label):
+            t = (t or "").strip()
+            if t and not t.lower().startswith(("http://", "https://")):
+                return t[:160]
+        return slug_title(self.url)
+
+    @property
+    def path_key(self) -> str:
+        """host + path — the dedupe key that survives per-list tracking params."""
+        parts = urlsplit(self.canonical or self.url)
+        return f"{parts.netloc}{parts.path}".lower()
 
     @property
     def author_key(self) -> str:
@@ -136,7 +159,7 @@ def select(cands: List[Candidate], rules: Dict[str, Any], *, per_topic: int = 8,
     seen_canon: set = set()
     for c in eligible:
         t = c.topic
-        if c.canonical in seen_canon:
+        if c.canonical in seen_canon or c.path_key in seen_canon:
             c.verdict, c.reason = "duplicate", "same article already picked"
             continue
         if len(sel.picks[t]) >= per_topic:
@@ -157,6 +180,7 @@ def select(cands: List[Candidate], rules: Dict[str, Any], *, per_topic: int = 8,
         sel.picks[t].append(c)
         c.verdict = "selected"
         seen_canon.add(c.canonical)
+        seen_canon.add(c.path_key)
         if c.domain == "hbr.org":
             hbr_n += 1
         author_n[c.author_key] += 1
@@ -167,10 +191,11 @@ def select(cands: List[Candidate], rules: Dict[str, Any], *, per_topic: int = 8,
         if c.verdict != "pending":
             continue
         t = c.topic
-        if c.canonical in seen_canon:
+        if c.canonical in seen_canon or c.path_key in seen_canon:
             c.verdict, c.reason = "duplicate", "same article already listed"
             continue
         seen_canon.add(c.canonical)
+        seen_canon.add(c.path_key)
         if len(sel.runners[t]) < runners_n:
             sel.runners[t].append(c)
             c.verdict = "runner-up"
