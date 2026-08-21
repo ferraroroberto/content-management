@@ -122,7 +122,9 @@ def open_in_chrome(urls: Sequence[str], *, debug_port: int = 9222, dry_run: bool
         for u in to_open:
             page = context.new_page()
             try:
-                page.goto(u, wait_until="domcontentloaded", timeout=30_000)
+                # "commit" = the navigation started; the page keeps loading in its tab while we move on
+                # (domcontentloaded waited up to 30 s on ad-heavy sites — 24 tabs took 12 min).
+                page.goto(u, wait_until="commit", timeout=15_000)
             except Exception as err:  # noqa: BLE001 — a slow page is still an open tab; archive handles it
                 logger.warning("⚠️ %s — %s (tab left open)", u[:80], str(err)[:80])
             opened += 1
