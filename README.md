@@ -33,7 +33,13 @@ Four pipelines, one repo:
   app's picker fed by a topics sidecar). **substack-draft** (optional,
   separate step) pushes those same grouped lists into a *private*
   Substack draft edition over the native HTTP API — closing the last
-  manual copy-paste. It never publishes.
+  manual copy-paste. It never publishes. **Triage** (`newsletter/triage/`)
+  sits upstream of all that: it reads the `newsletters` Gmail label for a
+  closed week, scores every link against the owner's inferred criteria
+  (54 weeks of ground truth, two-stage hub scoring, paywall/promo vetoes,
+  caps), stores the run in Supabase and proposes an 8+8+8 shortlist that
+  the owner reviews in the control panel's 🧭 triage tab — decisions feed
+  sender tiers and owner-accepted criteria notes back into the engine.
 - **Engagement** (`engagement/`) — defends comment threads against
   AI-generated noise using a layered classifier (rules → local sklearn
   model → LLM fallback via the local hub). Scrapes LinkedIn comments
@@ -101,12 +107,13 @@ content-management/                   # repo root
 │                                     # archive=chrome tabs → notion; normalize_names + normalize_url
 │                                     # rewrite titles + clean URLs; build_newsletter renders HTML
 │                                     # substack_draft pushes the same lists to a private Substack draft
+│   └── triage/                       # Gmail inbox → edition shortlist (criteria, engine, Supabase store, review, lessons)
 ├── engagement/                       # anti-AI comment triage (rules → sklearn → LLM fallback)
 │   ├── linkedin/                     # LinkedIn comment scraper
 │   ├── classify/                     # layered classifier + phrase config
 │   ├── reputation/                   # per-commenter reputation feedback loop
 │   └── db/                           # Supabase schema (commenters + comments tables)
-├── app/                              # Streamlit control panel (tabs: reporting/editorial/planning/newsletter/engagement)
+├── app/                              # Streamlit control panel (tabs: reporting/editorial/planning/newsletter/triage/engagement)
 ├── config/                           # config.json, mapping.json, logger_config, chrome_launch, console
 │   └── doc_capture/                  # deterministic control-panel screenshot engine (README tour)
 ├── results/                          # outputs — planning summaries + raw API JSON
@@ -212,6 +219,12 @@ Weekly newsletter pipeline: bootstrap the dedicated Chrome, archive the open art
 LinkedIn comment triage: scrape the comments on your recent posts, classify each as human / AI / unknown, and review the queues — canned acknowledgements are staged for copy-paste, never auto-sent.
 
 ![🛡️ Engagement screenshot](docs/screenshots/engagement-desktop.png)
+
+### 🧭 Triage
+
+Weekly newsletter inbox → edition shortlist: pick a closed Saturday→Saturday week, run the triage engine (Gmail → links → two-stage scoring → 8+8+8 suggestions stored in Supabase) with the live log, then review the editable table — tick / untick / promote, ⭐ / 🏆, notes — and Apply to persist decisions, learn sender tiers and advance the watermark. A review comment can be distilled into criteria notes you accept one by one.
+
+![🧭 Triage screenshot](docs/screenshots/triage-desktop.png)
 
 <!-- docs-shots:end -->
 

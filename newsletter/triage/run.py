@@ -41,20 +41,39 @@ from config.console import force_utf8_stdio  # noqa: E402
 from config.loader import load_block, load_full_config  # noqa: E402
 from newsletter import llm, notion_io  # noqa: E402
 from newsletter.cache import canonicalize_url  # noqa: E402
+from newsletter.triage import db  # noqa: E402
 from newsletter.triage import fetch as fx  # noqa: E402
 from newsletter.triage import gmail as gm  # noqa: E402
 from newsletter.triage import rank as rk  # noqa: E402
 from newsletter.triage import report as rp  # noqa: E402
 from newsletter.triage import score as sc  # noqa: E402
 from newsletter.triage.criteria import CRITERIA_PATH  # noqa: E402
+from newsletter.triage.state import STATE_PATH, TRIAGE_DIR, load_state, save_state  # noqa: E402,F401
 
 logger = logging.getLogger("newsletter_triage.run")
 
-TRIAGE_DIR = REPO_ROOT / "results" / "newsletter" / "triage"
 HISTORY_DIR = TRIAGE_DIR / "history"
-STATE_PATH = TRIAGE_DIR / "state.json"
 NOTION_URLS_CACHE = TRIAGE_DIR / "notion_urls.json"
 DEFAULT_MODEL = "claude_haiku"
+
+_STORE_STATE: Dict[str, Any] = {"checked": False, "ok": False}
+
+
+class RunExists(RuntimeError):
+    """A run for this (window, kind) is already stored — re-run with ``--force`` to replace it."""
+
+
+def store_ok() -> bool:
+    """One probe per process: is the Supabase store reachable with the schema applied? Degrades to
+    report-only (stats.store = 'unavailable') instead of failing the triage — the state is visible, not silent."""
+    if not _STORE_STATE["checked"]:
+        _STORE_STATE["checked"] = True
+        try:
+            db.ensure_schema()
+            _STORE_STATE["ok"] = True
+        except Exception as err:  # noqa: BLE001 — SchemaMissing, network, bad key: all → report-only
+            logger.error("❌ triage store unavailable (%s) — running report-only, nothing stored", str(err)[:200])
+    return bool(_STORE_STATE["ok"])
 
 
 # ---------------------------------------------------------------------------
@@ -65,20 +84,6 @@ def load_criteria() -> Dict[str, Any]:
     if not CRITERIA_PATH.exists():
         raise FileNotFoundError(f"{CRITERIA_PATH} missing — run `python -m newsletter.triage.criteria`")
     return json.loads(CRITERIA_PATH.read_text(encoding="utf-8"))
-
-
-def load_state() -> Dict[str, Any]:
-    if STATE_PATH.exists():
-        try:
-            return json.loads(STATE_PATH.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-    return {}
-
-
-def save_state(state: Dict[str, Any]) -> None:
-    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    STATE_PATH.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
 def _norm(text: str) -> str:
@@ -212,8 +217,70 @@ def build_candidates(records: Sequence[gm.EmailRecord], priors: sc.Priors, notio
 
 def run_window(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[str, Any], source: str,
                use_llm: bool, use_fetch: bool, top_k: int, model: str, out_dir: Path,
-               edition_hint: str = "next free edition", backtest: Optional[Dict[str, Any]] = None,
-               limit_links: Optional[int] = None) -> Tuple[Path, rk.Selection, Dict[str, Any]]:
+               edition_hint: Optional[str] = None, backtest: Optional[Dict[str, Any]] = None,
+               limit_links: Optional[int] = None, force: bool = False) -> Tuple[Path, rk.Selection, Dict[str, Any]]:
+    """One window → report + stored run. Refuses to replace a stored (window, kind) unless ``force``
+    (:class:`RunExists`). Store failures after registration mark the run ``failed`` and re-raise."""
+    kind = "backtest" if backtest is not None else "live"
+    run_id: Optional[int] = None
+    if store_ok():
+        prev = db.run_for_window(start, end, kind)
+        if prev and not force:
+            raise RunExists(f"window {start} → {end} ({kind}) already stored as run {prev['id']} "
+                            f"({prev.get('status')}, {str(prev.get('finished_at') or prev.get('started_at'))[:16]}) "
+                            f"— re-run with --force to replace it")
+        if edition_hint is None and kind == "live":
+            edition_hint = db.next_edition_number()
+        run_id = db.register_run(start, end, kind=kind, edition=backtest.get("edition") if backtest else None,
+                                 source=source, model=model, criteria_version=str(criteria.get("version", "")))
+    try:
+        path, sel, stats, cands, emails_view = _run_window_body(
+            start, end, cfg=cfg, criteria=criteria, source=source, use_llm=use_llm, use_fetch=use_fetch,
+            top_k=top_k, model=model, out_dir=out_dir, edition_hint=edition_hint or "next free edition",
+            backtest=backtest, limit_links=limit_links)
+    except Exception as err:
+        if run_id is not None:
+            db.mark_run(run_id, status="failed", stats={"error": str(err)[:500]})
+        raise
+    if run_id is None:
+        stats["store"] = "unavailable"
+        return path, sel, stats
+    n_e, n_c = db.store_run_results(run_id, emails_view, db.candidate_rows(cands, sel))
+    if backtest is not None:
+        n_d = db.save_decisions(start, end, _truth_decisions(cands, sel, backtest))
+        logger.info("🧪 stored %d truth decisions for the backtest window", n_d)
+    stats["store"] = f"run {run_id}"
+    db.mark_run(run_id, status="done", stats=stats, report_path=str(path))
+    logger.info("🗄️ stored run %s: %d emails, %d candidates", run_id, n_e, n_c)
+    return path, sel, stats
+
+
+def _truth_decisions(cands: List[rk.Candidate], sel: rk.Selection, bt: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Backtest → decisions as if the owner had reviewed the table: every candidate that was a real pick
+    in some edition = yes (star / must-read from the history), every other suggested pick / runner-up = no."""
+    canon, titles = bt["_canon"], bt["_titles"]
+    flags = bt.get("_truth_flags", {})
+    shortlisted = {c.cid for t in rk.TOPICS for c in sel.picks[t] + sel.runners[t]}
+    rows: List[Dict[str, Any]] = []
+    seen: set = set()
+    for c in cands:
+        truth = _is_truth(c, canon, titles)
+        if not truth and c.cid not in shortlisted:
+            continue
+        if c.canonical in seen:
+            continue
+        seen.add(c.canonical)
+        st, mr = flags.get(c.canonical, (False, False))
+        rows.append({"canonical": c.canonical, "cid": c.cid, "sender_address": c.sender_address, "title": c.display_title,
+                     "url": c.url, "topic": c.topic, "pick": truth, "star": truth and st, "must_read": truth and mr,
+                     "note": "backtest: real pick" if truth else "backtest: suggested, not picked"})
+    return rows
+
+
+def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[str, Any], source: str,
+                     use_llm: bool, use_fetch: bool, top_k: int, model: str, out_dir: Path,
+                     edition_hint: str, backtest: Optional[Dict[str, Any]],
+                     limit_links: Optional[int]) -> Tuple[Path, rk.Selection, Dict[str, Any], List[rk.Candidate], List[Dict[str, Any]]]:
     t0 = time.monotonic()
     base_url = cfg.get("llm_hub_base_url") or load_full_config().get("newsletter_archive", {}).get("llm_hub_base_url", "http://127.0.0.1:8000")
     priors = sc.Priors(criteria)
@@ -318,7 +385,8 @@ def run_window(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[st
             new_senders[rec.sender_address] = (name, addr, n + 1)
         if basis.startswith("floor"):
             floor[rec.sender_name] += 1
-        emails_view.append({"message_id": rec.message_id, "sender_name": rec.sender_name, "subject": rec.subject,
+        emails_view.append({"message_id": rec.message_id, "sender_name": rec.sender_name,
+                            "sender_address": rec.sender_address, "subject": rec.subject,
                             "timestamp": rec.timestamp, "sender_basis": basis, "is_new": is_new})
 
     if backtest is not None:
@@ -334,7 +402,7 @@ def run_window(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[st
     path.write_text(md, encoding="utf-8")
     logger.info("📝 report: %s — %d picks (%s) in %.0fs", path, stats["selected"],
                 ", ".join(f"{t[:6]} {len(sel.picks[t])}" for t in rk.TOPICS), stats["elapsed_s"])
-    return path, sel, stats
+    return path, sel, stats, cands, emails_view
 
 
 # ---------------------------------------------------------------------------
@@ -405,7 +473,8 @@ def _backtest_metrics(sel: rk.Selection, cands: List[rk.Candidate], bt: Dict[str
 
 
 def backtest_edition(number: str, *, cfg: Dict[str, Any], criteria: Dict[str, Any], use_llm: bool, use_fetch: bool,
-                     top_k: int, model: str, out_dir: Path, window_days: int = 14, offset_days: int = 7) -> Dict[str, Any]:
+                     top_k: int, model: str, out_dir: Path, window_days: int = 14, offset_days: int = 7,
+                     force: bool = False) -> Dict[str, Any]:
     editions = [json.loads(l) for l in (HISTORY_DIR / "editions.jsonl").open(encoding="utf-8") if l.strip()]
     ed = next((e for e in editions if e["number"] == number), None)
     if not ed or not ed.get("date"):
@@ -418,6 +487,7 @@ def backtest_edition(number: str, *, cfg: Dict[str, Any], criteria: Dict[str, An
     truth_titles: Dict[str, str] = {}
     names: Dict[str, str] = {}
     pos_by_id = {p["article_id"]: p for p in positives}
+    flags = {p["canonical"]: (bool(p.get("star")), bool(p.get("must_read"))) for p in positives if p.get("canonical")}
     for m in matches:
         if m["edition"] != number or not m.get("email_date"):
             continue
@@ -428,12 +498,12 @@ def backtest_edition(number: str, *, cfg: Dict[str, Any], criteria: Dict[str, An
                 truth_titles[_norm(p["title"])] = p["canonical"]
                 names[p["canonical"]] = p["title"]
     bt = {"edition": number, "_canon": canon, "_titles": titles, "_truth_msg_canon": truth_msg_canon,
-          "_truth_titles": truth_titles, "_truth_names": names}
+          "_truth_titles": truth_titles, "_truth_names": names, "_truth_flags": flags}
     logger.info("🧪 backtest %s (%s): window %s → %s, %d truth picks sourced in window", number, ed["date"], start, end,
                 len({cn for _m, cn in truth_msg_canon}))
     path, sel, stats = run_window(start, end, cfg=cfg, criteria=criteria, source="cache", use_llm=use_llm,
                                   use_fetch=use_fetch, top_k=top_k, model=model, out_dir=out_dir,
-                                  edition_hint=number, backtest=bt)
+                                  edition_hint=number, backtest=bt, force=force)
     return {k: v for k, v in bt.items() if not k.startswith("_")} | {"report": str(path), "stats": stats}
 
 
@@ -467,11 +537,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--limit-links", type=int, default=None)
     ap.add_argument("--out", default=str(TRIAGE_DIR))
     ap.add_argument("--backtest", help="comma-separated edition numbers, e.g. N226,N227")
+    ap.add_argument("--force", action="store_true", help="replace a run already stored for the same window")
     ap.add_argument("--debug", action="store_true")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout)
-    for noisy in ("httpx", "notion_client", "urllib3", "googleapiclient"):
+    for noisy in ("httpx", "httpcore", "hpack", "notion_client", "urllib3", "googleapiclient",
+                  "readability", "readability.readability"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
     cfg = load_block("newsletter_triage")
@@ -480,11 +552,22 @@ def main(argv: Optional[List[str]] = None) -> int:
     top_k = args.top_k or int(cfg.get("stage_b_top_k", 90))
     out_dir = Path(args.out)
 
+    try:
+        return _main_runs(args, cfg=cfg, criteria=criteria, model=model, top_k=top_k, out_dir=out_dir)
+    except RunExists as err:
+        logger.warning("⚠️ %s", err)
+        print(f"⚠️ {err}")
+        return 3
+
+
+def _main_runs(args: argparse.Namespace, *, cfg: Dict[str, Any], criteria: Dict[str, Any], model: str,
+               top_k: int, out_dir: Path) -> int:
     if args.backtest:
         results = []
         for num in [n.strip() for n in args.backtest.split(",") if n.strip()]:
             results.append(backtest_edition(num, cfg=cfg, criteria=criteria, use_llm=not args.no_llm,
-                                            use_fetch=not args.no_fetch, top_k=top_k, model=model, out_dir=out_dir))
+                                            use_fetch=not args.no_fetch, top_k=top_k, model=model, out_dir=out_dir,
+                                            force=args.force))
         print("\n=== backtest summary ===")
         for r in results:
             print(f"{r['edition']}: precision {r['precision']:.0%} ({r['hits']}/{r['shortlist']}) · "
@@ -507,7 +590,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     for a, b in windows:
         path, sel, stats = run_window(a, b, cfg=cfg, criteria=criteria, source=args.source, use_llm=not args.no_llm,
                                       use_fetch=not args.no_fetch, top_k=top_k, model=model, out_dir=out_dir,
-                                      limit_links=args.limit_links)
+                                      limit_links=args.limit_links, force=args.force)
         reports.append({"window": [a.isoformat(), b.isoformat()], "report": str(path), "selected": stats["selected"]})
     state.setdefault("runs", []).append({"at": datetime.now(timezone.utc).isoformat(), "windows": reports})
     state["last_window_end"] = end.isoformat()

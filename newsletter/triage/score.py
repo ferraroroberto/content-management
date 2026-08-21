@@ -136,6 +136,21 @@ class Priors:
 # ---------------------------------------------------------------------------
 # prompts
 
+LESSONS_PATH = Path(__file__).with_name("lessons.json")
+
+
+def load_lessons(path: Optional[Path] = None) -> List[str]:
+    """Owner-accepted criteria notes distilled from reviews (tracked, text-only; exported by ``lessons.py``)."""
+    path = path or LESSONS_PATH
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return [str(x.get("text") if isinstance(x, dict) else x).strip() for x in data.get("lessons", []) if x]
+
+
 def _criteria_brief(criteria: Dict[str, Any]) -> str:
     rules = criteria.get("rules", {})
     parts = ["Newsletter selection criteria (owner-validated, measured on 54 weeks):"]
@@ -146,6 +161,10 @@ def _criteria_brief(criteria: Dict[str, Any]) -> str:
     parts.append(f"- News policy: {np_.get('rule', '')} Keep: {'; '.join(np_.get('keep_if', []))}. Drop: {'; '.join(np_.get('drop_if', []))}.")
     parts.append(f"- Never: {'; '.join(rules.get('content_exclusions', {}).get('anchors', []))}; paywalled content.")
     parts.append(f"- Style: {rules.get('title_style', {}).get('note', '')}")
+    learned = load_lessons()
+    if learned:
+        parts.append("Learned from the owner's reviews (apply as soft preferences):")
+        parts.extend(f"- {x}" for x in learned)
     return "\n".join(parts)
 
 

@@ -26,8 +26,8 @@
         "[data-testid=\"stAlert\"]",
         "[data-testid=\"stDateInput\"]"
       ],
-      "input_hash": "9f3970ad4e221eb036b523dcd596378b7d2117cc77f7612c860fd208fcb5e496",
-      "captured_at": "2026-08-07T18:24:51+00:00",
+      "input_hash": "820c7a321d8253111a8c3cc4a44ad64264fbcb79fbddf885fcc9ff6d94e94e05",
+      "captured_at": "2026-08-21T16:10:41+00:00",
       "files": [
         "docs/screenshots/reporting-desktop.png"
       ]
@@ -51,8 +51,8 @@
         "[data-testid=\"stAlertContainer\"]",
         "[data-testid=\"stAlert\"]"
       ],
-      "input_hash": "3fb8d31ef6349c4280f8266ebd535d2ae292d33c912b3c7f716815c24e212594",
-      "captured_at": "2026-08-07T18:24:54+00:00",
+      "input_hash": "62bfee80a62636f3ecfc0ac8adab037ec6f6ca30f146d39c29a5d3afa03f7414",
+      "captured_at": "2026-08-21T16:10:44+00:00",
       "files": [
         "docs/screenshots/editorial-desktop.png"
       ]
@@ -76,8 +76,8 @@
         "[data-testid=\"stAlertContainer\"]",
         "[data-testid=\"stAlert\"]"
       ],
-      "input_hash": "1e5589bd2fdfced0c610ef6ca90220489935c78a99b01f7aca738477295ea5e6",
-      "captured_at": "2026-08-07T18:24:57+00:00",
+      "input_hash": "e74c7b7e785279316b24068a3b1048dceda3390f83ac5afdb09bee1ccf9e9bd2",
+      "captured_at": "2026-08-21T16:10:47+00:00",
       "files": [
         "docs/screenshots/planning-desktop.png"
       ]
@@ -101,8 +101,8 @@
         "[data-testid=\"stAlertContainer\"]",
         "[data-testid=\"stAlert\"]"
       ],
-      "input_hash": "546da8e7182a958b63706c6bb4258adc77cf3b4cd652e6b7474706a80de63e21",
-      "captured_at": "2026-08-07T18:25:01+00:00",
+      "input_hash": "d89b3f37a578680d75cc80c6ad5230764466162b682781106c31c47f5f88b2cb",
+      "captured_at": "2026-08-21T16:10:50+00:00",
       "files": [
         "docs/screenshots/newsletter-desktop.png"
       ]
@@ -132,10 +132,40 @@
         "[data-testid=\"stMetric\"]",
         "[data-testid=\"stDataFrame\"]"
       ],
-      "input_hash": "84c99f6634a27583f41e76905a8028f2f9afb0dbb6f58c78468eceb383179e4f",
-      "captured_at": "2026-08-07T18:25:11+00:00",
+      "input_hash": "e7bc8bef2f26d9576c72e748db233c41f5341e53c0e8da0eabc76299f9f64e27",
+      "captured_at": "2026-08-21T16:10:54+00:00",
       "files": [
         "docs/screenshots/engagement-desktop.png"
+      ]
+    },
+    "triage": {
+      "title": "🧭 Triage",
+      "description": "Weekly newsletter inbox → edition shortlist: pick a closed Saturday→Saturday week, run the triage engine (Gmail → links → two-stage scoring → 8+8+8 suggestions stored in Supabase) with the live log, then review the editable table — tick / untick / promote, ⭐ / 🏆, notes — and Apply to persist decisions, learn sender tiers and advance the watermark. A review comment can be distilled into criteria notes you accept one by one.",
+      "source_globs": [
+        "app/app.py",
+        "app/process_runner.py",
+        "app/tab_triage.py",
+        "newsletter/triage/review.py"
+      ],
+      "reach": {
+        "label": "triage"
+      },
+      "wait": {
+        "text": "closed week"
+      },
+      "mask": [
+        "[data-testid=\"stCode\"]",
+        "[data-testid=\"stAlertContainer\"]",
+        "[data-testid=\"stAlert\"]",
+        "[data-testid=\"stDataFrame\"]",
+        "[data-testid=\"stDataFrameResizable\"]",
+        "[data-testid=\"stTextArea\"]",
+        "[data-testid=\"stExpander\"]"
+      ],
+      "input_hash": "b04c3aea47508002c828e397d8e281f926e792dfc23b1ea5ca44feb7f4fad18e",
+      "captured_at": "2026-08-21T16:41:10+00:00",
+      "files": [
+        "docs/screenshots/triage-desktop.png"
       ]
     }
   }

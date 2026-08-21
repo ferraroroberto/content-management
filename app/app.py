@@ -132,6 +132,7 @@ PIPELINES = [
     ("editorial",          "📅 editorial"),
     ("planning",           "📅 planning"),
     ("newsletter",         "📰 newsletter"),
+    ("triage",             "🧭 triage"),
     ("engagement-scrape",  "🛡️ engagement (scrape)"),
     ("engagement-classify","🛡️ engagement (classify)"),
 ]
@@ -167,7 +168,7 @@ with st.sidebar:
 # (issue #157; streamlit/streamlit#11160, #12554). segmented_control is a
 # real widget — its selection is ordinary widget state, so it survives any
 # rerun the way st.tabs()'s internal state does not.
-SECTIONS = ["📊 reporting", "📅 editorial", "📅 planning", "📰 newsletter", "🛡️ engagement"]
+SECTIONS = ["📊 reporting", "📅 editorial", "📅 planning", "📰 newsletter", "🧭 triage", "🛡️ engagement"]
 
 # nav-bar and the routed section content must share one containing block
 # (this outer container) for position: sticky to have room to stick —
@@ -220,6 +221,9 @@ with st.container():
     elif section == "📰 newsletter":
         from app import tab_newsletter  # noqa: PLC0415
         tab_newsletter.run()
+    elif section == "🧭 triage":
+        from app import tab_triage  # noqa: PLC0415
+        tab_triage.run()
     elif section == "🛡️ engagement":
         from app import tab_engagement  # noqa: PLC0415
         tab_engagement.run()

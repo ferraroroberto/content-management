@@ -162,26 +162,26 @@ class ReportFeedbackTests(unittest.TestCase):
         self.assertIn("<!-- cand:m1:0 sender:fav@x.com -->", md)
         self.assertIn("New senders", md)
         decisions = fb.parse_report(md)
-        self.assertEqual([(d["cid"], d["yes"]) for d in decisions], [("m1:0", True), ("m2:0", False)])
+        self.assertEqual([(d["cid"], d["pick"]) for d in decisions], [("m1:0", True), ("m2:0", False)])
+        self.assertTrue(decisions[0]["canonical"].startswith("http"))
         # owner unticks the pick, ticks the runner-up
         md2 = md.replace("- [x] ", "- [ ] ", 1).replace("- [ ] **5.0**", "- [x] **5.0**")
         decisions = fb.parse_report(md2)
-        self.assertEqual([d["yes"] for d in decisions], [False, True])
+        self.assertEqual([d["pick"] for d in decisions], [False, True])
+        self.assertEqual(fb.window_from_name("triage-2026-08-08_2026-08-15.md"), ("2026-08-08", "2026-08-15"))
         with tempfile.TemporaryDirectory() as td:
             ov = Path(td) / "overrides.json"
-            ov.write_text(json.dumps({"senders": {"pay@wall.com": {"tier": "never"}}}), encoding="utf-8")
-            log = Path(td) / "feedback.jsonl"
-            for k in range(3):   # three reports of yes for meh@x.com → usually
-                res = fb.apply([{"cid": f"r{k}:0", "sender": "meh@x.com", "yes": True, "title": "t", "url": "u"}],
-                               report_name=f"r{k}.md", overrides_path=ov, log_path=log)
+            ov.write_text(json.dumps({"senders": {"pay@wall.com": {"tier": "never"},
+                                                  "hand@x.com": {"tier": "rarely", "source": "manual"}}}), encoding="utf-8")
+            # the tally comes from the store (every decision ever) — tiers follow the same rules as before
+            changes = fb.apply_tiers({"meh@x.com": (3, 3), "pay@wall.com": (4, 4), "hand@x.com": (6, 6), "new@x.com": (2, 2)},
+                                     overrides_path=ov)
             data = json.loads(ov.read_text(encoding="utf-8"))
             self.assertEqual(data["senders"]["meh@x.com"]["tier"], "usually")
-            self.assertEqual(data["senders"]["pay@wall.com"]["tier"], "never")
-            self.assertEqual(len(log.read_text(encoding="utf-8").splitlines()), 3)
-            # re-ingesting the same report replaces, never double-counts
-            fb.apply([{"cid": "r0:0", "sender": "meh@x.com", "yes": False, "title": "t", "url": "u"}],
-                     report_name="r0.md", overrides_path=ov, log_path=log)
-            self.assertEqual(len(log.read_text(encoding="utf-8").splitlines()), 3)
+            self.assertEqual(data["senders"]["pay@wall.com"]["tier"], "never")        # owner veto never touched
+            self.assertEqual(data["senders"]["hand@x.com"]["tier"], "rarely")         # manual tier kept, reported
+            self.assertNotIn("new@x.com", data["senders"])                            # n < 3 → no tier yet
+            self.assertTrue(any("hand@x.com: manual tier rarely kept" in c for c in changes))
 
     def test_tier_rules(self) -> None:
         self.assertIsNone(fb.tier_for(2, 2))

@@ -105,8 +105,8 @@ def run() -> int:
             return 1
 
         body = page.inner_text("body")
-        if all(label in body.lower() for label in ("reporting", "editorial", "planning", "newsletter", "engagement")):
-            _pass("all 5 pipeline tabs present")
+        if all(label in body.lower() for label in ("reporting", "editorial", "planning", "newsletter", "triage", "engagement")):
+            _pass("all 6 pipeline tabs present")
         else:
             _fail("missing pipeline tabs", "")
             fails += 1
@@ -160,6 +160,25 @@ def run() -> int:
             _pass("newsletter controls render")
         else:
             _fail("newsletter controls", "")
+            fails += 1
+
+        print("\n📱 step 4b — Triage tab renders week picker + run button")
+        _click_tab(page, "triage")
+        # The tab's first render imports pandas + the triage package and probes the Supabase store —
+        # wait for its own caption rather than a fixed delay.
+        try:
+            page.wait_for_selector("text=closed week", timeout=30_000)
+        except Exception:
+            pass
+        page.wait_for_timeout(800)
+        _shot(page, out_dir, "04b-triage")
+        body = page.inner_text("body")
+        if "closed week" in body.lower() and ("run triage" in body.lower() or "re-run week" in body.lower()):
+            _pass("triage controls render")
+        else:
+            _fail("triage controls", "expected the week selectbox + ▶ Run triage / ↻ Re-run week button")
+            fails += 1
+        if not _assert_no_traceback(page, "triage tab"):
             fails += 1
 
         print("\n📱 step 5 — Engagement tab renders sub-tabs + review data")
