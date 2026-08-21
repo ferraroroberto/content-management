@@ -19,7 +19,7 @@ flowchart TB
   RPIPE["reporting_pipeline.py"]
   PPIPE["planning_pipeline.py --all-wip"]
   NPIPE["newsletter_pipeline.py\nbootstrap / archive / normalize / build /\nsubstack-draft"]
-  APP["app/app.py — Streamlit control panel\ntab_reporting · tab_planning · tab_newsletter ·\ntab_editorial · tab_engagement"]
+  APP["app/app.py — Streamlit control panel\ntab_reporting · tab_planning · tab_newsletter ·\ntab_triage · tab_editorial · tab_engagement"]
   AUTOHEAL["app/autoheal_console.py"]
 
   LREPORT --> RPIPE
@@ -74,7 +74,8 @@ flowchart TB
     NBUILD["build_newsletter.py"]
     NSBDRAFT["substack_draft.py\n(optional, explicit step)"]
     NTRIAGE["triage/ — gmail.py + history.py + criteria.py\n(label ingest, link decode, 54-week\nground truth → criteria.json + overrides.json)"]
-    NTRIAGERUN["triage/run.py — weekly engine\nfetch + score (2 stages) + rank + report\n+ feedback.py (ticks → sender tiers)"]
+    NTRIAGERUN["triage/run.py — weekly engine\nfetch + score (2 stages) + rank + report\n+ feedback.py (decisions → sender tiers)"]
+    NTRIAGEREVIEW["triage/db.py + review.py + lessons.py\nstore, editable review, distilled criteria notes\n(lessons.json → prompt brief)"]
   end
   NPIPE --> NBOOT --> NARCHIVE --> NNORM --> NBUILD
   NTRIAGE -->|"gmail.readonly via vendored\ngmail_readonly/ + google_oauth_common/"| GMAILAPI[("Gmail API\nlabel 'newsletters'")]
@@ -84,7 +85,11 @@ flowchart TB
   NTRIAGERUN --> GMAILAPI
   NTRIAGERUN -->|"dedupe: article URLs (read-only)"| NOTION
   NTRIAGERUN -->|"stage A/B scoring\n(claude_haiku alias)"| LLMHUB
-  NTRIAGERUN --> TRIAGEREPORT[["results/newsletter/triage/\ntriage-<window>.md (review surface)"]]
+  NTRIAGERUN --> TRIAGEREPORT[["results/newsletter/triage/\ntriage-<window>.md (rendered in the tab)"]]
+  NTRIAGERUN -->|"triage_runs / emails / candidates\n+ backtest truth decisions"| SUPA
+  NTRIAGEREVIEW -->|"triage_decisions / reviews /\nlessons / editions / picks"| SUPA
+  NTRIAGEREVIEW -->|"distil review comment\n(claude_sonnet alias)"| LLMHUB
+  APP -->|"🧭 triage tab: run (slot 'triage'),\neditable table → Apply, distil, tiers"| NTRIAGEREVIEW
   TRIAGESKILL["newsletter-triage skill\n(.claude/skills/, .agents/skills/)"] --> NTRIAGERUN
   NARCHIVE -->|"readability-lxml extraction"| NOTION
   NARCHIVE --> LLMHUB[("local LLM hub\n127.0.0.1:8000\ntopic + 3-line summary")]

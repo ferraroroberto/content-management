@@ -300,7 +300,8 @@
         "stage_b_top_k": 90,
         "fetch_workers": 8,
         "fetch_timeout_s": 15,
-        "llm_workers": 3
+        "llm_workers": 3,
+        "lessons_model": "claude_sonnet"
     },
     "engagement": {
         "default_days": 5,

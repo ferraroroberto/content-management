@@ -232,11 +232,12 @@ byline. The fallback exists so the pipeline never invents people.
 - `triage/criteria.json` — machine-readable selection criteria (twin of `docs/newsletter-triage-criteria.md`), rebuilt by `python -m newsletter.triage.criteria`.
 - `triage/overrides.json` — owner-maintained sender decisions (tier `never|rarely|usually|always|review`, e.g. paywalled publications); applied before the data priors, updated by the feedback loop.
 
-## Triage — Gmail history + criteria (issue #210, Step 1/3)
+## Triage — Gmail history + criteria (issue #210, Step 1/4)
 
 The weekly inbox review (label `newsletters`, ~80 emails/week) is being
-automated in three steps. Step 1 builds the **ground truth** the later ranker
-is scored against, under `newsletter/triage/`:
+automated in four steps (#210 history + criteria, #211 engine + report, #217
+store + control-panel tab, #212 Chrome hand-off + watermark). Step 1 builds the
+**ground truth** the later ranker is scored against, under `newsletter/triage/`:
 
 - `gmail.py` — read-only Gmail adapter over the vendored `gmail_readonly/` +
   `google_oauth_common/` packages (byte-for-byte from whatsapp-radar — never
@@ -264,7 +265,7 @@ is scored against, under `newsletter/triage/`:
 | `python -m newsletter.triage.history --limit 150 --budget 100` | Smoke test. |
 | `python -m newsletter.triage.criteria` | Rebuild `criteria.json` from `stats.json` + `overrides.json`. |
 
-### Weekly engine (Step 2/3, issue #211)
+### Weekly engine (Step 2/4, issue #211)
 
 `run.py` turns one review window into one edition-sized shortlist — the owner's
 cadence rule: the run covers last watermark → now (normally Saturday → Friday)
@@ -287,7 +288,8 @@ per email except digests) → 8 per topic + ⭐/🏆 suggestions →
 | `python -m newsletter.triage.run --since 2026-08-08 --until 2026-08-22` | Explicit range (split into windows). |
 | `python -m newsletter.triage.run --backtest N224,N225,N226,N227` | Offline replay from the history cache: precision of the shortlist vs real picks, recall of the edition's picks sourced in the window. |
 | `python -m newsletter.triage.run --no-llm` | Rule-only report (sender/domain priors) when the hub is down. |
-| `python -m newsletter.triage.feedback <report.md>` | Ingest the reviewed report (tick = yes): sender tiers in `overrides.json` + `results/newsletter/triage/feedback.jsonl`. |
+| `python -m newsletter.triage.run --force` | Replace a run already stored for the same window (without it the engine refuses with exit 3 — the control panel's override toggle passes it). |
+| `python -m newsletter.triage.feedback <report.md>` | Ingest a reviewed markdown report (tick = yes) for the window in its name → `triage_decisions` + sender tiers in `overrides.json`. The control panel's Apply is the same path. |
 
 First dry run (2026-08-21, `claude_haiku`, 2-week windows ending 7 days before
 each edition): N224 precision 54 % / recall 16 %, N225 54 % / 26 %, N226 62 % /
@@ -304,6 +306,44 @@ inbox order with every link and its verdict (`selected / runner-up / candidate /
 low / vetoed / duplicate / unknown`) — an unfetchable or unscorable link is
 `unknown`, never "skipped". Skill: `/newsletter-triage`
 (`.claude/skills/newsletter-triage/SKILL.md`, mirrored in `.agents/skills/`).
+
+### Store + control-panel tab (Step 3/4, issue #217)
+
+Every run and every owner decision lives in Supabase — the repo's store, same
+project DB as reporting + engagement — in `triage_*` tables
+(`newsletter/triage/schema.sql`, applied **once** in the Supabase SQL editor,
+idempotent; `python -m newsletter.triage.db ensure-schema` probes and prints the
+recipe if missing). `db.py` owns every query (supabase-py from
+`config.supabase`, key fallback service_role → key → anon like engagement).
+Markdown reports and caches stay in gitignored `results/newsletter/triage/`.
+
+| Table | Holds |
+|---|---|
+| `triage_runs` | one row per (window, kind live/backtest) — status, model, stats, report path; re-running a stored window **replaces** it (needs `--force`) |
+| `triage_emails`, `triage_candidates` | the run's inbox + every link with scores, verdict, stage-A/B JSON and the engine's suggestion (pick / runner, rank, ⭐, 🏆) |
+| `triage_decisions` | the owner's ticks, keyed by **window + canonical URL** — they survive a re-run and pre-fill the new table; single source for the sender-tier tally (`feedback.jsonl` retired) |
+| `triage_reviews` | the per-window review comment ("why these choices") |
+| `triage_lessons` | criteria notes proposed by the hub (`lessons_model`, `claude_sonnet`) from comment + disagreements; accepted ones are exported to the tracked `newsletter/triage/lessons.json` and appended to the scoring prompt brief |
+| `triage_editions`, `triage_picks` | the 54-week knowledge base from the history files (`python -m newsletter.triage.db import-history`) |
+
+Control panel → **🧭 triage**: pick a closed Saturday→Saturday week (or the
+open week / custom dates) → ▶ run with the live log (slot `triage`; a stored
+week only re-runs behind the *override* toggle) → choose a stored run → the
+editable table (`review.py`): suggestions pre-ticked (weak fills unticked),
+tick / untick / promote from runners-up or the whole scored long tail, ⭐ / 🏆,
+per-row notes — **nothing is written until ✅ Apply**, which saves every row's
+decision, updates sender tiers from the whole history, stores the comment and
+advances `state.json → reviewed_until` (live runs only). 🧠 **Distil lessons**
+asks the hub for ≤ 3 generalisable notes you accept one by one; new senders get
+a manual tier (`overrides.json`, `source: manual`) from the same tab; the
+markdown report renders in an expander (one source, no second copy).
+
+| Command | What it does |
+|---|---|
+| `python -m newsletter.triage.db ensure-schema` / `stats` | Probe the tables / row counts. |
+| `python -m newsletter.triage.db import-history` | Load `triage_editions` + `triage_picks` from `results/newsletter/triage/history/`. |
+| `python -m newsletter.triage.run --backtest N224,N225,N226,N227 --force` | Store the four backtests with the real picks as decisions (the first knowledge base). |
+| `python -m newsletter.triage.lessons --run <id>` / `--accept 1,2` / `--list` | Distil / accept / list lessons from the CLI. |
 
 ### Gmail one-time setup
 
