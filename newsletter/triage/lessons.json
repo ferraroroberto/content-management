@@ -1,4 +1,20 @@
 {
   "_readme": "Owner-accepted criteria notes distilled from weekly reviews (newsletter/triage/lessons.py). Appended to the scoring prompt brief. Edit by accepting/rejecting in the control panel.",
-  "lessons": []
+  "lessons": [
+    {
+      "text": "Avoid content targeting exclusively executive or C-suite career paths; career-and-identity picks should apply to managers and individual contributors broadly.",
+      "window": "2026-08-14→2026-08-22",
+      "accepted": "2026-08-22"
+    },
+    {
+      "text": "Named-executive Q&A on company strategy scores lower than practitioner essays unless the speaker appears on the approved innovation-voices list.",
+      "window": "2026-08-14→2026-08-22",
+      "accepted": "2026-08-22"
+    },
+    {
+      "text": "Research or essay pieces examining what AI cannot replace in human work or creativity are high-value innovation picks alongside pieces on what AI changes.",
+      "window": "2026-08-14→2026-08-22",
+      "accepted": "2026-08-22"
+    }
+  ]
 }

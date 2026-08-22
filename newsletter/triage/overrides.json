@@ -42,8 +42,8 @@
       "source": "feedback"
     },
     "nir@nirandfar.com": {
-      "tier": "always",
-      "reason": "feedback 7/7 yes",
+      "tier": "usually",
+      "reason": "feedback 8/9 yes",
       "since": "2026-08-22",
       "source": "feedback"
     },
@@ -74,6 +74,12 @@
     "thegoodbusy@substack.com": {
       "tier": "usually",
       "reason": "feedback 5/5 yes",
+      "since": "2026-08-22",
+      "source": "feedback"
+    },
+    "sahil@sahilbloom.com": {
+      "tier": "usually",
+      "reason": "feedback 12/16 yes",
       "since": "2026-08-22",
       "source": "feedback"
     }
