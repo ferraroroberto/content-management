@@ -337,6 +337,19 @@ def lessons(*, accepted: Optional[bool] = None, start: Any = None, end: Any = No
     return _fetch_all("triage_lessons", filters=filters, order=("id", False))
 
 
+def update_lesson(lesson_id: int, *, text: Optional[str] = None, accepted: Optional[bool] = None) -> None:
+    """Edit one lesson in place — the owner's wording and/or the accept flag (#231). ``accepted_at`` is set
+    when the flag turns on and cleared when it turns off; unchanged when only the text changes."""
+    patch: Dict[str, Any] = {}
+    if text is not None:
+        patch["text"] = text.strip()
+    if accepted is not None:
+        patch["accepted"] = bool(accepted)
+        patch["accepted_at"] = _now() if accepted else None
+    if patch:
+        _t("triage_lessons").update(patch).eq("id", int(lesson_id)).execute()
+
+
 def accept_lessons(ids: Sequence[int], *, accepted: bool = True) -> int:
     if not ids:
         return 0

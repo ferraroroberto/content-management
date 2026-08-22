@@ -140,6 +140,26 @@ def accept(ids: Sequence[int], *, accepted: bool = True) -> int:
     return n
 
 
+def save(rows: Sequence[Dict[str, Any]]) -> int:
+    """Control-panel editor → store: each row ``{id, text, accepted}`` is written as-is (text edited by the owner,
+    accept flag ticked or not); rows whose text is blank are left untouched. Then ``lessons.json`` is re-exported."""
+    current = {r["id"]: r for r in db.lessons()}
+    n = 0
+    for row in rows:
+        cur = current.get(row.get("id"))
+        if cur is None:
+            continue
+        text = (row.get("text") or "").strip()
+        accepted = bool(row.get("accepted"))
+        changed_text = text and text != (cur.get("text") or "")
+        changed_flag = accepted != bool(cur.get("accepted"))
+        if changed_text or changed_flag:
+            db.update_lesson(cur["id"], text=text if changed_text else None, accepted=accepted if changed_flag else None)
+            n += 1
+    export()
+    return n
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     force_utf8_stdio()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)

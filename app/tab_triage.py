@@ -102,8 +102,16 @@ def _distil(run_id: int) -> None:
     _invalidate()
 
 
-def _accept_lessons(ids: list[int], accepted: bool) -> None:
-    lessons.accept(ids, accepted=accepted)
+def _save_lessons(editor_key: str) -> None:
+    base: list[dict] = st.session_state[f"{editor_key}-base"]
+    edits = (st.session_state.get(editor_key) or {}).get("edited_rows", {})
+    rows = [dict(r) for r in base]
+    for idx, patch in edits.items():
+        rows[int(idx)].update(patch)
+    try:
+        st.session_state["triage-last-lessons"] = {"n": lessons.save(rows)}
+    except Exception as err:  # noqa: BLE001 — surfaced as st.error below
+        st.session_state["triage-last-lessons"] = {"error": str(err)}
     _invalidate()
 
 
@@ -284,11 +292,30 @@ def _render_lessons(run_id: int, start: str, end: str) -> None:
     rows = _lessons(start, end)
     if not rows:
         return
-    st.markdown("**lessons from this review** — tick to accept into the engine's criteria brief")
-    for r in rows:
-        key = f"triage-lesson-{r['id']}"
-        st.checkbox(r["text"], value=bool(r.get("accepted")), key=key,
-                    on_change=lambda rid=r["id"], k=key: _accept_lessons([rid], st.session_state[k]))
+    st.markdown("**lessons from this review** — edit the wording, tick to accept into the engine's criteria brief, "
+                "then 💾 Save (nothing is written before)")
+    key = f"triage-lessons-{run_id}"
+    base = [{"id": r["id"], "accepted": bool(r.get("accepted")), "text": r["text"]} for r in rows]
+    st.session_state[f"{key}-base"] = base
+    st.data_editor(
+        pd.DataFrame(base, columns=["id", "accepted", "text"]),
+        key=key, hide_index=True, num_rows="fixed", width="stretch", disabled=["id"],
+        column_order=["accepted", "text"],
+        # pixel widths on purpose: Streamlit spreads any leftover width evenly over *all* columns, so a
+        # "small" tick column balloons next to a "large" text one; 45 + 1050 keeps the tick narrow and the
+        # sentence readable on a ~1100 px content pane (verified against the owner's manual resize)
+        column_config={"accepted": st.column_config.CheckboxColumn("✅", width=45),
+                       "text": st.column_config.TextColumn("lesson", width=1050)},
+    )
+    last = st.session_state.pop("triage-last-lessons", None)
+    st.button("💾 Save lessons", key=f"{key}-save", on_click=_save_lessons, args=(key,),
+              help="Writes text + accept flag to the store and re-exports the tracked lessons.json "
+                   "(commit it when you are happy with the wording).")
+    if last:
+        if "error" in last:
+            st.error(f"save failed: {last['error']}")
+        else:
+            st.success(f"saved {last['n']} lesson(s) · lessons.json re-exported")
 
 
 def _render_new_senders(run_id: int) -> None:
