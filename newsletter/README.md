@@ -322,7 +322,7 @@ Markdown reports and caches stay in gitignored `results/newsletter/triage/`.
 |---|---|
 | `triage_runs` | one row per (window, kind live/backtest) — status, model, stats, report path; re-running a stored window **replaces** it (needs `--force`) |
 | `triage_emails`, `triage_candidates` | the run's inbox + every link with scores, verdict, stage-A/B JSON and the engine's suggestion (pick / runner, rank, ⭐, 🏆) |
-| `triage_decisions` | the owner's ticks, keyed by **window + canonical URL** — they survive a re-run and pre-fill the new table; single source for the sender-tier tally (`feedback.jsonl` retired) |
+| `triage_decisions` | the owner's ticks, keyed by **window + canonical URL** — they survive a re-run and pre-fill the new table; single source for the sender-tier tally (`feedback.jsonl` retired); picks from earlier windows are a dedupe set for the next run (`already picked <window>`, before the archive step puts them in Notion) |
 | `triage_reviews` | the per-window review comment ("why these choices") |
 | `triage_lessons` | criteria notes proposed by the hub (`lessons_model`, `claude_sonnet`) from comment + disagreements; accepted ones are exported to the tracked `newsletter/triage/lessons.json` and appended to the scoring prompt brief |
 | `triage_editions`, `triage_picks` | the 54-week knowledge base from the history files (`python -m newsletter.triage.db import-history`) |
