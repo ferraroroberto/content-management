@@ -64,6 +64,7 @@ flowchart TB
   TW --> CHROME
   TH --> CHROME
   VIDEOS --> CHROME
+  VIDEOS <-->|"TH 'already scheduled'\n(no link TH(v) column)"| VIDLEDGER[["results/videos/\ntag_along_scheduled.json"]]
   PPIPE --> RESULTSPLAN[["results/planning/\nsummary.md + result.json"]]
   RESULTSPLAN -.->|"selector-drift failure"| AUTOHEALSKILL
 

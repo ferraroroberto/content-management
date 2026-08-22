@@ -34,7 +34,7 @@ flowchart TD
 | `python -m planning.videos.schedule_videos_posts --all-wip --live` | Schedule on every WIP-Video row across LI / IG / TW / TH. |
 | `python -m planning.videos.schedule_videos_posts --date 20260512 --live` | Single-day mode (only that row's video). |
 | `python -m planning.videos.schedule_videos_posts --all-wip --live --skip-li --skip-th` | Schedule only the platforms not flagged with `--skip-*`. |
-| `python -m planning.videos.schedule_videos_posts --all-wip --live --force` | Schedule even if `link <P>(v)` is already populated. |
+| `python -m planning.videos.schedule_videos_posts --all-wip --live --force` | Schedule even if already marked scheduled (`link <P>(v)` populated, or a tag-along ledger entry). |
 | `python -m planning.substack.post_substack_video_note --date 20260512 --live --force` | Standalone Substack video-note publish (also invoked automatically by the daily pipeline on video days). |
 | `python planning_pipeline.py --live` | Full planning orchestrator: LI → IG → TW → TH → **Videos** (Videos runs last). |
 
@@ -153,20 +153,39 @@ attach helper. See:
   SKIP-out-of-scope (clip relation deliberately empty → untick OK).
   Re-running with `--skip-li` will leave WIP-Vd checked so you can come
   back to LI later.
-- **Threads has no `link TH(v)` column → no link-based idempotency.**
-  TH is included via the `PLATFORMS_TAG_ALONG` set: in scope whenever
-  any other clip relation is populated. The orchestrator can't write a
-  sentinel for TH (no column), so re-runs with WIP-Vd still True would
-  attempt to re-schedule TH. The orchestrator unticks WIP-Vd as soon as
-  TH (and the other platforms) succeed once, which prevents accidental
-  double-scheduling in practice — but if you re-tick WIP-Vd later
-  without first deleting the existing scheduled Threads post, you'll
-  get a duplicate. The post-LIVE sentinel-write loop in
-  `schedule_videos_posts.py` explicitly skips platforms in
-  `PLATFORMS_TAG_ALONG` (see issue #29) so successful TH runs don't
-  log a misleading `"Role 'post_url_th' not present"` warning — that
-  warning is reserved for *real* `editorial_columns` regressions
-  (e.g. a `post_url_li` entry accidentally deleted from `config.json`).
+- **Threads has no `link TH(v)` column → its idempotency marker lives
+  off-column, in a ledger.** TH is included via the
+  `PLATFORMS_TAG_ALONG` set: in scope whenever any other clip relation
+  is populated. There is no column to hold the sentinel every other
+  platform uses, so the post-LIVE sentinel-write loop in
+  `schedule_videos_posts.py` skips tag-along platforms (issue #29 — the
+  write would log a misleading `"Role 'post_url_th' not present"`
+  warning, and that warning is reserved for *real* `editorial_columns`
+  regressions such as a `post_url_li` entry deleted from `config.json`).
+  Instead a successful TH run is recorded in
+  `results/videos/tag_along_scheduled.json` by
+  `planning/videos/videos_ledger.py` (gitignored, keyed by platform and
+  day title), and both `_rows_for_platform` and the WIP-Vd untick
+  decision consult it.
+
+  This is what makes a **recovery run** possible (issue #239). Before the
+  ledger, a row whose LI leg failed while IG/TW/TH went live had no good
+  re-run: plain re-run re-posted the Threads video, and `--skip-th`
+  avoided that only by leaving WIP-Vd checked forever, since a flag-skip
+  is deliberately not accepted as success. Now the untick decision
+  consults the ledger rather than the SKIP *reason*, so `--skip-th`
+  unticks when a prior run genuinely scheduled TH and still keeps WIP-Vd
+  checked when it did not. `--force` bypasses the ledger, which is the
+  deliberate way to re-post.
+
+  The ledger is a cache of what we already did, never a source of truth
+  about Notion, and its failure directions are asymmetric on purpose: a
+  missing or corrupt file reads as "nothing scheduled" (so the platform
+  runs — exactly the pre-ledger behaviour), while a failed write is
+  logged loudly but never raises, because the post is already live by
+  then. Deleting the file is therefore safe but costs you the recovery
+  path; if you re-tick WIP-Vd for a day whose ledger entry you removed,
+  you will get a duplicate.
 - **The LI composer does not reliably close within 20 s of `Schedule`.** The
   wait that confirms a scheduled post is shared with the photo/carousel
   driver — `linkedin_composer.wait_for_schedule_confirmation`, one copy so the
@@ -278,6 +297,10 @@ attach helper. See:
 - `schedule_videos_posts.py` — orchestrator entry point. Implements the
   `main() -> tuple[int, list[dict]]` contract consumed by
   `planning_pipeline.py`.
+- `videos_ledger.py` — `TagAlongLedger`, the off-column "already scheduled"
+  marker for platforms with no `link <P>(v)` column (currently TH only).
+  Backed by `results/videos/tag_along_scheduled.json`; see the tag-along
+  gotcha above for why it exists and how it fails.
 - `videos_linkedin.py` / `videos_instagram.py` / `videos_twitter.py` /
   `videos_threads.py` — per-platform drivers, each exposing
   `run(rows, video_cfg, *, dry_run) -> list[dict]`.
