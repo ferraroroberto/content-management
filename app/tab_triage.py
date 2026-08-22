@@ -343,11 +343,14 @@ def run() -> None:
         return
     if is_running(PIPELINE_NAME):
         st.info("a triage process is running — follow it in ▶ run; stored runs below refresh when it finishes")
-    options = {f"{r['window_start']} → {r['window_end']} · {r['kind']}"
-               + (f" {r.get('edition')}" if r.get("edition") else "")
-               + f" · {r['status']} · {r.get('picks') if r.get('picks') is not None else '?'} picks"
-               + (" · reviewed ✓" if r.get("reviewed") else ""): r["id"] for r in runs}
-    choice = st.selectbox("stored run", list(options.keys()), index=0, key="triage-run-pick")
-    run = _run(options[choice])
+    # options are run ids, not labels: a label changes after Apply (" · reviewed ✓") and a selectbox whose stored
+    # value vanished from its options silently resets to index 0 — the newest run (#225)
+    labels = {r["id"]: f"{r['window_start']} → {r['window_end']} · {r['kind']}"
+              + (f" {r.get('edition')}" if r.get("edition") else "")
+              + f" · {r['status']} · {r.get('picks') if r.get('picks') is not None else '?'} picks"
+              + (" · reviewed ✓" if r.get("reviewed") else "") for r in runs}
+    choice = st.selectbox("stored run", list(labels.keys()), index=0, key="triage-run-pick",
+                          format_func=lambda rid: labels.get(rid, f"run {rid}"))
+    run = _run(choice)
     if run:
         _render_review(run)
