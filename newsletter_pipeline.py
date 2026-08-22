@@ -15,7 +15,7 @@ Subcommands::
     newsletter_pipeline.py create    --newsletter NNN [--days 14] [--debug]
     newsletter_pipeline.py all       [--newsletter NNN] [--days 14] [--debug]
     newsletter_pipeline.py substack-draft --newsletter NNN [--title T] [--subtitle S]
-                                     [--must-read 1|2|3] [--delete-after] [--debug]
+                                     [--must-read 1|2|3] [--delete-after] [--no-open] [--debug]
 
 * ``bootstrap`` launches the dedicated newsletter Chrome on :9222 **without**
   killing the everyday browser (see ``newsletter/bootstrap_chrome.py``).
@@ -124,12 +124,14 @@ def step_build(newsletter_number: str | None, debug: bool, *,
 
 def step_substack_draft(newsletter_number: str, debug: bool, *,
                         title: str | None, subtitle: str,
-                        must_read: int | None, delete_after: bool) -> int:
+                        must_read: int | None, delete_after: bool,
+                        open_browser: bool) -> int:
     _banner("create Substack draft edition (private — nothing is sent)")
     try:
         substack_draft.run(
             newsletter_number, title=title, subtitle=subtitle,
-            must_read=must_read, delete_after=delete_after, debug=debug,
+            must_read=must_read, delete_after=delete_after,
+            open_browser=open_browser, debug=debug,
         )
     except substack_draft.SessionExpiredError as err:
         print(f"❌ {err}")
@@ -228,12 +230,16 @@ def main(argv: list[str] | None = None) -> int:
                            help="Create a private Substack draft edition from the newsletter")
     _add_newsletter(p_sbd, required=True)
     p_sbd.add_argument("--title", default=None,
-                       help="Draft title (defaults to the newsletter number)")
+                       help="Draft title (defaults to the must-read line when "
+                            "--must-read is given, else the newsletter number)")
     p_sbd.add_argument("--subtitle", default="")
     p_sbd.add_argument("--must-read", type=int, choices=(1, 2, 3), default=None,
-                       help="Compose the must-read line as the opening paragraph")
+                       help="Feature this permutation's leading article as the "
+                            "draft title and the 'one must read' section")
     p_sbd.add_argument("--delete-after", action="store_true",
                        help="Delete the draft after creating it (smoke test)")
+    p_sbd.add_argument("--no-open", action="store_true",
+                       help="Don't open the created draft in the browser")
     p_sbd.add_argument("--debug", action="store_true")
 
     p_all = sub.add_parser("all", help="Full interactive console sequence")
@@ -265,6 +271,7 @@ def main(argv: list[str] | None = None) -> int:
             args.newsletter, debug=debug,
             title=args.title, subtitle=args.subtitle,
             must_read=args.must_read, delete_after=args.delete_after,
+            open_browser=not args.no_open,
         )
     if cmd == "create":
         return run_create(days=args.days, newsletter_number=args.newsletter, debug=debug)

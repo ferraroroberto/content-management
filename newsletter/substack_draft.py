@@ -23,6 +23,11 @@ deliberate human action in the Substack editor. There is no ``--confirm`` here
 by design — see ``planning/substack/api_create.py`` for the manual path that
 can publish.
 
+The created draft opens in the browser automatically (``--no-open`` to
+suppress), the same way ``build_newsletter.run()`` opens the built HTML —
+there is nothing further to run, so the operator lands straight on the thing
+to review.
+
 Requires a harvested API session (``planning/substack/api_session.json``, ~89
 day cookie). If it has expired, ``SessionExpiredError`` is reported as a single
 actionable line pointing at ``planning.substack.extract_session``.
@@ -38,6 +43,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import webbrowser
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from config.loader import load_block
@@ -131,6 +137,7 @@ def run(
     subtitle: str = "",
     must_read: Optional[int] = None,
     delete_after: bool = False,
+    open_browser: bool = True,
     debug: bool = False,
 ) -> Optional[str]:
     """Build the newsletter's Substack draft. Returns the draft edit URL.
@@ -187,6 +194,9 @@ def run(
     edit_url = f"{publish_url.rsplit('/publish/', 1)[0]}/publish/post/{draft_id}"
     logging.info("🛑 Draft only — nothing was sent. Review, then publish from Substack:")
     logging.info("   %s", edit_url)
+    if open_browser:
+        webbrowser.open(edit_url)
+        logging.info("🌐 Opened draft in browser: %s", edit_url)
     return edit_url
 
 
@@ -219,6 +229,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                              "draft title and the 'one must read' section.")
     parser.add_argument("--delete-after", action="store_true",
                         help="Delete the draft after creating it (smoke test).")
+    parser.add_argument("--no-open", action="store_true",
+                        help="Don't open the created draft in the browser.")
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args(argv)
 
@@ -229,6 +241,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             subtitle=args.subtitle,
             must_read=args.must_read,
             delete_after=args.delete_after,
+            open_browser=not args.no_open,
             debug=args.debug,
         )
     except SessionExpiredError as err:
