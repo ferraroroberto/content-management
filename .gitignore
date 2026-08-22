@@ -61,5 +61,9 @@ engagement/classify/.llm_cache.json
 # Launcher scratch (ephemeral images/logs written by the tray launcher)
 .launcher-tmp/
 
+# Owner-accepted triage lessons — exported from Supabase triage_lessons on every accept/save;
+# local, regenerated, would otherwise mean a public commit every week
+newsletter/triage/lessons.json
+
 # Google OAuth client + tokens (Gmail read-only for newsletter triage) — never commit
 auth/

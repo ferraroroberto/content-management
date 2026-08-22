@@ -140,7 +140,8 @@ LESSONS_PATH = Path(__file__).with_name("lessons.json")
 
 
 def load_lessons(path: Optional[Path] = None) -> List[str]:
-    """Owner-accepted criteria notes distilled from reviews (tracked, text-only; exported by ``lessons.py``)."""
+    """Owner-accepted criteria notes distilled from reviews (local gitignored file, text-only; exported from the
+    store by ``lessons.py`` — absent on a fresh clone until the first accept/save)."""
     path = path or LESSONS_PATH
     if not path.exists():
         return []

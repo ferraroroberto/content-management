@@ -9,7 +9,8 @@ and the deltas between the engine's suggestion and the decisions (suggested-but-
 promoted from the runners-up / long tail, rows with notes). Output: ≤ 3 short, generalisable
 rule lines — never restatements of existing rules, never sender addresses. Nothing enters the
 prompt brief (``score._criteria_brief``) until ``accept`` exports it to the tracked
-``lessons.json`` (text only — the engine must not depend on the DB). Model: hub alias from
+``lessons.json`` (gitignored, text only — the engine must not depend on the DB at scoring time; the
+file is regenerated from ``triage_lessons`` on every accept/save). Model: hub alias from
 ``config.newsletter_triage.lessons_model`` (owner choice: ``claude_sonnet``).
 """
 
@@ -123,7 +124,7 @@ def propose(run_id: int, *, model: Optional[str] = None, base_url: Optional[str]
 
 
 def export(path: Optional[Path] = None) -> int:
-    """Rewrite the tracked ``lessons.json`` from every accepted lesson (text + window + date, no ids/addresses)."""
+    """Rewrite the local (gitignored) ``lessons.json`` from every accepted lesson (text + window + date)."""
     path = path or LESSONS_PATH
     rows = db.lessons(accepted=True)
     data = {"_readme": "Owner-accepted criteria notes distilled from weekly reviews (newsletter/triage/lessons.py). "

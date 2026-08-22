@@ -309,8 +309,8 @@ def _render_lessons(run_id: int, start: str, end: str) -> None:
     )
     last = st.session_state.pop("triage-last-lessons", None)
     st.button("💾 Save lessons", key=f"{key}-save", on_click=_save_lessons, args=(key,),
-              help="Writes text + accept flag to the store and re-exports the tracked lessons.json "
-                   "(commit it when you are happy with the wording).")
+              help="Writes text + accept flag to the store and re-exports the local lessons.json the "
+                   "scoring brief reads.")
     if last:
         if "error" in last:
             st.error(f"save failed: {last['error']}")
