@@ -315,6 +315,17 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(sc.load_lessons(out), ["Prefer first-person stories over listicles"])
             with unittest.mock.patch.object(sc, "LESSONS_PATH", out):
                 self.assertIn("Prefer first-person stories", sc._criteria_brief({"rules": {}}))
+            # control-panel editor path (#231): owner rewording + un-accept, one Save
+            ls.save([{"id": rows[0]["id"], "text": "Prefer first-person stories over listicles and roundups",
+                      "accepted": True}])
+            self.assertEqual(db.lessons()[0]["text"], "Prefer first-person stories over listicles and roundups")
+            self.assertTrue(db.lessons()[0]["accepted"])
+            with unittest.mock.patch.object(ls, "LESSONS_PATH", out):
+                ls.save([{"id": rows[0]["id"], "text": "", "accepted": False}])   # blank text ignored, flag off
+            self.assertEqual(db.lessons()[0]["text"], "Prefer first-person stories over listicles and roundups")
+            self.assertEqual(json.loads(out.read_text(encoding="utf-8"))["lessons"], [])
+            with unittest.mock.patch.object(ls, "LESSONS_PATH", out):
+                ls.accept([rows[0]["id"]])
         # run replaced → lesson survives with run_id = null
         self._store()
         self.assertIsNone(self.fake.tables["triage_lessons"][0]["run_id"])
