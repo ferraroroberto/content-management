@@ -312,8 +312,9 @@ low / vetoed / duplicate / unknown`) — an unfetchable or unscorable link is
 Every run and every owner decision lives in Supabase — the repo's store, same
 project DB as reporting + engagement — in `triage_*` tables
 (`newsletter/triage/schema.sql`, applied **once** in the Supabase SQL editor,
-idempotent; `python -m newsletter.triage.db ensure-schema` probes and prints the
-recipe if missing). `db.py` owns every query (supabase-py from
+idempotent, and carrying the RLS + `anon_*` policy stanza every public table needs
+for the daily drift check; `python -m newsletter.triage.db ensure-schema` probes and
+prints the recipe if missing). `db.py` owns every query (supabase-py from
 `config.supabase`, key fallback service_role → key → anon like engagement).
 Markdown reports and caches stay in gitignored `results/newsletter/triage/`.
 
