@@ -16,13 +16,24 @@ decide whether it is safe to touch:
 
 The classification lives here so the pipeline (which writes ``failure_kind`` into
 the machine-readable result JSON) and the skill (which reads it) can never drift
-apart. Pure function, no side effects — trivially unit-testable.
+apart.
+
+This module also owns the **retry-safety contract** (issue #235):
+``PostMayBeLiveError`` marks a failure that must never be retried, and
+``attempt_row`` is the single enforcement of that rule. Both live here, next to
+each other and to the classifier, precisely because a driver that re-implemented
+either one slightly differently would double-post to a live social account.
 """
 
 from __future__ import annotations
 
+import logging
 import re
-from typing import Literal
+from typing import Callable, Literal, Optional, TypeVar
+
+logger = logging.getLogger("planning_failure")
+
+T = TypeVar("T")
 
 FailureKind = Literal["ui-drift", "login-required", "data-error", "other", "none"]
 
@@ -63,6 +74,78 @@ def classify(status: str, detail: str) -> FailureKind:
     if _DATA_ERROR_RE.search(text):
         return "data-error"
     return "other"
+
+
+class PostMayBeLiveError(RuntimeError):
+    """A row failed at or after the point of no return — never retry it.
+
+    The per-row retry added in issue #235 exists to absorb races *before* a
+    post is committed (composer not open yet, caption box not rendered). Once
+    the driver has clicked the platform's final Schedule action, a failure no
+    longer means "nothing happened": the post may well be scheduled and the
+    driver simply lost sight of it. Retrying there would double-post, which is
+    strictly worse than the transient failure the retry was added to fix.
+
+    So drivers raise this — instead of a plain ``RuntimeError`` — for anything
+    from the final-action click onward, and the row loop treats it as terminal.
+    The boundary is deliberately drawn *before* that click rather than after:
+    a click that never landed is safe to retry, but proving it never landed is
+    harder than accepting one lost row.
+    """
+
+
+ROW_ATTEMPTS = 2
+
+
+def attempt_row(
+    run: Callable[[], T],
+    *,
+    label: str,
+    attempts: int = ROW_ATTEMPTS,
+    reset: Optional[Callable[[], None]] = None,
+) -> T:
+    """Run one scheduler row, retrying only failures that are safe to retry.
+
+    ``run`` is re-invoked at most ``attempts`` times. Between attempts ``reset``
+    (when given) returns the browser to a clean state — the composer from the
+    failed attempt has to be dismissed or the retry types into a half-filled
+    one.
+
+    Two failures are never retried:
+
+    * ``PostMayBeLiveError`` — raised at or past the platform's final Schedule
+      click, where a retry risks a duplicate post (see the class docstring).
+    * anything on the final attempt, which is simply re-raised.
+
+    Everything else — a composer that never opened, a caption box that had not
+    rendered — is exactly the transient class issue #235 was filed for, and is
+    retried against a settled DOM.
+    """
+    if attempts < 1:
+        raise ValueError(f"attempts must be >= 1, got {attempts}")
+    last_err: Exception
+    for attempt in range(1, attempts + 1):
+        try:
+            return run()
+        except PostMayBeLiveError:
+            # Terminal by construction: the post may already be live.
+            raise
+        except Exception as err:
+            last_err = err
+            if attempt >= attempts:
+                break
+            logger.warning(
+                "↻ %s: attempt %d/%d failed (%s) — retrying.",
+                label, attempt, attempts, err,
+            )
+            if reset is not None:
+                try:
+                    reset()
+                except Exception as reset_err:
+                    logger.warning(
+                        "⚠️ %s: could not reset between attempts: %s", label, reset_err
+                    )
+    raise last_err
 
 
 _SCREENSHOT_RE = re.compile(r"\(screenshot\s+([^)]+)\)")

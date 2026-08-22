@@ -74,6 +74,12 @@ from planning._wip_rows import (  # noqa: E402
     fetch_wip_rows as _fetch_wip_rows,
     resolve_payload as _resolve_payload,
 )
+from planning._failure import PostMayBeLiveError, attempt_row  # noqa: E402
+from planning._waits import (  # noqa: E402
+    CLICK_TIMEOUT_MS,
+    click_until_effect,
+    wait_for_first_ready,
+)
 
 
 def fetch_wip_th_rows(notion, db_id: str, ed_cols: dict, days: Optional[list[date]]) -> list[ScheduleRow]:
@@ -90,31 +96,29 @@ def _open_composer(page: Page) -> None:
     """Click the inline 'What's new?' on the profile to open the New thread
     modal. The same placeholder text exists inside the modal, so disambiguate
     by checking the modal's heading after opening.
+
+    The modal is only accepted once its **caption box** is on screen, not
+    merely its ``[role="dialog"]`` shell. Those two mount separately, and
+    treating the shell as "open" is what let ``_type_caption`` run against a
+    still-spinning modal and fail the first row of a batch while the six after
+    it succeeded (issue #235).
     """
-    candidates = [
-        # Profile-row click target. Several variants observed across Threads
-        # builds — try in order.
-        'text="What\'s new?"',
-        '[aria-label="Create new thread" i]',
-        'div[role="button"]:has-text("What\'s new?")',
-    ]
-    opened = False
-    for sel in candidates:
-        try:
-            loc = page.locator(sel).first
-            if loc.count():
-                loc.click(timeout=4000)
-                page.wait_for_timeout(800)
-                if page.locator('[role="dialog"]').count() or page.locator(
-                    'text="New thread"'
-                ).count():
-                    logger.debug("📝 Opened composer via %s", sel)
-                    opened = True
-                    break
-        except Exception:
-            continue
-    if not opened:
-        raise RuntimeError("Could not open the Threads composer modal.")
+    click_until_effect(
+        page,
+        [
+            # Profile-row click target. Several variants observed across
+            # Threads builds — tried in order on every round.
+            ("placeholder text", page.locator('text="What\'s new?"')),
+            ("aria create-thread", page.locator('[aria-label="Create new thread" i]')),
+            ("role=button placeholder",
+             page.locator('div[role="button"]:has-text("What\'s new?")')),
+        ],
+        effect=page.locator(
+            '[role="dialog"] div[contenteditable="true"], '
+            '[role="dialog"] [role="textbox"]'
+        ),
+        label="Threads composer modal",
+    )
 
 
 def _type_caption(page: Page, caption: str) -> None:
@@ -124,23 +128,26 @@ def _type_caption(page: Page, caption: str) -> None:
     dialog = page.locator('[role="dialog"]').last
     # The textarea inside the dialog is a contenteditable, anchored by the
     # same "What's new?" placeholder. Anchor by role.
-    ta_candidates = [
-        dialog.get_by_role("textbox", name=WHATS_NEW_TEXTBOX_RE).first,
-        dialog.locator('div[contenteditable="true"]').first,
-        dialog.locator('[role="textbox"]').first,
-    ]
-    for ta in ta_candidates:
-        try:
-            if ta.count():
-                ta.click(timeout=4000)
-                page.wait_for_timeout(150)
-                page.keyboard.type(caption, delay=4)
-                page.wait_for_timeout(400)
-                logger.debug("📝 Caption typed (%d chars).", len(caption))
-                return
-        except Exception:
-            continue
-    raise RuntimeError("Could not find the Threads caption textbox.")
+    #
+    # Bounded wait rather than a bare count(): _open_composer now holds until
+    # this box exists, so reaching here and finding nothing should be rare —
+    # but the contenteditable is also re-created when Threads swaps the
+    # composer between reply/thread modes, so the wait stays as the second
+    # line of defence (issue #235).
+    ta = wait_for_first_ready(
+        page,
+        [
+            ("placeholder textbox", dialog.get_by_role("textbox", name=WHATS_NEW_TEXTBOX_RE)),
+            ("contenteditable", dialog.locator('div[contenteditable="true"]')),
+            ("role=textbox", dialog.locator('[role="textbox"]')),
+        ],
+        label="Threads caption textbox",
+    )
+    ta.click(timeout=CLICK_TIMEOUT_MS)
+    page.wait_for_timeout(150)
+    page.keyboard.type(caption, delay=4)
+    page.wait_for_timeout(400)
+    logger.debug("📝 Caption typed (%d chars).", len(caption))
 
 
 def _upload_image(page: Page, path: Path) -> None:
@@ -529,11 +536,19 @@ def schedule_post(
         return "post:DRY-OK"
 
     _click_calendar_done(page)
-    _click_final_schedule_action(page)
-    if not _wait_composer_closes(page, timeout_ms=25000):
-        shot = out_dir / f"{label}-post-FAIL.png"
-        page.screenshot(path=str(shot), full_page=False)
-        raise RuntimeError(f"Composer did not close — see {shot}")
+
+    # ---- point of no return (issue #235) ----
+    # Past the final Schedule click a failure no longer proves the post was not
+    # scheduled, so these raise PostMayBeLiveError and the row loop refuses to
+    # retry them. See planning/_failure.py for the contract.
+    try:
+        _click_final_schedule_action(page)
+        if not _wait_composer_closes(page, timeout_ms=25000):
+            shot = out_dir / f"{label}-post-FAIL.png"
+            page.screenshot(path=str(shot), full_page=False)
+            raise RuntimeError(f"Composer did not close — see {shot}")
+    except Exception as err:
+        raise PostMayBeLiveError(str(err)) from err
     page.wait_for_timeout(1500)
     logger.info("✅ LIVE %s post scheduled on Threads", label)
     return "post:LIVE"
@@ -647,8 +662,19 @@ def main() -> tuple[int, list[dict]]:
 
         for row, payload in plans:
             return_to_profile(session.page, cfg["feed_url"])
+
+            def _reset() -> None:
+                """Clean slate between attempts — a half-filled composer left
+                by the failed attempt would otherwise capture the retry."""
+                _cancel_composer(session.page)
+                return_to_profile(session.page, cfg["feed_url"])
+
             try:
-                status = schedule_post(session, cfg, row, payload, dry_run=dry_run)
+                status = attempt_row(
+                    lambda: schedule_post(session, cfg, row, payload, dry_run=dry_run),
+                    label=row.day_title,
+                    reset=_reset,
+                )
             except (RuntimeError, PWTimeoutError) as err:
                 shot = session.screenshot_failure(f"{row.day_title}-error")
                 logger.error("❌ %s post failed: %s (screenshot %s)", row.day_title, err, shot)

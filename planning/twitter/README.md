@@ -123,6 +123,24 @@ successful live run).
    label. Use `.last` to avoid ambiguity with the inline composer's button
    on the underlying feed.
 
+9. **Never use `count()` as a readiness test** (issue #235). `Locator.count()`
+   returns immediately — it asks "is it there *right now*", not "wait for it".
+   A row that arrives while X is still showing its black splash screen finds
+   nothing mounted, burns through every candidate selector in milliseconds and
+   fails, while its siblings on the same warm page all succeed. Use
+   `planning._waits.click_until_effect` / `wait_for_first_ready`, which
+   re-resolve against the live DOM until a deadline. The effect for the
+   composer must be `[role="dialog"] [data-testid="tweetTextarea_0"]` — the
+   bare testid also matches the **inline** composer that is always present on
+   `/home`, so a looser effect is satisfied on arrival and the modal never
+   opens at all.
+
+10. **Row retry stops at the final Schedule click.** `planning._failure.attempt_row`
+    re-attempts a row that failed *before* the post was committed, but
+    `schedule_post` raises `PostMayBeLiveError` from `_click_final_schedule_action`
+    onward — past that point a failure no longer proves nothing happened, and a
+    retry would double-post. Losing one row to a manual re-run beats a duplicate.
+
 ---
 
 ## Files
