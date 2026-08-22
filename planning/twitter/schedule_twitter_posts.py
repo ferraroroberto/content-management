@@ -54,6 +54,12 @@ from reporting.notion.editorial import (  # noqa: E402
 )
 from reporting.notion.notion_update import format_database_id  # noqa: E402
 from planning._dates import parse_single_date, parse_week_start  # noqa: E402
+from planning._failure import PostMayBeLiveError, attempt_row  # noqa: E402
+from planning._waits import (  # noqa: E402
+    CLICK_TIMEOUT_MS,
+    click_until_effect,
+    wait_for_first_ready,
+)
 
 logger = logging.getLogger("twitter_schedule")
 
@@ -115,41 +121,47 @@ def _click_compose_area(page: Page) -> None:
     ``[data-testid="tweetTextarea_0"]`` inside ``[role="dialog"]``. Preferred
     over the inline composer because the inline one can carry stale draft
     state between sessions.
-    """
-    candidates = [
-        '[data-testid="SideNav_NewTweet_Button"]',
-        'a[data-testid="SideNav_NewTweet_Button"]',
-        '[aria-label="Post" i][role="button"]',
-    ]
-    for sel in candidates:
-        try:
-            loc = page.locator(sel).first
-            if loc.count():
-                loc.click(timeout=5000)
-                page.wait_for_timeout(900)
-                # Confirm a dialog opened with a textarea inside.
-                ta_in_dialog = page.locator(
-                    '[role="dialog"] [data-testid="tweetTextarea_0"]'
-                ).count()
-                if ta_in_dialog:
-                    logger.debug("📝 Opened composer modal via %s", sel)
-                    return
-        except Exception:
-            continue
 
-    # Fallback: try the inline textarea directly.
+    Every candidate used to be probed with a bare ``count()``, which does not
+    wait — so a row that arrived while X was still showing its splash screen
+    found nothing mounted, exhausted all four probes in milliseconds and
+    raised, while its siblings on the same warm page all succeeded (#235).
+    ``click_until_effect`` re-resolves until the composer is genuinely on
+    screen, so a cold app shell costs a few extra seconds instead of the row.
+    """
+    # The effect must be the textarea *inside the dialog*, never a bare
+    # ``tweetTextarea_0``: X renders an inline composer on the home timeline,
+    # so the looser selector is already satisfied on arrival and the modal
+    # would never be opened at all.
     try:
-        ta = page.locator('[data-testid="tweetTextarea_0"]').first
-        if ta.count():
-            ta.scroll_into_view_if_needed(timeout=2000)
-            ta.click(timeout=4000)
-            page.wait_for_timeout(500)
-            logger.debug("📝 Clicked inline composer area (fallback).")
-            return
+        click_until_effect(
+            page,
+            [
+                ("side-rail testid", page.locator('[data-testid="SideNav_NewTweet_Button"]')),
+                ("side-rail anchor", page.locator('a[data-testid="SideNav_NewTweet_Button"]')),
+                ("aria Post button", page.locator('[aria-label="Post" i][role="button"]')),
+            ],
+            effect=page.locator('[role="dialog"] [data-testid="tweetTextarea_0"]'),
+            label="X compose modal",
+        )
+        return
+    except RuntimeError as err:
+        logger.warning("⚠️ Compose modal did not open (%s) — trying the inline composer.", err)
+
+    # Fallback: the inline composer. Kept strictly behind the modal routes
+    # because it can carry stale draft state between sessions.
+    ta = wait_for_first_ready(
+        page,
+        [("inline textarea", page.locator('[data-testid="tweetTextarea_0"]'))],
+        label="X inline composer",
+        timeout_ms=4000,
+    )
+    try:
+        ta.scroll_into_view_if_needed(timeout=2000)
     except Exception:
         pass
-
-    raise RuntimeError("Could not open the X compose area.")
+    ta.click(timeout=CLICK_TIMEOUT_MS)
+    logger.debug("📝 Clicked inline composer area (fallback).")
 
 
 def _type_caption(page: Page, caption: str) -> None:
@@ -537,11 +549,20 @@ def schedule_post(
         return "post:DRY-OK"
 
     _click_confirm_in_modal(page)
-    _click_final_schedule_action(page)
-    if not _wait_composer_clears(page, timeout_ms=25000):
-        shot = out_dir / f"{label}-post-FAIL.png"
-        page.screenshot(path=str(shot), full_page=False)
-        raise RuntimeError(f"Composer did not clear — see {shot}")
+
+    # ---- point of no return (issue #235) ----
+    # From the final Schedule click onward a failure no longer means "nothing
+    # happened" — the post may be scheduled and we merely lost sight of it. So
+    # everything below raises PostMayBeLiveError, which the row loop refuses to
+    # retry. Losing one row to a manual re-run beats double-posting it.
+    try:
+        _click_final_schedule_action(page)
+        if not _wait_composer_clears(page, timeout_ms=25000):
+            shot = out_dir / f"{label}-post-FAIL.png"
+            page.screenshot(path=str(shot), full_page=False)
+            raise RuntimeError(f"Composer did not clear — see {shot}")
+    except Exception as err:
+        raise PostMayBeLiveError(str(err)) from err
     page.wait_for_timeout(1200)
     logger.info("✅ LIVE %s post scheduled on X", label)
     return "post:LIVE"
@@ -658,8 +679,19 @@ def main() -> tuple[int, list[dict]]:
 
         for row, payload in plans:
             return_to_home(session.page, cfg["feed_url"])
+
+            def _reset() -> None:
+                """Clean slate between attempts — a half-filled composer left
+                by the failed attempt would otherwise capture the retry."""
+                _cancel_composer(session.page)
+                return_to_home(session.page, cfg["feed_url"])
+
             try:
-                status = schedule_post(session, cfg, row, payload, dry_run=dry_run)
+                status = attempt_row(
+                    lambda: schedule_post(session, cfg, row, payload, dry_run=dry_run),
+                    label=row.day_title,
+                    reset=_reset,
+                )
             except (RuntimeError, PWTimeoutError) as err:
                 shot = session.screenshot_failure(f"{row.day_title}-error")
                 logger.error("❌ %s post failed: %s (screenshot %s)", row.day_title, err, shot)

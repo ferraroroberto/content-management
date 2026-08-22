@@ -134,6 +134,22 @@ from the IG side of the editorial DB. The scheduler only **reads** these
    The scheduler's primary idempotency marker is
    `work in progress TH` — unticked on a fully-successful LIVE run.
 
+9. **The modal shell and its caption box mount separately** (issue #235).
+   Treating `[role="dialog"]` as "composer open" is a race: the shell appears
+   while the modal is still spinning, so `_type_caption` then probes for a
+   `contenteditable` that has not rendered and fails — which is exactly how the
+   *first* row of a batch failed while the six after it succeeded.
+   `_open_composer` now holds until the **caption box itself** is visible, and
+   `_type_caption` keeps a bounded wait as a second line of defence (the box is
+   also re-created when Threads swaps the composer between reply/thread modes).
+   Never use `count()` as a readiness test — it does not wait.
+
+10. **Row retry stops at the final Schedule click.** `planning._failure.attempt_row`
+    re-attempts a row that failed *before* the post was committed, but
+    `schedule_post` raises `PostMayBeLiveError` from `_click_final_schedule_action`
+    onward — past that point a failure no longer proves nothing happened, and a
+    retry would double-post. Losing one row to a manual re-run beats a duplicate.
+
 ---
 
 ## Files

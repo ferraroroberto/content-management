@@ -814,18 +814,52 @@ def _wait_for_pdf_upload(page: Page, *, timeout_ms: int = 180000) -> None:
     title as well as on PDF processing, so polling it first deadlocks until
     the timeout. Called in the right order it is the single accurate signal
     that both the upload and the title are satisfied.
+
+    **Leaves breadcrumbs (issue #235).** This wait timed out once with the
+    failure screenshot showing a dialog that looked entirely ready — preview
+    rendered, title filled, Done in its enabled style — and because the loop
+    logged nothing across its ~180 polls, the log could not settle whether
+    LinkedIn was genuinely slow or the readiness predicate had gone blind. So
+    the observed state is now sampled into the log periodically and folded into
+    the raised error: ``present=0`` means the button selector stopped matching
+    (drift), while ``present=1 disabled=…`` means it matched and stayed
+    disabled (genuinely still processing). One line in the log now answers the
+    question the screenshot could not.
     """
     deadline = page.evaluate("() => Date.now()") + timeout_ms
+    polls = 0
+    observed = "not yet observed"
     while page.evaluate("() => Date.now()") < deadline:
+        polls += 1
         done_btn = _dialog_button(page, DONE_BTN_RE).first
         try:
-            ready = done_btn.count() and _button_is_enabled(done_btn)
-        except Exception:
+            present = done_btn.count()
+            observed = f"present={present}"
+            if present:
+                disabled = done_btn.get_attribute("disabled")
+                aria_dis = done_btn.get_attribute("aria-disabled")
+                observed = (
+                    f"present=1 disabled={disabled!r} aria-disabled={aria_dis!r}"
+                )
+            ready = present and _button_is_enabled(done_btn)
+        except Exception as err:
+            observed = f"probe-error({type(err).__name__}: {err})"
             ready = False
         if ready:
+            if polls > 1:
+                logger.info(
+                    "📄 PDF ready for 'Done' after %d poll(s) (~%ds).", polls, polls
+                )
             return
+        # Every 15th poll ≈ every 15s: enough of a trace to reconstruct the
+        # whole wait afterwards, far too little to drown the log.
+        if polls == 1 or polls % 15 == 0:
+            logger.info("⏳ Waiting on PDF processing (poll %d): %s", polls, observed)
         page.wait_for_timeout(1000)
-    raise RuntimeError("PDF processing did not finish within the timeout window.")
+    raise RuntimeError(
+        f"PDF processing did not finish within the timeout window "
+        f"({timeout_ms}ms, {polls} polls; last observed Done button: {observed})."
+    )
 
 
 def _fill_document_title(page: Page, doc_title: str) -> None:

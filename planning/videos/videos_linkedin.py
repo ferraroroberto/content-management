@@ -44,8 +44,14 @@ from planning.linkedin.schedule_linkedin_posts import (  # noqa: E402
     _set_schedule_datetime,
 )
 from planning.videos.videos_session import VideoRow  # noqa: E402
+from planning._waits import wait_for_first_ready  # noqa: E402
 
 logger = logging.getLogger("videos_linkedin")
+
+# Budget for LinkedIn's video Editor dialog to mount its (hidden) file input.
+# Generous because it is only ever paid in full on a genuine failure, and the
+# old 15 s lost a leg to a slow LinkedIn morning (issue #235).
+VIDEO_INPUT_TIMEOUT_MS = 45000
 
 
 # Re-exported for backward compatibility with any caller that imported these
@@ -101,9 +107,26 @@ def _upload_video(page: Page, video_path: Path) -> None:
     # with ``accept="...video/mp4..."`` and a visually-hidden wrapper. Push the file
     # straight at that input — the visible "Upload from computer" button is purely
     # decorative and is intercepted by a styled <div> overlay (clicking it errors out).
-    inp = page.locator('input#media-editor-file-selector__file-input, input[type="file"]').first
+    #
+    # The 15 s budget this used to carry was not enough on a slow LinkedIn
+    # morning — the Editor dialog simply had not mounted yet and the leg failed
+    # with a bare Playwright timeout (issue #235). ``wait_for_first_ready``
+    # re-resolves until a far more generous deadline and, on a real failure,
+    # reports what each selector could actually see instead of just the elapsed
+    # time. ``state="attached"``, not visible: the input is deliberately
+    # visually hidden behind the decorative "Upload from computer" button.
     try:
-        inp.wait_for(state="attached", timeout=15000)
+        inp = wait_for_first_ready(
+            page,
+            [
+                ("media-editor input",
+                 page.locator('input#media-editor-file-selector__file-input')),
+                ("any file input", page.locator('input[type="file"]')),
+            ],
+            label="LinkedIn video editor file input",
+            timeout_ms=VIDEO_INPUT_TIMEOUT_MS,
+            state="attached",
+        )
         inp.set_input_files(str(video_path))
     except Exception as err:
         raise RuntimeError(f"Could not upload video to LinkedIn editor: {err}")
