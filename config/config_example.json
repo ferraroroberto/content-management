@@ -257,6 +257,7 @@
         "articles_db_id": "67fbcee66711465c852ebf97303787a3",
         "connections_db_id": "33a1990d72f949f0983acd55ccd15724",
         "newsletter_db_id": "71fed31953b84183a9e77c48493bf9f4",
+        "books_db_id": "fb47feb4fc974def8385e6a865aa68ba",
         "chrome_debug_port": 9222,
         "skip_url_substrings": [
             "mail.google.com",

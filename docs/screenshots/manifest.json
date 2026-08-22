@@ -101,8 +101,8 @@
         "[data-testid=\"stAlertContainer\"]",
         "[data-testid=\"stAlert\"]"
       ],
-      "input_hash": "d89b3f37a578680d75cc80c6ad5230764466162b682781106c31c47f5f88b2cb",
-      "captured_at": "2026-08-21T16:10:50+00:00",
+      "input_hash": "4b4ca7454c25cbfffa7b9c5c091abc2d6fe82f19fc68d4ab77c8751ec1b4d91e",
+      "captured_at": "2026-08-22T11:44:15+00:00",
       "files": [
         "docs/screenshots/newsletter-desktop.png"
       ]

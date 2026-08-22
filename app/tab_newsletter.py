@@ -36,6 +36,12 @@ def run() -> None:
         "③ Normalize titles + URLs → ④ Build HTML. Run any step alone, or ▶ for ②③④. "
         "⑤ pushes the same lists into a private Substack draft."
     )
+    st.info(
+        "**Order matters for ⑤:** run ④ Build HTML (or ▶) first — it writes the "
+        "topics sidecar the must-read picker below reads. Then pick which article "
+        "leads: that choice becomes the draft's **title** and headlines the "
+        "**\"one must read\"** section. Only after that, click ⑤."
+    )
 
     cols = st.columns([2, 2, 2])
     with cols[0]:
@@ -134,9 +140,10 @@ def _render_substack_draft(
 ) -> None:
     """⑤ Create a private Substack draft edition from the built lists.
 
-    Sits below the must-read picker so the chosen line can be folded into the
-    draft as its opening paragraph. Never publishes — there is no ``--confirm``
-    on this path at all (see ``newsletter/substack_draft.py``).
+    Sits below the must-read picker so the chosen selection becomes the draft
+    title (the joined must-read line) and the featured "one must read" article
+    + summary at the top of the body. Never publishes — there is no
+    ``--confirm`` on this path at all (see ``newsletter/substack_draft.py``).
     """
     st.divider()
     st.markdown("**⑤ Substack draft**")
@@ -160,9 +167,12 @@ def _render_substack_draft(
     if not has_num:
         st.caption("ℹ️ enter a newsletter number to enable ⑤.")
     elif must_read is not None:
-        st.caption(f"→ creates a **private** draft, opening with must-read #{must_read}. Never publishes.")
+        st.caption(f"→ creates a **private** draft titled with the must-read line, "
+                   f"leading with must-read #{must_read}, and opens it in the browser. "
+                   f"Never publishes.")
     else:
-        st.caption("→ creates a **private** draft (no must-read line). Never publishes.")
+        st.caption("→ creates a **private** draft titled with the newsletter number "
+                   "(no must-read pick above) and opens it in the browser. Never publishes.")
 
 
 def _render_must_read_picker(newsletter_number: str) -> int | None:
@@ -185,6 +195,9 @@ def _render_must_read_picker(newsletter_number: str) -> int | None:
     except ValueError:
         return None  # not a valid number yet (e.g. "59") — nothing to show
     if not path.exists():
+        st.divider()
+        st.info("ℹ️ run ④ Build HTML (or ▶) first — the must-read picker needs the "
+                 "topics it writes, and ⑤ needs your pick for the draft title.")
         return None
 
     try:
@@ -207,6 +220,8 @@ def _render_must_read_picker(newsletter_number: str) -> int | None:
         for i, name in enumerate(top_names)
     ]
     options = list(range(1, len(top_names) + 1))
+    st.caption("pick which article leads — it becomes ⑤'s draft **title** and the "
+               "featured **\"one must read\"** article:")
     choice = st.radio(
         "which is the must-read?",
         options=options,
@@ -215,5 +230,5 @@ def _render_must_read_picker(newsletter_number: str) -> int | None:
     )
     line = format_must_read_line(top_names, int(choice))
     st.code(line, language=None)
-    st.caption("copy the line above ☝️")
+    st.caption("↑ this line becomes the Substack draft title.")
     return int(choice)
