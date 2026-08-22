@@ -15,7 +15,8 @@ The ``Work in Progress Video`` checkbox is unticked **only** when all four
 scheduled platforms succeed AND ``link SB(v)`` is populated by the daily
 Substack pipeline. Re-runnable: a second invocation after Substack posts
 will skip the already-scheduled four (idempotent via ``link <P>(v)``
-presence) and just untick.
+presence, or via the tag-along ledger for platforms that have no such
+column — see ``planning.videos.videos_ledger``) and just untick.
 
 CLI:
     python -m planning.videos.schedule_videos_posts \\
@@ -23,7 +24,7 @@ CLI:
         [--date YYYYMMDD]
         [--all-wip]             # every WIP-Video row, no date filter
         [--dry-run | --live]
-        [--force]               # schedule even if link <P>(v) is set
+        [--force]               # schedule even if already marked scheduled
         [--debug]
         [--skip-li] [--skip-ig] [--skip-tw] [--skip-th]
 """
@@ -38,6 +39,7 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from planning.videos.videos_ledger import TagAlongLedger  # noqa: E402
 from planning.videos.videos_session import (  # noqa: E402
     ClipPayload,
     VideoRow,
@@ -68,6 +70,9 @@ PLATFORMS_SCHEDULED = ("li", "ig", "tw", "th")  # SB is owned by the daily Subst
 # They are in scope whenever ANY of the other platforms' clip relations is
 # populated (i.e. the row has a video planned at all). The shared clip page
 # resolves identically regardless of which relation it was followed through.
+# Having no column of their own also means no ``link <P>(v)`` to hold the
+# idempotency sentinel, so their "already scheduled" marker lives off-column in
+# ``planning.videos.videos_ledger`` instead (issue #239).
 PLATFORMS_TAG_ALONG = frozenset({"th"})
 
 
@@ -220,12 +225,14 @@ def fetch_wip_video_rows(notion, db_id: str, video_cols: dict,
     return rows
 
 
-def _rows_for_platform(rows: list[_RowState], platform: str, force: bool) -> list:
+def _rows_for_platform(rows: list[_RowState], platform: str, force: bool,
+                       ledger: TagAlongLedger) -> list:
     """Filter rows to those eligible for the given platform.
 
-    Eligible = clip relation populated for that platform AND
-    (link <P>(v) is empty OR --force). Already-failed (payload-failed)
-    rows are excluded since they have nothing to schedule.
+    Eligible = clip relation populated for that platform AND not already
+    scheduled (per ``link <P>(v)``, or per the tag-along ledger for platforms
+    that have no such column) — unless ``--force``. Already-failed
+    (payload-failed) rows are excluded since they have nothing to schedule.
     """
     eligible = []
     for row in rows:
@@ -238,6 +245,19 @@ def _rows_for_platform(rows: list[_RowState], platform: str, force: bool) -> lis
         if row.link_status.get(platform) and not force:
             row.driver_status[platform] = "SKIP"
             row.driver_detail[platform] = f"link {platform.upper()}(v) already populated"
+            continue
+        if (platform in PLATFORMS_TAG_ALONG and not force
+                and ledger.is_scheduled(platform, row.day_title)):
+            at = ledger.recorded_at(platform, row.day_title) or "an earlier run"
+            row.driver_status[platform] = "SKIP"
+            row.driver_detail[platform] = (
+                f"{platform.upper()} already scheduled in a prior run "
+                f"(tag-along ledger, {at})"
+            )
+            logger.info(
+                "⏭️  %s: %s already scheduled on %s (tag-along ledger) — not re-posting.",
+                row.day_title, platform.upper(), at,
+            )
             continue
         eligible.append(VideoRow(
             page_id=row.page_id,
@@ -290,22 +310,27 @@ def _aggregate_row_status(state: _RowState, dry_run: bool) -> tuple[str, str]:
     return "FAIL", ", ".join(parts)
 
 
-def _maybe_untick_wip(notion, video_cols: dict, state: _RowState, dry_run: bool) -> tuple[str, str]:
+def _maybe_untick_wip(notion, video_cols: dict, state: _RowState, dry_run: bool,
+                      ledger: TagAlongLedger) -> tuple[str, str]:
     """Untick Work-in-Progress-Video iff every scheduled platform is OK AND
     link SB is populated.
 
     "OK" per platform is one of:
       * LIVE                          (just scheduled this run)
       * SKIP with link populated      (idempotent skip — already scheduled in a prior run)
+      * SKIP with a tag-along ledger entry (same, for platforms with no link column)
       * SKIP with platform out-of-scope (clip relation deliberately empty)
 
     SKIP via a ``--skip-<P>`` flag does NOT count — the platform genuinely
     hasn't been scheduled and WIP-Vd must stay checked so the user can
     re-run later. FAIL / LOGIN-REQUIRED also block the untick.
 
-    Note: tag-along platforms (no ``post_url_<P>`` column on the editorial
-    DB — currently TH) have no link-based idempotency marker. They are
-    only considered OK if the driver returned LIVE this run.
+    Tag-along platforms (no ``post_url_<P>`` column on the editorial DB —
+    currently TH) carry their idempotency marker off-column in the ledger
+    (issue #239). The ledger is consulted rather than the SKIP *reason*, so a
+    recovery run passing ``--skip-th`` to avoid re-posting still unticks when
+    a prior run genuinely scheduled TH — and still keeps WIP-Vd checked when
+    it did not.
 
     Returns ``(action, reason)`` so the end-of-run summary can name the
     WIP-Vd outcome per row (issue #37 AC). Actions:
@@ -323,6 +348,15 @@ def _maybe_untick_wip(notion, video_cols: dict, state: _RowState, dry_run: bool)
             continue
         if s == "SKIP" and state.link_status.get(p):
             continue  # idempotent skip
+        if (s == "SKIP" and p in PLATFORMS_TAG_ALONG
+                and ledger.is_scheduled(p, state.day_title)):
+            logger.info(
+                "🧾 %s: %s has no link column but the tag-along ledger records it "
+                "as scheduled on %s — counting it as done.",
+                state.day_title, p.upper(),
+                ledger.recorded_at(p, state.day_title) or "an earlier run",
+            )
+            continue  # idempotent skip, ledger-backed
         if s == "SKIP" and not state.in_scope.get(p):
             continue  # out of scope, user opted out
         logger.info(
@@ -395,7 +429,8 @@ def parse_args() -> argparse.Namespace:
     mode.add_argument("--live", action="store_true",
                       help="Actually schedule on every platform.")
     p.add_argument("--force", action="store_true",
-                   help="Schedule even if link <P>(v) is already populated.")
+                   help="Schedule even if already marked scheduled (link <P>(v) "
+                        "populated, or a tag-along ledger entry).")
     p.add_argument("--debug", action="store_true", help="Enable debug logging.")
     p.add_argument("--skip-li", action="store_true")
     p.add_argument("--skip-ig", action="store_true")
@@ -479,6 +514,9 @@ def main() -> tuple[int, list[dict]]:
     # Pre-compute eligibility per platform (so we don't waste a session if 0 rows).
     skip = {"li": args.skip_li, "ig": args.skip_ig, "tw": args.skip_tw, "th": args.skip_th}
 
+    # Off-column idempotency for platforms with no ``link <P>(v)`` column.
+    ledger = TagAlongLedger()
+
     # Dispatch per platform. Each driver opens its own browser session.
     for platform in PLATFORMS_SCHEDULED:
         if skip[platform]:
@@ -486,9 +524,22 @@ def main() -> tuple[int, list[dict]]:
             for state in rows:
                 state.driver_status[platform] = "SKIP"
                 state.driver_detail[platform] = "platform skipped via --skip-* flag"
+                if (platform in PLATFORMS_TAG_ALONG
+                        and ledger.is_scheduled(platform, state.day_title)):
+                    # Same SKIP status, materially different meaning: the flag
+                    # suppressed a run a *prior* run had already done. Say so
+                    # here — the untick decision below acts on it, and without
+                    # this line the log gives no hint why WIP-Vd cleared on a
+                    # platform that visibly did nothing this run.
+                    logger.info(
+                        "🧾 %s: %s was skipped by the flag, but the tag-along ledger "
+                        "records it as scheduled on %s.",
+                        state.day_title, platform.upper(),
+                        ledger.recorded_at(platform, state.day_title) or "an earlier run",
+                    )
             continue
 
-        eligible = _rows_for_platform(rows, platform, force=args.force)
+        eligible = _rows_for_platform(rows, platform, force=args.force, ledger=ledger)
         if not eligible:
             logger.info("ℹ️  %s: no eligible rows after filtering.", platform.upper())
             continue
@@ -511,21 +562,23 @@ def main() -> tuple[int, list[dict]]:
 
         _record_driver_results(rows, platform, driver_results)
 
-        # Write sentinel link <P>(v) for any LIVE row so re-runs skip it.
-        # Tag-along platforms (TH) have no link column by design — `_set_post_url`
-        # would log a misleading "Role 'post_url_th' not present" warning every
-        # successful TH run. Skip the write for them; the WIP-Vd untick logic
-        # already gates tag-along platforms on the LIVE driver status alone
-        # (see issue #29 + planning/videos/README.md).
+        # Mark every LIVE row as scheduled so re-runs skip it. Ordinary
+        # platforms get a sentinel in link <P>(v); tag-along platforms (TH)
+        # have no such column by design — `_set_post_url` would log a
+        # misleading "Role 'post_url_th' not present" warning on every
+        # successful TH run (issue #29) — so they get a ledger entry instead
+        # (issue #239).
         if not dry_run:
             for entry in driver_results:
                 if entry["status"] != "LIVE":
                     continue
-                if platform in PLATFORMS_TAG_ALONG:
-                    continue
                 # Find the matching state.
                 state = next((s for s in rows if s.day_title == entry["day"]), None)
                 if state is None:
+                    continue
+                if platform in PLATFORMS_TAG_ALONG:
+                    ledger.record(platform, state.day_title,
+                                  detail=entry.get("detail", ""))
                     continue
                 sentinel = _scheduled_sentinel(platform, state.day_title)
                 _set_post_url(notion, state.page_id, cfg["editorial_columns"],
@@ -552,7 +605,7 @@ def main() -> tuple[int, list[dict]]:
 
         status, detail = _aggregate_row_status(state, dry_run)
         wip_action, wip_reason = _maybe_untick_wip(
-            notion, cfg["editorial_columns"], state, dry_run,
+            notion, cfg["editorial_columns"], state, dry_run, ledger,
         )
         summary_rows.append({
             "day": state.day_title,
