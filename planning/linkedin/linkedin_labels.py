@@ -122,7 +122,32 @@ CHOOSE_FILE_BTN_RE = re.compile(
 
 # 'Done' closes a sub-dialog (document title, etc.). ES variants vary across
 # LinkedIn builds — both 'Listo' and 'Hecho' have been observed.
-DONE_BTN_RE = re.compile(r"^(?:done|listo|hecho)$", re.I)
+#
+# Matched by VISIBLE TEXT, not by accessible name. This used to be
+# ``DONE_BTN_RE`` + ``get_by_role("button", name=…)``, which stopped matching
+# in 2026-08 when LinkedIn re-rendered the control as a role-less ``<a>``
+# whose label sits in nested ``<span>``s (issue #237 — the same pattern as the
+# feed share-box in #140). An ``<a>`` carrying neither ``href`` nor ``role``
+# has no implicit ARIA button role, so the role anchor could not match it at
+# all: it found nothing for 177 consecutive polls while the dialog sat plainly
+# ready on screen, and the caller reported the PDF as still processing.
+DONE_TEXTS = ("Done", "Listo", "Hecho")
+
+# Matches the Done control by visible text, as ``<a>`` or ``<button>`` so it
+# survives either rendering, and **only when visible**.
+#
+# The ``:visible`` filter is load-bearing, not defensive: the one element in
+# the whole document whose own text is exactly "Done" is video.js's hidden
+# caption-settings button (``button.vjs-done-button`` inside
+# ``div.vjs-modal-dialog.vjs-hidden[role="dialog"]``), a leftover in the feed
+# that ``DIALOG_SEL``'s ``[role="dialog"]`` branch happily matches — see that
+# constant's docstring. ``get_by_role`` used to exclude it for free by skipping
+# hidden nodes; a text anchor does not, so the filter has to be explicit.
+DONE_CTRL_SEL = ", ".join(
+    f'{tag}:has-text("{word}"):visible'
+    for word in DONE_TEXTS
+    for tag in ("a", "button")
+)
 
 
 # ---------- Schedule dialog ----------
@@ -255,7 +280,8 @@ __all__ = [
     "EXPAND_CONTENT_TYPES_RE",
     "DOCUMENT_BTN_RE",
     "CHOOSE_FILE_BTN_RE",
-    "DONE_BTN_RE",
+    "DONE_CTRL_SEL",
+    "DONE_TEXTS",
     "SCHEDULE_CLOCK_SEL",
     "DATE_INPUT_SEL",
     "TIME_INPUT_SEL",
