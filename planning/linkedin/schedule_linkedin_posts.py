@@ -78,7 +78,7 @@ from planning.linkedin.linkedin_labels import (  # noqa: E402
     DIALOG_SEL,
     DISCARD_BTN_RE,
     DOCUMENT_BTN_RE,
-    DONE_BTN_RE,
+    DONE_CTRL_SEL,
     EXPAND_CONTENT_TYPES_RE,
     FINAL_SCHEDULE_BTN_RE,
     PHOTO_TEXT_RE,
@@ -416,6 +416,25 @@ def _composer_dialog(page: Page):
     return _dialog(page).filter(
         has=page.locator('div[role="textbox"][contenteditable="true"]')
     )
+
+
+def _dialog_done_control(page: Page):
+    """The document dialog's 'Done' affordance, matched by visible text.
+
+    NOT ``get_by_role("button", …)``: LinkedIn re-rendered this
+    control as a role-less ``<a>`` whose label sits in nested ``<span>``s
+    (issue #237, same pattern as the feed share-box in #140). An ``<a>`` with
+    neither ``href`` nor ``role`` has no implicit ARIA button role, so the
+    role anchor matched nothing at all — for 177 consecutive polls, while the
+    dialog sat plainly ready on screen and the wait reported the PDF as still
+    processing.
+
+    Same reasoning as ``_dialog_next_button`` above, which had to abandon the
+    accessible name for this identical reason. ``DONE_CTRL_SEL`` carries the
+    ``:visible`` filter that keeps the hidden video.js "Done" out — see its
+    definition in ``linkedin_labels``.
+    """
+    return _dialog(page).locator(DONE_CTRL_SEL)
 
 
 def _dialog_next_button(page: Page):
@@ -831,7 +850,7 @@ def _wait_for_pdf_upload(page: Page, *, timeout_ms: int = 180000) -> None:
     observed = "not yet observed"
     while page.evaluate("() => Date.now()") < deadline:
         polls += 1
-        done_btn = _dialog_button(page, DONE_BTN_RE).first
+        done_btn = _dialog_done_control(page).first
         try:
             present = done_btn.count()
             observed = f"present={present}"
@@ -909,7 +928,7 @@ def _fill_document_title(page: Page, doc_title: str) -> None:
 def _click_document_done(page: Page) -> None:
     """Click 'Done' in the Share-a-document dialog → returns to composer with PDF attached."""
     try:
-        _dialog_button(page, DONE_BTN_RE).first.click(timeout=10000)
+        _dialog_done_control(page).first.click(timeout=10000)
     except Exception as err:
         raise RuntimeError(f"Could not click 'Done' on the document dialog: {err}")
 
