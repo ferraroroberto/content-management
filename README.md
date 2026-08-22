@@ -33,7 +33,11 @@ Four pipelines, one repo:
   app's picker fed by a topics sidecar). **substack-draft** (optional,
   separate step) pushes those same grouped lists into a *private*
   Substack draft edition over the native HTTP API — closing the last
-  manual copy-paste. It never publishes. **Triage** (`newsletter/triage/`)
+  manual copy-paste. With a must-read choice it also titles the draft
+  with that line and leads the body with a "one must read" section (the
+  featured article, linked, plus its AI-generated summary), and trails
+  the last topic with a "one book" section pulled from the Notion books
+  database when one is linked to the newsletter. It never publishes. **Triage** (`newsletter/triage/`)
   sits upstream of all that: it reads the `newsletters` Gmail label for a
   closed week, scores every link against the owner's inferred criteria
   (54 weeks of ground truth, two-stage hub scoring, paywall/promo vetoes,

@@ -73,6 +73,7 @@ flowchart TB
     NNORM["normalize_names + normalize_url"]
     NBUILD["build_newsletter.py"]
     NSBDRAFT["substack_draft.py\n(optional, explicit step)"]
+    NBOOKS["books.py\n(one-book lookup)"]
     NTRIAGE["triage/ — gmail.py + history.py + criteria.py\n(label ingest, link decode, 54-week\nground truth → criteria.json + overrides.json)"]
     NTRIAGERUN["triage/run.py — weekly engine\nfetch + score (2 stages) + rank + report\n+ feedback.py (decisions → sender tiers)"]
     NTRIAGEREVIEW["triage/db.py + review.py + lessons.py\nstore, editable review, distilled criteria notes\n(lessons.json → prompt brief)"]
@@ -97,8 +98,10 @@ flowchart TB
   NARCHIVE --> LLMHUB[("local LLM hub\n127.0.0.1:8000\ntopic + 3-line summary")]
   NBUILD --> RESULTSNEWS[["results/newsletter/N{NNN}.html"]]
   NPIPE -->|"substack-draft"| NSBDRAFT
-  NSBDRAFT -->|"same grouped articles"| NOTION
-  NSBDRAFT -->|"create_draft_from_sections\nprivate draft — never published"| SBAPI
+  NSBDRAFT -->|"same grouped articles\n+ article summary property"| NOTION
+  NSBDRAFT --> NBOOKS
+  NBOOKS -->|"books DB, filtered by\nnewsletter relation"| NOTION
+  NSBDRAFT -->|"create_draft_from_sections\none-must-read + one-book leads/trails\nprivate draft — never published"| SBAPI
 
   subgraph engagement_mod["engagement/ — anti-AI comment triage"]
     ESCRAPE["linkedin/scrape_comments.py"]

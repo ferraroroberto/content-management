@@ -134,9 +134,10 @@ def _render_substack_draft(
 ) -> None:
     """⑤ Create a private Substack draft edition from the built lists.
 
-    Sits below the must-read picker so the chosen line can be folded into the
-    draft as its opening paragraph. Never publishes — there is no ``--confirm``
-    on this path at all (see ``newsletter/substack_draft.py``).
+    Sits below the must-read picker so the chosen selection becomes the draft
+    title (the joined must-read line) and the featured "one must read" article
+    + summary at the top of the body. Never publishes — there is no
+    ``--confirm`` on this path at all (see ``newsletter/substack_draft.py``).
     """
     st.divider()
     st.markdown("**⑤ Substack draft**")
@@ -160,7 +161,8 @@ def _render_substack_draft(
     if not has_num:
         st.caption("ℹ️ enter a newsletter number to enable ⑤.")
     elif must_read is not None:
-        st.caption(f"→ creates a **private** draft, opening with must-read #{must_read}. Never publishes.")
+        st.caption(f"→ creates a **private** draft titled with the must-read line, "
+                   f"leading with must-read #{must_read}. Never publishes.")
     else:
         st.caption("→ creates a **private** draft (no must-read line). Never publishes.")
 

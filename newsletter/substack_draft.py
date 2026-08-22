@@ -10,6 +10,14 @@ Reads exactly what ``build_newsletter`` reads (the Notion articles + newsletter
 databases) and reuses its grouping/sorting, so the draft and the HTML can never
 drift apart.
 
+When ``--must-read`` is given, the draft title becomes the joined must-read
+line (see ``build_newsletter.format_must_read_line``) and the body leads with
+a "One must for this week" block: the featured article, linked, followed by
+its AI-generated Notion summary. The body also trails with a "One book"
+section when a book is linked to the newsletter via the Notion "books"
+database's ``newsletter`` relation (``newsletter/books.py``) — omitted
+cleanly when none is linked.
+
 **Never publishes.** The draft is private and emails no one; publishing stays a
 deliberate human action in the Substack editor. There is no ``--confirm`` here
 by design — see ``planning/substack/api_create.py`` for the manual path that
@@ -33,19 +41,28 @@ import sys
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from config.loader import load_block
+from newsletter.books import find_book_for_newsletter
 from newsletter.build_newsletter import (
     TOPICS,
     NotionClient,
+    build_article_summary_map,
     format_must_read_line,
     group_articles_by_topic,
+    must_read_first_index,
     normalize_newsletter_number,
+    top_article_by_topic,
     top_article_names_by_topic,
 )
 
 # NOTE: config comes from ``config.loader`` rather than
 # ``planning.substack.substack_session.load_substack_config`` on purpose — the
 # latter transitively imports Playwright, and this path is pure HTTP.
-from planning.substack.api_client import SessionExpiredError, SubstackAPI
+from planning.substack.api_client import (
+    SessionExpiredError,
+    SubstackAPI,
+    build_book_nodes,
+    build_must_read_nodes,
+)
 
 Grouped = Dict[str, List[Tuple[str, str]]]
 Sections = List[Tuple[str, List[Tuple[str, str]]]]
@@ -67,10 +84,10 @@ def build_sections(grouped: Grouped, topics: Sequence[str]) -> Sections:
     ]
 
 
-def compose_intro(
+def compose_title_line(
     topics: Sequence[str], grouped: Grouped, must_read: Optional[int]
 ) -> Optional[str]:
-    """The must-read line to use as the draft's opening paragraph, if available.
+    """The must-read line to use as the draft title, if available.
 
     ``None`` when no choice was made, or when a topic has no articles (the same
     condition under which ``build_newsletter`` reports the line unavailable).
@@ -82,6 +99,29 @@ def compose_intro(
         logging.warning("⚠️ Cannot compose must-read line: a topic has no articles")
         return None
     return format_must_read_line(top_names, must_read)
+
+
+def compose_must_read_article(
+    topics: Sequence[str],
+    grouped: Grouped,
+    summaries: Dict[Tuple[str, str], str],
+    must_read: Optional[int],
+) -> Optional[Tuple[str, str, str]]:
+    """``(title, url, summary)`` for the featured "one must read" article.
+
+    The featured article is whichever one leads the chosen must-read
+    permutation (the same article that leads :func:`compose_title_line`'s
+    joined sentence) — its Notion-generated summary comes from ``summaries``
+    (see ``build_newsletter.build_article_summary_map``).
+    """
+    if must_read is None:
+        return None
+    top = top_article_by_topic(topics, grouped)
+    if top is None:
+        logging.warning("⚠️ Cannot compose must-read section: a topic has no articles")
+        return None
+    name, url = top[must_read_first_index(must_read)]
+    return name, url, summaries.get((name, url), "")
 
 
 def run(
@@ -109,7 +149,14 @@ def run(
         raise ValueError(f"No articles found for newsletter '{nl_num}'")
     grouped = group_articles_by_topic(articles)
     sections = build_sections(grouped, TOPICS)
-    intro = compose_intro(TOPICS, grouped, must_read)
+    title_line = compose_title_line(TOPICS, grouped, must_read)
+
+    summaries = build_article_summary_map(articles)
+    must_read_article = compose_must_read_article(TOPICS, grouped, summaries, must_read)
+    lead_nodes = build_must_read_nodes(*must_read_article) if must_read_article else None
+
+    book = find_book_for_newsletter(nl["id"])
+    trail_nodes = build_book_nodes(book["title"], book["url"], book["author"]) if book else None
 
     total = sum(len(articles) for _, articles in sections)
     logging.info("📝 Building Substack draft for %s — %d articles across %d sections",
@@ -119,10 +166,11 @@ def run(
     publish_url = cfg.get("publish_url", "")
     api = SubstackAPI(publication_url=publish_url)
     draft = api.create_draft_from_sections(
-        title=title or nl_num,
+        title=title or title_line or nl_num,
         subtitle=subtitle,
         sections=sections,
-        intro=intro,
+        lead_nodes=lead_nodes,
+        trail_nodes=trail_nodes,
     )
     draft_id = draft.get("id")
     logging.info("✅ Draft created — id=%s", draft_id)
@@ -163,10 +211,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--newsletter", required=True,
                         help="Newsletter number (057 or N057).")
     parser.add_argument("--title", default=None,
-                        help="Draft title (defaults to the newsletter number).")
+                        help="Draft title (defaults to the must-read line when "
+                             "--must-read is given, else the newsletter number).")
     parser.add_argument("--subtitle", default="")
     parser.add_argument("--must-read", type=int, choices=(1, 2, 3), default=None,
-                        help="Compose the must-read line as the opening paragraph.")
+                        help="Feature this permutation's leading article as the "
+                             "draft title and the 'one must read' section.")
     parser.add_argument("--delete-after", action="store_true",
                         help="Delete the draft after creating it (smoke test).")
     parser.add_argument("--debug", action="store_true")

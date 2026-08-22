@@ -178,6 +178,35 @@ def extract_article_data(article: Dict[str, Any]
         return None
 
 
+def extract_article_summary(article: Dict[str, Any]) -> str:
+    """Pull the AI-generated ``summary`` rich_text property off one Notion
+    article page (written by ``newsletter/notion_io.py::create_article()``)."""
+    props = article.get("properties", {})
+    summary_prop = props.get("summary", {})
+    if summary_prop.get("type") != "rich_text":
+        return ""
+    return "".join(t.get("plain_text", "") for t in summary_prop.get("rich_text", [])).strip()
+
+
+def build_article_summary_map(articles: List[Dict[str, Any]]) -> Dict[Tuple[str, str], str]:
+    """Map ``(name, url) -> AI-generated summary`` for every article that has one.
+
+    Keyed the same way :func:`group_articles_by_topic` stores articles, so a
+    top article can be matched back to its summary without a second Notion
+    round-trip.
+    """
+    out: Dict[Tuple[str, str], str] = {}
+    for art in articles:
+        data = extract_article_data(art)
+        if not data:
+            continue
+        name, url, _topic, _star, _niche = data
+        summary = extract_article_summary(art)
+        if summary:
+            out[(name, url)] = summary
+    return out
+
+
 def group_articles_by_topic(articles: List[Dict[str, Any]], topics: Sequence[str] = TOPICS
                             ) -> Dict[str, List[Tuple[str, str]]]:
     """Group + sort raw Notion article pages by topic (star desc → niche asc → title asc).
@@ -257,21 +286,36 @@ def generate_complete_html(grouped: Dict[str, List[Tuple[str, str]]], topics: Se
 # ---------------------------------------------------------------- helpers
 
 
-def top_article_names_by_topic(
+def top_article_by_topic(
     topics: Sequence[str], grouped: Dict[str, List[Tuple[str, str]]]
-) -> Optional[List[str]]:
-    names: List[str] = []
+) -> Optional[List[Tuple[str, str]]]:
+    """Like :func:`top_article_names_by_topic`, but keeps the ``(name, url)`` pair."""
+    top: List[Tuple[str, str]] = []
     for topic in topics:
         articles = grouped.get(topic) or []
         if not articles:
             return None
-        names.append(articles[0][0])
-    return names
+        top.append(articles[0])
+    return top
+
+
+def top_article_names_by_topic(
+    topics: Sequence[str], grouped: Dict[str, List[Tuple[str, str]]]
+) -> Optional[List[str]]:
+    top = top_article_by_topic(topics, grouped)
+    return [name for name, _url in top] if top is not None else None
 
 
 def format_must_read_line(three_names: Sequence[str], must_read: int) -> str:
     perm = _MUST_READ_PERM[must_read]
     return ". ".join(three_names[i] for i in perm) + "."
+
+
+def must_read_first_index(must_read: int) -> int:
+    """Index into ``topics``/``top_article_by_topic`` of the article that leads
+    the must-read line for this permutation — the same article :func:`format_must_read_line`
+    puts first."""
+    return _MUST_READ_PERM[must_read][0]
 
 
 def topics_sidecar_path(newsletter_number: str) -> Path:

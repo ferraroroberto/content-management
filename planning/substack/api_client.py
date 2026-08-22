@@ -75,6 +75,8 @@ __all__ = [
     "react_to_note",
     "unreact_to_note",
     "build_section_nodes",
+    "build_must_read_nodes",
+    "build_book_nodes",
     "SubstackAPI",
     "SESSION_FILE",
 ]
@@ -495,16 +497,66 @@ def _text_node(text: str, href: Optional[str] = None) -> dict:
     return node
 
 
+def _run_nodes(runs: list[tuple[str, Optional[str]]]) -> list[dict]:
+    """One or more text runs, each optionally linked — the content of a
+    heading/paragraph node that mixes plain and linked text."""
+    return [_text_node(text, href) for text, href in runs]
+
+
+def build_must_read_nodes(title: str, url: str, summary: str) -> list[dict]:
+    """The 'One "must" for this week' block: a heading with the linked article
+    title, followed by its AI-generated summary as one paragraph per line
+    (``newsletter/summarizer.py`` produces exactly 3 plain-text lines).
+
+    Matches the hand-authored format of the live published editions (e.g.
+    "One \"must\" for this week: <linked title>" as an H2, summary lines below
+    as separate paragraphs).
+    """
+    nodes: list[dict] = [
+        {
+            "type": "heading",
+            "attrs": {"level": 2},
+            "content": _run_nodes([('One "must" for this week: ', None), (title, url)]),
+        }
+    ]
+    for line in [ln.strip() for ln in (summary or "").splitlines() if ln.strip()]:
+        nodes.append({"type": "paragraph", "content": _run_nodes([(line, None)])})
+    return nodes
+
+
+def build_book_nodes(title: str, url: str, author: str) -> list[dict]:
+    """The 'One book' block: a heading, then the quoted linked title + author.
+
+    Matches the live published format: ``"<linked title>" by <author>.`` — the
+    trailing ``by <author>`` is dropped when the book row has no author (the
+    Notion "author to copy" formula can be blank).
+    """
+    tail = f'" by {author}.' if author else '".'
+    return [
+        {
+            "type": "heading",
+            "attrs": {"level": 2},
+            "content": _run_nodes([("One book", None)]),
+        },
+        {
+            "type": "paragraph",
+            "content": _run_nodes([('"', None), (title, url), (tail, None)]),
+        },
+    ]
+
+
 def build_section_nodes(
     sections: list[tuple[str, list[tuple[str, str]]]],
     *,
-    intro: Optional[str] = None,
+    lead_nodes: Optional[list[dict]] = None,
+    trail_nodes: Optional[list[dict]] = None,
 ) -> list[dict]:
     """Build the ProseMirror body nodes for a sectioned edition.
 
     ``sections`` is ``[(heading, [(link_text, url), ...]), ...]`` — one heading
-    per topic, one linked bullet per article. ``intro``, when given, becomes the
-    first paragraph.
+    per topic, one linked bullet per article. ``lead_nodes``, when given, are
+    inserted before the sections (e.g. :func:`build_must_read_nodes`);
+    ``trail_nodes`` after (e.g. :func:`build_book_nodes`).
 
     Text is emitted as **literal** text nodes rather than parsed as markdown:
     article titles come from arbitrary web pages and routinely contain ``[``,
@@ -517,8 +569,8 @@ def build_section_nodes(
     destroying the links. Hence the explicit node construction here.
     """
     nodes: list[dict] = []
-    if intro:
-        nodes.append({"type": "paragraph", "content": [_text_node(intro)]})
+    if lead_nodes:
+        nodes.extend(lead_nodes)
     for heading, articles in sections:
         nodes.append(
             {
@@ -538,6 +590,8 @@ def build_section_nodes(
         # for a topic that collected no articles.
         if items:
             nodes.append({"type": "bullet_list", "content": items})
+    if trail_nodes:
+        nodes.extend(trail_nodes)
     return nodes
 
 
@@ -651,7 +705,8 @@ class SubstackAPI:
         subtitle: str,
         sections: list[tuple[str, list[tuple[str, str]]]],
         *,
-        intro: Optional[str] = None,
+        lead_nodes: Optional[list[dict]] = None,
+        trail_nodes: Optional[list[dict]] = None,
         audience: str = "everyone",
     ) -> dict:
         """Create a newsletter edition DRAFT laid out as headed link sections.
@@ -664,7 +719,9 @@ class SubstackAPI:
         built explicitly rather than through the library's markdown path.
         """
         post = Post(title, subtitle, self.user_id, audience=audience)
-        post.draft_body["content"].extend(build_section_nodes(sections, intro=intro))
+        post.draft_body["content"].extend(
+            build_section_nodes(sections, lead_nodes=lead_nodes, trail_nodes=trail_nodes)
+        )
         return self._api.post_draft(post.get_draft())
 
     def update_draft(self, draft_id: int, **fields) -> dict:
