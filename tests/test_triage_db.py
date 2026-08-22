@@ -315,9 +315,12 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(sc.load_lessons(out), ["Prefer first-person stories over listicles"])
             with unittest.mock.patch.object(sc, "LESSONS_PATH", out):
                 self.assertIn("Prefer first-person stories", sc._criteria_brief({"rules": {}}))
-            # control-panel editor path (#231): owner rewording + un-accept, one Save
-            ls.save([{"id": rows[0]["id"], "text": "Prefer first-person stories over listicles and roundups",
-                      "accepted": True}])
+            # control-panel editor path (#231): owner rewording + un-accept, one Save.
+            # Every save/accept stays under the patched path — save() exports, and an unpatched call
+            # clobbers the real newsletter/triage/lessons.json with the fake store's rows.
+            with unittest.mock.patch.object(ls, "LESSONS_PATH", out):
+                ls.save([{"id": rows[0]["id"], "text": "Prefer first-person stories over listicles and roundups",
+                          "accepted": True}])
             self.assertEqual(db.lessons()[0]["text"], "Prefer first-person stories over listicles and roundups")
             self.assertTrue(db.lessons()[0]["accepted"])
             with unittest.mock.patch.object(ls, "LESSONS_PATH", out):
