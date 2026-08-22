@@ -179,7 +179,11 @@ def emails_from_gmail(start: date, end: date, *, cfg: Dict[str, Any], budget: Op
 
 
 def build_candidates(records: Sequence[gm.EmailRecord], priors: sc.Priors, notion_urls: set,
-                     notion_titles: Dict[str, str]) -> Tuple[List[rk.Candidate], Dict[str, List[rk.Candidate]]]:
+                     notion_titles: Dict[str, str],
+                     picked_before: Optional[Dict[str, str]] = None) -> Tuple[List[rk.Candidate], Dict[str, List[rk.Candidate]]]:
+    """``picked_before`` = ``db.picked_before(start)``: articles ticked in an earlier window are duplicates even
+    before the archive step puts them in Notion (#228 — HBR re-links the same piece from a later digest)."""
+    picked_before = picked_before or {}
     cands: List[rk.Candidate] = []
     by_email: Dict[str, List[rk.Candidate]] = defaultdict(list)
     for rec in records:
@@ -200,7 +204,9 @@ def build_candidates(records: Sequence[gm.EmailRecord], priors: sc.Priors, notio
                              label=link.label, url=link.best_url, canonical=canonical, domain=dom,
                              sender_weight=weight, sender_basis=basis, is_new_sender=is_new, domain_bonus=bonus,
                              topic=priors.topic_prior(rec.sender_address, dom))
-            if link.resolved and canonical in notion_urls:
+            if link.resolved and canonical in picked_before:
+                c.in_notion, c.picked_earlier = True, picked_before[canonical]
+            elif link.resolved and canonical in notion_urls:
                 c.in_notion = True
             elif link.label and _norm(link.label) in notion_titles:
                 c.in_notion = True
@@ -287,11 +293,13 @@ def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: D
     rules = criteria.get("rules", {})
     records = emails_from_cache(start, end) if source == "cache" else emails_from_gmail(start, end, cfg=cfg)
     notion_urls, notion_titles = load_notion_urls(created_before=start.isoformat() if backtest is not None else None)
-    cands, by_email = build_candidates(records, priors, notion_urls, notion_titles)
+    picked_before = db.picked_before(start) if store_ok() else {}
+    cands, by_email = build_candidates(records, priors, notion_urls, notion_titles, picked_before)
     if limit_links:
         cands = cands[:limit_links]
     stats: Dict[str, Any] = {"emails": len(records), "links": len(cands),
-                             "duplicates_in_notion": sum(1 for c in cands if c.in_notion),
+                             "duplicates_in_notion": sum(1 for c in cands if c.in_notion and not c.picked_earlier),
+                             "duplicates_picked_earlier": sum(1 for c in cands if c.picked_earlier),
                              "unresolved_links": sum(1 for c in cands if c.reason == "redirect unresolved")}
     llm_calls = 0
     llm_cache = sc.LLMCache()
@@ -341,7 +349,9 @@ def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: D
                 c.reason = f"fetch: {f.error}"
             if f.final_url:
                 canon = canonicalize_url(gm.canonical_substack(f.final_url))
-                if canon in notion_urls:
+                if canon in picked_before:
+                    c.in_notion, c.picked_earlier = True, picked_before[canon]
+                elif canon in notion_urls:
                     c.in_notion = True
                 c.domain = gm.publication_domain(f.final_url, c.sender_address) or c.domain
             if f.title and _norm(f.title) in notion_titles:

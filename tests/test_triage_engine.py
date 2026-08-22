@@ -55,6 +55,15 @@ class RankTests(unittest.TestCase):
         self.assertIsNotNone(sel.stars["leadership and management"])
         self.assertIs(sel.must_read.topic, "personal development")  # prior 0.6 × 7 > 0.35 × 9
 
+    def test_picked_earlier_is_a_duplicate(self) -> None:  # issue #228
+        c = _cand(1, topic="leadership and management", score=12.4, in_notion=True,
+                  picked_earlier="2026-08-07 → 2026-08-14")
+        rk.apply_vetoes(c)
+        self.assertEqual((c.verdict, c.reason), ("duplicate", "already picked 2026-08-07 → 2026-08-14"))
+        d = _cand(2, topic="innovation", score=9.0, in_notion=True)
+        rk.apply_vetoes(d)
+        self.assertEqual(d.reason, "already in Notion")
+
     def test_vetoes_and_states(self) -> None:
         pay = _cand(1, topic="innovation", score=9.0, paywalled=True)
         never = _cand(2, topic="innovation", score=9.0, sender_weight=0.0, sender_basis="override:never")

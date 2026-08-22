@@ -79,6 +79,10 @@ class _Query:
         self.filters.append(("in", col, list(vals)))
         return self
 
+    def lte(self, col: str, val: Any) -> "_Query":
+        self.filters.append(("lte", col, val))
+        return self
+
     def order(self, col: str, desc: bool = False) -> "_Query":
         self.orders.append((col, desc))
         return self
@@ -97,6 +101,8 @@ class _Query:
             if kind == "eq" and str(row.get(col)) != str(val):
                 return False
             if kind == "in" and row.get(col) not in val:
+                return False
+            if kind == "lte" and not (row.get(col) is not None and str(row.get(col)) <= str(val)):
                 return False
         return True
 
@@ -346,6 +352,15 @@ class StoreTests(unittest.TestCase):
             self.assertNotIn("meh@x.com", json.loads(ov.read_text(encoding="utf-8"))["senders"])
             with self.assertRaises(ValueError):
                 rv.set_sender_tier("a@b.c", "sometimes", overrides_path=ov)
+
+    def test_picked_before_is_strictly_earlier_windows(self) -> None:  # issue #228
+        db.save_decisions("2026-08-07", "2026-08-14", [
+            {"canonical": "https://hbr.org/leadership-drift", "pick": True, "title": "Drift"},
+            {"canonical": "https://hbr.org/passed", "pick": False, "title": "Passed"}])
+        db.save_decisions("2026-08-14", "2026-08-22", [{"canonical": "https://x.com/later", "pick": True}])
+        picked = db.picked_before("2026-08-14")
+        self.assertEqual(picked, {"https://hbr.org/leadership-drift": "2026-08-07 → 2026-08-14"})
+        self.assertEqual(db.picked_before("2026-08-07"), {})          # nothing closed before the window opens
 
     def test_saturday_weeks(self) -> None:
         weeks = rv.saturday_weeks(3, today=date(2026, 8, 21))       # a Friday

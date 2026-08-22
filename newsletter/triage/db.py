@@ -116,7 +116,8 @@ def ensure_schema() -> None:
 
 
 def _fetch_all(name: str, select: str = "*", *, filters: Optional[Dict[str, Any]] = None,
-               order: Optional[Tuple[str, bool]] = None, in_: Optional[Tuple[str, Sequence[Any]]] = None) -> List[Dict[str, Any]]:
+               order: Optional[Tuple[str, bool]] = None, in_: Optional[Tuple[str, Sequence[Any]]] = None,
+               lte: Optional[Tuple[str, Any]] = None) -> List[Dict[str, Any]]:
     """Page through every matching row (PostgREST caps a request at ``PAGE`` rows)."""
     out: List[Dict[str, Any]] = []
     start = 0
@@ -126,6 +127,8 @@ def _fetch_all(name: str, select: str = "*", *, filters: Optional[Dict[str, Any]
             q = q.eq(col, val)
         if in_:
             q = q.in_(in_[0], list(in_[1]))
+        if lte:
+            q = q.lte(lte[0], lte[1])
         if order:
             q = q.order(order[0], desc=order[1])
         rows = q.range(start, start + PAGE - 1).execute().data or []
@@ -254,6 +257,15 @@ def emails(run_id: int) -> List[Dict[str, Any]]:
 
 def load_decisions(start: Any, end: Any) -> List[Dict[str, Any]]:
     return _fetch_all("triage_decisions", filters={"window_start": _d(start), "window_end": _d(end)})
+
+
+def picked_before(start: Any) -> Dict[str, str]:
+    """``{canonical: "window_start → window_end"}`` of every article the owner picked in a window that closed
+    on or before ``start`` — the cross-window dedupe set (#228). Overlapping windows (backtests) and the
+    run's own window are excluded by construction (``window_end <= start``)."""
+    rows = _fetch_all("triage_decisions", "canonical,window_start,window_end", filters={"pick": True},
+                      lte=("window_end", _d(start)), order=("window_end", False))
+    return {r["canonical"]: f"{r['window_start']} → {r['window_end']}" for r in rows if r.get("canonical")}
 
 
 def save_decisions(start: Any, end: Any, rows: Sequence[Dict[str, Any]]) -> int:

@@ -59,6 +59,7 @@ class Candidate:
     fetched_ok: Optional[bool] = None
     paywalled: Optional[bool] = None
     in_notion: bool = False
+    picked_earlier: str = ""    # "2026-08-07 → 2026-08-14": picked in that earlier window (#228); implies in_notion
     sender_weight: float = 1.0
     sender_basis: str = ""
     is_new_sender: bool = False
@@ -118,7 +119,7 @@ def resolve_topic(c: Candidate) -> Optional[str]:
 def apply_vetoes(c: Candidate) -> None:
     """Set verdict for anything that can never be selected; leave others ``pending``."""
     if c.in_notion:
-        c.verdict, c.reason = "duplicate", "already in Notion"
+        c.verdict, c.reason = "duplicate", (f"already picked {c.picked_earlier}" if c.picked_earlier else "already in Notion")
     elif c.sender_weight <= 0.0:
         c.verdict, c.reason = "vetoed", f"sender {c.sender_basis}"
     elif c.paywalled is True:
