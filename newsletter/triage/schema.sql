@@ -3,7 +3,9 @@
 -- Idempotent: safe to re-run. `newsletter/triage/db.py::ensure_schema()` probes triage_runs
 -- and fails loud with a pointer to this file when the tables are missing.
 --
--- Access is through the service_role key (RLS bypass), like the engagement tables.
+-- Every table carries RLS + the four permissive anon_* policies (stanza at the bottom) — the
+-- project-wide convention that reporting_pipeline.py step 7 (supabase_policy_script --check)
+-- enforces fail-closed on the whole public schema. A table without it fails the daily job (#222).
 
 -- one engine run = one window (closed Saturday→Saturday week) of one kind.
 -- Re-running a stored window deletes the row (children cascade) and inserts a fresh one.
@@ -140,3 +142,90 @@ create table if not exists triage_picks (
     summary             text
 );
 create index if not exists triage_picks_edition_idx on triage_picks (edition);
+
+-- ---------------------------------------------------------------------------
+-- RLS + anon_* policies — one block per table, identical to what
+-- reporting/process/supabase_policy_script.py::apply_table_policies emits. Idempotent
+-- (drop policy if exists before create). ADD A BLOCK HERE FOR EVERY NEW triage_* TABLE —
+-- otherwise the daily drift check (step 7 of the reporting pipeline) fails until someone
+-- runs `python -m reporting.process.supabase_policy_script` by hand.
+
+alter table triage_runs enable row level security;
+drop policy if exists anon_select_all on triage_runs;
+create policy anon_select_all on triage_runs for select to anon using (true);
+drop policy if exists anon_insert_all on triage_runs;
+create policy anon_insert_all on triage_runs for insert to anon with check (true);
+drop policy if exists anon_update_all on triage_runs;
+create policy anon_update_all on triage_runs for update to anon using (true) with check (true);
+drop policy if exists anon_delete_all on triage_runs;
+create policy anon_delete_all on triage_runs for delete to anon using (true);
+
+alter table triage_emails enable row level security;
+drop policy if exists anon_select_all on triage_emails;
+create policy anon_select_all on triage_emails for select to anon using (true);
+drop policy if exists anon_insert_all on triage_emails;
+create policy anon_insert_all on triage_emails for insert to anon with check (true);
+drop policy if exists anon_update_all on triage_emails;
+create policy anon_update_all on triage_emails for update to anon using (true) with check (true);
+drop policy if exists anon_delete_all on triage_emails;
+create policy anon_delete_all on triage_emails for delete to anon using (true);
+
+alter table triage_candidates enable row level security;
+drop policy if exists anon_select_all on triage_candidates;
+create policy anon_select_all on triage_candidates for select to anon using (true);
+drop policy if exists anon_insert_all on triage_candidates;
+create policy anon_insert_all on triage_candidates for insert to anon with check (true);
+drop policy if exists anon_update_all on triage_candidates;
+create policy anon_update_all on triage_candidates for update to anon using (true) with check (true);
+drop policy if exists anon_delete_all on triage_candidates;
+create policy anon_delete_all on triage_candidates for delete to anon using (true);
+
+alter table triage_decisions enable row level security;
+drop policy if exists anon_select_all on triage_decisions;
+create policy anon_select_all on triage_decisions for select to anon using (true);
+drop policy if exists anon_insert_all on triage_decisions;
+create policy anon_insert_all on triage_decisions for insert to anon with check (true);
+drop policy if exists anon_update_all on triage_decisions;
+create policy anon_update_all on triage_decisions for update to anon using (true) with check (true);
+drop policy if exists anon_delete_all on triage_decisions;
+create policy anon_delete_all on triage_decisions for delete to anon using (true);
+
+alter table triage_reviews enable row level security;
+drop policy if exists anon_select_all on triage_reviews;
+create policy anon_select_all on triage_reviews for select to anon using (true);
+drop policy if exists anon_insert_all on triage_reviews;
+create policy anon_insert_all on triage_reviews for insert to anon with check (true);
+drop policy if exists anon_update_all on triage_reviews;
+create policy anon_update_all on triage_reviews for update to anon using (true) with check (true);
+drop policy if exists anon_delete_all on triage_reviews;
+create policy anon_delete_all on triage_reviews for delete to anon using (true);
+
+alter table triage_lessons enable row level security;
+drop policy if exists anon_select_all on triage_lessons;
+create policy anon_select_all on triage_lessons for select to anon using (true);
+drop policy if exists anon_insert_all on triage_lessons;
+create policy anon_insert_all on triage_lessons for insert to anon with check (true);
+drop policy if exists anon_update_all on triage_lessons;
+create policy anon_update_all on triage_lessons for update to anon using (true) with check (true);
+drop policy if exists anon_delete_all on triage_lessons;
+create policy anon_delete_all on triage_lessons for delete to anon using (true);
+
+alter table triage_editions enable row level security;
+drop policy if exists anon_select_all on triage_editions;
+create policy anon_select_all on triage_editions for select to anon using (true);
+drop policy if exists anon_insert_all on triage_editions;
+create policy anon_insert_all on triage_editions for insert to anon with check (true);
+drop policy if exists anon_update_all on triage_editions;
+create policy anon_update_all on triage_editions for update to anon using (true) with check (true);
+drop policy if exists anon_delete_all on triage_editions;
+create policy anon_delete_all on triage_editions for delete to anon using (true);
+
+alter table triage_picks enable row level security;
+drop policy if exists anon_select_all on triage_picks;
+create policy anon_select_all on triage_picks for select to anon using (true);
+drop policy if exists anon_insert_all on triage_picks;
+create policy anon_insert_all on triage_picks for insert to anon with check (true);
+drop policy if exists anon_update_all on triage_picks;
+create policy anon_update_all on triage_picks for update to anon using (true) with check (true);
+drop policy if exists anon_delete_all on triage_picks;
+create policy anon_delete_all on triage_picks for delete to anon using (true);
