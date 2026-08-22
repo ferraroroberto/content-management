@@ -22,7 +22,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 import requests
 from lxml import html as lxml_html
@@ -94,10 +94,33 @@ def detect_paywall(html: str, body_text: str, url: str) -> tuple[Optional[bool],
     return False, ""
 
 
+_YT_ID_PATH = re.compile(r"^/(?:shorts|embed|live|v)/([A-Za-z0-9_-]{6,})")
+
+
+def youtube_watch_url(url: str) -> Optional[str]:
+    """Canonical ``https://www.youtube.com/watch?v=<id>`` for any video link (``watch/?v=``, ``youtu.be/<id>``,
+    ``/shorts/<id>``, ``/embed/<id>``, ``/live/<id>``); None when there is no video id (playlists, channels).
+    The oembed endpoint answers 404 for the ``youtube.com/watch/?v=`` form some newsletters emit (#224)."""
+    parts = urlsplit(url or "")
+    host = parts.netloc.lower()
+    host = host[4:] if host.startswith("www.") else host
+    vid = ""
+    if host == "youtu.be":
+        vid = parts.path.strip("/").split("/")[0]
+    elif host in ("youtube.com", "m.youtube.com", "music.youtube.com"):
+        vid = dict(parse_qsl(parts.query)).get("v", "")
+        if not vid:
+            m = _YT_ID_PATH.match(parts.path)
+            vid = m.group(1) if m else ""
+    return f"https://www.youtube.com/watch?v={vid}" if vid else None
+
+
 def _youtube_oembed(session: requests.Session, url: str, timeout: float) -> Fetched:
-    f = Fetched(url=url, kind="video", final_url=url)
+    watch = youtube_watch_url(url)
+    f = Fetched(url=url, kind="video", final_url=watch or url)
     try:
-        r = session.get("https://www.youtube.com/oembed", params={"url": url, "format": "json"}, timeout=timeout)
+        r = session.get("https://www.youtube.com/oembed", params={"url": watch or url, "format": "json"},
+                        timeout=timeout)
         f.status = r.status_code
         if r.ok:
             data = r.json()

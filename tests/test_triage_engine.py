@@ -190,6 +190,38 @@ class ReportFeedbackTests(unittest.TestCase):
         self.assertEqual(fb.tier_for(5, 0), "rarely")
         self.assertIsNone(fb.tier_for(4, 1))
 
+class YouTubeUrlTests(unittest.TestCase):
+    def test_watch_slash_form_normalises(self) -> None:  # issue #224 — oembed 404s on youtube.com/watch/?v=
+        self.assertEqual(fx.youtube_watch_url("https://youtube.com/watch/?v=oCVq-wAPqSs"),
+                         "https://www.youtube.com/watch?v=oCVq-wAPqSs")
+        self.assertEqual(fx.youtube_watch_url("https://www.youtube.com/watch?t=266&v=TmNARZonhvY&feature=youtu.be"),
+                         "https://www.youtube.com/watch?v=TmNARZonhvY")
+        self.assertEqual(fx.youtube_watch_url("https://youtu.be/oCVq-wAPqSs?si=abc"),
+                         "https://www.youtube.com/watch?v=oCVq-wAPqSs")
+        self.assertEqual(fx.youtube_watch_url("https://www.youtube.com/shorts/oCVq-wAPqSs"),
+                         "https://www.youtube.com/watch?v=oCVq-wAPqSs")
+
+    def test_no_video_id_passes_through(self) -> None:
+        self.assertIsNone(fx.youtube_watch_url("https://www.youtube.com/playlist?list=PLbN57C5Zdl6j"))
+        self.assertIsNone(fx.youtube_watch_url("https://www.youtube.com/@JasonHeadley/videos"))
+        self.assertIsNone(fx.youtube_watch_url("https://example.com/watch?v=abc"))
+
 
 if __name__ == "__main__":
     unittest.main()
+
+class YouTubeUrlTests(unittest.TestCase):
+    def test_watch_slash_form_normalises(self) -> None:  # issue #224 — oembed 404s on youtube.com/watch/?v=
+        self.assertEqual(fx.youtube_watch_url("https://youtube.com/watch/?v=oCVq-wAPqSs"),
+                         "https://www.youtube.com/watch?v=oCVq-wAPqSs")
+        self.assertEqual(fx.youtube_watch_url("https://www.youtube.com/watch?t=266&v=TmNARZonhvY&feature=youtu.be"),
+                         "https://www.youtube.com/watch?v=TmNARZonhvY")
+        self.assertEqual(fx.youtube_watch_url("https://youtu.be/oCVq-wAPqSs?si=abc"),
+                         "https://www.youtube.com/watch?v=oCVq-wAPqSs")
+        self.assertEqual(fx.youtube_watch_url("https://www.youtube.com/shorts/oCVq-wAPqSs"),
+                         "https://www.youtube.com/watch?v=oCVq-wAPqSs")
+
+    def test_no_video_id_passes_through(self) -> None:
+        self.assertIsNone(fx.youtube_watch_url("https://www.youtube.com/playlist?list=PLbN57C5Zdl6j"))
+        self.assertIsNone(fx.youtube_watch_url("https://www.youtube.com/@JasonHeadley/videos"))
+        self.assertIsNone(fx.youtube_watch_url("https://example.com/watch?v=abc"))
