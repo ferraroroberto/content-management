@@ -10,13 +10,22 @@ status work unchanged. The must-read picker reads the topics sidecar that
 ⑤ Substack draft (issue #184) is deliberately outside the ▶ combo — it writes
 to an external platform, so it stays an explicit, separately-clicked action. It
 creates a **private** draft and never publishes.
+
+⓪ Schedule editions (issue #230) sits before ① because ② Archive can only file
+an article against a *future* newsletter row: with the buffer drained it aborts
+outright. The block reads the buffer state for its caption through a cached
+helper so a Streamlit rerun doesn't hit the Notion API on every keystroke.
 """
 
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING
 
 import streamlit as st
+
+if TYPE_CHECKING:  # annotation only — the real import stays lazy (app startup)
+    from newsletter.schedule_editions import BufferState
 
 from app.process_runner import (
     VENV_PY,
@@ -28,12 +37,17 @@ from app.process_runner import (
 
 PIPELINE_NAME = "newsletter"
 
+#: Tracks the pipeline slot's running state across reruns so the cached buffer
+#: read can be dropped the moment a run finishes (see :func:`_sync_buffer_cache`).
+_WAS_RUNNING_KEY = "newsletter-schedule-was-running"
+
 
 def run() -> None:
     st.subheader("📰 newsletter — weekly archive + build")
     st.caption(
-        "① Bootstrap Chrome → open your article tabs → ② Archive into Notion → "
-        "③ Normalize titles + URLs → ④ Build HTML. Run any step alone, or ▶ for ②③④. "
+        "⓪ Keep future editions stocked in Notion → ① Bootstrap Chrome → open your "
+        "article tabs → ② Archive into Notion → ③ Normalize titles + URLs → "
+        "④ Build HTML. Run any step alone, or ▶ for ②③④. "
         "⑤ pushes the same lists into a private Substack draft."
     )
     st.info(
@@ -66,6 +80,10 @@ def run() -> None:
 
     base = [str(VENV_PY), "newsletter_pipeline.py"]
     dbg = ["--debug"] if debug else []
+
+    _sync_buffer_cache(running)
+    _render_schedule_editions(running, base, dbg)
+    st.divider()
 
     # ── ① bootstrap ──────────────────────────────────────────────────
     st.button(
@@ -128,6 +146,85 @@ def run() -> None:
 
     must_read = _render_must_read_picker(num)
     _render_substack_draft(num, has_num, running, base, dbg, must_read)
+
+
+@st.cache_data(ttl=120, show_spinner="⏬ reading the newsletter buffer from Notion…")
+def _read_buffer_state() -> tuple[BufferState | None, str]:
+    """Cached Notion read behind the ⓪ caption: ``(state, error)``.
+
+    Short TTL rather than no cache at all — every widget interaction in this tab
+    triggers a rerun, and an uncached read would hit the Notion API each time.
+    The spinner is not decoration: the uncached read pages the whole newsletter
+    DB and takes tens of seconds, and without it the ⓪ block renders as a bare
+    heading over empty space for that whole time.
+    """
+    from newsletter.schedule_editions import read_buffer_state
+
+    try:
+        return read_buffer_state(), ""
+    except Exception as exc:  # noqa: BLE001 — surfaced to the user, never raised
+        return None, f"{type(exc).__name__}: {exc}"
+
+
+def _sync_buffer_cache(running: bool) -> None:
+    """Drop the cached buffer read when the pipeline slot goes running → idle.
+
+    The log panel reruns roughly once a second while a step is in flight, so
+    this transition is observed and the caption refreshes on its own once the
+    ⓪ run finishes — no manual refresh button needed.
+    """
+    if st.session_state.get(_WAS_RUNNING_KEY, False) and not running:
+        _read_buffer_state.clear()
+    st.session_state[_WAS_RUNNING_KEY] = running
+
+
+def _render_schedule_editions(running: bool, base: list[str], dbg: list[str]) -> None:
+    """⓪ Top the buffer of future newsletter rows in Notion back up.
+
+    The count is only a *default* taken from the cached read — the subprocess
+    re-reads the maximum edition number at write time, so a stale caption can
+    never produce a duplicate number.
+    """
+    from newsletter.schedule_editions import DEFAULT_TARGET
+
+    st.markdown("**⓪ Schedule future editions**")
+
+    state, error = _read_buffer_state()
+    # 0 is a real, reachable value: it is what a full buffer asks for, and it
+    # disables the button rather than creating a ninth edition nobody wanted.
+    default_count = state.shortfall(DEFAULT_TARGET) if state is not None else 1
+
+    with st.container(horizontal=True, gap="small"):
+        count = int(st.number_input(
+            "editions to create",
+            min_value=0, max_value=52, value=default_count, step=1,
+            key="newsletter-schedule-count",
+            help=f"Defaults to the shortfall against a {DEFAULT_TARGET}-edition "
+                 f"buffer. 0 means there is nothing to do.",
+        ))
+        st.button(
+            "⓪ Schedule editions",
+            key="newsletter-schedule",
+            disabled=running or count == 0,
+            on_click=start_pipeline,
+            args=(PIPELINE_NAME, base + ["schedule", "--count", str(count)] + dbg),
+            width="stretch",
+        )
+
+    if error:
+        st.warning(f"⚠️ couldn't read the newsletter buffer from Notion — {error}")
+        st.caption("→ the step still works; it does its own read. The count above is a guess.")
+    elif state is None:
+        st.warning("⚠️ no newsletter edition in Notion carries both a number and a Date — "
+                   "the sequence has nothing to continue from.")
+    else:
+        shortfall = state.shortfall(DEFAULT_TARGET)
+        tail = f"{shortfall} to add" if shortfall else f"buffer full (target {DEFAULT_TARGET})"
+        st.caption(
+            f"latest {state.latest_label} · {state.latest_date.isoformat()} · "
+            f"{state.future_count} future edition"
+            f"{'' if state.future_count == 1 else 's'} — {tail}"
+        )
 
 
 def _render_substack_draft(

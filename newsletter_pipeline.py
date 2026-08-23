@@ -8,6 +8,7 @@ Streamlit-only path.
 Subcommands::
 
     newsletter_pipeline.py bootstrap                         # ensure Chrome on :9222 (targeted)
+    newsletter_pipeline.py schedule  [--count N] [--target 8] [--dry-run] [--debug]
     newsletter_pipeline.py archive   [--debug]               # open tabs -> Notion
     newsletter_pipeline.py normalize [--days 14] [--debug]   # titles + URLs
     newsletter_pipeline.py build     --newsletter NNN [--debug] [--no-open]
@@ -19,6 +20,9 @@ Subcommands::
 
 * ``bootstrap`` launches the dedicated newsletter Chrome on :9222 **without**
   killing the everyday browser (see ``newsletter/bootstrap_chrome.py``).
+* ``schedule`` tops the buffer of future newsletter rows in Notion back up to
+  8, so ``archive`` always has a row to file articles against (see
+  ``newsletter/schedule_editions.py``). Not part of ``create`` / ``all``.
 * ``archive`` / ``normalize`` / ``build`` / ``create`` are all non-interactive.
 * ``create`` = archive -> normalize -> build (no must-read prompt), chained.
 * ``all`` is the one sanctioned interactive console flow: bootstrap -> a single
@@ -50,6 +54,7 @@ force_utf8_stdio()
 from newsletter import bootstrap_chrome  # noqa: E402
 from newsletter import build_newsletter, normalize_names, normalize_url  # noqa: E402
 from newsletter import pipeline as archive_pipeline  # noqa: E402
+from newsletter import schedule_editions  # noqa: E402
 from newsletter import substack_draft  # noqa: E402
 
 logger = logging.getLogger("newsletter_pipeline")
@@ -80,6 +85,13 @@ def _banner(title: str) -> None:
 def step_bootstrap() -> int:
     _banner("bootstrap Chrome on :9222 (targeted — everyday browser untouched)")
     return bootstrap_chrome.ensure_chrome()
+
+
+def step_schedule(*, count: int | None, target: int, dry_run: bool,
+                  debug: bool) -> int:
+    _banner("schedule future newsletter editions in Notion")
+    return schedule_editions.run(count=count, target=target,
+                                 dry_run=dry_run, debug=debug)
 
 
 def step_archive(debug: bool) -> int:
@@ -195,13 +207,25 @@ def _add_newsletter(p: argparse.ArgumentParser, *, required: bool) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Newsletter pipeline: bootstrap → archive → normalize → build."
+        description="Newsletter pipeline: schedule → bootstrap → archive → normalize → build."
     )
     parser.add_argument("--debug", action="store_true",
                         help="Verbose logs (also accepted per-subcommand)")
     sub = parser.add_subparsers(dest="cmd")
 
     sub.add_parser("bootstrap", help="Ensure Chrome is up on :9222 (targeted)")
+
+    p_sched = sub.add_parser(
+        "schedule", help="Create the missing future newsletter rows in Notion")
+    p_sched.add_argument("--count", type=int, default=None,
+                         help="Create exactly N editions (default: top the "
+                              "buffer up to --target)")
+    p_sched.add_argument("--target", type=int, default=schedule_editions.DEFAULT_TARGET,
+                         help="Desired number of future editions "
+                              f"(default {schedule_editions.DEFAULT_TARGET})")
+    p_sched.add_argument("--dry-run", action="store_true",
+                         help="Print the rows that would be created; write nothing")
+    p_sched.add_argument("--debug", action="store_true")
 
     p_arch = sub.add_parser("archive", help="Archive open Chrome tabs to Notion")
     p_arch.add_argument("--debug", action="store_true")
@@ -253,6 +277,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if cmd == "bootstrap":
         return step_bootstrap()
+    if cmd == "schedule":
+        return step_schedule(count=args.count, target=args.target,
+                             dry_run=args.dry_run, debug=debug)
     if cmd == "archive":
         return step_archive(debug=debug)
     if cmd == "normalize":
