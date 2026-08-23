@@ -165,8 +165,44 @@ def pick_newsletter(
     return None
 
 
+def iter_newsletter_editions(
+    client: Client, *, newsletter_db_id: str,
+) -> Iterator[Dict[str, Any]]:
+    """Yield every row of the newsletter DB, oldest first.
+
+    Used by the ``schedule`` step, which needs the whole table rather than the
+    first row that has room: the next number must continue from the highest
+    edition that exists *anywhere*, not just the newest-dated one.
+    """
+    sorts = [{"property": "Date", "direction": "ascending"}]
+    return _iter_database(client, newsletter_db_id, sorts=sorts)
+
+
 # ---------------------------------------------------------------------------
 # writes
+
+
+def create_newsletter_edition(
+    client: Client, *, newsletter_db_id: str, number: str, edition_date: date,
+) -> Dict[str, Any]:
+    """Create an empty future edition row — ``number`` (title) + ``Date`` only.
+
+    Every other column on the newsletter DB is a rollup over the related
+    ``articles`` DB, so a fresh row fills itself in as articles are archived
+    against it.
+    """
+    page = _retry(
+        lambda: client.pages.create(
+            parent={"database_id": newsletter_db_id},
+            properties={
+                "number": {"title": [{"type": "text", "text": {"content": number}}]},
+                "Date": {"date": {"start": edition_date.isoformat()}},
+            },
+        ),
+        label=f"create newsletter {number}",
+    )
+    logger.info("➕ Created newsletter edition: %s (%s)", number, edition_date.isoformat())
+    return page
 
 
 def create_connection(client: Client, *, connections_db_id: str, name: str,

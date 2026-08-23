@@ -12,6 +12,9 @@ ferraroroberto/content-management#18 (full pipeline + monorepo migration).
 
 ```mermaid
 flowchart LR
+    subgraph S0[0. Schedule]
+        Z[schedule_editions.py<br/>read every edition row<br/>-> max number + max date<br/>-> create the missing<br/>future rows, weekly cadence]
+    end
     subgraph S1[1. Bootstrap]
         A[bootstrap_chrome.py<br/>targeted: reuse :9222 if up,<br/>else kill only the newsletter-profile<br/>Chrome and relaunch on :9222]
     end
@@ -35,7 +38,7 @@ flowchart LR
         O[same grouped articles] --> P[native HTTP API<br/>cookie auth]
         P --> Q[private draft edition<br/>never published]
     end
-    S1 --> S2 --> S3 --> S4
+    S0 --> S1 --> S2 --> S3 --> S4
     S4 -.-> S5
 ```
 
@@ -111,6 +114,7 @@ The pipeline is split into independent, non-interactive subcommands (issue #59)
 
 | Command | What it does |
 |---|---|
+| `newsletter_pipeline.py schedule [--count N] [--target 8] [--dry-run] [--debug]` | Create the missing **future** newsletter rows in Notion so `archive` always has somewhere to file an article. |
 | `newsletter_pipeline.py bootstrap` | Ensure Chrome is up on `:9222` (targeted — never kills the everyday browser). |
 | `newsletter_pipeline.py archive [--debug]` | Archive every eligible open tab → Notion, write + close. |
 | `newsletter_pipeline.py normalize [--days 14] [--debug]` | normalize_names + normalize_url. |
@@ -137,6 +141,32 @@ Lower-level module entry points:
 Add `--debug` to any of the above for verbose logs. All runs append to
 `logs/newsletter_archive.log` (archive entry points) or stdout (the
 others).
+
+## Scheduling future editions (issue #230)
+
+`archive` files each article against the first **future** newsletter row that
+still has room for its topic (`notion_io.pick_newsletter`, which filters
+`Date >= today`). When the buffer of future rows runs dry it aborts outright:
+
+```
+❌ No future newsletter has room for topic '<topic>' — stopping
+```
+
+`schedule` tops that buffer back up. It reads every row of the newsletter DB
+once, takes the highest `number` and the highest `Date` **independently**, and
+creates the rows that follow:
+
+```powershell
+& .\.venv\Scripts\python.exe newsletter_pipeline.py schedule --dry-run   # plan only, writes nothing
+& .\.venv\Scripts\python.exe newsletter_pipeline.py schedule             # top up to 8 future editions
+& .\.venv\Scripts\python.exe newsletter_pipeline.py schedule --count 4   # create exactly 4
+```
+
+- **Numbering** continues from the highest edition anywhere in the table, zero-padded to three digits (`N234`) — `build_newsletter.normalize_newsletter_number` rejects anything else, so an unpadded number would only fail later, at ④ Build. Taking the max number separately from the max date is what makes a duplicate impossible even if the two ever disagree.
+- **Dating** carries the weekly cadence off the latest row, so the Saturday alignment is inherited rather than recomputed.
+- **Idempotent.** With the buffer already at target it creates nothing, says so, and exits 0.
+- New rows carry `number` and `Date` only — every other column on that DB is a rollup over the related `articles` DB, so they fill themselves in as articles are archived.
+- The maximum is re-read inside the step, at write time. The ⓪ block in the app's 📰 tab only *pre-fills* the count from a cached read, so a stale caption can never produce a duplicate number.
 
 ## Notion field map
 
@@ -220,6 +250,7 @@ byline. The fallback exists so the pipeline never invents people.
 - `cache.py` — in-memory caches + URL canonicaliser + fuzzy name match.
 - `notion_io.py` — DB read/write helpers with retry-with-backoff.
 - `pipeline.py` — archive batch orchestrator.
+- `schedule_editions.py` — future-edition scheduler: buffer state + the pure number/date sequence generator.
 - `dry_run.py` — single-tab entrypoint.
 - `normalize_names.py` — article title sentence-case rewriter.
 - `normalize_names_words.json` — sidecar: proper-name whitelist + special

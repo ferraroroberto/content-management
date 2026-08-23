@@ -15,9 +15,13 @@ Four pipelines, one repo:
   and the daily Substack run can consume them.
 - **Newsletter** (`newsletter/`, `newsletter_pipeline.py`) — the weekly
   newsletter workflow, split into independent non-interactive steps
-  (`bootstrap` / `archive` / `normalize` / `build`, plus `create` and
-  `all` composites) so each runs on its own from the app or a console.
-  **Bootstrap** launches the dedicated newsletter Chrome on `:9222`
+  (`schedule` / `bootstrap` / `archive` / `normalize` / `build`, plus
+  `create` and `all` composites) so each runs on its own from the app or
+  a console. **Schedule** tops the buffer of *future* newsletter rows in
+  Notion back up to eight, continuing the number sequence from the
+  highest existing edition and the weekly cadence from the latest date —
+  without those rows **Archive** has nowhere to file an article and stops
+  (issue #230). **Bootstrap** launches the dedicated newsletter Chrome on `:9222`
   without touching the everyday browser (targeted, idempotent — issue
   #59). **Archive** walks the open article tabs in that CDP-attached
   Chrome into Notion (readability-lxml extraction → Gemini-Lite topic +
@@ -126,7 +130,7 @@ content-management/                   # repo root
 │   └── screenshots/                  # manifest.json + generated per-tab screenshots (tracked)
 ├── planning_pipeline.py              # orchestrator: LI → IG → TW → TH (--all-wip)
 ├── reporting_pipeline.py             # orchestrator: APIs → Supabase → Notion → Substack
-├── newsletter_pipeline.py            # orchestrator: bootstrap/archive/normalize/build subcommands
+├── newsletter_pipeline.py            # orchestrator: schedule/bootstrap/archive/normalize/build subcommands
 ├── launch_app.bat                    # Streamlit control panel launcher (Windows CMD)
 ├── launch_planning.bat               # planning launcher (Windows CMD)
 ├── launch_reporting.bat              # reporting launcher (Windows CMD)

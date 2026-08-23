@@ -18,7 +18,7 @@ flowchart TB
 
   RPIPE["reporting_pipeline.py"]
   PPIPE["planning_pipeline.py --all-wip"]
-  NPIPE["newsletter_pipeline.py\nbootstrap / archive / normalize / build /\nsubstack-draft"]
+  NPIPE["newsletter_pipeline.py\nschedule / bootstrap / archive / normalize / build /\nsubstack-draft"]
   APP["app/app.py — Streamlit control panel\ntab_reporting · tab_planning · tab_newsletter ·\ntab_triage · tab_editorial · tab_engagement"]
   AUTOHEAL["app/autoheal_console.py"]
 
@@ -69,6 +69,7 @@ flowchart TB
   RESULTSPLAN -.->|"selector-drift failure"| AUTOHEALSKILL
 
   subgraph newsletter_mod["newsletter/ — weekly issue pipeline"]
+    NSCHED["schedule_editions.py\n(top up future edition rows)"]
     NBOOT["bootstrap_chrome.py\n(dedicated Chrome, CDP :9222)"]
     NARCHIVE["chrome_tabs + extractor +\nauthor_resolver + summarizer/llm"]
     NNORM["normalize_names + normalize_url"]
@@ -79,6 +80,9 @@ flowchart TB
     NTRIAGERUN["triage/run.py — weekly engine\nfetch + score (2 stages) + rank + report\n+ feedback.py (decisions → sender tiers)"]
     NTRIAGEREVIEW["triage/db.py + review.py + lessons.py\nstore, editable review, distilled criteria notes\n(lessons.json → prompt brief)"]
   end
+  NPIPE --> NSCHED
+  NSCHED -->|"max number + max Date →\ncreate N{NNN} rows, weekly cadence"| NOTION
+  NSCHED -.->|"future rows archive can target"| NARCHIVE
   NPIPE --> NBOOT --> NARCHIVE --> NNORM --> NBUILD
   NTRIAGE -->|"gmail.readonly via vendored\ngmail_readonly/ + google_oauth_common/"| GMAILAPI[("Gmail API\nlabel 'newsletters'")]
   NTRIAGE -->|"positives: articles + editions"| NOTION
