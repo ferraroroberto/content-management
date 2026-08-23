@@ -43,7 +43,7 @@ _NUMBER_RE = re.compile(r"^N?(\d+)$", re.IGNORECASE)
 # pure helpers
 
 
-def parse_edition_number(raw: str) -> Optional[int]:
+def parse_edition_number(raw: Optional[str]) -> Optional[int]:
     """``"N233"`` / ``"233"`` -> ``233``; anything else -> ``None``.
 
     Deliberately laxer than ``build_newsletter.normalize_newsletter_number``
