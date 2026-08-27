@@ -1,62 +1,54 @@
-"""Thin wrapper around the local-llm-hub Anthropic-shape /v1/messages endpoint."""
+"""Thin wrapper around the local-llm-hub Anthropic-shape /v1/messages endpoint.
+
+Backed by the `anthropic` SDK (global CLAUDE.md "Don't duplicate hub
+functionality in downstream apps") rather than a hand-rolled `requests.post`
++ retry loop — the SDK already implements retry/backoff on transient
+network errors and response parsing, so this module only adapts the SDK
+call to this project's `call()`/`health_check()` shape.
+"""
 
 from __future__ import annotations
 
 import logging
-import time
+from functools import lru_cache
 
-import requests
+from anthropic import Anthropic
 
 logger = logging.getLogger("newsletter_archive.llm")
 
-# Transient network failures worth retrying — the hub may be briefly slow
-# or mid-restart. A genuine bad response (4xx/5xx) is not retried here.
-_RETRYABLE = (requests.ReadTimeout, requests.ConnectionError)
+
+@lru_cache(maxsize=None)
+def _client(base_url: str) -> Anthropic:
+    return Anthropic(api_key="local-dummy", base_url=base_url)
 
 
 def call(*, base_url: str, model: str, prompt: str, max_tokens: int = 512,
-         timeout: int = 120, retries: int = 2, backoff: float = 2.0) -> str:
+         timeout: int = 120, retries: int = 2) -> str:
     """Single-turn user → assistant round-trip. Returns the assistant text.
 
-    On a transient network error (read timeout / connection error) the call
-    is retried up to ``retries`` times with exponential backoff before the
-    error is re-raised — so one slow blip doesn't discard a fully-extracted
-    article. Each attempt uses the full ``timeout``.
+    Transient network errors (read timeout / connection error) are retried
+    by the SDK's own backoff up to ``retries`` times before the error is
+    re-raised — so one slow blip doesn't discard a fully-extracted article.
     """
-    payload = {
-        "model": model,
-        "max_tokens": max_tokens,
-        "messages": [{"role": "user", "content": prompt}],
-    }
     logger.debug("LLM call: model=%s max_tokens=%d prompt_chars=%d",
                  model, max_tokens, len(prompt))
-    last_exc: Exception | None = None
-    for attempt in range(1, retries + 2):  # 1 initial + `retries` retries
-        try:
-            resp = requests.post(
-                f"{base_url.rstrip('/')}/v1/messages",
-                json=payload,
-                timeout=timeout,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            for part in data.get("content", []):
-                if part.get("type") == "text":
-                    return (part.get("text") or "").strip()
-            raise RuntimeError(f"Unexpected /v1/messages response shape: {data!r}")
-        except _RETRYABLE as exc:
-            last_exc = exc
-            if attempt <= retries:
-                wait = backoff * (2 ** (attempt - 1))
-                logger.warning("⚠️ LLM call failed (%s) — attempt %d/%d, "
-                               "retrying in %.0fs",
-                               type(exc).__name__, attempt, retries + 1, wait)
-                time.sleep(wait)
-            else:
-                logger.error("❌ LLM call failed after %d attempts: %s",
-                              retries + 1, type(exc).__name__)
-    assert last_exc is not None
-    raise last_exc
+    client = _client(base_url.rstrip("/"))
+    try:
+        msg = client.with_options(
+            timeout=float(timeout), max_retries=retries,
+        ).messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except Exception as exc:
+        logger.error("❌ LLM call failed after %d retries: %s: %s",
+                      retries, type(exc).__name__, exc)
+        raise
+    for part in msg.content or []:
+        if getattr(part, "type", None) == "text":
+            return (part.text or "").strip()
+    raise RuntimeError(f"Unexpected /v1/messages response shape: {msg!r}")
 
 
 def health_check(*, base_url: str, model: str, timeout: int = 30) -> bool:

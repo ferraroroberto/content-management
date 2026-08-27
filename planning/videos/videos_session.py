@@ -205,25 +205,45 @@ _PLACEHOLDER_MASK = (
 _INVALID_FILE_ATTRIBUTES = 0xFFFFFFFF
 
 
-def _win_file_attributes(path: Path) -> int:
-    """Return the Win32 attribute bitmask for ``path`` (-1 if unavailable).
+def _win_file_attributes(path: Path) -> Optional[int]:
+    """Return the Win32 attribute bitmask for ``path``, or ``None`` if unavailable.
 
-    Returns -1 on non-Windows platforms or when the query fails, so callers
-    treat the file as a normal local file (no-op) rather than a placeholder.
+    ``None`` on non-Windows platforms, or when ``GetFileAttributesW`` fails
+    (deleted file, permission denial, path-length limit, ...). ``None`` means
+    "could not determine" — it is a *distinct* state from "definitely not a
+    placeholder" and callers must not collapse the two (see ``is_online_only``).
+    Logs a warning with the Win32 error code on failure so a silent
+    misclassification doesn't hide the underlying query failure.
     """
     if os.name != "nt":
-        return -1
+        return None
     get_attrs = ctypes.windll.kernel32.GetFileAttributesW
     get_attrs.restype = ctypes.c_uint32
     get_attrs.argtypes = [ctypes.c_wchar_p]
     attrs = get_attrs(str(path))
-    return -1 if attrs == _INVALID_FILE_ATTRIBUTES else int(attrs)
+    if attrs == _INVALID_FILE_ATTRIBUTES:
+        win_err = ctypes.windll.kernel32.GetLastError()
+        logger.warning(
+            "⚠️ GetFileAttributesW failed for %s (Win32 error %d) — cannot tell "
+            "whether this is a normal local file or an unhydrated OneDrive "
+            "placeholder.", path, win_err,
+        )
+        return None
+    return int(attrs)
 
 
-def is_online_only(path: Path) -> bool:
-    """True iff ``path`` is an un-hydrated OneDrive Files-On-Demand placeholder."""
+def is_online_only(path: Path) -> Optional[bool]:
+    """True iff ``path`` is an un-hydrated OneDrive Files-On-Demand placeholder.
+
+    Returns ``None`` when the attribute query failed and placeholder status
+    could not be determined at all — this is distinct from ``False``
+    ("confirmed not a placeholder") and callers must handle it as its own
+    state, never silently treat it as "definitely a local file".
+    """
     attrs = _win_file_attributes(path)
-    return attrs >= 0 and bool(attrs & _PLACEHOLDER_MASK)
+    if attrs is None:
+        return None
+    return bool(attrs & _PLACEHOLDER_MASK)
 
 
 def _trigger_download(path: Path) -> None:
@@ -277,24 +297,46 @@ def ensure_local_file(path: Path, *, timeout_s: float = 600.0, poll_s: float = 1
 
     This triggers OneDrive's download, then polls the placeholder attributes
     until they clear. Raises ``RuntimeError`` if the file is still a placeholder
-    after ``timeout_s`` so the caller fails loudly instead of uploading a stub.
-    No-op for already-local files and on non-Windows platforms.
+    after ``timeout_s``, so the caller fails loudly instead of uploading a stub.
+    True no-op only when the file is *confirmed* local. When placeholder status
+    cannot be determined at all (``is_online_only`` returns ``None`` — the
+    attribute query itself failed), this does **not** silently treat that as
+    "local": it logs the indeterminate state and forces the same
+    download-and-verify path defensively, because uploading an un-hydrated
+    stub is worse than one extra, harmless read-through of an already-local
+    file.
     """
-    if not is_online_only(path):
+    online = is_online_only(path)
+    if online is False:
         return
-    size_mb = path.stat().st_size / 1_048_576
-    logger.info(
-        "🌥️ %s is an online-only OneDrive placeholder (%.1f MB) — forcing download…",
-        path.name, size_mb,
-    )
+    if online is None:
+        logger.warning(
+            "⚠️ %s: OneDrive placeholder status could not be determined — "
+            "forcing a download-and-verify pass defensively instead of "
+            "assuming it is a normal local file.", path,
+        )
+    else:
+        size_mb = path.stat().st_size / 1_048_576
+        logger.info(
+            "🌥️ %s is an online-only OneDrive placeholder (%.1f MB) — forcing download…",
+            path.name, size_mb,
+        )
     _trigger_download(path)
     # The download runs in the OneDrive service; poll until the attributes clear.
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
-        if not is_online_only(path):
-            logger.info("✅ %s hydrated locally (%.1f MB).", path.name, size_mb)
+        online = is_online_only(path)
+        if online is False:
+            logger.info("✅ %s hydrated locally.", path.name)
             return
         time.sleep(poll_s)
+    online = is_online_only(path)
+    if online is None:
+        raise RuntimeError(
+            f"OneDrive placeholder status for {path} could not be confirmed within "
+            f"{timeout_s:.0f}s (the attribute query kept failing) — refusing to "
+            "hand a possibly-unhydrated file to the uploader."
+        )
     raise RuntimeError(
         f"OneDrive placeholder {path} did not finish downloading within {timeout_s:.0f}s. "
         "Pin it locally (right-click → Always keep on this device) and retry."

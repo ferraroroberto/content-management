@@ -16,7 +16,7 @@ flowchart LR
         Z[schedule_editions.py<br/>read every edition row<br/>-> max number + max date<br/>-> create the missing<br/>future rows, weekly cadence]
     end
     subgraph S1[1. Bootstrap]
-        A[bootstrap_chrome.py<br/>targeted: reuse :9222 if up,<br/>else kill only the newsletter-profile<br/>Chrome and relaunch on :9222]
+        A[bootstrap_chrome.py<br/>targeted: reuse :9222 if up,<br/>else wait out a non-debug<br/>newsletter-profile Chrome, then launch :9222]
     end
     subgraph S2[2. Archive]
         B[connect_over_cdp] --> C[list tabs<br/>skip gmail/notion/...]
@@ -215,13 +215,18 @@ byline. The fallback exists so the pipeline never invents people.
   against the default profile dir (security policy change to block
   session-stealing extensions). Bootstrap always launches with
   `--user-data-dir=newsletter\chrome_user_data\` to work around this.
-- Bootstrap is **targeted and idempotent** (issue #59, supersedes #57): it
-  reuses an existing `:9222` if one is up, and otherwise kills **only** the
-  Chrome whose command line carries `--user-data-dir=<newsletter profile>` (via
+- Bootstrap is **targeted and idempotent** (issue #59, supersedes #57; wait
+  semantics fixed in #244): it reuses an existing `:9222` if one is up, and
+  otherwise checks for a Chrome whose command line carries
+  `--user-data-dir=<newsletter profile>` (via
   `config.chrome_profile_lock.pids_holding_profile`) — never `taskkill /IM
-  chrome.exe`. Your everyday browser is never touched. If a *non-debug* Chrome
-  is holding the newsletter profile, relaunching it drops that window's open
-  tabs (logins persist).
+  chrome.exe`, and never force-kills that process either. Your everyday
+  browser is never touched. If a *non-debug* Chrome is holding the newsletter
+  profile, bootstrap **waits** with the same exponential backoff schedule as
+  `config.chrome_profile_lock` (60→120→240→480 s), re-checking each cycle;
+  only if the profile is still held after the full ~15 min schedule does it
+  report the holder as likely wedged (exit code 4) instead of relaunching —
+  close that window yourself to free the profile sooner.
 - The pipeline does **not** close Chrome when it disconnects — only the
   tabs whose articles processed successfully are closed.
 - New connections are created with `name` + `topic` only. LinkedIn URLs
@@ -238,7 +243,7 @@ byline. The fallback exists so the pipeline never invents people.
 
 ## Files
 
-- `bootstrap_chrome.py` — targeted, idempotent Chrome launcher on `:9222` (reuse-or-relaunch; never kills the everyday browser).
+- `bootstrap_chrome.py` — targeted, idempotent Chrome launcher on `:9222` (reuse-or-launch; never kills the everyday browser or the newsletter profile's holder — waits with backoff instead).
 - `bootstrap_chrome.bat` — thin wrapper that runs `python -m newsletter.bootstrap_chrome`.
 - `bootstrap_session.py` — one-time Gmail-login flow into the dedicated profile.
 - `chrome_tabs.py` — CDP attach, list, skip filter, tab close.
