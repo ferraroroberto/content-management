@@ -124,10 +124,13 @@ content-management/                   # repo root
 ├── app/                              # Streamlit control panel (tabs: reporting/editorial/planning/newsletter/triage/engagement)
 ├── config/                           # config.json, mapping.json, logger_config, chrome_launch, console
 │   └── doc_capture/                  # deterministic control-panel screenshot engine (README tour)
+├── gmail_readonly/                   # portable, read-only Gmail OAuth + search component (vendored)
+├── google_oauth_common/              # shared installed-app OAuth bootstrap for the portable Google packages (vendored)
 ├── results/                          # outputs — planning summaries + raw API JSON
 ├── logs/                             # per-module .log files
 ├── docs/                             # durable topic reference docs (tracked)
 │   └── screenshots/                  # manifest.json + generated per-tab screenshots (tracked)
+├── tests/                            # unittest + pytest-style suite — see Verification below
 ├── planning_pipeline.py              # orchestrator: LI → IG → TW → TH (--all-wip)
 ├── reporting_pipeline.py             # orchestrator: APIs → Supabase → Notion → Substack
 ├── newsletter_pipeline.py            # orchestrator: schedule/bootstrap/archive/normalize/build subcommands
@@ -608,7 +611,28 @@ description, source globs, navigation, **required** mask selectors per tab).
 Idempotent by input hash — a rerun with unchanged `app/tab_*.py` sources
 captures nothing and leaves the README untouched. Hard safety invariant: a
 manifest entry without `mask` selectors is refused (skipped with a warning),
-never captured raw. Tests: `& .\.venv\Scripts\python.exe -m unittest discover tests -v`.
+never captured raw. See [Verification](#-verification) below for the test
+suite command.
+
+## ✅ Verification
+
+No CI pipeline — run the test suite locally before shipping. Most of `tests/`
+is `unittest.TestCase`-based and picked up by discovery:
+
+```powershell
+& .\.venv\Scripts\python.exe -m unittest discover tests -v
+```
+
+`tests/test_gmail_readonly.py` is pytest-style (plain test functions, not
+`unittest.TestCase`) — `unittest discover` silently skips it, no error, no
+warning. Run it separately with pytest, or run the whole suite through pytest
+instead, which understands both styles:
+
+```powershell
+& .\.venv\Scripts\python.exe -m pytest tests/test_gmail_readonly.py -v
+# or, to cover everything (unittest- and pytest-style) in one pass:
+& .\.venv\Scripts\python.exe -m pytest tests -v
+```
 
 ## 📝 License and contact
 

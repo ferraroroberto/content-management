@@ -58,7 +58,7 @@ No new secrets needed — uses `config.supabase.service_role_key` and `config.no
 
 ## Gotchas
 
-- **Selectors are unvalidated on first run.** The LinkedIn comment-area DOM was never used by the planning composer. `scrape_comments.py` has multiple candidate selectors per concept (`SEL_COMMENT_ARTICLE`, `SEL_COMMENT_TEXT`, etc.) and logs which one matched. If a post returns 0 comments, expect to iterate the selector lists.
+- **Selectors are unvalidated on first run.** The LinkedIn comment-area DOM was never used by the planning composer. `scrape_comments.py` hooks the comment list via two `data-testid` selectors (`SEL_COMMENT_LIST_CONTAINER`, `SEL_COMMENT_TEXT_NODES`). If a post returns 0 comments, `_dump_debug` writes an HTML + full-page PNG snapshot to `results/engagement/debug/`, and a DOM shape miss surfaces as the `no_list_container` structural error (tracked separately from a genuinely comment-free post — `_evaluate_scrape_health` only flags the run `"broken"` when every post structurally failed). Use the dump + structural-error signal to debug, not a selector-match log.
 - **Headful by default.** Headless would be brittle for first-run selector debugging. Use `--headless` once selectors are validated.
 - **Idempotent.** Both tables are upserted on `(platform, comment_id)` and `(platform, account_url)` respectively — safe to re-run on the same posts.
 - **Relative time parsing is approximate.** LinkedIn shows `2h`, `5m`, `1d`. We reconstruct an absolute timestamp from scrape time, so `posted_at` drifts up to ~one tick of the LI display unit. Fine for cadence rules.
