@@ -23,6 +23,7 @@ CLI:
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import logging
 import os
@@ -243,16 +244,38 @@ def group_articles_by_topic(articles: List[Dict[str, Any]], topics: Sequence[str
 # ---------------------------------------------------------------- HTML render
 
 
+# Only these schemes are emitted as a clickable ``href``. Article titles and
+# links are archived verbatim from third-party pages, so neither string is
+# trusted markup: every one is escaped before it reaches the template, and an
+# off-list scheme is rendered as inert text rather than a link.
+_LINKABLE_SCHEMES = ("http://", "https://")
+
+
+def _render_link(name: str, url: str) -> str:
+    """One ``<li>`` for an article, with both fields escaped for HTML.
+
+    ``name`` and ``url`` come from the Notion row the archive step wrote from
+    an arbitrary third-party page, so they are treated as text, never markup:
+    ``html.escape(..., quote=True)`` also escapes ``"`` so neither can close
+    the ``href`` attribute. A URL whose scheme is not in
+    :data:`_LINKABLE_SCHEMES` keeps the title readable but is not linked.
+    """
+    safe_name = html.escape(name, quote=True)
+    if url.lower().startswith(_LINKABLE_SCHEMES):
+        return f'  <li><a href="{html.escape(url, quote=True)}">{safe_name}</a></li>'
+    return f"  <li>{safe_name} ({html.escape(url, quote=True)})</li>"
+
+
 def generate_html_lists(grouped: Dict[str, List[Tuple[str, str]]], topics: Sequence[str] = TOPICS) -> str:
     out: List[str] = []
     for topic in topics:
         heading = topic[0].upper() + topic[1:]
-        out.append(f"<h2>{heading}</h2>")
+        out.append(f"<h2>{html.escape(heading, quote=True)}</h2>")
         articles = grouped[topic]
         if articles:
             out.append("<ul>")
             for name, url in articles:
-                out.append(f'  <li><a href="{url}">{name}</a></li>')
+                out.append(_render_link(name, url))
             out.append("</ul>")
         else:
             out.append("<ul></ul>")
