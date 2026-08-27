@@ -20,7 +20,8 @@ rollback):
 Everything either side of publishing — the Notion read, the idempotence guard,
 the empty-body refusal, the image resolution and the ``post_url`` write-back —
 is shared, so the two backends differ only in how the Note reaches Substack.
-Video notes are Playwright-only (see ``post_substack_video_note.py``).
+Video notes (see ``post_substack_video_note.py``) support the same
+``note_source`` flag (issue #189).
 """
 
 from __future__ import annotations

@@ -58,6 +58,7 @@ python -m reporting.social_client.social_api_client [options]
 - `--skip-existing`: Skip platforms with today's data already collected (default: enabled)
 - `--no-skip`: Force re-fetching of data even if today's file exists
 - `--platform PLATFORM_NAME`: Process only a specific platform
+- `--date YYYY-MM-DD`: Reference date to collect for, instead of today — this is the flag `reporting_pipeline.py` passes on every run
 
 ### Examples
 

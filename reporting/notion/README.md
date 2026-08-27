@@ -39,7 +39,10 @@ pip install notion-client psycopg2-binary pandas python-dotenv requests
 ```
 
 2. Configure your environment:
-   - Copy `.env.example` to `.env` and fill in your credentials
+   - Copy `reporting/process/.env_example` to `reporting/process/.env` and
+     fill in your credentials — this module reuses the same DB connection
+     helper as the `reporting/process` pipeline (see its README), so it
+     shares that file rather than having its own
    - Update `config/config.json` with your Notion API token and database settings
 
 ## ⚙️ Configuration
@@ -98,13 +101,14 @@ Updates specific Notion database entries with data from Supabase based on date m
 
 **Usage:**
 ```bash
-python -m reporting.notion.notion_update YYYYMMDD [--debug] [--database-id DATABASE_ID]
+python -m reporting.notion.notion_update YYYYMMDD [--debug] [--database-id DATABASE_ID] [-y|--yes]
 ```
 
 **Arguments:**
 - `YYYYMMDD`: Target date for updates (required)
 - `--debug`: Enable debug logging
 - `--database-id`: Override database ID from config
+- `-y`, `--yes`: Auto-confirm the update prompt (skip the "Press Enter to continue" wait) — the flag that makes this step runnable unattended
 
 **Example:**
 ```bash
@@ -363,7 +367,7 @@ All scripts use a centralized logging configuration with:
 
 To support new Notion property types:
 
-1. Update `_extract_property_value()` in `notion_supabase_sync.py`
+1. Update `extract_property_value()` in `reporting/notion/_client.py`
 2. Add type mapping in `_get_postgres_type()`
 3. Update the property type mapping table in this README
 

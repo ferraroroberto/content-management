@@ -173,7 +173,7 @@ above.
 | `illustrations_folder` | Absolute folder containing the daily image. Joined with `image_filename`. |
 | `editorial_db_id` | Notion editorial database id. |
 | `notion_columns` | Role-to-column map. Roles: `title_day`, `text_body`, `image_filename`, `post_url`. The `follow SB` follower column is **not** in this map — it is populated by the reporting pipeline (`reporting/scrape_client/substack.py::fetch_profile` → `data_processor` → `notion_update`, mapped from `profile.num_followers_substack`) like every other platform's follower count. |
-| `note_source` | Optional, `"playwright"` (default) or `"native"`. Which backend publishes the daily Note — the Chrome composer, or the HTTP API with the harvested cookie. Video notes ignore this and always use Playwright. |
+| `note_source` | Optional, `"playwright"` (default) or `"native"`. Which backend publishes the daily Note — the Chrome composer, or the HTTP API with the harvested cookie. Video notes (issue #189) support the same flag. |
 | `headless` | Optional bool (default `false`). |
 | `dry_run_default` | Optional bool (default `false`). When `true`, step 1 always runs as a dry-run unless `--force` is passed. |
 
