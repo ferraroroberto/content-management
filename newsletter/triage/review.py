@@ -184,4 +184,5 @@ def set_sender_tier(address: str, tier: str, *, name: str = "", reason: str = "m
     else:
         senders[address] = {"tier": tier, "reason": reason + (f" — {name}" if name else ""),
                             "since": datetime.now(timezone.utc).date().isoformat(), "source": "manual"}
+    overrides_path.parent.mkdir(parents=True, exist_ok=True)
     overrides_path.write_text(json.dumps(ov, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

@@ -10,7 +10,6 @@ helper from that module.
 from __future__ import annotations
 
 import logging
-import re
 import sys
 from pathlib import Path
 
@@ -37,6 +36,7 @@ from planning.threads.schedule_threads_posts import (  # noqa: E402
     _wait_composer_closes,
     return_to_profile,
 )
+from planning.threads.threads_labels import DISCARD_BTN_RE  # noqa: E402
 from planning.videos.videos_session import (  # noqa: E402
     VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS,
     VideoRow,
@@ -79,7 +79,7 @@ def schedule_one_video(
         _cancel_composer(page)
         for _ in range(3):
             try:
-                btn = page.get_by_role("button", name=re.compile(r"^discard$", re.I))
+                btn = page.get_by_role("button", name=DISCARD_BTN_RE)
                 if btn.count():
                     btn.first.click(timeout=2000)
                     page.wait_for_timeout(400)

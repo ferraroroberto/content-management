@@ -1,4 +1,4 @@
-"""Build ``newsletter/triage/criteria.json`` — the machine-readable selection criteria.
+"""Build ``results/newsletter/triage/criteria.json`` — the machine-readable selection criteria.
 
 Two halves, merged:
 
@@ -8,6 +8,12 @@ Two halves, merged:
   with the rule (see ``docs/newsletter-triage-criteria.md``).
 * **priors** (derived at build time from ``results/newsletter/triage/history/
   stats.json``) — per-sender and per-domain hit-rates, topic mix and star rates.
+
+The merged output — like ``overrides.json`` — carries real sender addresses
+and hit-rate tables, so both live under the gitignored ``results/newsletter/
+triage/`` tree (same rationale as ``newsletter/triage/lessons.json``): only
+the hand-written RULES half is versioned with the code, as Python source
+below.
 
 Usage::
 
@@ -32,8 +38,9 @@ if str(REPO_ROOT) not in sys.path:
 
 from config.console import force_utf8_stdio  # noqa: E402
 
-STATS_PATH = REPO_ROOT / "results" / "newsletter" / "triage" / "history" / "stats.json"
-CRITERIA_PATH = Path(__file__).with_name("criteria.json")
+TRIAGE_RESULTS_DIR = REPO_ROOT / "results" / "newsletter" / "triage"
+STATS_PATH = TRIAGE_RESULTS_DIR / "history" / "stats.json"
+CRITERIA_PATH = TRIAGE_RESULTS_DIR / "criteria.json"
 
 TOPICS = ("leadership and management", "personal development", "innovation")
 
@@ -127,7 +134,7 @@ RULES: Dict[str, Any] = {
         "detect": ["Substack 'This post is for paid subscribers' / paywall block", "hard subscribe-to-read walls",
                    "truncated body with a subscription CTA"],
         "metered_is_ok": "HBR-style metered/registration walls are accessible and were picked 151 times — only hard walls are excluded",
-        "known_paywalled_senders": "see overrides.json (tier=never, reason=paywalled) — Fearless Culture since 2026",
+        "known_paywalled_senders": "see results/newsletter/triage/overrides.json (tier=never, reason=paywalled) — Fearless Culture since 2026",
     },
     "cadence": {
         "rule": "one run covers one review window (last watermark → now, normally one week) and fills ONE edition (8/8/8); "
@@ -135,14 +142,15 @@ RULES: Dict[str, Any] = {
         "window_anchor": "Saturday edition day: the run on Friday covers last Saturday → today and feeds the next edition, so the queue stays one edition ahead",
     },
     "feedback_loop": {
-        "rule": "after the owner reviews a report (tick = yes, untick = no), ingest the decisions: update sender tiers/weights in overrides.json, "
-                "log every decision to results/newsletter/triage/feedback.jsonl; the weekly Notion re-sync (history.py) refreshes the data priors",
+        "rule": "after the owner reviews a report (tick = yes, untick = no), ingest the decisions: update sender tiers/weights in "
+                "results/newsletter/triage/overrides.json, log every decision to results/newsletter/triage/feedback.jsonl; "
+                "the weekly Notion re-sync (history.py) refreshes the data priors",
         "new_senders": "a sender with no history is flagged NEW in the report, scored on content + criteria only, and listed for a manual tier "
-                       "decision (always/usually/rarely/never/review) that persists in overrides.json",
+                       "decision (always/usually/rarely/never/review) that persists in results/newsletter/triage/overrides.json",
     },
 }
 
-OVERRIDES_PATH = Path(__file__).with_name("overrides.json")
+OVERRIDES_PATH = TRIAGE_RESULTS_DIR / "overrides.json"
 
 
 def load_overrides() -> Dict[str, Any]:
@@ -219,7 +227,9 @@ def main(argv=None) -> int:
         return 2
     stats = json.loads(stats_path.read_text(encoding="utf-8"))
     crit = build_criteria(stats)
-    Path(args.out).write_text(json.dumps(crit, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    out_path = Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(crit, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     print(f"✅ criteria.json written: {len(crit['sender_priors']['ranked'])} ranked senders, "
           f"{len(crit['sender_priors']['floor'])} floor senders, {len(crit['sender_overrides'])} overrides, "
           f"{len(crit['domain_priors'])} domains → {args.out}")
