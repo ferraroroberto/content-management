@@ -11,9 +11,12 @@ Behaviour (idempotent):
   "never kill a live holder" — your debug Chrome and its open tabs are left
   alone.
 * Else, if the dedicated newsletter profile is held by a non-debug Chrome →
-  kill **only those PIDs** (via :func:`config.chrome_profile_lock.pids_holding_profile`,
-  which matches only ``--user-data-dir=<this profile>``), then relaunch. The
-  persistent profile (logins) survives; only that window's live tabs are lost.
+  **wait**, never kill (via :func:`config.chrome_profile_lock.pids_holding_profile`,
+  which matches only ``--user-data-dir=<this profile>``, and the same
+  exponential backoff schedule as ``config.chrome_profile_lock``). Re-checks
+  each cycle whether the holder has exited on its own; only after the full
+  schedule is a still-held profile reported as a precise, non-fatal error —
+  the holder is treated as genuinely wedged, not force-killed.
 * Launch Chrome with the debug port + the dedicated ``--user-data-dir`` and
   poll until the port responds.
 
@@ -33,6 +36,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Sequence
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -40,7 +44,10 @@ if str(REPO_ROOT) not in sys.path:
 
 import requests  # noqa: E402
 
-from config.chrome_profile_lock import pids_holding_profile  # noqa: E402
+from config.chrome_profile_lock import (  # noqa: E402
+    DEFAULT_LOCK_BACKOFF_SECONDS,
+    pids_holding_profile,
+)
 
 USER_DATA_DIR = Path(__file__).parent / "chrome_user_data"
 DEBUG_PORT = 9222
@@ -74,21 +81,42 @@ def _find_chrome_exe() -> Path:
     )
 
 
-def _kill_pids(pids: list[int]) -> None:
-    for pid in pids:
-        # /T also kills child processes (Chrome's renderer/GPU helpers).
-        subprocess.run(
-            ["taskkill", "/PID", str(pid), "/F", "/T"],
-            capture_output=True, text=True,
-            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+def _wait_for_profile_free(
+    *, backoff_seconds: Sequence[int] = DEFAULT_LOCK_BACKOFF_SECONDS,
+) -> list[int]:
+    """Wait out a non-debug Chrome holding the newsletter profile — never kill it.
+
+    Re-checks :func:`pids_holding_profile` after each backoff step; returns as
+    soon as the holder exits on its own (empty list). If it is still held
+    after the full schedule, returns the still-held PIDs so the caller can
+    report a precise, non-fatal error — the holder is a genuinely wedged (or
+    simply forgotten-open) process, never force-killed.
+    """
+    held = pids_holding_profile(USER_DATA_DIR)
+    if not held:
+        return []
+    for delay in backoff_seconds:
+        logger.warning(
+            "⏳ Newsletter profile %s is held by non-debug Chrome PID(s) %s — "
+            "waiting %ds, then re-checking (never auto-killed; close it "
+            "yourself if you want the debug Chrome up sooner)",
+            USER_DATA_DIR, held, delay,
         )
+        time.sleep(delay)
+        held = pids_holding_profile(USER_DATA_DIR)
+        if not held:
+            logger.info("✅ profile %s freed on its own — continuing", USER_DATA_DIR)
+            return []
+    return held
 
 
 def ensure_chrome(*, timeout_s: int = 15) -> int:
     """Ensure Chrome is up on :9222 against the newsletter profile.
 
     Returns 0 on success (already up, or launched and reachable), 3 if the
-    port never came up within ``timeout_s`` seconds.
+    port never came up within ``timeout_s`` seconds after launch, 4 if the
+    profile is still held by a non-debug Chrome after the full wait schedule
+    (a likely-wedged holder, reported rather than force-killed).
     """
     USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -96,16 +124,16 @@ def ensure_chrome(*, timeout_s: int = 15) -> int:
         logger.info("✅ Chrome already up on :%d — reusing it (open tabs untouched)", DEBUG_PORT)
         return 0
 
-    held = pids_holding_profile(USER_DATA_DIR)
-    if held:
-        logger.warning(
-            "⚠️ Newsletter profile is held by a non-debug Chrome (PID(s) %s) — "
-            "relaunching it with the debug port. That window's open tabs will "
-            "close; your logins persist.", held,
+    still_held = _wait_for_profile_free()
+    if still_held:
+        logger.error(
+            "❌ Newsletter profile %s is still held by live process(es) %s after "
+            "waiting %ds across %d backoff step(s) — likely wedged. Close it "
+            "manually and re-run (fleet rule: never auto-kill a live holder).",
+            USER_DATA_DIR, still_held, sum(DEFAULT_LOCK_BACKOFF_SECONDS),
+            len(DEFAULT_LOCK_BACKOFF_SECONDS),
         )
-        _kill_pids(held)
-        # Give the OS a moment to release the profile-dir lock.
-        time.sleep(2)
+        return 4
 
     chrome = _find_chrome_exe()
     logger.info("🚀 Launching Chrome on :%d  ·  profile %s", DEBUG_PORT, USER_DATA_DIR)
