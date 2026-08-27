@@ -123,13 +123,15 @@ def run() -> int:
             fails += 1
         else:
             _pass("no leaked NaN in real-comments tab")
-        # The cards should render — look for at least one familiar commenter name we know is in the DB.
-        # (Skip if Daniel Lock got blacklisted and cascaded out.)
-        cards_visible = any(name.lower() in body.lower() for name in ("Tasha Eurich", "Mostafa Aouich", "Madhav Pangarkar", "Edoardo Pallaro"))
-        if cards_visible:
+        # The cards should render — assert on structure (the count caption
+        # `render_real_tab` always emits, or the explicit empty state), not
+        # on specific commenters' names: those are live DB rows that churn
+        # (blacklisted / ignored / aged out) and shouldn't be hardcoded into
+        # a public-repo check anyway.
+        if "inbox clear" in body.lower() or "real comment(s)" in body.lower():
             _pass("real-comments cards rendered")
         else:
-            _fail("real-comments cards", "no familiar commenter names found on page")
+            _fail("real-comments cards", "expected 'inbox clear' or 'N real comment(s)' caption")
             fails += 1
 
         print("\n📱 step 3 — AI triage tab")
@@ -137,10 +139,12 @@ def run() -> int:
         page.wait_for_timeout(800)
         _shot(page, out_dir, "03-ai-tab")
         body = page.inner_text("body")
-        if "triage clear" in body.lower() or any(n.lower() in body.lower() for n in ("Daniel Lock",)):
-            _pass("AI triage rendered (cascade reflected if Daniel Lock blacklisted)")
+        # Same structural rule as step 2: the count caption `render_ai_tab`
+        # always emits, or the explicit empty state — never a named row.
+        if "triage clear" in body.lower() or "comment(s)" in body.lower():
+            _pass("AI triage rendered")
         else:
-            _fail("AI triage state ambiguous", "expected empty-state caption or blacklisted commenter card")
+            _fail("AI triage state ambiguous", "expected empty-state caption or comment-count caption")
             fails += 1
 
         print("\n📱 step 4 — sidebar counts non-zero")

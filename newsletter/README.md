@@ -260,8 +260,8 @@ byline. The fallback exists so the pipeline never invents people.
 - `substack_draft.py` — pushes the same grouped article lists into a private Substack draft edition over the native HTTP API.
 - `triage/gmail.py` — read-only Gmail label ingestion + link extraction / redirect decoding (adapter over the vendored `gmail_readonly/`).
 - `triage/history.py` — 54-week ground-truth dataset (Notion positives ⋈ Gmail offered links) + `stats.md`.
-- `triage/criteria.json` — machine-readable selection criteria (twin of `docs/newsletter-triage-criteria.md`), rebuilt by `python -m newsletter.triage.criteria`.
-- `triage/overrides.json` — owner-maintained sender decisions (tier `never|rarely|usually|always|review`, e.g. paywalled publications); applied before the data priors, updated by the feedback loop.
+- `results/newsletter/triage/criteria.json` — machine-readable selection criteria (twin of `docs/newsletter-triage-criteria.md`), rebuilt by `python -m newsletter.triage.criteria`. Gitignored — a build artifact merging the hand-written `RULES` in `triage/criteria.py` with data priors that carry real sender addresses.
+- `results/newsletter/triage/overrides.json` — owner-maintained sender decisions (tier `never|rarely|usually|always|review`, e.g. paywalled publications); applied before the data priors, updated by the feedback loop. Gitignored for the same reason as `triage/lessons.json` — regenerated/appended locally, carries real sender addresses.
 
 ## Triage — Gmail history + criteria (issue #210, Step 1/4)
 

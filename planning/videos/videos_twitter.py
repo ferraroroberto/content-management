@@ -35,6 +35,7 @@ from planning.twitter.schedule_twitter_posts import (  # noqa: E402
     _wait_composer_clears,
     return_to_home,
 )
+from planning.twitter.twitter_labels import CANCEL_CLOSE_BTN_RES  # noqa: E402
 from planning.videos.videos_session import (  # noqa: E402
     VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS,
     VideoRow,
@@ -194,10 +195,9 @@ def schedule_one_video(
         shot = out_dir / f"{label}-tw-dryrun.png"
         page.screenshot(path=str(shot), full_page=False)
         logger.info("✅ DRY-RUN %s TW: schedule modal ready, screenshot → %s", label, shot)
-        import re
-        for name_re in (r"^cancel$", r"^close$"):
+        for name_re in CANCEL_CLOSE_BTN_RES:
             try:
-                btn = page.get_by_role("button", name=re.compile(name_re, re.I))
+                btn = page.get_by_role("button", name=name_re)
                 if btn.count():
                     btn.first.click(timeout=2000)
                     page.wait_for_timeout(400)

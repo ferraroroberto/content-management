@@ -13,6 +13,7 @@ the standard reporting pipeline (``data_processor`` → ``profile_aggregator``
 from __future__ import annotations
 
 import argparse
+import contextlib
 import logging
 import sys
 from pathlib import Path
@@ -60,7 +61,13 @@ def main() -> int:
 
     rc_post = 0
 
-    with SubstackSession(cfg) as session:
+    # The native backend posts over HTTP and never touches ``session`` (see
+    # post_note / post_video_note_if_applicable) — don't pay for a headed
+    # Chrome launch + shared-profile lock on a run that will never use it.
+    note_source = str(cfg.get("note_source", "playwright")).lower()
+    session_cm = contextlib.nullcontext(None) if note_source == "native" else SubstackSession(cfg)
+
+    with session_cm as session:
         if args.skip_post:
             logger.info("⏭️ Skipping step 1 (post Note).")
         else:
