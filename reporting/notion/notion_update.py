@@ -45,25 +45,13 @@ def parse_date(date_str):
         logger.error(f"❌ Error parsing date '{date_str}': {e}")
         raise
 
-def search_by_date(notion, database_id, target_date):
-    """Search for a row in the database where the 'date' field matches the day before target date."""
+def find_row_for_date(notion, database_id, iso_date):
+    """Query the database for the row whose 'date' field equals `iso_date`
+    (YYYY-MM-DD). Single-source lookup shared by `search_by_date`,
+    `search_by_current_date`, and the next-day 'next' relation lookup below —
+    each previously hand-rolled its own copy of this query."""
     try:
-        # Convert the input date to a datetime object
-        date_obj = parse_date(target_date)
-        
-        # Calculate previous day
-        prev_date_obj = date_obj - timedelta(days=1)
-        prev_date_str = prev_date_obj.strftime("%Y-%m-%d")
-        
-        logger.debug(f"🔍 Searching for previous date: {prev_date_str} (day before {target_date})")
-        
-        # Format the database ID if needed
         formatted_id = format_database_id(database_id)
-        
-        # Convert to ISO format (YYYY-MM-DD)
-        iso_date = prev_date_obj.strftime("%Y-%m-%d")
-        
-        # Query the database with date filter
         response = notion.databases.query(
             database_id=formatted_id,
             filter={
@@ -73,19 +61,37 @@ def search_by_date(notion, database_id, target_date):
                 }
             }
         )
-        
+
         results = response.get('results', [])
-        
+
         if not results:
-            logger.warning(f"⚠️ No rows found for previous date: {prev_date_str}")
+            logger.warning(f"⚠️ No rows found for date: {iso_date}")
             return None
-        
+
         if len(results) > 1:
-            logger.warning(f"⚠️ Multiple rows found for previous date: {prev_date_str}. Using the first one.")
-        
-        logger.info(f"✅ Found row for previous date: {prev_date_str}")
+            logger.warning(f"⚠️ Multiple rows found for date: {iso_date}. Using the first one.")
+
+        logger.info(f"✅ Found row for date: {iso_date}")
         return results[0]
-    
+
+    except Exception as e:
+        logger.error(f"❌ Error searching by date: {e}")
+        return None
+
+def search_by_date(notion, database_id, target_date):
+    """Search for a row in the database where the 'date' field matches the day before target date."""
+    try:
+        # Convert the input date to a datetime object
+        date_obj = parse_date(target_date)
+
+        # Calculate previous day
+        prev_date_obj = date_obj - timedelta(days=1)
+        iso_date = prev_date_obj.strftime("%Y-%m-%d")
+
+        logger.debug(f"🔍 Searching for previous date: {iso_date} (day before {target_date})")
+
+        return find_row_for_date(notion, database_id, iso_date)
+
     except Exception as e:
         logger.error(f"❌ Error searching by date: {e}")
         return None
@@ -95,38 +101,13 @@ def search_by_current_date(notion, database_id, target_date):
     try:
         # Convert the input date to a datetime object
         date_obj = parse_date(target_date)
-        
-        logger.debug(f"🔍 Searching for current date: {target_date}")
-        
-        # Format the database ID if needed
-        formatted_id = format_database_id(database_id)
-        
-        # Convert to ISO format (YYYY-MM-DD)
+
         iso_date = date_obj.strftime("%Y-%m-%d")
-        
-        # Query the database with date filter
-        response = notion.databases.query(
-            database_id=formatted_id,
-            filter={
-                "property": "date",
-                "date": {
-                    "equals": iso_date
-                }
-            }
-        )
-        
-        results = response.get('results', [])
-        
-        if not results:
-            logger.warning(f"⚠️ No rows found for current date: {target_date}")
-            return None
-        
-        if len(results) > 1:
-            logger.warning(f"⚠️ Multiple rows found for current date: {target_date}. Using the first one.")
-        
-        logger.info(f"✅ Found row for current date: {target_date}")
-        return results[0]
-    
+
+        logger.debug(f"🔍 Searching for current date: {target_date}")
+
+        return find_row_for_date(notion, database_id, iso_date)
+
     except Exception as e:
         logger.error(f"❌ Error searching by current date: {e}")
         return None
@@ -578,16 +559,12 @@ def main():
     next_day_obj = date_obj + timedelta(days=1)
     next_day_iso = next_day_obj.strftime("%Y-%m-%d")
     logger.debug(f"🔍 Looking up next-day row for {next_day_iso}")
-    next_day_response = notion.databases.query(
-        database_id=format_database_id(database_id),
-        filter={"property": "date", "date": {"equals": next_day_iso}},
-    )
-    next_day_results = next_day_response.get('results', [])
+    next_day_row = find_row_for_date(notion, database_id, next_day_iso)
 
-    if not next_day_results:
+    if not next_day_row:
         logger.warning(f"⚠️ No row found for next day ({next_day_iso}); 'next' will be skipped")
     else:
-        next_day_page_id = next_day_results[0].get('id', '')
+        next_day_page_id = next_day_row.get('id', '')
         current_next_relation = current_properties.get('next', {}).get('relation', [])
         current_next_id = current_next_relation[0].get('id', '') if current_next_relation else None
 

@@ -111,6 +111,7 @@ from planning._dates import (  # noqa: E402
     parse_single_date,
     parse_week_start,
 )
+from planning._captions import canonical_caption_from_publish_ig  # noqa: E402
 
 Route = Literal["ILL", "POST", "CAROUSEL"]
 
@@ -318,46 +319,9 @@ def fetch_illustration(notion, illustration_page_id: str, cfg: dict) -> Illustra
         fname_str = f"{fname_str}.png"
 
     # --- Caption: earliest publishIG editorial row's `text IG` ---
-    caption = ""
-    publish_col = illust_cols["publish_relation"]
-    publish_rels = page.get("properties", {}).get(publish_col, {}).get("relation", []) or []
-
-    if publish_rels:
-        candidates: list[tuple[str, str]] = []
-        for rel in publish_rels:
-            rel_id = rel.get("id")
-            if not rel_id:
-                continue
-            try:
-                ed_page = retrieve_page(notion, rel_id)
-            except Exception as err:
-                logger.warning("⚠️ could not fetch %s for publishIG resolution: %s", rel_id, err)
-                continue
-            day_str = get_field(ed_page, "title_day", ed_cols) or ""
-            text = get_field(ed_page, "caption_text", ed_cols) or ""
-            day_str = str(day_str).strip()
-            text = str(text).strip()
-            if day_str:
-                candidates.append((day_str, text))
-
-        candidates.sort(key=lambda x: x[0])  # YYYYMMDD lex = chronological
-        for day_str, text in candidates:
-            if text:
-                caption = text
-                logger.info(
-                    "📝 caption from earliest publishIG row (%s): %d chars",
-                    day_str, len(caption),
-                )
-                break
-
-    if not caption:
-        fallback_text = get_field(page, "caption_fallback", illust_cols) or ""
-        caption = str(fallback_text).strip()
-        if caption:
-            logger.warning(
-                "⚠️ publishIG yielded no caption — falling back to '%s' formula (%d chars)",
-                illust_cols["caption_fallback"], len(caption),
-            )
+    caption = canonical_caption_from_publish_ig(
+        notion, illustration_page_id, illust_cols, ed_cols, logger, page=page
+    )
 
     return IllustrationData(
         image_filename=fname_str,

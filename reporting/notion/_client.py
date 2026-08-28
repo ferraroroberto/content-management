@@ -11,8 +11,10 @@ The logger is configured at import (mirroring ``supabase_uploader.py``) so
 regardless of which caller imports it.
 """
 
-from typing import Any
+from typing import Any, Optional
+import json
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -20,6 +22,7 @@ from notion_client import Client
 
 # Add the repo root to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from config.loader import load_full_config
 from config.logger_config import setup_logger
 
 # Set up logger - will use existing logger if available
@@ -39,6 +42,63 @@ def init_notion_client(api_token):
     except Exception as e:
         logger.error(f"❌ Error initializing Notion client: {e}")
         return None
+
+
+def load_project_config(config_path: Optional[str] = None,
+                        logger: Optional[logging.Logger] = None) -> dict:
+    """Load project config from JSON file.
+
+    With no override, reads through ``config.loader`` (the project's
+    single-source loader) so the default path stays in exactly one place.
+    An explicit ``config_path`` reads that file directly instead — used by
+    CLI tools' ``--config`` flag. Single-source for what was a byte-identical
+    ``_load_config`` copy in ``notion_database_list.NotionDatabaseLister``
+    and ``notion_supabase_sync.NotionSupabaseSync``.
+    """
+    log = logger or logging.getLogger(__name__)
+    if config_path is None:
+        log.debug("📂 Loading configuration via config.loader (config/config.json)")
+        config = load_full_config()
+        log.info("✅ Configuration loaded successfully")
+        return config
+
+    log.debug(f"📂 Loading configuration from {config_path}")
+
+    if not os.path.exists(config_path):
+        log.error(f"❌ Configuration file not found: {config_path}")
+        raise FileNotFoundError(f"Configuration file not found: {config_path}")
+
+    with open(config_path, 'r') as f:
+        config = json.load(f)
+
+    log.info("✅ Configuration loaded successfully")
+    return config
+
+
+def notion_rest_headers(api_token: str) -> dict:
+    """Standard Notion REST API headers for the hand-rolled ``requests``
+    callers (``notion_database_list.py``, ``notion_supabase_sync.py``) that
+    predate the official SDK client used elsewhere in this package."""
+    return {
+        "Authorization": f"Bearer {api_token}",
+        "Content-Type": "application/json",
+        "Notion-Version": "2022-06-28",
+    }
+
+
+def slugify_identifier(name: str) -> str:
+    """Lowercase + replace non-alnum/underscore characters with ``_``,
+    collapsing repeats. Shared first pass for the DB-name → table-name
+    (``notion_database_list._normalize_table_name``) and property-name →
+    column-name (``notion_supabase_sync._normalize_column_name``)
+    normalizers, which then apply their own digit-prefix and
+    case-specific empty-string fallback.
+    """
+    normalized = name.lower().strip()
+    normalized = "".join(c if c.isalnum() or c == "_" else "_" for c in normalized)
+    while "__" in normalized:
+        normalized = normalized.replace("__", "_")
+    return normalized
 
 
 def format_database_id(database_id):

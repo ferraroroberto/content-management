@@ -28,14 +28,13 @@ import argparse
 import json
 import logging
 import re
-import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import requests
-
 from config.loader import load_full_config
+from config.logger_config import configure_root_logging
+from newsletter import notion_io
 
 WORDS_CONFIG = Path(__file__).parent / "normalize_names_words.json"
 
@@ -77,11 +76,7 @@ class NotionNameNormalizer:
         self.database_id = self.config["database_id"]
         if not all([self.notion_api_key, self.database_id]):
             raise ValueError("Missing notion_api_key or articles_db_id in config")
-        self.headers = {
-            "Authorization": f"Bearer {self.notion_api_key}",
-            "Notion-Version": "2022-06-28",
-            "Content-Type": "application/json",
-        }
+        self.client = notion_io.init_client(self.notion_api_key)
 
     def _load_word_lists(self):
         self.proper_names = set(self.config["proper_name_whitelist"])
@@ -111,32 +106,15 @@ class NotionNameNormalizer:
         logging.info(
             f"🔍 Querying articles created since {filter_date_str} ({days} days back)"
         )
-        body: Dict[str, Any] = {
-            "filter": {"and": [{"property": "created", "created_time": {"after": filter_date_str}}]},
-            "sorts": [{"property": "created", "direction": "descending"}],
-        }
-        pages: List[Dict[str, Any]] = []
-        cursor: Optional[str] = None
-        while True:
-            if cursor:
-                body["start_cursor"] = cursor
-            try:
-                resp = requests.post(
-                    f"https://api.notion.com/v1/databases/{self.database_id}/query",
-                    headers=self.headers, json=body, timeout=30,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-            except requests.exceptions.RequestException as e:
-                logging.error(f"❌ Notion API error: {e}")
-                raise
-            results = data.get("results", [])
-            if not results:
-                break
-            pages.extend(results)
-            if not data.get("has_more"):
-                break
-            cursor = data.get("next_cursor")
+        query_filter = {"and": [{"property": "created", "created_time": {"after": filter_date_str}}]}
+        sorts = [{"property": "created", "direction": "descending"}]
+        try:
+            pages = notion_io.query_database(
+                self.client, self.database_id, query_filter=query_filter, sorts=sorts,
+            )
+        except Exception as e:
+            logging.error(f"❌ Notion API error: {e}")
+            raise
         logging.info(f"📊 Total pages retrieved: {len(pages)}")
         return pages
 
@@ -155,19 +133,13 @@ class NotionNameNormalizer:
         return page_id, last_edited_time, name_text
 
     def _update_page_title(self, page_id: str, new_value: str) -> bool:
-        body = {
-            "properties": {
-                "article": {"title": [{"type": "text", "text": {"content": new_value}}]}
-            }
+        properties = {
+            "article": {"title": [{"type": "text", "text": {"content": new_value}}]}
         }
         try:
-            resp = requests.patch(
-                f"https://api.notion.com/v1/pages/{page_id}",
-                headers=self.headers, json=body, timeout=30,
-            )
-            resp.raise_for_status()
+            notion_io.update_page(self.client, page_id, properties)
             return True
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
             logging.error(f"❌ Failed to update page {page_id[:8]}…: {e}")
             return False
 
@@ -380,23 +352,8 @@ class NotionNameNormalizer:
 
 def run(days: int = 14, dry_run: bool = False, debug: bool = False) -> List[Dict[str, Any]]:
     """Orchestrator-friendly entry point — same behaviour as ``main()``."""
-    _setup_logging(debug)
+    configure_root_logging(debug)
     return NotionNameNormalizer().process_database(days=days, dry_run=dry_run)
-
-
-def _setup_logging(debug: bool = False):
-    level = logging.DEBUG if debug else logging.INFO
-    # Re-configure UTF-8 stdio so emoji-bearing log lines don't crash cp1252.
-    from config.console import force_utf8_stdio
-    force_utf8_stdio()
-    if not logging.getLogger().handlers:
-        logging.basicConfig(
-            level=level,
-            format="%(asctime)s - %(levelname)s - %(message)s",
-            handlers=[logging.StreamHandler(sys.stdout)],
-        )
-    else:
-        logging.getLogger().setLevel(level)
 
 
 def main() -> int:
@@ -408,7 +365,7 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true",
                         help="Show changes without writing to Notion")
     args = parser.parse_args()
-    _setup_logging(args.debug)
+    configure_root_logging(args.debug)
     try:
         if args.test:
             normaliser = NotionNameNormalizer()

@@ -3,26 +3,18 @@
 Usage:
     python -m linkedin.bootstrap_session [--debug]
 
-Launches **real Chrome** (channel="chrome") pointed at the project-local profile
-directory configured as ``linkedin.user_data_dir`` (default:
-``linkedin/chrome_user_data/``). The user's regular Chrome profile is **not
-touched**: a separate, dedicated on-disk directory is created by Playwright
-under the repo, and Chrome writes its session cookies there.
-
-After login the dedicated profile retains the session, so subsequent runs of
-``schedule_linkedin_posts`` reuse it without prompting.
+See ``planning._bootstrap.run_bootstrap`` for the shared implementation
+(mirror of ``instagram/bootstrap_session.py``, ``twitter/bootstrap_session.py``,
+``threads/bootstrap_session.py``, ``substack/bootstrap_session.py``).
 """
 
 from __future__ import annotations
 
-import argparse
 import sys
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright
-
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from config.chrome_launch import STEALTH_INIT_SCRIPT, stealth_launch_kwargs  # noqa: E402
+from planning._bootstrap import parse_bootstrap_args, run_bootstrap  # noqa: E402
 from planning.linkedin.linkedin_session import (  # noqa: E402
     _resolve_user_data_dir,
     configure_logger,
@@ -31,47 +23,24 @@ from planning.linkedin.linkedin_session import (  # noqa: E402
 
 LOGIN_URL_DEFAULT = "https://www.linkedin.com/login"
 
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="One-time LinkedIn session bootstrap.")
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
-    return parser.parse_args()
+LOGIN_PROMPT = (
+    "\n>>> Log in to LinkedIn inside the opened Chrome window, "
+    "then press Enter here to save the session...\n"
+)
 
 
 def main() -> int:
-    args = parse_args()
-    logger = configure_logger("linkedin_bootstrap", debug=args.debug)
-
-    cfg = load_linkedin_config()
-    user_data_dir = _resolve_user_data_dir(cfg["user_data_dir"])
-    user_data_dir.mkdir(parents=True, exist_ok=True)
-
-    login_url = cfg.get("login_url", LOGIN_URL_DEFAULT)
-
-    logger.info("🚀 LinkedIn session bootstrap")
-    logger.info("📁 Dedicated Chrome profile directory: %s", user_data_dir)
-    logger.info("   (this is SEPARATE from your normal Chrome profile)")
-
-    with sync_playwright() as pw:
-        context = pw.chromium.launch_persistent_context(
-            **stealth_launch_kwargs(str(user_data_dir), headless=False),
-        )
-        context.add_init_script(STEALTH_INIT_SCRIPT)
-        page = context.pages[0] if context.pages else context.new_page()
-        page.goto(login_url, wait_until="domcontentloaded")
-        # Intentional print (the issue allows this single bootstrap pause).
-        print("\n>>> Log in to LinkedIn inside the opened Chrome window, then press Enter here to save the session...\n")
-        try:
-            input()
-        except KeyboardInterrupt:
-            logger.warning("❌ Bootstrap cancelled before login.")
-            context.close()
-            return 2
-
-        # Persistent context flushes the profile to disk on close.
-        context.close()
-        logger.info("✅ Chrome profile saved → %s", user_data_dir)
-    return 0
+    args = parse_bootstrap_args("One-time LinkedIn session bootstrap.")
+    return run_bootstrap(
+        platform_label="LinkedIn",
+        logger_name="linkedin_bootstrap",
+        load_config=load_linkedin_config,
+        resolve_user_data_dir=_resolve_user_data_dir,
+        configure_logger=configure_logger,
+        default_login_url=LOGIN_URL_DEFAULT,
+        login_prompt=LOGIN_PROMPT,
+        debug=args.debug,
+    )
 
 
 if __name__ == "__main__":

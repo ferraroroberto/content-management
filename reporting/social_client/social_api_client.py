@@ -61,11 +61,15 @@ def check_file_exists_for_date(platform_key, config, date_str):
         logger.info(f"🔄 Found existing file for {platform_key} dated {date_str}: {filename}")
     return exists, file_path
 
-def _fetch_via_playwright(platform_key, reference_date):
-    """Delegate to the per-platform scraper in ``reporting.scrape_client``.
+def _fetch_via_module(module_suffix, label, platform_key, reference_date):
+    """Delegate to a per-platform fetcher module in ``reporting.scrape_client``.
 
-    ``platform_key`` is e.g. ``"linkedin_profile"`` → calls
-    ``reporting.scrape_client.linkedin.fetch_profile(reference_date)``.
+    ``platform_key`` is e.g. ``"linkedin_profile"`` → module
+    ``reporting.scrape_client.linkedin{module_suffix}``, function
+    ``fetch_profile(reference_date)``. Shared implementation for
+    ``_fetch_via_playwright`` (``module_suffix=""``) and ``_fetch_via_native``
+    (``module_suffix="_native"``) — the two previously differed only in that
+    suffix and a log emoji.
     """
     parts = platform_key.split('_', 1)
     if len(parts) != 2:
@@ -73,53 +77,37 @@ def _fetch_via_playwright(platform_key, reference_date):
         return None
     platform, data_type = parts
     fn_name = f"fetch_{data_type}"
+    module_name = f"reporting.scrape_client.{platform}{module_suffix}"
     try:
-        module = importlib.import_module(f"reporting.scrape_client.{platform}")
+        module = importlib.import_module(module_name)
     except ImportError as err:
-        logger.error(f"❌ No Playwright scraper module for {platform!r}: {err}")
+        logger.error(f"❌ No {label} module for {platform!r}: {err}")
         return None
     fn = getattr(module, fn_name, None)
     if fn is None:
-        logger.error(f"❌ Playwright scraper {platform!r} has no {fn_name}()")
+        logger.error(f"❌ {label} fetcher {platform!r} has no {fn_name}()")
         return None
-    logger.info(f"🌐 Scraping {platform_key} via Playwright")
+    logger.info(f"🌐 Fetching {platform_key} via {label}")
     try:
         return fn(reference_date)
     except Exception as err:
-        logger.error(f"❌ Playwright scrape of {platform_key} failed: {err}", exc_info=True)
+        logger.error(f"❌ {label} fetch of {platform_key} failed: {err}", exc_info=True)
         return None
+
+
+def _fetch_via_playwright(platform_key, reference_date):
+    """Delegate to the per-platform Playwright scraper in ``reporting.scrape_client``."""
+    return _fetch_via_module("", "Playwright", platform_key, reference_date)
 
 
 def _fetch_via_native(platform_key, reference_date):
     """Delegate to the per-platform native-API fetcher in ``reporting.scrape_client``.
 
-    ``platform_key`` is e.g. ``"substack_profile"`` → calls
-    ``reporting.scrape_client.substack_native.fetch_profile(reference_date)``.
     The native fetchers hit the platform's own HTTP API directly (cookie auth);
     they return the same envelope as the Playwright scrapers, so they are drop-in
     interchangeable via the ``source`` config flag.
     """
-    parts = platform_key.split('_', 1)
-    if len(parts) != 2:
-        logger.error(f"❌ Cannot dispatch {platform_key!r} — expected '<platform>_<data_type>'")
-        return None
-    platform, data_type = parts
-    fn_name = f"fetch_{data_type}"
-    try:
-        module = importlib.import_module(f"reporting.scrape_client.{platform}_native")
-    except ImportError as err:
-        logger.error(f"❌ No native-API fetcher module for {platform!r}: {err}")
-        return None
-    fn = getattr(module, fn_name, None)
-    if fn is None:
-        logger.error(f"❌ Native fetcher {platform!r} has no {fn_name}()")
-        return None
-    logger.info(f"🔌 Fetching {platform_key} via native API")
-    try:
-        return fn(reference_date)
-    except Exception as err:
-        logger.error(f"❌ Native API fetch of {platform_key} failed: {err}", exc_info=True)
-        return None
+    return _fetch_via_module("_native", "native API", platform_key, reference_date)
 
 
 # Retries for the playwright/native scrape sources, run between attempts. A

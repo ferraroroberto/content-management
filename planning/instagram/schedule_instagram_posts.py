@@ -67,35 +67,14 @@ from reporting.notion.editorial import (  # noqa: E402
     set_field,
 )
 from reporting.notion.notion_update import format_database_id  # noqa: E402
+from planning._dates import (  # noqa: E402
+    date_to_day_title,
+    next_monday,
+    parse_single_date,
+    parse_week_start,
+)
 
 logger = logging.getLogger("instagram_schedule")
-
-
-# ---------- Date helpers ----------
-
-def next_monday(today: Optional[date] = None) -> date:
-    today = today or date.today()
-    days_ahead = (7 - today.weekday()) % 7
-    if days_ahead == 0:
-        days_ahead = 7
-    return today + timedelta(days=days_ahead)
-
-
-def parse_week_start(s: Optional[str]) -> date:
-    if not s:
-        return next_monday()
-    return datetime.strptime(s, "%Y-%m-%d").date()
-
-
-def parse_single_date(s: str) -> date:
-    s = s.strip()
-    if "-" in s:
-        return datetime.strptime(s, "%Y-%m-%d").date()
-    return datetime.strptime(s, "%Y%m%d").date()
-
-
-def date_to_day_title(d: date) -> str:
-    return d.strftime("%Y%m%d")
 
 
 # ---------- Row model ----------
