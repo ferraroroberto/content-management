@@ -99,16 +99,6 @@ def day_cell_label(d: date) -> str:
     return f"{_WEEKDAY_ABBR[d.weekday()]} {d.day}"
 
 
-def fmt_time_12h(hour: int, minute: int) -> str:
-    """Render a 12-hour time slot string as Meta's time picker shows it,
-    e.g. ``"6:30 AM"`` / ``"3:00 PM"``."""
-    suffix = "AM" if hour < 12 else "PM"
-    h12 = hour % 12
-    if h12 == 0:
-        h12 = 12
-    return f"{h12}:{minute:02d} {suffix}"
-
-
 __all__ = [
     "NOT_NOW_BTN_RE",
     "CLOSE_BTN_RE",
@@ -121,5 +111,4 @@ __all__ = [
     "ADD_MEDIA_BTN_SELECTOR",
     "UPLOAD_FROM_COMPUTER_SELECTOR",
     "day_cell_label",
-    "fmt_time_12h",
 ]

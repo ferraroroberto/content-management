@@ -154,23 +154,6 @@ def extract_date_from_filename(file_path):
         return date_match.group(1)
     return None
 
-def convert_unix_timestamp(timestamp):
-    """Convert Unix timestamp to human-readable date format."""
-    if timestamp is None:
-        return None
-    
-    # If it's already a formatted date string (contains dashes or colons), return as is
-    if isinstance(timestamp, str) and ('-' in timestamp or ':' in timestamp):
-        return timestamp
-        
-    try:
-        # Try to convert as Unix timestamp (seconds since epoch)
-        return datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
-    except (ValueError, TypeError, OSError) as e:
-        # If conversion fails, return the original value
-        logger.warning(f"⚠️ Failed to convert timestamp: {timestamp}. Error: {e}")
-        return timestamp
-
 def process_array_data(data, mapping_config, file_date=None):
     """Process array data type (like LinkedIn posts)."""
     array_path = mapping_config.get('array_path', 'data')
@@ -258,10 +241,6 @@ def process_array_data(data, mapping_config, file_date=None):
                 skip_record = True
                 break
             
-            # Convert Unix timestamps to readable dates
-            if field_name == 'posted_at' and value is not None:
-                # Store directly without keeping the raw value
-                record[field_name] = convert_unix_timestamp(value)
             # Convert date fields to 'YYYY-MM-DD'
             if field_name in ['posted_at', 'date', 'posted']:
                 record[field_name] = convert_to_date_string(value)
