@@ -42,7 +42,6 @@ from planning.instagram.instagram_labels import (  # noqa: E402
     ADD_MEDIA_BTN_SELECTOR,
     CLOSE_BTN_RE,
     DISCARD_LEAVE_BTN_RE,
-    NEXT_MONTH_BTN_RE,
     NEXT_WEEK_BTN_RE,
     NOT_NOW_BTN_RE,
     PREV_WEEK_BTN_RE,
@@ -50,7 +49,6 @@ from planning.instagram.instagram_labels import (  # noqa: E402
     SET_DATE_TIME_TEXT_RE,
     UPLOAD_FROM_COMPUTER_SELECTOR,
     day_cell_label,
-    fmt_time_12h,
 )
 from planning.instagram.instagram_session import (  # noqa: E402
     InstagramSession,
@@ -69,7 +67,6 @@ from reporting.notion.editorial import (  # noqa: E402
 from reporting.notion.notion_update import format_database_id  # noqa: E402
 from planning._dates import (  # noqa: E402
     date_to_day_title,
-    next_monday,
     parse_single_date,
     parse_week_start,
 )
@@ -741,16 +738,6 @@ def _count_composer_media(page: Page) -> int:
         return 0
 
 
-# Meta renders date and time controls as ``div[role="button"]`` with the
-# formatted text inside, NOT as <input> elements. Click opens a calendar /
-# typeahead — same pattern LinkedIn uses. Regexes are intentionally NOT
-# anchored: Meta wraps the text inside a button that also contains an
-# icon/glyph, so the full text node content includes more than just the
-# date/time string.
-_DATE_BUTTON_RE = re.compile(r"[A-Z][a-z]{2,8}\s+\d{1,2},\s+\d{4}")
-_TIME_BUTTON_RE = re.compile(r"\d{1,2}:\d{2}\s*[AP]M")
-
-
 def _fill_post_text(page: Page, caption: str) -> None:
     """Fill the Create post composer's caption text area.
 
@@ -827,74 +814,6 @@ def _ensure_set_date_toggle_on(page: Page) -> None:
         pass
 
 
-def _click_calendar_day(page: Page, target: date) -> None:
-    """In an open Meta calendar popup, navigate to the right month if needed
-    and click the target day. Meta's calendar uses ``aria-label`` like
-    ``Monday, May 18, 2026`` on day buttons.
-    """
-    day_aria = target.strftime("%A, %B ") + f"{target.day}, {target.year}"
-    month_year = target.strftime("%B %Y")  # e.g. "May 2026"
-
-    # Walk forward via "Next month" until the header matches. The calendar
-    # popup is a freshly-mounted floating layer; scope to the page.
-    for _ in range(18):  # ~1.5 years forward bound
-        if page.locator(f'div:has-text("{month_year}")').count() > 0:
-            break
-        try:
-            next_btn = page.get_by_role(
-                "button", name=NEXT_MONTH_BTN_RE
-            )
-            if next_btn.count():
-                next_btn.first.click(timeout=2000)
-                page.wait_for_timeout(250)
-                continue
-        except Exception:
-            break
-        break
-
-    day_btn = page.get_by_role("button", name=re.compile(re.escape(day_aria), re.I))
-    if day_btn.count() == 0:
-        # Fallback: aria-label may be a date-only string like "May 18, 2026"
-        short = target.strftime("%B ") + f"{target.day}, {target.year}"
-        day_btn = page.get_by_role("button", name=re.compile(re.escape(short), re.I))
-    if day_btn.count() == 0:
-        raise RuntimeError(f"Could not find calendar day for {day_aria}")
-    try:
-        day_btn.first.click(timeout=5000)
-    except Exception as err:
-        raise RuntimeError(f"Could not click calendar day {day_aria}: {err}")
-    page.wait_for_timeout(400)
-
-
-def _click_time_slot(page: Page, hour: int, minute: int) -> None:
-    """In an open time-picker dropdown, click the slot for HH:MM (12h)."""
-    slot_str = fmt_time_12h(hour, minute)
-    # Meta's time dropdown items are role="option" or simple <li>/<div>.
-    candidates = [
-        lambda: page.get_by_role("option", name=re.compile(rf"^{re.escape(slot_str)}$", re.I)),
-        lambda: page.locator(f'li:has-text("{slot_str}")'),
-        lambda: page.locator(f'div[role="button"]:has-text("{slot_str}")'),
-        lambda: page.get_by_text(slot_str, exact=True),
-    ]
-    for find in candidates:
-        try:
-            loc = find()
-            if loc.count():
-                loc.first.scroll_into_view_if_needed(timeout=2000)
-                loc.first.click(timeout=4000)
-                page.wait_for_timeout(300)
-                return
-        except Exception:
-            continue
-    # Last resort: type the time into whatever input is now focused.
-    try:
-        page.keyboard.type(slot_str, delay=8)
-        page.keyboard.press("Enter")
-        page.wait_for_timeout(400)
-    except Exception as err:
-        raise RuntimeError(f"Could not pick time slot {slot_str}: {err}")
-
-
 def _click_action_button(page: Page, name: str, exact: bool = True) -> None:
     """Click a top-level composer action button (Save / Schedule / Cancel)."""
     pattern = re.compile(rf"^{re.escape(name)}$", re.I) if exact else re.compile(name, re.I)
@@ -911,9 +830,14 @@ def wait_action_button_enabled(
     """Wait until the composer's action button is no longer ``aria-disabled``.
 
     Meta's composer keeps Schedule / Share now ``aria-disabled="true"`` while
-    the uploaded media is still transcoding server-side. Videos in particular
-    can take well over the 6 s fixed sleep the drivers used to wait — once
-    they're past that, the button enables and the click succeeds instantly.
+    the uploaded media is still processing server-side. Clicking through a
+    disabled button is a no-op that only surfaces 30 s later as a misleading
+    "composer did not close" timeout, so ``schedule_story`` / ``schedule_post``
+    call this first. Returns as soon as the button is enabled (the common case
+    costs nothing). If the locator cannot resolve at all — a Meta relabel —
+    ``get_attribute`` raises after Playwright's default action timeout and the
+    guard falls through to the click, so a relabel costs one bounded delay
+    rather than turning the guard into a blocker.
     Raises ``RuntimeError`` if the button stays disabled past ``timeout_ms``.
     """
     pattern = re.compile(rf"^{re.escape(name)}$", re.I) if exact else re.compile(name, re.I)
@@ -1114,46 +1038,6 @@ def _dismiss_initial_schedule_submodal(page: Page) -> None:
     logger.warning("⚠️ Schedule sub-modal still present after dismissal attempt.")
 
 
-def _probe_date_time_dom(page: Page) -> dict:
-    """Return a snapshot of all candidate date/time controls in the page,
-    used for debugging when the regex selectors miss.
-    """
-    return page.evaluate(r"""
-() => {
-    const dateRe = /[A-Z][a-z]{2,8}\s+\d{1,2},\s+\d{4}/;
-    const timeRe = /\d{1,2}:\d{2}\s*[AP]M/;
-    const out = {dates: [], times: [], inputs: []};
-    const all = document.querySelectorAll('input, [role="button"], [contenteditable], div, span');
-    for (const el of all) {
-        const txt = (el.innerText || '').trim();
-        const val = (el.value || '').trim();
-        const aria = el.getAttribute('aria-label') || '';
-        if (el.tagName === 'INPUT') {
-            out.inputs.push({
-                tag: el.tagName,
-                type: el.type,
-                value: val,
-                aria,
-                placeholder: el.placeholder || '',
-            });
-            continue;
-        }
-        if (dateRe.test(txt) && txt.length < 60) {
-            out.dates.push({tag: el.tagName, role: el.getAttribute('role'), text: txt, aria});
-        }
-        if (timeRe.test(txt) && txt.length < 30) {
-            out.times.push({tag: el.tagName, role: el.getAttribute('role'), text: txt, aria});
-        }
-    }
-    // Trim to 8 each
-    out.dates = out.dates.slice(0, 8);
-    out.times = out.times.slice(0, 8);
-    out.inputs = out.inputs.slice(0, 12);
-    return out;
-}
-""")
-
-
 def _fill_input(page: Page, locator, value: str) -> None:
     """Click, clear, and type into a Meta composer text input."""
     locator.click(timeout=4000)
@@ -1269,6 +1153,7 @@ def schedule_story(
         return "story:DRY-OK"
 
     # Story composer's primary action: 'Schedule' (greys out 'Share now').
+    wait_action_button_enabled(page, "Schedule")
     _click_action_button(page, "Schedule")
     if not _wait_composer_closes(page, cfg["feed_url"], timeout_ms=30000):
         shot = out_dir / f"{label}-story-FAIL.png"
@@ -1315,6 +1200,7 @@ def schedule_post(
         _cancel_composer(page)
         return "post:DRY-OK"
 
+    wait_action_button_enabled(page, "Schedule")
     _click_action_button(page, "Schedule")
     if not _wait_composer_closes(page, cfg["feed_url"], timeout_ms=30000):
         shot = out_dir / f"{label}-post-FAIL.png"

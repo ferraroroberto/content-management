@@ -68,7 +68,7 @@ Layered classifier — earlier layers are cheaper and more auditable; later laye
 
 Score ≥ `ai_classification_threshold` (default 0.50) → **AI**. Below → **unknown**. Whitelist/blacklist commenters short-circuit the score: their pending comments are reclassified immediately (whitelist → human; blacklist → ai + canned reply pre-filled + status auto-promoted to `approved`).
 
-**Layer 2 — local sklearn model** (Phase 2a, this branch). Logistic regression on `TfidfVectorizer(ngram_range=(1,2))` + `TfidfVectorizer(analyzer='char_wb', ngram_range=(3,5))` + 6 per-comment scalar features (the same ones the rules layer derives). Trained on your accumulated commenter-level whitelist/blacklist labels — every comment by a blacklisted commenter is a positive AI example, every comment by a whitelisted commenter is a negative.
+**Layer 2 — local sklearn model** (Phase 2a, shipped). Logistic regression on `TfidfVectorizer(ngram_range=(1,2))` + `TfidfVectorizer(analyzer='char_wb', ngram_range=(3,5))` + 6 per-comment scalar features (the same ones the rules layer derives). Trained on your accumulated commenter-level whitelist/blacklist labels — every comment by a blacklisted commenter is a positive AI example, every comment by a whitelisted commenter is a negative.
 
 - Runs **only on rows the rules layer left as `unknown`** (layered, not blended — so each verdict carries its provenance).
 - Threshold to upgrade to AI: `local_model_ai_threshold` (default 0.70). Conservative so canned replies aren't wrongly staged.
@@ -77,9 +77,9 @@ Score ≥ `ai_classification_threshold` (default 0.50) → **AI**. Below → **u
 - The pickle is bound to the scikit-learn that wrote it (pinned to one minor line in `requirements.txt`). If you upgrade sklearn, the loader refuses the stale artifact and names both versions — retrain rather than classifying from a degraded model.
 - The featurizer (`local_model.featurize_one`) re-imports the per-comment helpers from `rules.py`, so train-time and inference-time signals **can't drift**. Tune a rule → retrain the model.
 
-**Layer 3 — LLM fallback** (Phase 3, future). Structured-output call to a small LLM (Gemini Flash-Lite or Haiku 4.5) for the ~10% genuine ambiguous middle, cached by `(commenter_url, comment_hash)`. Not implemented yet.
+**Layer 3 — LLM fallback** (Phase 3, shipped — opt-in via `engagement.llm_fallback.enabled` in `config.json`). Structured-output call routed through the local LLM hub (`http://127.0.0.1:8000`, version-free alias `claude_haiku`) for the genuine ambiguous middle. Fires only on rows where the local model's `P(AI)` sits inside the uncertainty window `[llm_fallback_local_uncertainty_low, local_model_ai_threshold)` (defaults 0.30 / 0.70). Verdicts are cached on disk (`engagement/classify/.llm_cache.json`, gitignored) keyed by `sha256(commenter_url|text)`; the database is the truth-of-record.
 
-**Verdict written back** to the `comments` row: `classification` (human/ai/unknown), `confidence` (0-1), `verdict_source` (`rules` / `local` / `whitelist` / `blacklist` / `whitelist_cascade` / `blacklist_cascade`), `verdict_reasons` (jsonb: which rule + weight + probability fired), `suggested_action` (`surface_to_me` / `like_and_thanks` / `ignore`), `suggested_reply` (the canned thanks template for AI rows).
+**Verdict written back** to the `comments` row: `classification` (human/ai/unknown), `confidence` (0-1), `verdict_source` (`rules` / `local` / `llm` / `whitelist` / `blacklist` / `whitelist_cascade` / `blacklist_cascade`), `verdict_reasons` (jsonb: which rule + weight + probability fired), `suggested_action` (`surface_to_me` / `like_and_thanks` / `ignore`), `suggested_reply` (the canned thanks template for AI rows).
 
 ---
 
