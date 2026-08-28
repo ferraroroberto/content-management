@@ -54,5 +54,28 @@ def setup_logger(name, level=logging.INFO, file_logging=True):
         f_formatter = logging.Formatter(log_format)
         f_handler.setFormatter(f_formatter)
         logger.addHandler(f_handler)
-    
+
     return logger
+
+
+def configure_root_logging(debug: bool = False) -> None:
+    """Configure the root logger for scripts that log via the bare
+    ``logging`` module rather than a named logger — was a verbatim
+    ``_setup_logging`` copy in ``newsletter/build_newsletter.py``,
+    ``newsletter/normalize_names.py``, ``newsletter/normalize_url.py`` and
+    ``newsletter/substack_draft.py``.
+
+    Re-configures UTF-8 stdio so emoji-bearing log lines don't crash a
+    cp1252 console, then attaches one ``StreamHandler`` to the root logger
+    if none exists yet (idempotent across repeated calls in one process).
+    """
+    level = logging.DEBUG if debug else logging.INFO
+    force_utf8_stdio()
+    if not logging.getLogger().handlers:
+        logging.basicConfig(
+            level=level,
+            format="%(asctime)s - %(levelname)s - %(message)s",
+            handlers=[logging.StreamHandler(sys.stdout)],
+        )
+    else:
+        logging.getLogger().setLevel(level)

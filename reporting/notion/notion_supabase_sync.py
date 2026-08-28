@@ -13,9 +13,13 @@ from dotenv import load_dotenv
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from config.loader import load_full_config
 from config.logger_config import setup_logger
-from reporting.notion._client import extract_property_value
+from reporting.notion._client import (
+    extract_property_value,
+    load_project_config,
+    notion_rest_headers,
+    slugify_identifier,
+)
 from reporting.process.supabase_uploader import get_db_connection, load_db_config
 
 # Set up logger - will use existing logger if available
@@ -29,47 +33,17 @@ class NotionSupabaseSync:
     def __init__(self, config_path: str = None, environment: str = "cloud", database_list_path: str = None):  # type: ignore
         """Initialize the sync with configuration."""
         self.environment = environment
-        self.config = self._load_config(config_path)
+        self.config = load_project_config(config_path, logger=logger)
         self.notion_token = self.config["notion"]["api_token"]
         self.poll_every = self.config["notion"]["poll_every"]
         self.page_size = self.config["notion"]["page_size"]
-        
+
         # Load databases from notion_database_list.json
         self.databases = self._load_database_list(database_list_path)
-        
-        self.headers = {
-            "Authorization": f"Bearer {self.notion_token}",
-            "Content-Type": "application/json",
-            "Notion-Version": "2022-06-28"
-        }
+
+        self.headers = notion_rest_headers(self.notion_token)
         self.last_sync_times = {}  # Track last sync time per database
-        
-    def _load_config(self, config_path: str = None) -> dict:  # type: ignore
-        """Load configuration from JSON file.
 
-        With no override, reads through ``config.loader`` (the project's
-        single-source loader) so the default path stays in exactly one place.
-        The ``--config`` override still reads its own path directly, since
-        that's not something ``config.loader`` supports.
-        """
-        if config_path is None:
-            logger.debug("📂 Loading configuration via config.loader (config/config.json)")
-            config = load_full_config()
-            logger.info("✅ Configuration loaded successfully")
-            return config
-
-        logger.debug(f"📂 Loading configuration from {config_path}")
-
-        if not os.path.exists(config_path):
-            logger.error(f"❌ Configuration file not found: {config_path}")
-            raise FileNotFoundError(f"Configuration file not found: {config_path}")
-
-        with open(config_path, 'r') as f:
-            config = json.load(f)
-
-        logger.info("✅ Configuration loaded successfully")
-        return config
-    
     def _load_database_list(self, database_list_path: str = None) -> List[dict]:  # type: ignore
         """Load database list from JSON file and filter by replication status."""
         if database_list_path is None:
@@ -151,12 +125,7 @@ class NotionSupabaseSync:
 
     def _normalize_column_name(self, name: str) -> str:
         """Normalize Notion property names to valid PostgreSQL column names."""
-        # Replace spaces and special characters with underscores
-        normalized = name.lower().strip()
-        normalized = "".join(c if c.isalnum() or c == "_" else "_" for c in normalized)
-        # Remove consecutive underscores
-        while "__" in normalized:
-            normalized = normalized.replace("__", "_")
+        normalized = slugify_identifier(name)
         # Ensure it doesn't start with a number
         if normalized and normalized[0].isdigit():
             normalized = f"col_{normalized}"

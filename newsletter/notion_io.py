@@ -50,6 +50,29 @@ def init_client(api_token: str) -> Client:
     return Client(auth=api_token)
 
 
+def query_database(
+    client: Client, db_id: str, *, query_filter: Optional[Dict[str, Any]] = None,
+    sorts: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    """Paginated, retried query returning every matching row.
+
+    Single-source for the "query a Notion DB and page through every result"
+    loop that used to be hand-rolled with raw ``requests`` in
+    ``build_newsletter.NotionClient``, ``normalize_names.NotionNameNormalizer``
+    and ``normalize_url.NotionURLNormalizer`` — none of which retried on a
+    transient Notion error, unlike the archive path below.
+    """
+    return list(_iter_database(client, db_id, query_filter=query_filter, sorts=sorts))
+
+
+def update_page(client: Client, page_id: str, properties: Dict[str, Any]) -> Dict[str, Any]:
+    """Patch a page's properties with the shared retry/backoff."""
+    return _retry(
+        lambda: client.pages.update(page_id=page_id, properties=properties),
+        label=f"update page {page_id[:8]}…",
+    )
+
+
 # ---------------------------------------------------------------------------
 # property readers
 

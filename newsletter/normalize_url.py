@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import sys
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse, urlunparse
@@ -31,6 +30,8 @@ from urllib.parse import urlparse, urlunparse
 import requests
 
 from config.loader import load_full_config
+from config.logger_config import configure_root_logging
+from newsletter import notion_io
 
 
 class NotionURLNormalizer:
@@ -43,11 +44,7 @@ class NotionURLNormalizer:
         self.domains_preserving_params = set(self.config.get("domains_preserving_params", []))
         if not all([self.notion_api_key, self.database_id]):
             raise ValueError("Missing notion_api_key or articles_db_id in config")
-        self.headers = {
-            "Authorization": f"Bearer {self.notion_api_key}",
-            "Notion-Version": "2022-06-28",
-            "Content-Type": "application/json",
-        }
+        self.client = notion_io.init_client(self.notion_api_key)
         logging.info("✅ URL normalizer initialized")
         logging.info(f"📊 Database ID: {self.database_id}")
         logging.info(f"🛡️ Preserved domains: {sorted(self.domains_preserving_params)}")
@@ -100,32 +97,15 @@ class NotionURLNormalizer:
         logging.info(
             f"🔍 Querying articles created since {filter_date_str} ({days} days back)"
         )
-        body: Dict[str, Any] = {
-            "filter": {"and": [{"property": "created", "created_time": {"after": filter_date_str}}]},
-            "sorts": [{"property": "created", "direction": "descending"}],
-        }
-        pages: List[Dict[str, Any]] = []
-        cursor: Optional[str] = None
-        while True:
-            if cursor:
-                body["start_cursor"] = cursor
-            try:
-                resp = requests.post(
-                    f"https://api.notion.com/v1/databases/{self.database_id}/query",
-                    headers=self.headers, json=body, timeout=30,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-            except requests.exceptions.RequestException as e:
-                logging.error(f"❌ Notion API error: {e}")
-                raise
-            results = data.get("results", [])
-            if not results:
-                break
-            pages.extend(results)
-            if not data.get("has_more"):
-                break
-            cursor = data.get("next_cursor")
+        query_filter = {"and": [{"property": "created", "created_time": {"after": filter_date_str}}]}
+        sorts = [{"property": "created", "direction": "descending"}]
+        try:
+            pages = notion_io.query_database(
+                self.client, self.database_id, query_filter=query_filter, sorts=sorts,
+            )
+        except Exception as e:
+            logging.error(f"❌ Notion API error: {e}")
+            raise
         logging.info(f"📊 Total pages retrieved: {len(pages)}")
         return pages
 
@@ -142,15 +122,11 @@ class NotionURLNormalizer:
         return page_id, last_edited, url_content
 
     def _update_page_url(self, page_id: str, new_url: str) -> bool:
-        body = {"properties": {"link": {"url": new_url}}}
+        properties = {"link": {"url": new_url}}
         try:
-            resp = requests.patch(
-                f"https://api.notion.com/v1/pages/{page_id}",
-                headers=self.headers, json=body, timeout=30,
-            )
-            resp.raise_for_status()
+            notion_io.update_page(self.client, page_id, properties)
             return True
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
             logging.error(f"❌ Failed to update page {page_id[:8]}…: {e}")
             return False
 
@@ -198,24 +174,10 @@ class NotionURLNormalizer:
 
 def run(days: int = 14, dry_run: bool = False, testing_mode: bool = False,
         debug: bool = False) -> List[Dict[str, Any]]:
-    _setup_logging(debug)
+    configure_root_logging(debug)
     return NotionURLNormalizer().process_database(
         days=days, dry_run=dry_run, testing_mode=testing_mode,
     )
-
-
-def _setup_logging(debug: bool = False):
-    level = logging.DEBUG if debug else logging.INFO
-    from config.console import force_utf8_stdio
-    force_utf8_stdio()
-    if not logging.getLogger().handlers:
-        logging.basicConfig(
-            level=level,
-            format="%(asctime)s - %(levelname)s - %(message)s",
-            handlers=[logging.StreamHandler(sys.stdout)],
-        )
-    else:
-        logging.getLogger().setLevel(level)
 
 
 def main() -> int:
@@ -227,7 +189,7 @@ def main() -> int:
     parser.add_argument("--testing", action="store_true",
                         help="HEAD/GET each cleaned URL to verify it resolves")
     args = parser.parse_args()
-    _setup_logging(args.debug)
+    configure_root_logging(args.debug)
     try:
         if args.test:
             normaliser = NotionURLNormalizer()

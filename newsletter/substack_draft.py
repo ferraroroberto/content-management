@@ -42,11 +42,11 @@ from __future__ import annotations
 
 import argparse
 import logging
-import sys
 import webbrowser
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from config.loader import load_block
+from config.logger_config import configure_root_logging
 from newsletter.books import find_book_for_newsletter
 from newsletter.build_newsletter import (
     TOPICS,
@@ -144,7 +144,7 @@ def run(
 
     Returns ``None`` when ``delete_after`` removed the throwaway draft.
     """
-    _setup_logging(debug)
+    configure_root_logging(debug)
     nl_num = normalize_newsletter_number(newsletter_number)
 
     client = NotionClient()
@@ -198,20 +198,6 @@ def run(
         webbrowser.open(edit_url)
         logging.info("🌐 Opened draft in browser: %s", edit_url)
     return edit_url
-
-
-def _setup_logging(debug: bool = False) -> None:
-    level = logging.DEBUG if debug else logging.INFO
-    from config.console import force_utf8_stdio
-    force_utf8_stdio()
-    if not logging.getLogger().handlers:
-        logging.basicConfig(
-            level=level,
-            format="%(asctime)s - %(levelname)s - %(message)s",
-            handlers=[logging.StreamHandler(sys.stdout)],
-        )
-    else:
-        logging.getLogger().setLevel(level)
 
 
 def main(argv: Optional[List[str]] = None) -> int:

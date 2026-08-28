@@ -34,9 +34,11 @@ import webbrowser
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-import requests
+from notion_client.errors import APIResponseError, HTTPResponseError, RequestTimeoutError
 
 from config.loader import load_full_config
+from config.logger_config import configure_root_logging
+from newsletter import notion_io
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = REPO_ROOT / "results" / "newsletter"
@@ -59,12 +61,15 @@ _MUST_READ_PERM: Dict[int, Tuple[int, int, int]] = {
 
 
 class NotionClient:
-    """Notion HTTP + pagination for the two databases the newsletter reads.
+    """Notion client + pagination for the two databases the newsletter reads.
 
-    Holds only connection state (auth headers, db ids) — no article
+    Holds only connection state (SDK client, db ids) — no article
     extraction, grouping, or rendering logic lives here so each concern can
     be tested and reused on its own (``newsletter/substack_draft.py`` reuses
     :func:`group_articles_by_topic` without importing this class at all).
+    Query pagination and write retry go through ``newsletter.notion_io``, the
+    same module the archive path uses, so a Notion hiccup here gets the same
+    documented backoff instead of failing outright.
     """
 
     def __init__(self):
@@ -74,11 +79,7 @@ class NotionClient:
         self.newsletter_db_id = self.config["newsletter_db_id"]
         if not all([self.notion_api_key, self.articles_db_id, self.newsletter_db_id]):
             raise ValueError("Missing notion_api_key or DB ids in config")
-        self.headers = {
-            "Authorization": f"Bearer {self.notion_api_key}",
-            "Notion-Version": "2022-06-28",
-            "Content-Type": "application/json",
-        }
+        self.client = notion_io.init_client(self.notion_api_key)
         logging.info("✅ Newsletter builder initialized")
         logging.info(f"📊 Articles DB: {self.articles_db_id}")
         logging.info(f"📊 Newsletter DB: {self.newsletter_db_id}")
@@ -95,27 +96,11 @@ class NotionClient:
 
     def _query_notion_database(self, database_id: str,
                                filter_data: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-        url = f"https://api.notion.com/v1/databases/{database_id}/query"
-        payload: Dict[str, Any] = {}
-        if filter_data:
-            payload["filter"] = filter_data
-        all_results: List[Dict[str, Any]] = []
-        cursor: Optional[str] = None
-        while True:
-            if cursor:
-                payload["start_cursor"] = cursor
-            try:
-                resp = requests.post(url, headers=self.headers, json=payload, timeout=30)
-                resp.raise_for_status()
-                data = resp.json()
-            except requests.exceptions.RequestException as e:
-                logging.error(f"❌ Failed to query Notion: {e}")
-                raise
-            all_results.extend(data.get("results", []))
-            if not data.get("has_more"):
-                break
-            cursor = data.get("next_cursor")
-        return all_results
+        try:
+            return notion_io.query_database(self.client, database_id, query_filter=filter_data)
+        except Exception as e:
+            logging.error(f"❌ Failed to query Notion: {e}")
+            raise
 
     def find_newsletter_by_title(self, newsletter_title: str) -> Optional[Dict[str, Any]]:
         logging.info(f"🔍 Searching for newsletter: {newsletter_title}")
@@ -443,7 +428,7 @@ def run(newsletter_number: str, debug: bool = False, *,
     * else ``interactive_must_read`` → prompt on stdin (console flow).
     * else → write the HTML + sidecar only (the app's non-blocking path).
     """
-    _setup_logging(debug)
+    configure_root_logging(debug)
     nl_num = normalize_newsletter_number(newsletter_number)
 
     logging.info(f"🚀 Building newsletter: {nl_num}")
@@ -483,20 +468,6 @@ def run(newsletter_number: str, debug: bool = False, *,
     return out_path
 
 
-def _setup_logging(debug: bool = False):
-    level = logging.DEBUG if debug else logging.INFO
-    from config.console import force_utf8_stdio
-    force_utf8_stdio()
-    if not logging.getLogger().handlers:
-        logging.basicConfig(
-            level=level,
-            format="%(asctime)s - %(levelname)s - %(message)s",
-            handlers=[logging.StreamHandler(sys.stdout)],
-        )
-    else:
-        logging.getLogger().setLevel(level)
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--newsletter", type=str,
@@ -504,7 +475,7 @@ def main() -> int:
                         'Prompted if omitted.')
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
-    _setup_logging(args.debug)
+    configure_root_logging(args.debug)
     try:
         nl = args.newsletter
         if not nl:
@@ -518,7 +489,7 @@ def main() -> int:
             return 2
         run(nl, debug=args.debug)
         return 0
-    except (ValueError, FileNotFoundError, requests.exceptions.RequestException) as e:
+    except (ValueError, FileNotFoundError, APIResponseError, HTTPResponseError, RequestTimeoutError) as e:
         logging.error(f"❌ Failed to build newsletter: {e}")
         return 1
     except Exception as e:

@@ -10,8 +10,12 @@ from dotenv import load_dotenv
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from config.loader import load_full_config
 from config.logger_config import setup_logger
+from reporting.notion._client import (
+    load_project_config,
+    notion_rest_headers,
+    slugify_identifier,
+)
 
 # Set up logger - will use existing logger if available
 logger = logging.getLogger("notion_database_list")
@@ -24,40 +28,11 @@ class NotionDatabaseLister:
     
     def __init__(self, config_path: str = None):
         """Initialize with configuration."""
-        self.config = self._load_config(config_path)
+        self.config = load_project_config(config_path, logger=logger)
         self.notion_token = self.config["notion"]["api_token"]
-        self.headers = {
-            "Authorization": f"Bearer {self.notion_token}",
-            "Content-Type": "application/json",
-            "Notion-Version": "2022-06-28"
-        }
-        
-    def _load_config(self, config_path: str = None) -> dict:
-        """Load configuration from JSON file.
+        self.headers = notion_rest_headers(self.notion_token)
 
-        With no override, reads through ``config.loader`` (the project's
-        single-source loader) so the default path stays in exactly one place.
-        The ``--config`` override still reads its own path directly, since
-        that's not something ``config.loader`` supports.
-        """
-        if config_path is None:
-            logger.debug("📂 Loading configuration via config.loader (config/config.json)")
-            config = load_full_config()
-            logger.info("✅ Configuration loaded successfully")
-            return config
 
-        logger.debug(f"📂 Loading configuration from {config_path}")
-
-        if not os.path.exists(config_path):
-            logger.error(f"❌ Configuration file not found: {config_path}")
-            raise FileNotFoundError(f"Configuration file not found: {config_path}")
-
-        with open(config_path, 'r') as f:
-            config = json.load(f)
-
-        logger.info("✅ Configuration loaded successfully")
-        return config
-    
     def _search_databases(self, start_cursor: str = None) -> Dict[str, Any]:
         """Search for all databases using Notion API."""
         url = "https://api.notion.com/v1/search"
@@ -83,12 +58,7 @@ class NotionDatabaseLister:
     
     def _normalize_table_name(self, name: str) -> str:
         """Normalize database name to valid PostgreSQL table name."""
-        # Convert to lowercase and replace spaces/special chars with underscores
-        normalized = name.lower().strip()
-        normalized = "".join(c if c.isalnum() or c == "_" else "_" for c in normalized)
-        # Remove consecutive underscores
-        while "__" in normalized:
-            normalized = normalized.replace("__", "_")
+        normalized = slugify_identifier(name)
         # Ensure it doesn't start with a number
         if normalized and normalized[0].isdigit():
             normalized = f"table_{normalized}"

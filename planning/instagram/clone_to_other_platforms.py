@@ -63,7 +63,6 @@ from planning.instagram.instagram_session import (  # noqa: E402
     load_notion_token,
 )
 from reporting.notion.editorial import (  # noqa: E402
-    get_field,
     init_notion_client,
     query_rows_by_filter,
     retrieve_page,
@@ -78,6 +77,7 @@ from planning._dates import (  # noqa: E402
     parse_single_date,
     parse_week_start,
 )
+from planning._captions import canonical_caption_from_publish_ig  # noqa: E402
 
 logger = logging.getLogger("instagram_clone")
 
@@ -168,60 +168,6 @@ def fetch_wip_ig_rows(notion, db_id: str, ed_cols: dict, days: list[date]) -> li
 
 # ---------- Source resolution ----------
 
-def _canonical_caption_from_publish_ig(
-    notion,
-    illustration_page_id: str,
-    illust_cols: dict,
-    ed_cols: dict,
-) -> str:
-    """Follow an illustration's ``publishIG`` relation back to all editorial
-    rows that published it, sort by day ascending, and return the earliest
-    one's ``text IG`` (the canonical first-publication caption).
-
-    Fallback: ``text IG to copy`` formula on the illustration page.
-
-    Mirror of ``linkedin.schedule_linkedin_posts.fetch_illustration`` caption
-    logic (kept local to avoid a cross-package import, since the LinkedIn
-    module pulls in Playwright at import time).
-    """
-    page = retrieve_page(notion, illustration_page_id)
-    publish_col = illust_cols["publish_relation"]
-    publish_rels = page.get("properties", {}).get(publish_col, {}).get("relation", []) or []
-
-    if publish_rels:
-        candidates: list[tuple[str, str]] = []
-        for rel in publish_rels:
-            rel_id = rel.get("id")
-            if not rel_id:
-                continue
-            try:
-                ed_page = retrieve_page(notion, rel_id)
-            except Exception as err:
-                logger.warning("⚠️ could not fetch %s for publishIG resolution: %s", rel_id, err)
-                continue
-            day_str = get_field(ed_page, "title_day", ed_cols) or ""
-            text = get_field(ed_page, "caption_text", ed_cols) or ""
-            day_str = str(day_str).strip()
-            text = str(text).strip()
-            if day_str:
-                candidates.append((day_str, text))
-
-        candidates.sort(key=lambda x: x[0])  # YYYYMMDD lex = chronological
-        for day_str, text in candidates:
-            if text:
-                logger.info(
-                    "📝 canonical caption from publishIG row %s: %d chars", day_str, len(text)
-                )
-                return text
-
-    fallback = str(get_field(page, "caption_fallback", illust_cols) or "").strip()
-    if fallback:
-        logger.warning(
-            "⚠️ publishIG yielded no caption — falling back to '%s' formula (%d chars)",
-            illust_cols["caption_fallback"], len(fallback),
-        )
-    return fallback
-
 
 def _first_thread_illustration_id(notion, post_page_id: str, posts_cols: dict) -> str:
     """Read the posts-page ``illustration`` relation and return its first id."""
@@ -262,8 +208,8 @@ def resolve_source(notion, cfg: dict, row: IgRow) -> CloneSource:
             # (earliest first-publication row's `text IG`, with the
             # `text IG to copy` formula as fallback). Same rule the LinkedIn
             # scheduler and the Sunday-thread branch below use.
-            caption = _canonical_caption_from_publish_ig(
-                notion, illust_id, illust_cols, ed_cols
+            caption = canonical_caption_from_publish_ig(
+                notion, illust_id, illust_cols, ed_cols, logger
             )
             if not caption:
                 raise RuntimeError(
@@ -290,8 +236,8 @@ def resolve_source(notion, cfg: dict, row: IgRow) -> CloneSource:
     first_illust_id = _first_thread_illustration_id(
         notion, row.post_ig_ids[0], posts_cols
     )
-    canonical = _canonical_caption_from_publish_ig(
-        notion, first_illust_id, illust_cols, ed_cols
+    canonical = canonical_caption_from_publish_ig(
+        notion, first_illust_id, illust_cols, ed_cols, logger
     )
     if not canonical:
         raise RuntimeError(
