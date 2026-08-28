@@ -68,6 +68,11 @@ class PipelineFailures:
       a view lost ``security_invoker`` (recorded by ``check_policy_drift_coverage``);
       this catches Supabase security drift on the project's own clock instead of
       waiting for the weekly security-advisor email (issue #50).
+    * ``unverified`` — a coverage/drift check could not run at all (no DB
+      connection, or it raised) so its posture is genuinely unknown, not
+      "clean" (issue #246). Kept separate from the other lists so a full DB
+      outage still trips ``any()`` and the alert/non-zero exit, instead of a
+      check that silently couldn't run being folded into a green run.
     """
 
     def __init__(self) -> None:
@@ -75,10 +80,12 @@ class PipelineFailures:
         self.missing_endpoints: list[str] = []
         self.missing_post_metrics: list[str] = []
         self.policy_drift: list[str] = []
+        self.unverified: list[str] = []
 
     def any(self) -> bool:
         return bool(self.step_failures or self.missing_endpoints
-                    or self.missing_post_metrics or self.policy_drift)
+                    or self.missing_post_metrics or self.policy_drift
+                    or self.unverified)
 
 
 def _load_config() -> dict | None:
@@ -167,7 +174,8 @@ def check_posts_coverage(processing_date: str, failures: "PipelineFailures") -> 
         from reporting.process.supabase_uploader import get_db_connection
         connection = get_db_connection()
         if not connection:
-            logger.error("❌ Posts-coverage check: no DB connection — skipped")
+            logger.error("❌ Posts-coverage check: no DB connection — could not verify, treating as unverified")
+            failures.unverified.append("posts_coverage: no DB connection")
             return
         try:
             with connection.cursor() as cursor:
@@ -199,6 +207,7 @@ def check_posts_coverage(processing_date: str, failures: "PipelineFailures") -> 
             logger.info(f"✅ Posts-coverage: all {len(COVERAGE_PLATFORMS)} platforms have post metrics for {processing_date}")
     except Exception as e:
         logger.error(f"❌ Posts-coverage check failed: {e}")
+        failures.unverified.append(f"posts_coverage: check raised — {e}")
 
 
 def check_policy_drift_coverage(failures: "PipelineFailures") -> None:
@@ -217,7 +226,8 @@ def check_policy_drift_coverage(failures: "PipelineFailures") -> None:
         from reporting.process.supabase_policy_script import check_policy_drift, summarize_drift
         connection = get_db_connection()
         if not connection:
-            logger.error("❌ Policy-drift check: no DB connection — skipped")
+            logger.error("❌ Policy-drift check: no DB connection — could not verify, treating as unverified")
+            failures.unverified.append("policy_drift: no DB connection")
             return
         try:
             result = check_policy_drift(connection)
@@ -237,6 +247,7 @@ def check_policy_drift_coverage(failures: "PipelineFailures") -> None:
             logger.error(f"❌ Policy-drift: {kind} {summary}")
     except Exception as e:
         logger.error(f"❌ Policy-drift check failed: {e}")
+        failures.unverified.append(f"policy_drift: check raised — {e}")
 
 
 def _resolve_reporting_channel(config: dict | None) -> str:
@@ -292,6 +303,11 @@ def _build_alert_message(failures: "PipelineFailures", processing_date: str) -> 
         lines.append("RLS/policy drift:")
         for entry in failures.policy_drift:
             lines.append(f"• {entry}")
+    if failures.unverified:
+        lines.append("")
+        lines.append("Unverified (check could not run):")
+        for entry in failures.unverified:
+            lines.append(f"• {entry}")
     return "\n".join(lines)
 
 
@@ -341,7 +357,9 @@ def run_module(module_func, module_name, debug_mode=False, extra_args=None, fail
         module_name: Name of the module for logging
         debug_mode: Whether to enable debug mode
         extra_args: List of additional arguments to pass
-        failures: Optional PipelineFailures accumulator to record step exceptions
+        failures: Optional PipelineFailures accumulator to record step
+            exceptions, and step functions that return ``False`` instead of
+            raising (issue #246).
     """
     # Save original command line arguments
     original_argv = sys.argv.copy()
@@ -358,9 +376,19 @@ def run_module(module_func, module_name, debug_mode=False, extra_args=None, fail
         if extra_args:
             sys.argv.extend(extra_args)
             
-        # Run the module
-        module_func()
-        logger.info(f"✅ {module_name} completed successfully")
+        # Run the module. A step that degrades gracefully instead of raising
+        # (e.g. no DB connection, missing config) returns False rather than
+        # None/True — record that as a step failure too, not just an
+        # exception (issue #246). Steps that don't return a bool (e.g. still
+        # only ``return``/implicit ``None`` on their success path) are
+        # treated as successful, matching prior behaviour.
+        result = module_func()
+        if result is False:
+            logger.error(f"❌ {module_name} completed with errors (see above)")
+            if failures is not None:
+                failures.step_failures.append((module_name, "step reported failure (returned False)"))
+        else:
+            logger.info(f"✅ {module_name} completed successfully")
     except Exception as e:
         logger.error(f"❌ Error in {module_name}: {e}")
         if failures is not None:

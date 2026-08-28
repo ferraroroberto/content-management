@@ -35,12 +35,14 @@ create table if not exists comments (
     decided_at          timestamptz,
     my_reply_text       text,                             -- if I (post author) already replied — captured at scrape time
     my_replied_at       timestamptz,                      -- approximate from LI relative timestamp
+    post_posted_at      timestamptz,                      -- the post's own publish time — feeds the sub_2_min rule (issue #246)
     primary key (platform, comment_id)
 );
 
 -- Idempotent column-adds for anyone who applied an earlier schema revision.
 alter table comments add column if not exists my_reply_text text;
 alter table comments add column if not exists my_replied_at timestamptz;
+alter table comments add column if not exists post_posted_at timestamptz;
 
 create index if not exists comments_status_idx     on comments (status, classification);
 create index if not exists comments_commenter_idx  on comments (platform, commenter_url);

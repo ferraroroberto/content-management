@@ -38,8 +38,13 @@ def parse_arguments():
     
     return parser.parse_args()
 
-def main(args=None):
-    """Main function to execute the posts consolidator."""
+def main(args=None) -> bool:
+    """Main function to execute the posts consolidator.
+
+    Returns ``True``/``False`` (rather than only raising) so
+    ``reporting_pipeline.run_module`` can record a step failure even when this
+    degrades gracefully instead of raising (issue #246).
+    """
     if args is None:
         # Use command-line arguments if available, otherwise parse them
         args = parse_arguments()
@@ -58,7 +63,7 @@ def main(args=None):
     connection = get_db_connection()
     if not connection:
         logger.error("❌ Failed to connect to database")
-        return
+        return False
 
     # Read + execute the consolidation SQL
     logger.info("🔄 Executing SQL to create consolidated posts table")
@@ -66,11 +71,12 @@ def main(args=None):
 
     # Close connection
     connection.close()
-    
+
     if success:
         logger.info("✅ Posts Consolidator completed successfully")
     else:
         logger.error("❌ Posts Consolidator failed")
+    return success
 
 if __name__ == "__main__":
     main()

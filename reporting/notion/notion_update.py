@@ -382,8 +382,15 @@ def log_field_changes(connection, page_id, changes):
         connection.rollback()
         return False
 
-def main():
-    """Main function to execute the Notion update process."""
+def main() -> bool:
+    """Main function to execute the Notion update process.
+
+    Returns ``True``/``False`` so ``reporting_pipeline.run_module`` can record
+    a step failure on any of the early bail-outs below (missing token, failed
+    client init, no editorial row, no Supabase connection) or a failed page
+    update — all of which previously returned silently on a green "completed
+    successfully" log line one level up (issue #246).
+    """
     # Parse command-line arguments
     args = parse_arguments()
     
@@ -402,7 +409,7 @@ def main():
     
     if not api_token or not databases:
         logger.error("❌ Notion API token or databases not found in config.json")
-        return
+        return False
     
     # Get database ID (from args or config)
     if args.database_id:
@@ -418,19 +425,19 @@ def main():
     notion = init_notion_client(api_token)
     if notion is None:
         logger.error("❌ Failed to initialize Notion client")
-        return
+        return False
     
     # Search for the row with the matching date (one day before) for POSTS update
     previous_day_row = search_by_date(notion, database_id, args.date)
     if previous_day_row is None:
         logger.error(f"❌ No row found for the day before date: {args.date}")
-        return
+        return False
     
     # Search for the current day row for FOLLOWERS update
     current_day_row = search_by_current_date(notion, database_id, args.date)
     if current_day_row is None:
         logger.error(f"❌ No row found for current date: {args.date}")
-        return
+        return False
     
     # Extract page_id and properties for both rows
     previous_page_id = previous_day_row.get('id', '')
@@ -481,7 +488,7 @@ def main():
     supabase_connection = get_db_connection()
     if not supabase_connection:
         logger.error("❌ Failed to connect to Supabase")
-        return
+        return False
     
     # Get data from Supabase
     logger.info("📊 Fetching data from Supabase")
@@ -585,6 +592,7 @@ def main():
                 )
 
     # Update Notion pages
+    update_ok = True
     if posts_updates or followers_updates:
         total_updates = len(posts_updates) + len(followers_updates)
         logger.info("Ready to update %d fields in Notion", total_updates)
@@ -609,6 +617,7 @@ def main():
                     log_field_changes(supabase_connection, previous_page_id, posts_changes)
                 else:
                     logger.error("❌ Failed to update posts fields on previous day")
+                    update_ok = False
             
             # Update follower fields on current day
             if followers_updates:
@@ -623,6 +632,7 @@ def main():
                     log_field_changes(supabase_connection, current_page_id, followers_changes)
                 else:
                     logger.error("❌ Failed to update follower fields on current day")
+                    update_ok = False
             
             # Print field update summary
             logger.info("=" * 60)
@@ -649,6 +659,7 @@ def main():
     logger.info("=" * 60)
 
     logger.info("✅ Notion Update Process completed")
+    return update_ok
 
 if __name__ == "__main__":
     main()
