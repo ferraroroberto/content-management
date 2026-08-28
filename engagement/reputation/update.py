@@ -148,14 +148,13 @@ def _aggregate(
 def recompute_for_platform(platform: str = "linkedin") -> dict:
     sb = supabase_client()
 
-    # Note: `post_posted_at` is a scrape-time side-channel (stripped before
-    # upsert) — it isn't a column in the `comments` table. The cadence
-    # "seconds after my post" signal will simply be absent until that gets
-    # backfilled; for now `_seconds_after` returns None and the median
-    # seconds + sub-2-min counter stay at zero, matching rules.py behaviour.
+    # `post_posted_at` is now a real column (schema.sql), persisted by the
+    # scraper alongside each comment (issue #246) — select it explicitly so
+    # the cadence "seconds after my post" signal and sub_2_min counter below
+    # aren't silently starved, matching rules.py.
     rows = (
         sb.table("comments")
-        .select("comment_id,commenter_url,display_name,text,post_url,posted_at,scraped_at,classification")
+        .select("comment_id,commenter_url,display_name,text,post_url,posted_at,post_posted_at,scraped_at,classification")
         .eq("platform", platform)
         .execute()
         .data

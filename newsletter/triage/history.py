@@ -99,6 +99,42 @@ def _norm(text: str) -> str:
 # 1. Gmail pull (incremental, cached HTML)
 
 
+def _reextract_from_cache(existing: Dict[str, gm.EmailRecord], raw_dir: Path, min_anchor: int) -> None:
+    """Re-run link extraction from cached HTML for every record in ``existing``
+    (mutated in place). Pure local file I/O — no mailbox, no network."""
+    if not existing:
+        return
+    logger.info("♻️ re-extracting links from %d cached HTML bodies", len(existing))
+    for mid, rec in existing.items():
+        gz = raw_dir / f"{mid}.html.gz"
+        if not gz.exists():
+            continue
+        with gzip.open(gz, "rt", encoding="utf-8") as fp:
+            html = fp.read()
+        rec.links = gm.links_from_html(html, min_anchor_chars=min_anchor)
+
+
+def reextract_cached(cfg: Dict[str, Any]) -> List[gm.EmailRecord]:
+    """Re-run link extraction from already-cached HTML only — no mailbox
+    build, no Gmail search, no network I/O at all.
+
+    Split out of ``pull_emails`` (issue #246): that function always calls
+    ``gm.build_mailbox(cfg)`` + ``label_search`` + ``search_ids`` even when
+    called with ``limit=0``, so the documented offline path
+    (``--no-gmail --reextract --budget 0``, "no new network" per the README)
+    raised ``FileNotFoundError`` on a missing Gmail token instead of touching
+    only the cached HTML it was meant to re-parse.
+    """
+    emails_path = HISTORY_DIR / "emails.jsonl"
+    raw_dir = HISTORY_DIR / "raw"
+    existing = {r["message_id"]: gm.EmailRecord.from_json(r) for r in _read_jsonl(emails_path)}
+    min_anchor = int(cfg.get("min_anchor_chars", gm.DEFAULT_MIN_ANCHOR_CHARS))
+    _reextract_from_cache(existing, raw_dir, min_anchor)
+    records = sorted(existing.values(), key=lambda r: r.timestamp)
+    _write_jsonl(emails_path, (r.to_json() for r in records))
+    return records
+
+
 def pull_emails(weeks: int, *, cfg: Dict[str, Any], reextract: bool = False,
                 limit: Optional[int] = None) -> List[gm.EmailRecord]:
     emails_path = HISTORY_DIR / "emails.jsonl"
@@ -107,15 +143,8 @@ def pull_emails(weeks: int, *, cfg: Dict[str, Any], reextract: bool = False,
     existing = {r["message_id"]: gm.EmailRecord.from_json(r) for r in _read_jsonl(emails_path)}
     min_anchor = int(cfg.get("min_anchor_chars", gm.DEFAULT_MIN_ANCHOR_CHARS))
 
-    if reextract and existing:
-        logger.info("♻️ re-extracting links from %d cached HTML bodies", len(existing))
-        for mid, rec in existing.items():
-            gz = raw_dir / f"{mid}.html.gz"
-            if not gz.exists():
-                continue
-            with gzip.open(gz, "rt", encoding="utf-8") as fp:
-                html = fp.read()
-            rec.links = gm.links_from_html(html, min_anchor_chars=min_anchor)
+    if reextract:
+        _reextract_from_cache(existing, raw_dir, min_anchor)
 
     tm = gm.build_mailbox(cfg)
     try:
@@ -580,9 +609,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     HISTORY_DIR.mkdir(parents=True, exist_ok=True)
 
     if args.no_gmail:
-        records = [gm.EmailRecord.from_json(r) for r in _read_jsonl(HISTORY_DIR / "emails.jsonl")]
         if args.reextract:
-            records = pull_emails(weeks, cfg=cfg, reextract=True, limit=0)
+            records = reextract_cached(cfg)
+        else:
+            records = [gm.EmailRecord.from_json(r) for r in _read_jsonl(HISTORY_DIR / "emails.jsonl")]
         logger.info("📬 %d cached emails", len(records))
     else:
         records = pull_emails(weeks, cfg=cfg, reextract=args.reextract, limit=args.limit)

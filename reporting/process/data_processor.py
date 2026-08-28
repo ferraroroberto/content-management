@@ -572,65 +572,74 @@ def parse_arguments():
     
     return parser.parse_args()
 
-def main(args=None):
-    """Main function to execute the data processor."""
+def main(args=None) -> bool:
+    """Main function to execute the data processor.
+
+    Returns ``True``/``False`` so ``reporting_pipeline.run_module`` can record
+    a step failure when this degrades gracefully instead of raising — a
+    missing mapping config, no data to process, or a failed Supabase upload
+    all previously returned silently on a green "completed successfully" log
+    line one level up (issue #246).
+    """
     if args is None:
         # Use command-line arguments if available, otherwise parse them
         args = parse_arguments()
-    
+
     # Configure logger with appropriate level
     debug_mode = args.debug
     configure_logger(debug_mode)
-    
+
     logger.info("🚀 Starting Data Processor")
     logger.info(f"🐞 Debug mode: {'Enabled' if debug_mode else 'Disabled'}")
-    
+
     # Load configurations
     mapping_config = load_mapping_config()
     if not mapping_config:
         logger.error("❌ Failed to load mapping configuration")
-        return
-    
+        return False
+
     main_config = load_config()
 
     # Process all JSON files and get DataFrames by data type
     dataframes = process_all_files(mapping_config, main_config, debug_mode=debug_mode, target_date=args.date)
-    
+
     if not dataframes:
         logger.warning("⚠️  No data to save")
-        return
-    
+        return False
+
     # Display info about each DataFrame
     for data_type, df in dataframes.items():
         logger.info(f"📊 {data_type} DataFrame shape: {df.shape}")
         logger.info(f"📋 {data_type} Columns: {', '.join(df.columns)}")
-        
+
         if debug_mode:
             logger.debug("%s DataFrame Preview:\n%s", data_type, df.head().to_string())
             logger.debug("%s DataFrame Info: %d rows x %d cols", data_type, len(df), len(df.columns))
-    
+
     # Upload data to Supabase if enabled
+    upload_success = True
     supabase_enabled = main_config.get('supabase', {}).get('enable_upload', False)
     if supabase_enabled:
         upload_to_supabase = args.upload != 'n'  # Default to yes if not explicitly 'n'
         if upload_to_supabase:
             logger.info("📤 Uploading data to Supabase...")
-            
+
             # Upload all dataframes
-            success = upload_all_dataframes(dataframes)
-            if success:
+            upload_success = upload_all_dataframes(dataframes)
+            if upload_success:
                 logger.info("✅ Successfully uploaded all data to Supabase")
             else:
                 logger.warning("⚠️  Some errors occurred during Supabase upload")
-    
+
     # Use output format from arguments
     output_format = args.format
-    
+
     # Save DataFrames
     output_files = save_dataframes(dataframes, main_config, output_format=output_format)
-    
+
     logger.info("✅ Data Processor completed")
     logger.info(f"📁 Generated {len(output_files)} output files")
+    return bool(upload_success)
 
 if __name__ == "__main__":
     main()

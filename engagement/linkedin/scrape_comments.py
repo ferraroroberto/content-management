@@ -565,6 +565,7 @@ def scrape_post_comments(
                 "posted_at": rec.get("posted_at_iso"),
                 "my_reply_text": rec.get("my_reply_text"),
                 "my_replied_at": rec.get("my_replied_at_iso"),
+                "post_posted_at": post_posted_at,
             }
         )
         if account_url:
@@ -578,9 +579,6 @@ def scrape_post_comments(
             )
 
     logger.info("✅ %s — extracted %d comments", post_url, len(comments_rows))
-    # Stamp post_posted_at into each row's verdict_reasons-friendly side channel for the classifier.
-    for r in comments_rows:
-        r["_post_posted_at"] = post_posted_at  # consumed by classifier only; stripped before upsert
     return comments_rows, list(commenters_seen.values()), None
 
 

@@ -88,26 +88,31 @@ def parse_arguments():
 
     return parser.parse_args()
 
-def main(args=None):
-    """Main function for running the profile aggregator."""
+def main(args=None) -> bool:
+    """Main function for running the profile aggregator.
+
+    Returns ``True``/``False`` so ``reporting_pipeline.run_module`` can record
+    a step failure on a logged-but-not-raised failure (issue #246).
+    """
     if args is None:
         # Use command-line arguments if available, otherwise parse them
         args = parse_arguments()
-    
+
     # Configure logger with appropriate level based on args
     debug_mode = args.debug
     configure_logger(debug_mode)
-    
+
     logger.info("🚀 Starting Profile Aggregator")
     logger.info(f"🐞 Debug mode: {'Enabled' if debug_mode else 'Disabled'}")
-    
+
     # Aggregate profile data
     result = aggregate_profile_data()
-    
+
     if result:
         logger.info("✅ Profile aggregation completed successfully")
     else:
         logger.error("❌ Profile aggregation failed")
+    return bool(result)
 
 if __name__ == "__main__":
     main()

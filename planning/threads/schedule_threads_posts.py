@@ -307,6 +307,7 @@ _CLICK_CAL_DAY_JS = r"""
 (args) => {
     const headerText = args.headerText;
     const dayText = args.dayText;
+    const isToday = args.isToday;
     // Verify the right month is showing (failsafe).
     const headerSeen = [...document.querySelectorAll('*')]
         .some(el => (el.innerText||'').trim() === headerText);
@@ -350,8 +351,16 @@ _CLICK_CAL_DAY_JS = r"""
     //   today           = WHITE text (rgb 255,255,255) inside a dark-pill bg → lightness ≈ 255
     //   current month   = BLACK text (rgb 0,0,0)                               → lightness ≈ 0
     //   prev/next month = LIGHT grey text                                     → lightness ≈ 150–200
-    // We want the BLACK one (current-month, not today). Pick lowest lightness.
-    cells.sort((a, b) => a.spanLightness - b.spanLightness);
+    // When the target IS today, the current-month cell for that digit renders
+    // WHITE (not black) — so the only candidates are today's white cell and a
+    // same-digit grey overflow cell, and "pick lowest" would wrongly grab the
+    // overflow cell. Flip direction based on isToday instead of always
+    // assuming black is the answer.
+    if (isToday) {
+        cells.sort((a, b) => b.spanLightness - a.spanLightness);
+    } else {
+        cells.sort((a, b) => a.spanLightness - b.spanLightness);
+    }
     cells[0].cell.click();
     return {
         ok: true,
@@ -368,13 +377,22 @@ def _click_calendar_day(page: Page, target: date) -> None:
 
     Calendar days are `<div role="gridcell">` wrappers whose accessible name
     is empty; the digit lives in nested ``<span>``s. Cells from the previous
-    and next months are also present but greyed out. JS picks the brightest
-    cell with matching text (current-month).
+    and next months are also present but greyed out. JS disambiguates
+    same-digit cells by text lightness: current-month-non-today is black
+    (lowest), the overflow cell is grey (middle), and today is white
+    (highest) — so it picks the *lowest* lightness cell normally, but the
+    *highest* when ``target`` is today (its current-month cell renders white,
+    not black, leaving no black candidate to prefer over the grey overflow
+    cell).
     """
     header_text = calendar_header(target)
     day_text = str(target.day)
+    is_today = target == date.today()
     try:
-        res = page.evaluate(_CLICK_CAL_DAY_JS, {"headerText": header_text, "dayText": day_text})
+        res = page.evaluate(
+            _CLICK_CAL_DAY_JS,
+            {"headerText": header_text, "dayText": day_text, "isToday": is_today},
+        )
     except Exception as err:
         raise RuntimeError(f"Calendar day JS picker failed: {err}")
     if not res or not res.get("ok"):

@@ -56,6 +56,17 @@ def _count_pending() -> int:
     return res.count or 0
 
 
+def _approved_keys() -> set[tuple[str, str]]:
+    """``(platform, comment_id)`` — the table's own primary key (schema.sql:35)
+    — for every row currently ``status = 'approved'``. Used to diff before/after
+    the approve click so the idempotency rollback below can scope itself to
+    just the row(s) this click approved, instead of every approved row in the
+    table (issue #246)."""
+    sb = supabase_client()
+    rows = sb.table("comments").select("platform,comment_id").eq("status", "approved").execute().data or []
+    return {(r["platform"], r["comment_id"]) for r in rows}
+
+
 def _wait_for_streamlit(page: Page, timeout_ms: int = 15_000) -> None:
     """Streamlit renders client-side — wait for the run-toolbar OR the page title."""
     page.wait_for_load_state("networkidle", timeout=timeout_ms)
@@ -162,6 +173,7 @@ def run() -> int:
 
         print("\n📱 step 5 — approve action lowers pending count by 1")
         pending_before = _count_pending()
+        approved_before = _approved_keys()
         _click_tab(page, "AI triage")
         page.wait_for_timeout(500)
         approve_clicked = False
@@ -182,9 +194,20 @@ def run() -> int:
             else:
                 _fail("approve count delta", f"expected {pending_before - 1}, got {pending_after}")
                 fails += 1
-            # Roll back so the test is idempotent — re-run friendly.
+            # Roll back so the test is idempotent — re-run friendly. Scope to
+            # exactly the row(s) THIS click approved (the before/after diff on
+            # the table's own primary key), never a blanket
+            # `.eq("status", "approved")` — that would revert every row the
+            # owner has approved by hand in the review app, not just this
+            # check's own row (issue #246).
+            newly_approved = _approved_keys() - approved_before
             sb = supabase_client()
-            sb.table("comments").update({"status": "pending", "decided_at": None}).eq("status", "approved").execute()
+            if newly_approved:
+                for platform, comment_id in newly_approved:
+                    sb.table("comments").update({"status": "pending", "decided_at": None}) \
+                        .eq("platform", platform).eq("comment_id", comment_id).execute()
+            else:
+                print("     note: rollback skipped — could not identify which row(s) the click approved")
         else:
             _pass("approve button skipped — no AI-flagged rows to approve (expected on first run)")
 

@@ -76,7 +76,7 @@ from the IG side of the editorial DB. The scheduler only **reads** these
 | Calendar header | text-equals `<Month> <Year>` (e.g. `"May 2026"`) | Use for navigation + sanity-check. |
 | Calendar `>` (next month) | `aria-label="Next month"` (button) | Click until header matches target. |
 | Day cell | `[role="gridcell"]` (size ~28×28) — find via JS, walking from a leaf `<span>` with the day digit up to its nearest `[role="gridcell"]` ancestor | The span itself is inert; the React click handler is bound on the gridcell. |
-| Disambiguating duplicate day digits (e.g. `1` appears in both current and next month) | Pick lowest-lightness span color: today=255 (white text), current-month=0 (black text), grey-month=~150 | Current-month-non-today wins. |
+| Disambiguating duplicate day digits (e.g. `1` appears in both current and next month) | Pick lowest-lightness span color: today=255 (white text), current-month=0 (black text), grey-month=~150 — **except** when the target day is today: pick highest-lightness instead | Current-month-non-today wins on lowest; today wins on highest (its cell renders white, so there's no black candidate to prefer over the grey overflow cell). |
 | Time inputs | `input[placeholder="hh"]` and `input[placeholder="mm"]` | Two separate 24-hour inputs, zero-padded values. |
 | Calendar Done | `get_by_role("button", name=/^done$/i)` | Commits the calendar selection. |
 | Final Schedule action | `get_by_role("button", name=/^schedule$/i)` scoped to the dialog | Bottom-right of the dialog; replaces the `Post` button after Done. |
@@ -103,7 +103,11 @@ from the IG side of the editorial DB. The scheduler only **reads** these
    - today           → 255 (white on dark)
    - current month   → 0   (black on white)
    - prev/next month → ~150 (light grey)
-   Pick **lowest** lightness for current-month-non-today.
+   Pick **lowest** lightness for current-month-non-today — **except** when
+   the target day is today, where the current-month cell for that digit
+   renders white (not black), so there is no black candidate and "lowest"
+   would wrongly pick the grey overflow cell instead. Pick **highest**
+   lightness in that case (content-management#246).
 
 3. **The 3-dots button has no aria-label and no test-id.** The dialog
    header contains exactly 2 svg-only icon buttons (no text); the

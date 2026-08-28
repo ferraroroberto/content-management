@@ -126,9 +126,15 @@ echo ========================================
 echo.
 
 :END
-REM Keep the window open so the output can be inspected after the run.
+REM Keep the window open so the output can be inspected after an interactive
+REM run — but not under AUTO_MODE (scheduler / "cron-friendly" per README),
+REM where an unconditional pause would leave the process hung forever and its
+REM %RC% never observed (issue #246; launch_planning.bat already has this
+REM shape via its :EOL skip).
+if "%AUTO_MODE%"=="1" goto EOL
 echo Press any key to close this window...
 pause >nul
+:EOL
 
 REM Propagate the pipeline's exit code so the scheduler records a crashed
 REM run as failed. reporting_pipeline.py deliberately sys.exit(1)s on any
