@@ -73,7 +73,6 @@ from reporting.notion.notion_update import (  # noqa: E402
 )
 from planning._dates import (  # noqa: E402
     date_to_day_title,
-    next_monday,
     parse_single_date,
     parse_week_start,
 )
