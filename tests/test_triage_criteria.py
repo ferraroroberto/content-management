@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -48,7 +49,11 @@ class CriteriaTests(unittest.TestCase):
         self.assertEqual(crit["window"]["match_rate"], 0.9)
 
     def test_owner_overrides_are_merged(self) -> None:
-        crit = cr.build_criteria(_STATS)
+        # Overrides live in a gitignored, machine-local file (results/newsletter/triage/overrides.json)
+        # that may not exist on this machine — stub it so the test doesn't depend on real owner data.
+        fake_overrides = {"senders": {"gustavorazzetti@substack.com": {"tier": "never", "reason": "paywalled"}}}
+        with patch.object(cr, "load_overrides", return_value=fake_overrides):
+            crit = cr.build_criteria(_STATS)
         ov = crit["sender_overrides"]
         self.assertEqual(ov["gustavorazzetti@substack.com"]["tier"], "never")   # paywalled — owner rule
         self.assertIn("paywall", cr.RULES)
