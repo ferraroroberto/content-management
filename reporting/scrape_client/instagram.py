@@ -194,24 +194,73 @@ def _hover_for_overlay(page, anchor) -> dict:
     return out
 
 
-def _permalink_time_and_video(page) -> tuple[Optional[str], int]:
-    """Read ``<time datetime>`` and detect a ``<video>`` on the post detail."""
-    posted_at = None
+class _PermalinkNavigationError(Exception):
+    """Raised when a permalink page could not be opened at all."""
+
+
+def _read_permalink_posted_at(page, timeout_ms: int = 8000) -> tuple[Optional[str], Optional[str]]:
+    """Wait for and read ``<time datetime>`` on the current page.
+
+    Returns ``(posted_at, failure_reason)`` — ``failure_reason`` is ``None``
+    on success and otherwise names *why* it failed, distinguishing "element
+    never appeared" from "attribute unparseable" from "attribute absent",
+    so a caller can log something more useful than a bare ``None``.
+    """
     try:
-        time_el = page.locator("time[datetime]").first
-        if time_el.count() > 0:
-            iso = time_el.get_attribute("datetime")
-            if iso:
-                posted_at = to_iso_date(iso)
-    except Exception:
-        pass
-    is_video = 0
+        page.wait_for_selector("time[datetime]", timeout=timeout_ms)
+    except Exception as err:
+        return None, f"element never appeared: {err}"
+    try:
+        iso = page.locator("time[datetime]").first.get_attribute("datetime")
+    except Exception as err:
+        return None, f"attribute read failed: {err}"
+    if not iso:
+        return None, "datetime attribute empty"
+    posted_at = to_iso_date(iso)
+    if posted_at is None:
+        return None, f"datetime attribute unparseable: {iso!r}"
+    return posted_at, None
+
+
+def _detect_video(page) -> int:
+    """Detect a ``<video>`` element on the current (permalink) page."""
     try:
         if page.locator("video").count() > 0:
-            is_video = 1
-    except Exception:
-        pass
-    return posted_at, is_video
+            return 1
+    except Exception as err:
+        logger.warning("⚠️ Instagram video-element read failed: %s", err)
+    return 0
+
+
+def _scrape_permalink(page, permalink: str, *, timeout_ms: int = 8000) -> tuple[Optional[str], int]:
+    """Navigate to ``permalink`` and read ``posted_at`` + ``is_video``.
+
+    Waits explicitly for ``time[datetime]`` instead of a fixed sleep, and
+    retries the permalink once if the date still doesn't show up in time —
+    tiles are visited newest-first, so the *first* permalink (the one the
+    posts-coverage check depends on) is the coldest navigation in the loop
+    and the most likely to lose that race (#260). Every ``posted_at is
+    None`` outcome is logged at WARNING with the permalink and the reason —
+    a failed read must never be indistinguishable from a genuinely dateless
+    post.
+
+    Raises ``_PermalinkNavigationError`` if the permalink itself never loads.
+    """
+    posted_at = None
+    reason = None
+    for attempt in range(2):
+        try:
+            page.goto(permalink, timeout=30000, wait_until="domcontentloaded")
+        except Exception as err:
+            raise _PermalinkNavigationError(str(err)) from err
+        posted_at, reason = _read_permalink_posted_at(page, timeout_ms=timeout_ms)
+        if posted_at is not None:
+            break
+        if attempt == 0:
+            logger.info("🔁 Retrying IG permalink %s — posted_at was None (%s)", permalink, reason)
+    if posted_at is None:
+        logger.warning("⚠️ Instagram permalink %s — posted_at is None (%s)", permalink, reason)
+    return posted_at, _detect_video(page)
 
 
 def fetch_posts(target_date: Optional[str] = None) -> Optional[dict]:
@@ -269,12 +318,10 @@ def fetch_posts(target_date: Optional[str] = None) -> Optional[dict]:
         for code, kind, href in tiles:
             permalink = f"https://www.instagram.com{href}"
             try:
-                s.page.goto(permalink, timeout=30000, wait_until="domcontentloaded")
-                s.page.wait_for_timeout(1000)
-            except Exception as err:
+                posted_at, is_video = _scrape_permalink(s.page, permalink)
+            except _PermalinkNavigationError as err:
                 logger.warning("⚠️ Could not open IG permalink %s: %s", permalink, err)
                 continue
-            posted_at, is_video = _permalink_time_and_video(s.page)
             eng = engagement.get(code, {})
             record = {
                 "post_id": permalink,
@@ -293,5 +340,16 @@ def fetch_posts(target_date: Optional[str] = None) -> Optional[dict]:
             s.screenshot_failure(f"{target_date}-instagram-no-posts-parsed")
             raise ScrapeError("Instagram tiles found but no permalinks parsed.")
 
-        logger.info("✅ Instagram posts scraped: %d", len(posts))
+        # Tiles are visited newest-first, so posts[0] is the newest post — the
+        # one the posts-coverage check depends on. A scrape where it still has
+        # no posted_at after the retry above is not a clean success, even
+        # though every tile parsed; say so instead of an unqualified ✅ (#260).
+        if posts[0]["posted_at"] is None:
+            logger.error(
+                "❌ Instagram posts scraped: %d, but the newest post (%s) has no "
+                "posted_at — posts-coverage will likely fail for this date",
+                len(posts), posts[0]["post_id"],
+            )
+        else:
+            logger.info("✅ Instagram posts scraped: %d", len(posts))
         return {"posts": posts}
