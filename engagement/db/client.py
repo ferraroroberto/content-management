@@ -85,6 +85,110 @@ def supabase_client():
     raise RuntimeError(f"No working supabase key found in config.supabase (last err: {last_err})")
 
 
+# ---------- Schema preflight ----------
+
+# Every column the engagement pipeline reads or writes. Kept in sync with
+# ``engagement/db/schema.sql`` by ``tests/test_engagement_schema_preflight.py``,
+# which parses that file and fails if the two drift apart (issue #262).
+REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
+    "commenters": (
+        "platform", "account_url", "display_name", "reputation_score",
+        "classification", "signals", "counters", "notes",
+        "first_seen", "last_seen",
+    ),
+    "comments": (
+        "platform", "comment_id", "post_url", "commenter_url", "display_name",
+        "text", "posted_at", "scraped_at", "classification", "confidence",
+        "verdict_source", "verdict_reasons", "suggested_action",
+        "suggested_reply", "status", "decided_at", "my_reply_text",
+        "my_replied_at", "post_posted_at",
+    ),
+}
+
+SCHEMA_REMEDIATION = (
+    "apply engagement/db/schema.sql via the Supabase dashboard SQL editor "
+    "(engagement/README.md, setup step 2) — it is idempotent"
+)
+
+
+class SchemaDriftError(RuntimeError):
+    """The live database is missing columns the pipeline writes.
+
+    Raised by :func:`verify_schema` *before* any expensive work, so a database
+    that is behind ``schema.sql`` costs a second and a clear message rather
+    than a full scrape that dies on its final upsert (issue #262).
+    """
+
+
+def _missing_columns(sb, table: str, columns: tuple[str, ...]) -> list[str]:
+    """Return every column of ``columns`` absent from ``table``.
+
+    One request in the happy path — PostgREST rejects the whole projection if
+    any column is unknown. Only on that rejection do we probe column by column,
+    because PostgREST names just the first offender and we want the operator to
+    fix all of them in one pass.
+
+    Only :class:`APIError` (the server answered, and said no) counts as
+    evidence of absence. A transport failure propagates to the caller, which
+    reports it as *unverified* rather than inventing drift.
+    """
+    from postgrest.exceptions import APIError  # lazy — optional dependency
+
+    try:
+        sb.table(table).select(",".join(columns)).limit(1).execute()
+        return []
+    except APIError:
+        pass
+
+    missing: list[str] = []
+    for col in columns:
+        try:
+            sb.table(table).select(col).limit(1).execute()
+        except APIError:
+            missing.append(col)
+    return missing
+
+
+def verify_schema() -> str:
+    """Check the live tables against :data:`REQUIRED_COLUMNS`.
+
+    Returns ``"ok"`` when every required column is present, or ``"unverified"``
+    when the check itself could not run (supabase unreachable, credentials
+    rejected). ``"unverified"`` is deliberately a state of its own and is never
+    folded into the passing state — an unanswered question is not a yes.
+
+    Raises :class:`SchemaDriftError` when the database genuinely is behind
+    ``schema.sql``.
+    """
+    try:
+        sb = supabase_client()
+    except Exception as err:
+        logger.warning("⚠️ schema NOT VERIFIED — supabase client unavailable: %s", err)
+        return "unverified"
+
+    drift: dict[str, list[str]] = {}
+    for table, columns in REQUIRED_COLUMNS.items():
+        try:
+            missing = _missing_columns(sb, table, columns)
+        except Exception as err:
+            logger.warning("⚠️ schema NOT VERIFIED for %r: %s", table, err)
+            return "unverified"
+        if missing:
+            drift[table] = missing
+
+    if drift:
+        detail = "; ".join(
+            f"{table} is missing {', '.join(cols)}" for table, cols in sorted(drift.items())
+        )
+        raise SchemaDriftError(
+            f"live database is behind engagement/db/schema.sql — {detail}. "
+            f"Fix: {SCHEMA_REMEDIATION}."
+        )
+
+    logger.info("✅ schema verified (%s)", ", ".join(sorted(REQUIRED_COLUMNS)))
+    return "ok"
+
+
 def upsert_commenters(rows: list[dict]) -> None:
     if not rows:
         return
@@ -343,6 +447,9 @@ __all__ = [
     "load_engagement_config",
     "supabase_client",
     "notion_client",
+    "REQUIRED_COLUMNS",
+    "SchemaDriftError",
+    "verify_schema",
     "upsert_commenters",
     "upsert_comments",
     "fetch_pending_comments",

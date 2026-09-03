@@ -41,6 +41,7 @@ from engagement.db.client import (  # noqa: E402
     migrate_fallback_ids_to_urn,
     upsert_commenters,
     upsert_comments,
+    verify_schema,
 )
 from planning.linkedin.linkedin_session import (  # noqa: E402
     LinkedInSession,
@@ -597,6 +598,15 @@ def _evaluate_scrape_health(total_posts: int, structural_errors: list[str]) -> s
 
 
 def run(days: int, *, headless: bool = False, dry_run: bool = False, limit: Optional[int] = None) -> dict:
+    # Fail fast when the live database is behind schema.sql. A missing column
+    # used to surface only on the final upsert — after a full two-minute scrape
+    # — so 20 consecutive runs did all their work and threw it away (issue
+    # #262). A dry run writes nothing, so it has nothing to verify.
+    if not dry_run and verify_schema() == "unverified":
+        logger.warning(
+            "⚠️ proceeding with an UNVERIFIED schema — a column mismatch "
+            "will not surface until the upsert"
+        )
     li_cfg = load_linkedin_config()
     posts = fetch_recent_li_posts(days)
     if limit:
