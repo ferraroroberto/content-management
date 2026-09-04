@@ -93,29 +93,29 @@ Mirror the repo's issue/PR conventions. One **separate issue per drift**.
 
 Leave the working tree clean (or the branch un-pushed) and hand off to a human.
 
-## Step 5 — escalate via Slack, then stop
+## Step 5 — escalate via Telegram, then stop
 
-Read the Slack target from `config/config.json` → `slack.autoheal_channel`. Send the
-ping through the **fleet-wide Slack bot helper** (provided by `fleet-config`, available
-with zero install at `~/.claude/hooks/slack_notify.py`):
+Send the ping through the **fleet-wide bot helper** (provided by `fleet-config`, available
+with zero install at `~/.claude/hooks/notify_send.py`):
 
 ```
-& py "$HOME/.claude/hooks/slack_notify.py" --channel <autoheal_channel> --text "<message>"
+& E:/automation/fleet-config/.venv/Scripts/python.exe "$HOME/.claude/hooks/notify_send.py" --category attention --text "<message>"
 ```
 
-Pass the bare channel id (the helper also accepts a pasted archive URL). The message must
-contain: platform, failing step, the screenshot path, the probe's top candidates, and
-exactly what you need decided.
+Do **not** pass a chat id. `--category attention` is the whole point: a stuck scheduler is
+come-look, and the fleet's `hooks/projects.toml` owns which chat that is, so this repo
+never holds a destination that can go stale. The message must contain: platform, failing
+step, the screenshot path, the probe's top candidates, and exactly what you need decided.
 
-Use the bot, not the Slack MCP connector: the MCP connector posts **as the user**, so
-Slack never fires a notification and the escalation lands silently — defeating an
-unattended scheduler. The bot posts as a separate identity, which actually notifies. Its
-token lives in `~/.claude/settings.json` env (`SLACK_BOT_TOKEN`), never in this repo; see
-`fleet-config/docs/slack-workflow.md`.
+Use the helper, not an MCP chat connector: a connector posts **as the user**, so the
+escalation lands without notifying anyone — defeating an unattended scheduler. The bot
+posts as a separate identity, which actually notifies. Its token lives in
+`~/.claude/settings.json` env (`TELEGRAM_BOT_TOKEN`), never in this repo; see
+`fleet-config/docs/telegram-workflow.md`.
 
-If `autoheal_channel` is blank **or** the helper reports a failure (missing token, API
-error), surface that plainly in the run output and still **stop**. Either way: do not
-commit, push, or merge anything ambiguous.
+If the helper reports a failure (missing token, no chat configured, API error), surface
+that plainly in the run output and still **stop**. Either way: do not commit, push, or
+merge anything ambiguous.
 
 ## Guardrails (non-negotiable)
 

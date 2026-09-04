@@ -13,7 +13,6 @@ import os
 import sys
 import json
 import argparse
-import importlib.util
 import logging
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -89,13 +88,13 @@ class PipelineFailures:
 
 
 def _load_config() -> dict | None:
-    """Load ``config/config.json`` for coverage + Slack channel resolution.
+    """Load ``config/config.json`` for the coverage checks.
 
     Wraps ``config.loader.load_full_config`` (the project's single-source
     loader) but, unlike it, degrades to ``None`` on a missing/corrupt
-    config.json rather than raising — coverage checks and the Slack channel
-    resolution are best-effort here; the failure alert must still fire even
-    if config couldn't be read.
+    config.json rather than raising — the coverage checks are best-effort
+    here; the failure alert must still fire even if config couldn't be read
+    (its destination no longer comes from this file at all).
     """
     try:
         return load_full_config()
@@ -250,33 +249,31 @@ def check_policy_drift_coverage(failures: "PipelineFailures") -> None:
         failures.unverified.append(f"policy_drift: check raised — {e}")
 
 
-def _resolve_reporting_channel(config: dict | None) -> str:
-    """Slack target: ``slack.reporting_channel`` → falls back to ``slack.autoheal_channel``."""
-    slack_cfg = config.get("slack", {}) if config else {}
-    channel = (slack_cfg.get("reporting_channel") or "").strip()
-    if channel:
-        return channel
-    return (slack_cfg.get("autoheal_channel") or "").strip()
-
-
-def _load_slack_notify():
-    """Import the fleet-wide Slack helper from ``~/.claude/hooks/slack_notify.py``.
+def _load_notify_send():
+    """Import the fleet-wide notifier from ``~/.claude/hooks/notify_send.py``.
 
     Returns the module, or ``None`` if it can't be located/imported (logged).
     The helper is provided by the ``fleet-config`` project and reused fleet-wide
     (the same transport ``/schedule-autoheal`` uses) — do not reimplement it.
+
+    The hooks directory goes on ``sys.path`` rather than the module being loaded
+    by file spec, because ``notify_send`` imports its sibling ``_lib`` to resolve
+    the destination chat by category. A spec-only load leaves ``_lib`` unfindable,
+    ``notify_send`` degrades to "no chat resolved", and the alert is dropped
+    (content-management#264).
     """
-    helper = Path.home() / ".claude" / "hooks" / "slack_notify.py"
+    hooks_dir = Path.home() / ".claude" / "hooks"
+    helper = hooks_dir / "notify_send.py"
     if not helper.exists():
-        logger.error(f"❌ Slack helper not found at {helper} — alert not sent")
+        logger.error(f"❌ Notify helper not found at {helper} — alert not sent")
         return None
     try:
-        spec = importlib.util.spec_from_file_location("slack_notify", helper)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)  # type: ignore
-        return module
+        if str(hooks_dir) not in sys.path:
+            sys.path.insert(0, str(hooks_dir))
+        import notify_send
+        return notify_send
     except Exception as e:
-        logger.error(f"❌ Could not import Slack helper: {e}")
+        logger.error(f"❌ Could not import notify helper: {e}")
         return None
 
 
@@ -312,25 +309,28 @@ def _build_alert_message(failures: "PipelineFailures", processing_date: str) -> 
 
 
 def send_failure_alert(failures: "PipelineFailures", processing_date: str, config: dict | None) -> None:
-    """Send exactly one consolidated Slack alert for a failed run.
+    """Send exactly one consolidated Telegram alert for a failed run.
 
-    Channel resolution and missing token/channel degrade gracefully (logged);
-    the non-zero exit in ``main()`` is the independent second signal regardless.
+    Routed by **intent category**, not by a chat id this repo owns: a pipeline
+    failure is come-look, so it goes to ``attention`` and the fleet's
+    ``hooks/projects.toml`` decides which chat that is. Nothing here needs
+    changing when the destination moves (content-management#264).
+
+    ``config`` is unused now that the destination is not repo-owned. It stays in
+    the signature because callers pass it positionally.
+
+    A missing token or chat degrades gracefully (logged); the non-zero exit in
+    ``main()`` is the independent second signal regardless.
     """
     message = _build_alert_message(failures, processing_date)
     logger.error("🚨 Pipeline finished with failures:\n%s", message)
 
-    channel = _resolve_reporting_channel(config)
-    if not channel:
-        logger.error("❌ No Slack channel configured (slack.reporting_channel / slack.autoheal_channel) — alert not sent")
+    notify_send = _load_notify_send()
+    if notify_send is None:
         return
 
-    slack = _load_slack_notify()
-    if slack is None:
-        return
-
-    if not slack.notify(message, channel=channel):
-        logger.error("❌ Slack alert delivery failed (see slack_notify logs)")
+    if notify_send.main(["--category", "attention", "--text", message]) != 0:
+        logger.error("❌ Telegram alert delivery failed (see notify_send logs)")
 
 
 def parse_arguments():
@@ -411,7 +411,7 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
     configure_logger(debug_mode)
 
     # Failure detection: collect step exceptions + missing-endpoint coverage,
-    # then emit one consolidated Slack alert at the end (issue #76).
+    # then emit one consolidated Telegram alert at the end (issue #76).
     failures = PipelineFailures()
     config = _load_config()
 
