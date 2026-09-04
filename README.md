@@ -337,9 +337,9 @@ flowchart LR
   content-level check, since a raw file can exist yet contain no post the
   consolidator can match). The alert lists the date + failing steps + missing
   endpoints + platforms with no post metrics. A clean run sends nothing and
-  exits `0`. The alert channel is `slack.reporting_channel` in
-  `config/config.json`, falling back to `slack.autoheal_channel`; delivery uses
-  the fleet-wide `~/.claude/hooks/slack_notify.py` bot helper.
+  exits `0`. The alert is routed by intent — `--category attention`, resolved to a
+  chat by the fleet's `hooks/projects.toml`, so no chat id lives in this repo —
+  and delivered by the fleet-wide `~/.claude/hooks/notify_send.py` bot helper.
 
 ## Quick Start
 

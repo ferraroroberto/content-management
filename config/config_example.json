@@ -321,9 +321,5 @@
             "cache_path": "engagement/classify/.llm_cache.json",
             "timeout_seconds": 20
         }
-    },
-    "slack": {
-        "autoheal_channel": "",
-        "reporting_channel": ""
     }
 }
