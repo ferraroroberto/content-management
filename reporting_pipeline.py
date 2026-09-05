@@ -59,6 +59,9 @@ class PipelineFailures:
     * ``missing_endpoints`` — a configured endpoint produced no raw JSON file
       for the processing date (recorded by ``check_endpoint_coverage``); this
       catches the ``None``→no-file case that the per-endpoint loop swallows.
+    * ``skipped_platforms`` — a platform's complete source pair was unavailable
+      after its own retries. The rest of the reporting run continues, but the
+      condition remains alert-worthy and non-zero.
     * ``missing_post_metrics`` — a platform's *consolidated* post metrics are
       absent for the date (recorded by ``check_posts_coverage``); this catches
       the case where the raw file exists but holds no post the consolidator can
@@ -77,12 +80,13 @@ class PipelineFailures:
     def __init__(self) -> None:
         self.step_failures: list[tuple[str, str]] = []
         self.missing_endpoints: list[str] = []
+        self.skipped_platforms: list[str] = []
         self.missing_post_metrics: list[str] = []
         self.policy_drift: list[str] = []
         self.unverified: list[str] = []
 
     def any(self) -> bool:
-        return bool(self.step_failures or self.missing_endpoints
+        return bool(self.step_failures or self.missing_endpoints or self.skipped_platforms
                     or self.missing_post_metrics or self.policy_drift
                     or self.unverified)
 
@@ -111,12 +115,26 @@ def check_endpoint_coverage(config: dict, processing_date: str, failures: "Pipel
     writes with, by reusing ``check_file_exists_for_date``.
     """
     config_endpoints = {k: v for k, v in config.items() if isinstance(v, dict) and 'api_url' in v}
+    missing: list[str] = []
     for platform_key in config_endpoints:
         exists, _ = check_file_exists_for_date(platform_key, config, processing_date)
         if not exists:
-            failures.missing_endpoints.append(platform_key)
-            logger.error(f"❌ Missing expected data file for {platform_key} on {processing_date}")
-    if not failures.missing_endpoints:
+            missing.append(platform_key)
+
+    threads_endpoints = {"threads_profile", "threads_posts"}
+    if threads_endpoints.issubset(missing):
+        failures.skipped_platforms.append("threads (profile + posts; upstream unavailable)")
+        missing = [endpoint for endpoint in missing if endpoint not in threads_endpoints]
+        logger.warning(
+            "⚠️ Threads profile + posts unavailable after retries for %s; "
+            "skipping Threads and continuing the other platforms",
+            processing_date,
+        )
+
+    for platform_key in missing:
+        failures.missing_endpoints.append(platform_key)
+        logger.error(f"❌ Missing expected data file for {platform_key} on {processing_date}")
+    if not failures.missing_endpoints and not failures.skipped_platforms:
         logger.info(f"✅ All {len(config_endpoints)} expected endpoint files present for {processing_date}")
 
 
@@ -191,6 +209,12 @@ def check_posts_coverage(processing_date: str, failures: "PipelineFailures") -> 
 
         data = dict(zip(columns, row))
         for platform in COVERAGE_PLATFORMS:
+            if platform == "threads" and failures.skipped_platforms:
+                logger.warning(
+                    "⚠️ Posts-coverage: Threads metrics skipped for %s because its source endpoints were unavailable",
+                    processing_date,
+                )
+                continue
             has_metrics = data.get(f"post_id_{platform}_no_video") or data.get(f"post_id_{platform}_video")
             if has_metrics:
                 continue
@@ -290,6 +314,11 @@ def _build_alert_message(failures: "PipelineFailures", processing_date: str) -> 
         lines.append("Missing endpoints:")
         for endpoint in failures.missing_endpoints:
             lines.append(f"• {endpoint}")
+    if failures.skipped_platforms:
+        lines.append("")
+        lines.append("Skipped platforms (upstream unavailable):")
+        for platform in failures.skipped_platforms:
+            lines.append(f"• {platform}")
     if failures.missing_post_metrics:
         lines.append("")
         lines.append("No post metrics (platform):")
