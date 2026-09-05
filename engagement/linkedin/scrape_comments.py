@@ -106,18 +106,26 @@ def fetch_recent_li_posts(days: int) -> list[dict]:
 
 # ---------- LinkedIn DOM scraping ----------
 
-# LinkedIn migrated to a componentized framework — CSS class names are obfuscated
-# and shuffle between deploys (same trap as the composer; see memory note
-# `reference_linkedin_composer_selectors`). The stable hooks are:
+# LinkedIn serves both a componentized implementation and the legacy feed
+# detail markup. Prefer the component hooks, but retain the semantic legacy
+# classes observed in the scheduled-job diagnostic capture. The latter are
+# deliberately scoped to the comments region rather than the generic feed.
+# The hooks are:
 #
-#   - comment list container: data-testid ends with "FeedType_FEED_DETAIL"
-#   - comment text:           data-testid="expandable-text-box"
+#   - comment list container: component data-testid or comments list class
+#   - comment text:           component data-testid or comment body class
 #   - profile links:          <a href="https://www.linkedin.com/in/<handle>/">
 #
 # Extraction runs as a single page.evaluate() so we don't fight per-element
 # Playwright locator chains against an obfuscated DOM.
-SEL_COMMENT_LIST_CONTAINER = "[data-testid$='FeedType_FEED_DETAIL']"
-SEL_COMMENT_TEXT_NODES = "[data-testid='expandable-text-box']"
+SEL_COMMENT_LIST_CONTAINER = (
+    "[data-testid$='FeedType_FEED_DETAIL'], "
+    ".comments-comment-list__container"
+)
+SEL_COMMENT_TEXT_NODES = (
+    "[data-testid='expandable-text-box'], "
+    ".comments-comment-item__main-content"
+)
 
 SEL_LOAD_MORE = [
     "button:has-text('Load more comments')",
