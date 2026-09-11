@@ -94,6 +94,15 @@ ALT_TEXT_BTN_RE = re.compile(r"alternative text|texto alternativo", re.I)
 # sub-dialogs. Spanish LinkedIn uses "Añadir".
 ADD_BTN_RE = re.compile(r"^(?:add|añadir)$", re.I)
 
+# The lone button on LinkedIn's full-page "Something went wrong" screen, which
+# replaces the whole app when its client code throws. Since 2026-09 the photo
+# editor's ALT commit reliably lands there (issue #270), so the photo flow
+# watches for it to tell "LinkedIn crashed" from "the editor is slow".
+TRY_AGAIN_RE = re.compile(
+    r"^\s*(?:try again|reintentar|volver a intentarlo|intentar de nuevo)\s*$",
+    re.I,
+)
+
 
 # ---------- Composer footer (carousel route) ----------
 
@@ -277,6 +286,7 @@ __all__ = [
     "START_POST_TEXT_RE",
     "ALT_TEXT_BTN_RE",
     "ADD_BTN_RE",
+    "TRY_AGAIN_RE",
     "EXPAND_CONTENT_TYPES_RE",
     "DOCUMENT_BTN_RE",
     "CHOOSE_FILE_BTN_RE",

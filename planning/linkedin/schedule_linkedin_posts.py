@@ -40,7 +40,7 @@ import argparse
 import logging
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Literal, Optional
@@ -87,6 +87,7 @@ from planning.linkedin.linkedin_labels import (  # noqa: E402
     START_POST_TEXT_RE,
     TIME_INPUT_SEL,
     TIME_MENU_SEL,
+    TRY_AGAIN_RE,
     month_token_candidates,
     schedule_date_candidates,
     time_picker_candidates,
@@ -452,6 +453,58 @@ def _upload_photo(page: Page, image_path: Path) -> None:
         raise RuntimeError(f"Could not upload image to LinkedIn editor: {err}")
 
 
+# How long to watch, after the ALT 'Add' click, for the photo editor to come
+# back or LinkedIn's crash screen to replace it (issue #270). The crash landed
+# within ~2 s in the live probe; the editor normally returns near-instantly.
+ALT_COMMIT_SETTLE_MS = 6000
+
+
+class AltTextCrashError(RuntimeError):
+    """LinkedIn's own photo editor crashed while committing the ALT text.
+
+    Raised instead of letting the 'Next' click time out against the crash
+    screen, so ``schedule_one_illustration_row`` can re-drive the row without
+    ALT text (issue #270). A ``RuntimeError`` so the per-row handler still
+    records a FAIL should it ever escape.
+    """
+
+
+def _any_visible(loc) -> bool:
+    """True when any element ``loc`` resolves to is visible right now."""
+    try:
+        return any(loc.nth(i).is_visible() for i in range(loc.count()))
+    except Exception:
+        return False
+
+
+def _alt_commit_crashed(page: Page, timeout_ms: int = ALT_COMMIT_SETTLE_MS) -> bool:
+    """True when LinkedIn's crash screen replaced the editor after the ALT commit.
+
+    Since 2026-09 the ALT panel's 'Add' throws ``x.create is not a function``
+    inside LinkedIn's bundle and the whole app unmounts to a full-page
+    "Something went wrong / Try again" screen (issue #270). A LinkedIn bug, not
+    selector drift: the live probe hit it with ``fill()`` and real keystrokes,
+    short and long text, a mouse click and focus+Enter, and via the composer's
+    Edit path too.
+
+    The editor's 'Next' coming back wins over the crash screen, so an unrelated
+    "Try again" elsewhere can't fake a crash while the editor is plainly fine.
+    Neither within the window → ``False``: the 'Next' click then fails with its
+    own, distinct timeout rather than being misreported as this crash.
+    """
+    editor_next = _dialog_next_button(page)
+    crash = page.get_by_role("button", name=TRY_AGAIN_RE)
+    deadline = page.evaluate("() => Date.now()") + timeout_ms
+    while True:
+        if _any_visible(editor_next):
+            return False
+        if _any_visible(crash):
+            return True
+        if page.evaluate("() => Date.now()") >= deadline:
+            return False
+        page.wait_for_timeout(250)
+
+
 def _set_alt_text(page: Page, alt_text: str) -> None:
     """Open the ALT dialog from the photo editor and fill the textbox."""
     if not alt_text:
@@ -488,6 +541,12 @@ def _set_alt_text(page: Page, alt_text: str) -> None:
         _dialog_button(page, ADD_BTN_RE).last.click(timeout=10000)
     except Exception as err:
         raise RuntimeError(f"Could not click ALT 'Add' button: {err}")
+
+    if _alt_commit_crashed(page):
+        raise AltTextCrashError(
+            "LinkedIn's photo editor crashed committing the ALT text "
+            "(its own 'Something went wrong' screen replaced the editor)"
+        )
 
 
 def _click_next_after_photo_editor(page: Page) -> None:
@@ -986,7 +1045,38 @@ def schedule_one_illustration_row(
     ``use_mention_resolution=True`` swaps the plain ``_fill_caption`` for
     the videos-package mention-aware typer (POST route caption may contain
     ``@FirstName Last`` references that must resolve through LI's typeahead).
+
+    ALT text is best-effort: when LinkedIn's editor crashes committing it
+    (issue #270), the row is re-driven once from a fresh feed without ALT text
+    and the returned status says so. The crash happens before 'Next', so the
+    first attempt cannot have scheduled anything.
     """
+    try:
+        return _drive_photo_row(
+            session, cfg, row, illust, image_path,
+            dry_run=dry_run, use_mention_resolution=use_mention_resolution,
+        )
+    except AltTextCrashError as err:
+        logger.warning("⚠️ %s: %s — re-driving the row without ALT text (issue #270).",
+                       row.day_title, err)
+    status = _drive_photo_row(
+        session, cfg, row, replace(illust, alt_text=""), image_path,
+        dry_run=dry_run, use_mention_resolution=use_mention_resolution,
+    )
+    return f"{status} (ALT text dropped: LinkedIn's ALT editor crashed)"
+
+
+def _drive_photo_row(
+    session: LinkedInSession,
+    cfg: dict,
+    row: ScheduleRow,
+    illust: IllustrationData,
+    image_path: Path,
+    *,
+    dry_run: bool,
+    use_mention_resolution: bool,
+) -> str:
+    """One pass of the photo+caption flow, from the feed to Schedule."""
     page = session.page
     day_label = row.day_title
 
