@@ -73,6 +73,7 @@ from planning.linkedin.linkedin_labels import (  # noqa: E402
     ADD_BTN_RE,
     ALT_TEXT_BTN_RE,
     CHOOSE_FILE_BTN_RE,
+    COMPOSER_EDITOR_SEL,
     CONFIRM_BTN_RE,
     DATE_INPUT_SEL,
     DIALOG_SEL,
@@ -81,6 +82,7 @@ from planning.linkedin.linkedin_labels import (  # noqa: E402
     DONE_CTRL_SEL,
     EXPAND_CONTENT_TYPES_RE,
     FINAL_SCHEDULE_BTN_RE,
+    MEDIA_FILE_INPUT_SEL,
     PHOTO_TEXT_RE,
     SCHEDULE_CLOCK_SEL,
     SCHEDULE_SUMMARY_SEL,
@@ -437,7 +439,7 @@ def _click_add_photo(page: Page) -> None:
     # means LinkedIn didn't trigger a native chooser this time.
     try:
         with page.expect_file_chooser(timeout=FEED_ENTRY_CLICK_TIMEOUT_MS + FEED_ENTRY_EFFECT_TIMEOUT_MS):
-            click_feed_entry(page, PHOTO_TEXT_RE, "Photo", expect_selector='input[type="file"]')
+            click_feed_entry(page, PHOTO_TEXT_RE, "Photo", expect_selector=MEDIA_FILE_INPUT_SEL)
     except PWTimeoutError:
         logger.debug("No native file chooser observed for the 'Photo' click.")
 
@@ -969,7 +971,13 @@ def _click_start_a_post(page: Page) -> None:
     # attempt. Both English variants ('Start a post' / 'Create a post') and the
     # Spanish variants are folded into the shared ``START_POST_TEXT_RE`` so one
     # call handles every locale.
-    click_feed_entry(page, START_POST_TEXT_RE, "Start a post")
+    #
+    # ``expect_selector`` is the #150 inert-click guard `_click_add_photo`
+    # already had: without it a swallowed click "succeeded", and the carousel
+    # route then failed at 'Expand content types' against a feed with no
+    # composer open (issue #271).
+    click_feed_entry(page, START_POST_TEXT_RE, "Start a post",
+                     expect_selector=COMPOSER_EDITOR_SEL)
 
 
 # ---------- Per-row driver ----------
