@@ -27,7 +27,7 @@ from planning.linkedin.linkedin_composer import (  # noqa: E402
     wait_for_schedule_confirmation,
     wait_for_upload_complete,
 )
-from planning.linkedin.linkedin_labels import VIDEO_TEXT_RE  # noqa: E402
+from planning.linkedin.linkedin_labels import MEDIA_FILE_INPUT_SEL, VIDEO_TEXT_RE  # noqa: E402
 from planning.linkedin.linkedin_session import (  # noqa: E402
     LinkedInSession,
     LoginRequiredError,
@@ -82,10 +82,16 @@ def _click_video_button(page: Page) -> None:
     hidden input via CDP regardless, so the post still succeeds). A timeout
     here is non-fatal — it just means this click didn't trigger a native
     chooser this time.
+
+    ``expect_selector`` is the #150 inert-click guard the Photo click already
+    had. Since 2026-09 the Video click mounts its file input straight away,
+    like Photo, so the input's arrival is the proof the editor opened. Without
+    the guard a swallowed click "succeeded" and ``_upload_video`` then waited
+    45 s for an input that was never coming (issue #271).
     """
     try:
         with page.expect_file_chooser(timeout=FEED_ENTRY_CLICK_TIMEOUT_MS + FEED_ENTRY_EFFECT_TIMEOUT_MS):
-            click_feed_entry(page, VIDEO_TEXT_RE, "Video")
+            click_feed_entry(page, VIDEO_TEXT_RE, "Video", expect_selector=MEDIA_FILE_INPUT_SEL)
     except PWTimeoutError:
         logger.debug("No native file chooser observed for the 'Video' click.")
 
@@ -94,10 +100,11 @@ def _upload_video(page: Page, video_path: Path) -> None:
     """Push the .mp4 into LinkedIn's video Editor dialog.
 
     LinkedIn's photo flow auto-mounts an ``input[type=file]`` the moment
-    you click "Photo". The video flow does NOT: the "Video" button opens an
-    Editor dialog that shows "Select files to begin" with an "Upload from
-    computer" button, and the file chooser only opens when that button is
-    clicked. Strategy:
+    you click "Photo". The video flow used NOT to: until 2026-09 the "Video"
+    button opened an Editor dialog showing "Select files to begin" with an
+    "Upload from computer" button, and the file chooser only opened when that
+    button was clicked. Since 2026-09 it mounts ``input[accept="video/*"]``
+    straight away, like Photo (issue #271). The strategy below covers both:
       1. Fast path: if any ``input[type=file]`` is already attached in the
          DOM, just push the file at it (catches future LinkedIn rebuilds).
       2. Otherwise: click the dialog's "Upload from computer" button and

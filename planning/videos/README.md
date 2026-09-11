@@ -70,12 +70,15 @@ attach helper. See:
 
 - LinkedIn: `planning/linkedin/schedule_linkedin_posts.py` — composer
   + ALT skipped (videos have no ALT in LI), `Video` button instead of
-  `Photo`. The video Editor mounts a hidden
-  `input#media-editor-file-selector__file-input` with
-  `accept="...video/mp4..."` — `_upload_video` pushes the .mp4 directly
-  at that input (the visible blue "Upload from computer" button is
-  decorative and intercepted by a styled `<div>` overlay; clicking it
-  errors out). Then `_wait_for_video_ready` polls the `Next` button's
+  `Photo`. The `Video` click is guarded like `Photo`'s: it only counts
+  once a file input attaches, so a click swallowed by the feed's
+  re-hydration is retried (issue #271). Since 2026-09 the Editor
+  mounts `input[accept="video/*"]` straight away; the older build
+  mounted a hidden `input#media-editor-file-selector__file-input` with
+  `accept="...video/mp4..."`. Either way, `_upload_video` pushes the
+  .mp4 directly at the input (the older build's visible blue "Upload
+  from computer" button was decorative and intercepted by a styled
+  `<div>` overlay; clicking it errors out). Then `_wait_for_video_ready` polls the `Next` button's
   enabled-state for up to 180s (LI transcoding window). The caption is
   typed via `fill_caption_with_mentions` (imported from
   `planning/linkedin/linkedin_composer.py` — shared with the LinkedIn

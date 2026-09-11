@@ -85,6 +85,25 @@ START_POST_TEXT_RE = re.compile(
     re.I,
 )
 
+# What each share-box click must produce before it counts as landed — the
+# ``expect_selector`` of ``linkedin_composer.click_feed_entry`` (issue #150).
+# Since 2026-09 every feed load logs React error #418 (hydration mismatch) and
+# LinkedIn re-renders the share box client-side, so an early click is
+# swallowed; an unguarded caller then carried on against a feed with no
+# composer open (issue #271).
+#
+# Photo and Video both mount a hidden file input as they open — Video did not
+# until 2026-09 (it showed "Upload from computer" first), which is why it had
+# no guard. Start a post opens the composer, recognised by its caption editor
+# inside an open modal, spelled out per ``DIALOG_SEL`` branch because a
+# selector *list* can't be prefixed by interpolation. Neither exists on the
+# bare feed (live probe, 2026-09-11), so neither guard can pass vacuously.
+MEDIA_FILE_INPUT_SEL = 'input[type="file"]'
+COMPOSER_EDITOR_SEL = ", ".join(
+    f'{branch.strip()} div[role="textbox"][contenteditable="true"]'
+    for branch in DIALOG_SEL.split(",")
+)
+
 
 # ---------- Photo editor ----------
 
@@ -284,6 +303,8 @@ __all__ = [
     "PHOTO_TEXT_RE",
     "VIDEO_TEXT_RE",
     "START_POST_TEXT_RE",
+    "MEDIA_FILE_INPUT_SEL",
+    "COMPOSER_EDITOR_SEL",
     "ALT_TEXT_BTN_RE",
     "ADD_BTN_RE",
     "TRY_AGAIN_RE",

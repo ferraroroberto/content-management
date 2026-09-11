@@ -102,12 +102,23 @@ def click_feed_entry(
     attaches within ``FEED_ENTRY_EFFECT_TIMEOUT_MS``; otherwise the click is
     treated as inert and retried like any other failed attempt, within the
     same overall ``FEED_ENTRY_CLICK_TIMEOUT_MS`` budget.
+
+    Before each re-click the effect is checked once more: a click whose effect
+    merely landed *late* has already opened the editor, whose modal now covers
+    the share box, so re-clicking would only be intercepted until the budget
+    ran out and fail a row that was in fact fine (issue #271; the 2026-08-28
+    Photo failure shows that interception).
     """
     deadline = time.monotonic() + FEED_ENTRY_CLICK_TIMEOUT_MS / 1000
     last_err: Optional[Exception] = None
     attempts = 0
     while True:
         attempts += 1
+        if (attempts > 1 and expect_selector is not None
+                and page.locator(expect_selector).count() > 0):
+            logger.info("✅ '%s' click took effect late ('%s' attached) — not re-clicking.",
+                        label, expect_selector)
+            return
         try:
             page.get_by_text(text_re).first.click(
                 timeout=FEED_ENTRY_ATTEMPT_TIMEOUT_MS,
