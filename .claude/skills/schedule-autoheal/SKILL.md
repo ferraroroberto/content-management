@@ -5,9 +5,8 @@ description: Run a planning scheduler unattended and self-heal selector breakage
 
 # schedule-autoheal
 
-**Goal:** make the weekly planning run *set-and-forget*. Run the scheduler; if it
-just works, say so and stop (minimal tokens). If a step fails because a platform's
-DOM drifted (an `aria-label` appeared, a button was renamed, a header was retyped),
+Make the weekly planning run *set-and-forget*. Run the scheduler; if it just works, say
+so and stop (minimal tokens). If a step fails because a platform's DOM drifted,
 **self-heal in place** — no human relaunch — and either land the fix end-to-end or
 escalate cleanly.
 
@@ -15,14 +14,14 @@ Invoking this skill is explicit authorization to run the scheduler and, **only w
 the confidence gate below is met**, to commit/push/PR/merge a selector-only fix.
 
 This is a **public repo** — never put secrets, internal identifiers, or private
-project references in issues, PRs, commit messages, or Slack pings.
+project references in issues, PRs, commit messages, or pings.
 
 ## Arguments
 
 `<platform|all> [--live|--dry-run] [--debug] [--skip-<platform>] [--from-result <path>]`
 
 - `platform` ∈ `linkedin|instagram|twitter|threads|all`. `all` runs the full pipeline.
-- mode defaults to `--dry-run`. `--live` actually schedules.
+- Mode defaults to `--dry-run`. `--live` actually schedules.
 - `--from-result <path>` skips the run and heals from an existing
   `results/planning/<ts>-result.json` (used when the planning tab already ran it).
 
@@ -31,9 +30,8 @@ project references in issues, PRs, commit messages, or Slack pings.
 - `all` → `& .\.venv\Scripts\python.exe planning_pipeline.py <mode> [--debug] [--skip-*]`
 - single platform → `& .\.venv\Scripts\python.exe -m planning.<platform>.schedule_<platform>_posts --all-wip <mode> [--debug]`
 
-Then read `results/planning/latest-result.json` (the machine-readable record written
-by `planning_pipeline.py`; see `planning/_failure.py` for the schema fields
-`status`, `detail`, `screenshot`, `failure_kind`).
+Then read `results/planning/latest-result.json`, written by `planning_pipeline.py`; its
+schema fields `status`, `detail`, `screenshot`, `failure_kind` live in `planning/_failure.py`.
 
 ## Step 2 — triage
 
@@ -49,9 +47,10 @@ Heal at most **one platform per invocation cycle**; re-run to pick up the next.
 1. From the failing row, note the platform, the failing step (in `detail`), and the
    `screenshot` path. Read the screenshot if helpful.
 2. **Probe the live DOM:** `& .\.venv\Scripts\python.exe -m planning._probe <platform>`
-   (add `--url <page>` to target a specific page). This opens the platform's real-Chrome
-   session (stealth + shared-profile lock-wait are handled by the existing session helper —
-   never re-inline launch args) and prints ranked `role + accessible name` candidates.
+   (`--url <page>` targets a specific page). It opens the platform's real-Chrome session
+   through the existing session helper — stealth + shared-profile lock-wait are handled
+   there, **never re-inline launch args** — and prints ranked `role + accessible name`
+   candidates.
 3. **Locate the broken selector:**
    - LinkedIn → `planning/linkedin/linkedin_labels.py` (centralised regex registry; keep
      the `EN | ES` alternations).
@@ -61,7 +60,7 @@ Heal at most **one platform per invocation cycle**; re-run to pick up the next.
 4. **Apply a selector-only edit.** Re-anchor the role/text selector on the new accessible
    name from the probe. Prefer role + name anchors; **never** anchor on a class (class
    names rotate — the READMEs warn). The diff MUST be a pure selector-string change — no
-   control-flow, scheduling-logic, or unrelated edits. A reviewer should read it in seconds.
+   control-flow, scheduling-logic, or unrelated edits.
 5. **Re-validate:** re-run that platform `--dry-run`. Bounded retries — **max 2** heal
    attempts per row; if still failing, **escalate** (Step 5).
 
@@ -95,27 +94,25 @@ Leave the working tree clean (or the branch un-pushed) and hand off to a human.
 
 ## Step 5 — escalate via Telegram, then stop
 
-Send the ping through the **fleet-wide bot helper** (provided by `fleet-config`, available
-with zero install at `~/.claude/hooks/notify_send.py`):
+Send the ping through the **fleet-wide bot helper** (provided by `fleet-config`, zero
+install at `~/.claude/hooks/notify_send.py`):
 
 ```
 & E:/automation/fleet-config/.venv/Scripts/python.exe "$HOME/.claude/hooks/notify_send.py" --category attention --text "<message>"
 ```
 
-Do **not** pass a chat id. `--category attention` is the whole point: a stuck scheduler is
-come-look, and the fleet's `hooks/projects.toml` owns which chat that is, so this repo
-never holds a destination that can go stale. The message must contain: platform, failing
-step, the screenshot path, the probe's top candidates, and exactly what you need decided.
-
-Use the helper, not an MCP chat connector: a connector posts **as the user**, so the
-escalation lands without notifying anyone — defeating an unattended scheduler. The bot
-posts as a separate identity, which actually notifies. Its token lives in
-`~/.claude/settings.json` env (`TELEGRAM_BOT_TOKEN`), never in this repo; see
-`fleet-config/docs/telegram-workflow.md`.
-
-If the helper reports a failure (missing token, no chat configured, API error), surface
-that plainly in the run output and still **stop**. Either way: do not commit, push, or
-merge anything ambiguous.
+- Do **not** pass a chat id. The fleet's `hooks/projects.toml` owns which chat that is, so
+  this repo never holds a destination that can go stale. `--category attention` is the
+  whole point: a stuck scheduler is come-look.
+- The message must contain: platform, failing step, the screenshot path, the probe's top
+  candidates, and exactly what you need decided.
+- Use this helper, **not** an MCP chat connector — a connector posts **as the user**, so
+  the escalation notifies nobody; the bot posts as a separate identity that actually
+  notifies. Its token lives in `~/.claude/settings.json` env (`TELEGRAM_BOT_TOKEN`), never
+  in this repo; see `fleet-config/docs/telegram-workflow.md`.
+- If the helper reports a failure (missing token, no chat configured, API error), surface
+  that plainly in the run output and still **stop**. Either way: do not commit, push, or
+  merge anything ambiguous.
 
 ## Guardrails (non-negotiable)
 
@@ -129,7 +126,7 @@ merge anything ambiguous.
   lock-wait). Never re-inline launch args.
 - **Human-reviewable trail.** Every landed fix has an issue + PR with before/after selector
   and probe evidence. Never a silent push to `main` without an issue+PR.
-- **Public repo hygiene.** No secrets / internal refs in any issue, PR, commit, or Slack ping.
+- **Public repo hygiene.** No secrets / internal refs in any issue, PR, commit, or ping.
 
 ## Verification gate (before declaring done)
 
