@@ -1,6 +1,6 @@
 ---
 name: schedule-autoheal
-description: Run a planning scheduler unattended and self-heal selector breakage from platform UI drift — probe the live DOM, apply a selector-only fix, re-validate by dry-run, then when confident file an issue, open a PR and merge; when not confident, ping Slack and stop. E.g. "/schedule-autoheal all --dry-run", "/schedule-autoheal twitter --live".
+description: Run a planning scheduler unattended and self-heal selector breakage from platform UI drift — probe the live DOM, apply a selector-only fix, re-validate by dry-run, then when confident file an issue, open a PR and merge; when not confident, ping Telegram and stop. E.g. "/schedule-autoheal all --dry-run", "/schedule-autoheal twitter --live".
 ---
 
 # schedule-autoheal
