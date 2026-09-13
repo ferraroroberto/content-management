@@ -2,7 +2,7 @@
 REM Visible-console launcher for the self-healing scheduler skill.
 REM Runs /schedule-autoheal headless in THIS window (live --verbose stream),
 REM teeing output to results\planning\autoheal-<ts>.log. On a UI-drift failure
-REM the agent self-heals end-to-end; otherwise it pings Slack and waits.
+REM the agent self-heals end-to-end; otherwise it pings Telegram and stops.
 REM
 REM Usage:
 REM   launch_autoheal.bat                  - dry-run, all platforms
