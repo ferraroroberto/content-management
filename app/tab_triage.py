@@ -212,9 +212,10 @@ def _render_review(run: dict) -> None:
         width="stretch",
         height=min(900, 60 + 36 * len(frame)),
         column_order=["topic", "pick", "star", "must_read", "score", "title", "url", "sender", "summary", "why", "note", "suggested"],
-        disabled=["cid", "topic", "score", "title", "url", "sender", "summary", "why", "suggested", "canonical", "sender_address"],
+        disabled=["cid", "score", "title", "url", "sender", "summary", "why", "suggested", "canonical", "sender_address"],
         column_config={
-            "topic": st.column_config.TextColumn("topic", width="medium"),
+            "topic": st.column_config.SelectboxColumn("topic", options=list(TOPICS), required=True, width="medium",
+                                                      help="reclassify — saved on Apply"),
             "pick": st.column_config.CheckboxColumn("✅", help="include in the edition", width="small"),
             "star": st.column_config.CheckboxColumn("⭐", help="star (one per topic)", width="small"),
             "must_read": st.column_config.CheckboxColumn("🏆", help="must-read (one per edition)", width="small"),
