@@ -5,12 +5,12 @@ Canonical instructions for AI coding agents working in this repository. Claude C
 ## Streamlit conventions
 *Apply only if this project uses Streamlit.*
 
-- `st.set_page_config(layout="wide", page_title="...")` MUST be the first Streamlit call.
+- Call `st.set_page_config(layout="wide", page_title="...")` first, before any other Streamlit call. Guidance, not a guarantee: no lint, hook or test in this repo checks it.
 - Use `width="stretch"` (and `width="content"` where appropriate) in new and modified code. **Never** introduce new `use_container_width=True` — it is deprecated. When you touch existing code that uses `use_container_width`, migrate it.
 - All mutable state in `st.session_state`. No module-level globals.
 - `@st.cache_data` for DataFrames/files; `@st.cache_resource` for DB clients/models.
 - Every widget needs a stable, explicit `key=`.
-- UI code only in the UI directory (e.g. `app/`). Data logic stays in the non-UI package (e.g. `src/`). Never import `streamlit` from non-UI code.
+- UI code only in the UI modules (`app/`, `engagement/ui.py`, `engagement/review_app.py`; `run_app.py` imports `streamlit.web.cli` only to launch). Data logic stays in the non-UI packages. Keep `streamlit` imports out of non-UI code. Guidance, not a guarantee: no lint rule enforces the boundary.
 - User feedback via `st.error()` / `st.warning()` / `st.success()`, not `st.write()`.
 - **App layout:** main file (e.g. `app.py`) handles only page config, shared state, sidebar, and tab/radio routing. Each tab/mode lives in its own file exposing a `main(...)` (or `render_*`) function. Default to `st.tabs()`; use a sidebar radio only when asked.
 
