@@ -264,6 +264,27 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(json.loads(ov.read_text(encoding="utf-8"))["senders"]["meh@x.com"]["tier"], "usually")
             self.assertTrue(any("meh@x.com" in c for c in changes))
 
+    def test_review_frame_prefills_corrected_topic(self) -> None:
+        run_id = self._store()
+        rows = rv.review_frame(run_id).to_dict("records")
+        self.assertEqual(rows[2]["topic"], "innovation")
+        rows[2]["pick"], rows[2]["topic"] = True, "personal development"   # owner reclassifies the runner-up
+        with tempfile.TemporaryDirectory() as td, \
+                unittest.mock.patch.object(rv, "load_state", return_value={}), \
+                unittest.mock.patch.object(rv, "save_state"):
+            rv.apply_review(run_id, rows, overrides_path=Path(td) / "overrides.json")
+        dec = {d["canonical"]: d for d in db.load_decisions("2026-08-08", "2026-08-15")}
+        self.assertEqual(dec["https://site3.com/post-3"]["topic"], "personal development")
+        # reopening the stored run shows the correction, grouped into its new topic's block (TOPICS order)
+        frame = rv.review_frame(run_id)
+        self.assertEqual(list(frame["cid"]), ["m3:0", "m1:0", "m2:0"])
+        self.assertEqual(list(frame["topic"]), ["personal development", "innovation", "innovation"])
+        self.assertEqual(rv.topic_counts(frame)["personal development"], 1)
+        # a stored topic outside TOPICS (e.g. the "–" placeholder) never masks the engine's classification
+        db.save_decisions("2026-08-08", "2026-08-15", [{"canonical": "https://site1.com/post-1", "topic": "–",
+                                                        "sender_address": "fav@x.com", "pick": True}])
+        self.assertEqual(rv.review_frame(run_id).set_index("cid").loc["m1:0", "topic"], "innovation")
+
     def test_feedback_cli_path_saves_to_store(self) -> None:
         self._store()
         with tempfile.TemporaryDirectory() as td:

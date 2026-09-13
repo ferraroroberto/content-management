@@ -92,16 +92,18 @@ def review_frame(run_id: int, *, all_candidates: bool = False) -> pd.DataFrame:
         pick = bool(d["pick"]) if d else (c.get("suggested") == "pick" and not weak)
         star = bool(d.get("star")) if d else bool(c.get("suggested_star"))
         must = bool(d.get("must_read")) if d else bool(c.get("suggested_must_read"))
+        # the owner's reclassification wins; anything outside TOPICS (the "–" placeholder) falls back to the engine
+        topic = d["topic"] if d and d.get("topic") in topic_rank else c.get("topic")
         em = emails.get(c.get("message_id") or "", {})
         rows.append({
-            "cid": c["cid"], "topic": c.get("topic") or "–", "pick": pick, "star": star, "must_read": must,
+            "cid": c["cid"], "topic": topic or "–", "pick": pick, "star": star, "must_read": must,
             "score": round(float(c["score"]), 1) if c.get("score") is not None else None,
             "title": c.get("title") or c.get("url"), "url": c.get("url"),
             "sender": em.get("sender_name") or c.get("sender_basis") or "", "summary": c.get("summary") or "",
             "why": _why(c), "note": (d or {}).get("note") or "",
             "suggested": c.get("suggested") or "", "canonical": c.get("canonical"),
             "sender_address": em.get("sender_address") or "",
-            "_order": (topic_rank.get(c.get("topic") or "", 9), 0 if c.get("suggested") == "pick" else 1,
+            "_order": (topic_rank.get(topic or "", 9), 0 if c.get("suggested") == "pick" else 1,
                        c.get("suggested_rank") or 999, -(c.get("score") or 0)),
         })
     rows.sort(key=lambda r: r["_order"])
