@@ -231,7 +231,7 @@ def summarize_drift(result):
     Returns:
         List[Tuple[str, str]]: ``(kind, summary)`` pairs where kind is
             ``'table'`` or ``'view'`` and summary names the object and what is
-            wrong, suitable for logging or a Slack alert.
+            wrong, suitable for logging or a Telegram alert.
     """
     items = []
     for issue in result['table_issues']:

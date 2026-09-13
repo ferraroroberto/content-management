@@ -142,7 +142,7 @@ def run() -> None:
             on_click=_launch_autoheal,
             args=(_skill_command(mode, debug, skips),),
             help="Opens a visible console running /schedule-autoheal. On a UI-drift failure the agent "
-                 "self-heals end-to-end (issue → fix → dry-run → PR → merge) or pings you on Slack.",
+                 "self-heals end-to-end (issue → fix → dry-run → PR → merge) or pings you on Telegram.",
         )
 
     # Show the panel for the runner the user last launched (set in the button

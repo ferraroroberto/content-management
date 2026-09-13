@@ -139,7 +139,7 @@ def run(skill_cmd: str, log_path: Path, model: str, claude_exe: str,
     if remote_control:
         # Surfaces the run in the Claude mobile/web app so it can be watched and
         # driven remotely (e.g. answering the "not confident" escalation from the
-        # phone instead of only via Slack). Optional name makes it findable.
+        # phone instead of only via Telegram). Optional name makes it findable.
         argv += ["--remote-control", remote_name]
     with log_path.open("wb") as fh:
         _emit(fh, f"$ {' '.join(argv)}")

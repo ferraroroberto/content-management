@@ -21,7 +21,7 @@ the loop that turns that break-and-fix cycle into a set-and-forget operation.
    - **Confident** → file a drift issue, branch, commit, PR (`Closes #N`),
      merge, delete branch, land on `main` — the whole issue lifecycle,
      autonomously. One issue per drift.
-   - **Not confident** → ping the user on Slack and stop for interactive
+   - **Not confident** → ping the user on Telegram and stop for interactive
      handling.
 
 ## The machine-readable contract

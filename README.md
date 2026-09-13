@@ -296,7 +296,7 @@ planning tab (and `launch_autoheal.bat`) runs the `/schedule-autoheal` skill in 
 **visible console**: it runs the scheduler and, on a UI-drift failure, probes the
 live DOM, applies a selector-only fix, re-validates with a dry-run, and — when
 confident — files an issue, opens a PR, and merges end-to-end. Login / data
-errors instead ping Slack and stop for a human. The run also writes a
+errors instead ping Telegram and stop for a human. The run also writes a
 machine-readable `results/planning/latest-result.json`. See
 [`docs/self-healing-scheduler.md`](docs/self-healing-scheduler.md) for the full
 loop, failure classification, and guardrails.
@@ -330,7 +330,7 @@ flowchart LR
   `"native"` (the platform's own HTTP API with cookie auth — Substack only).
   See [Choosing the data source](#choosing-the-data-source-rapidapi-vs-playwright)
   for how to flip per platform and roll back.
-- **Fails loudly when it drops data.** The run sends **one** Slack alert and
+- **Fails loudly when it drops data.** The run sends **one** Telegram alert and
   exits non-zero if any of these hold: a step raised; a configured endpoint
   produced no raw file for the date; or — after consolidation — a platform has
   **no post metrics** in the consolidated `posts` row for the day (a
