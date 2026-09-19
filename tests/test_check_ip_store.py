@@ -202,12 +202,16 @@ class CheckIpProcessTests(unittest.TestCase):
     """The ported pure helpers — behaviour must match the sibling repo's."""
 
     def test_extract_linkedin_post_date(self):
-        url = "https://www.linkedin.com/feed/update/urn:li:activity:7138259296076619777/"
-        self.assertTrue(process.extract_post_date(url).startswith("2023-"))
+        # Synthetic id built as (epoch_ms << 22) for 2023-06-15T12:00Z — exercises
+        # the real arithmetic without embedding a third party's post id in a
+        # public repo.
+        url = "https://www.linkedin.com/feed/update/urn:li:activity:7075079494041600000/"
+        self.assertEqual(process.extract_post_date(url), "2023-06-15 12:00:00 UTC")
 
     def test_extract_twitter_post_date(self):
-        url = "https://x.com/FerraroRoberto/status/1598186442865491971"
-        self.assertTrue(process.extract_post_date(url).startswith("2022-"))
+        # Synthetic snowflake for 2022-06-15T12:00Z: (epoch_ms - twitter_epoch) << 22.
+        url = "https://x.com/someone/status/1537042233553846272"
+        self.assertEqual(process.extract_post_date(url), "2022-06-15 12:00:00 UTC")
 
     def test_extract_post_date_returns_none_off_platform(self):
         self.assertIsNone(process.extract_post_date("https://example.test/blog/post"))
@@ -219,7 +223,7 @@ class CheckIpProcessTests(unittest.TestCase):
         cases = {
             "https://www.linkedin.com/posts/someone_thing-activity-7392771581359513600-wLzA": "LinkedIn",
             "https://x.com/someone/status/1985821858432684125": "Twitter/X",
-            "https://www.instagram.com/someone/p/CZdTwxtre82/": "Instagram",
+            "https://www.instagram.com/someone/p/Ab1Cd2Ef3Gh/": "Instagram",
             "https://example.test/gallery": None,
         }
         for url, expected in cases.items():
