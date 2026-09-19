@@ -1,6 +1,6 @@
 # Social Media Automation Suite
 
-Four pipelines, one repo:
+Five surfaces, one repo:
 
 - **Reporting** (`reporting/`, `reporting_pipeline.py`) — pulls daily
   metrics from social media APIs, processes through Supabase, syncs to
@@ -56,8 +56,18 @@ Four pipelines, one repo:
   review app (`engagement/review_app.py`). Approved replies are staged
   for manual copy-paste — never auto-sent. See
   [`engagement/README.md`](engagement/README.md) for the full design.
+- **Check IP** (`check_ip/`) — finds where my published illustrations are
+  being reused. Each illustration is reverse-image-searched through Google
+  Lens (SerpAPI) and every match lands in a local SQLite store. The
+  control panel's ⚖️ check IP tab is where a match gets judged —
+  legitimate share, or my work with the credit stripped off — and the
+  `/check-ip` skill does the browser pass first, proposing a verdict and a
+  reason for each link. The skill **only proposes**: it never contacts
+  anyone, never files a report, and cannot write the verdict. See
+  [`check_ip/README.md`](check_ip/README.md).
 
-All four pipelines read from the same Notion editorial database. Each per-folder
+The four content pipelines read from the same Notion editorial database;
+check IP is independent of Notion and keeps its own local store. Each per-folder
 README has its own mermaid flowchart, CLI table, gotchas, and validated
 selector list — this README is the orientation map.
 
@@ -121,7 +131,8 @@ content-management/                   # repo root
 │   ├── classify/                     # layered classifier + phrase config
 │   ├── reputation/                   # per-commenter reputation feedback loop
 │   └── db/                           # Supabase schema (commenters + comments tables)
-├── app/                              # Streamlit control panel (tabs: reporting/editorial/planning/newsletter/triage/engagement)
+├── check_ip/                         # illustration copyright check (Google Lens → SQLite → triage tab)
+├── app/                              # Streamlit control panel (tabs: reporting/editorial/planning/newsletter/triage/engagement/check-IP)
 ├── config/                           # config.json, mapping.json, logger_config, chrome_launch, console
 │   └── doc_capture/                  # deterministic control-panel screenshot engine (README tour)
 ├── gmail_readonly/                   # portable, read-only Gmail OAuth + search component (vendored)
@@ -162,6 +173,8 @@ gotchas, files.
   [`newsletter/README.md`](newsletter/README.md)
 - **Engagement** —
   [`engagement/README.md`](engagement/README.md)
+- **Check IP** —
+  [`check_ip/README.md`](check_ip/README.md)
 - **Shared** — [`config/README.md`](config/README.md)
 
 ## The launchers

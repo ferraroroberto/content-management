@@ -19,7 +19,7 @@ flowchart TB
   RPIPE["reporting_pipeline.py"]
   PPIPE["planning_pipeline.py --all-wip"]
   NPIPE["newsletter_pipeline.py\nschedule / bootstrap / archive / normalize / build /\nsubstack-draft"]
-  APP["app/app.py — Streamlit control panel\ntab_reporting · tab_planning · tab_newsletter ·\ntab_triage · tab_editorial · tab_engagement"]
+  APP["app/app.py — Streamlit control panel\ntab_reporting · tab_planning · tab_newsletter ·\ntab_triage · tab_editorial · tab_engagement · tab_check_ip"]
   AUTOHEAL["app/autoheal_console.py"]
 
   LREPORT --> RPIPE
@@ -123,7 +123,44 @@ flowchart TB
   EREVIEW -->|"approved replies staged,\nnever auto-sent"| EREP
   EREP --> EDB
 
-  subgraph shared["config/ — shared by all four pipelines + app"]
+  subgraph checkip_mod["check_ip/ — illustration copyright check"]
+    CIRUN["run.py — reverse-image search
+(due images only, cost-gated)"]
+    CIIMGUR["imgur.py — upload each
+illustration once"]
+    CILENS["lens.py — Google Lens via SerpAPI
+payload to a sidecar file, not the DB"]
+    CIDB["db.py + schema.sql
+images · results · api_history"]
+    CIMIG["migrate.py — one-shot Excel import
+(idempotent, preserves every annotation)"]
+    CISCREEN["screen.py — ranked queue
++ verdict writer"]
+    CIREVIEW["review.py — the tab's reads/writes"]
+  end
+  ILLUS[["illustrations
+(iCloud folder)"]] --> CIRUN
+  LEGACY[["legacy .xlsx
+(cold archive)"]] --> CIMIG --> CIDB
+  CIRUN --> CIIMGUR --> IMGURAPI[("Imgur")]
+  IMGURAPI -->|"public URL"| CILENS
+  CIRUN --> CILENS
+  CILENS -->|"one call per image"| SERPAPI[("SerpAPI
+Google Lens")]
+  CILENS --> CIDB
+  CILENS -->|"full payload"| CIRAW[["results/check_ip/api_raw/"]]
+  CIDB --> CISCREEN --> CHECKIPSKILL["check-ip skill
+(.claude/skills/, .agents/skills/)
+browser pass -> proposed verdict only"]
+  CHECKIPSKILL -->|"screen_* columns ONLY —
+never the owner's ok/person/chat/report/fixed"| CIDB
+  CHECKIPSKILL -.->|"reads each found link"| REALCHROME[("the owner's Chrome
+(logged-in session)")]
+  CIDB --> CIREVIEW
+  APP -->|"⚖️ check IP tab: filter, read the
+proposal, decide, Apply"| CIREVIEW
+
+  subgraph shared["config/ — shared by every pipeline + app"]
     CFGLOADER["loader.py\nconfig.json + mapping.json"]
     CHROMELAUNCH["chrome_launch.py +\nchrome_profile_lock.py"]
     LOGCFG["logger_config.py + console.py"]
@@ -134,6 +171,7 @@ flowchart TB
   planning_mod -.-> shared
   newsletter_mod -.-> shared
   engagement_mod -.-> shared
+  checkip_mod -.-> shared
   APP -.-> shared
 
   AUTOHEALSKILL["schedule-autoheal skill\n(.claude/skills/, .agents/skills/)\nprobe live DOM -> selector-only fix ->\ndry-run revalidate -> issue + PR"]
