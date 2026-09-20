@@ -375,6 +375,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     logger.info("🔢 refreshing per-image counts…")
     db.refresh_image_counts(conn)
 
+    logger.info("👤 deriving poster keys…")
+    logger.info("   %s rows keyed", db.refresh_poster_keys(conn))
+
     after = db.counts(conn)
     db.set_meta(conn, "last_migration_source", str(folder))
     db.set_meta(conn, "last_migration_results", str(after["results"]))

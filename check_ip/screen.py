@@ -17,8 +17,15 @@ Usage::
     python -m check_ip.screen next --limit 20
     python -m check_ip.screen next --limit 20 --image "bicycle backwards - micromanagement.png"
     python -m check_ip.screen verdict --id 12345 --verdict infringement \\
-        --reason "reposted with the signature cropped out" --poster-url https://…
+        --reason "no mention of the owner anywhere in the post" --poster-url https://…
+    python -m check_ip.screen verdict --id 12345 --verdict infringement --promotional --altered \\
+        --reason "watermark cropped off; caption sells the poster's course"
     python -m check_ip.screen stats
+
+The verdict answers one question: **does the post credit the owner?** A visible
+watermark is not credit on its own — the policy is that the post must mention
+him. ``--promotional`` and ``--altered`` record what makes an infringement
+worse; see ``db.severity``.
 """
 
 from __future__ import annotations
@@ -37,12 +44,12 @@ sys.path.insert(0, str(REPO_ROOT))
 from check_ip import db  # noqa: E402
 
 DEFAULT_SOURCE = "LinkedIn"
-DEFAULT_LIMIT = 20
+DEFAULT_LIMIT = 10  # one worker batch; the skill fans out N/10 of them
 
 # Fields the queue hands the skill. Deliberately excludes the owner columns:
 # the skill should judge the page, not be primed by a past decision.
 QUEUE_FIELDS = ("id", "local_image", "found_link", "title", "source", "post_date",
-                "match_type", "search_date", "linkedin_count")
+                "match_type", "search_date", "linkedin_count", "poster_pending")
 
 
 def queue_config() -> dict:
@@ -50,6 +57,13 @@ def queue_config() -> dict:
     return {
         "source": cfg.get("source", DEFAULT_SOURCE),
         "default_limit": int(cfg.get("default_limit", DEFAULT_LIMIT)),
+        # Accounts that are the owner's own. Their posts are not findings at
+        # all, and without this they dominate the ranking: the owner's own
+        # handle holds 491 pending rows, far more than any real reuser, so the
+        # first fifty batches would screen his own posts. Empty by default —
+        # config.json is gitignored, so the pre-flight reports the exclusion
+        # rather than letting a missing setting fail silently.
+        "exclude_posters": [str(p).lower() for p in (cfg.get("exclude_posters") or [])],
     }
 
 
@@ -60,14 +74,23 @@ def next_batch(
     source: Optional[str] = None,
     image: Optional[str] = None,
     include_screened: bool = False,
+    exclude_posters: Optional[list[str]] = None,
 ) -> list[dict]:
     """Serve the next batch of links to screen.
 
-    Ranked by how much reuse the image already attracts (its LinkedIn count),
-    then by the most recent post first — the freshest reuse on the most-copied
-    illustrations is where acting still has a point. Only canonical rows
-    (``duplicate`` 0 or 2) are served, so the same URL is never screened twice
-    under different images, and rows the owner already decided are skipped.
+    Ranked by how many pending rows the same poster holds, then by how much
+    reuse the image already attracts (its LinkedIn count), then most recent
+    post first. Repeat offenders lead because they are one conversation rather
+    than many: clearing one settles several findings at once, while the large
+    majority of posters appear exactly once and are worth far less attention.
+
+    ``exclude_posters`` drops accounts that are the owner's own — see
+    ``queue_config``. Without it the owner's handle tops the ranking by a wide
+    margin and the queue serves his own posts first.
+
+    Only canonical rows (``duplicate`` 0 or 2) are served, so the same URL is
+    never screened twice under different images, and rows the owner already
+    decided are skipped.
     """
     where = [
         "r.duplicate in (0, 2)",
@@ -84,17 +107,35 @@ def next_batch(
     if image:
         where.append("r.local_image = ?")
         params.append(image)
+    if exclude_posters:
+        placeholders = ", ".join("?" for _ in exclude_posters)
+        where.append(f"(r.poster_key is null or r.poster_key not in ({placeholders}))")
+        params.extend(exclude_posters)
 
     params.append(int(limit))
     rows = conn.execute(
         f"""
+        with pending as (
+            select r.id, r.poster_key
+              from results r
+             where {" and ".join(where)}
+        ),
+        poster_load as (
+            select poster_key, count(*) as n
+              from pending
+             where poster_key is not null
+             group by poster_key
+        )
         select r.id, r.local_image, r.found_link, r.title, r.source,
                r.post_date, r.match_type, r.search_date,
-               coalesce(i.linkedin_count, 0) as linkedin_count
+               coalesce(i.linkedin_count, 0) as linkedin_count,
+               coalesce(pl.n, 1)             as poster_pending
           from results r
-          left join images i on i.filename = r.local_image
-         where {" and ".join(where)}
-         order by coalesce(i.linkedin_count, 0) desc,
+          join pending p        on p.id = r.id
+          left join images i    on i.filename = r.local_image
+          left join poster_load pl on pl.poster_key = r.poster_key
+         order by coalesce(pl.n, 1) desc,
+                  coalesce(i.linkedin_count, 0) desc,
                   r.post_date desc,
                   r.id
          limit ?
@@ -112,10 +153,22 @@ def record_verdict(
     reason: str = "",
     poster_url: Optional[str] = None,
     screen_source: str = "check-ip skill",
+    promotional: bool = False,
+    altered: bool = False,
 ) -> dict:
-    """Write one proposed verdict. Owner columns are not in the statement."""
+    """Write one proposed verdict. Owner columns are not in the statement.
+
+    ``promotional`` (a self-promotional or commercial call to action) and
+    ``altered`` (the image was edited — watermark cropped, painted over or
+    removed) are aggravators, and only mean anything alongside an
+    ``infringement`` verdict. Recording them on an ``acceptable`` row would
+    make the stored severity disagree with ``db.severity()``, so they are
+    cleared rather than trusted.
+    """
     if verdict not in db.VERDICTS:
         raise ValueError(f"verdict must be one of {db.VERDICTS}, got {verdict!r}")
+    if verdict != "infringement":
+        promotional = altered = False
 
     row = conn.execute("select id, local_image, found_link from results where id = ?",
                        (row_id,)).fetchone()
@@ -125,18 +178,26 @@ def record_verdict(
     conn.execute(
         """
         update results
-           set screen_verdict = ?,
-               screen_reason  = ?,
-               screened_at    = ?,
-               screen_source  = ?,
-               poster_url     = coalesce(?, poster_url)
+           set screen_verdict     = ?,
+               screen_reason      = ?,
+               screened_at        = ?,
+               screen_source      = ?,
+               poster_url         = coalesce(?, poster_url),
+               screen_promotional = ?,
+               screen_altered     = ?
          where id = ?
         """,
         (verdict, reason or None, datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-         screen_source, poster_url or None, row_id),
+         screen_source, poster_url or None,
+         1 if promotional else 0, 1 if altered else 0, row_id),
     )
     conn.commit()
-    return {"id": row_id, "verdict": verdict, "found_link": row["found_link"]}
+    return {
+        "id": row_id,
+        "verdict": verdict,
+        "found_link": row["found_link"],
+        "severity": db.severity(verdict, promotional, altered),
+    }
 
 
 def stats(conn: sqlite3.Connection, *, source: Optional[str] = None) -> dict:
@@ -152,7 +213,13 @@ def stats(conn: sqlite3.Connection, *, source: Optional[str] = None) -> dict:
             sum(case when r.ok is null and r.screened_at is null
                      then 1 else 0 end)                                as pending,
             sum(case when r.screen_verdict = 'infringement'
-                     and r.ok is null then 1 else 0 end)               as proposed_infringement
+                     and r.ok is null then 1 else 0 end)               as proposed_infringement,
+            sum(case when r.screen_verdict = 'acceptable' then 1 else 0 end) as proposed_acceptable,
+            sum(case when r.screen_verdict = 'unclear' then 1 else 0 end)    as proposed_unclear,
+            sum(case when r.ok is null and ({db.severity_sql()}) = 3
+                     then 1 else 0 end)                                as severity_3,
+            sum(case when r.ok is null and ({db.severity_sql()}) = 2
+                     then 1 else 0 end)                                as severity_2
           from results r
          where r.duplicate in (0, 2) and {scope}
         """,
@@ -187,6 +254,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_verdict.add_argument("--reason", default="")
     p_verdict.add_argument("--poster-url", default=None)
     p_verdict.add_argument("--screen-source", default="check-ip skill")
+    p_verdict.add_argument("--promotional", action="store_true",
+                           help="the post carries a self-promotional or commercial CTA")
+    p_verdict.add_argument("--altered", action="store_true",
+                           help="the image was edited: watermark cropped, painted over, removed")
 
     p_stats = sub.add_parser("stats", help="queue depth and progress")
     p_stats.add_argument("--source", default=cfg["source"])
@@ -197,15 +268,18 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.command == "next":
         source = None if args.source in ("any", "all", "") else args.source
         batch = next_batch(conn, limit=args.limit, source=source, image=args.image,
-                           include_screened=args.include_screened)
+                           include_screened=args.include_screened,
+                           exclude_posters=cfg["exclude_posters"])
         if args.json:
             print(json.dumps(batch, indent=2, ensure_ascii=False))
         elif not batch:
             print("queue empty — nothing pending for this filter")
         else:
             for row in batch:
+                repeat = (f" · poster has {row['poster_pending']} pending"
+                          if row["poster_pending"] > 1 else "")
                 print(f"[{row['id']}] {row['local_image']}  (image seen on LinkedIn "
-                      f"{row['linkedin_count']}x)")
+                      f"{row['linkedin_count']}x{repeat})")
                 print(f"    {row['found_link']}")
                 print(f"    {row['match_type']} · posted {row['post_date'] or 'unknown'} "
                       f"· found {row['search_date']}")
@@ -213,13 +287,28 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     if args.command == "verdict":
         out = record_verdict(conn, args.id, verdict=args.verdict, reason=args.reason,
-                             poster_url=args.poster_url, screen_source=args.screen_source)
-        print(f"✅ [{out['id']}] {out['verdict']} — {out['found_link']}")
+                             poster_url=args.poster_url, screen_source=args.screen_source,
+                             promotional=args.promotional, altered=args.altered)
+        tag = f" · severity {out['severity']}" if out["severity"] else ""
+        print(f"✅ [{out['id']}] {out['verdict']}{tag} — {out['found_link']}")
         return 0
 
     source = None if args.source in ("any", "all", "") else args.source
     for key, value in stats(conn, source=source).items():
         print(f"{key:24s} {value}")
+    # Surfaced rather than silent: config.json is gitignored, so a checkout
+    # without this set would quietly rank the owner's own posts first.
+    excluded = cfg["exclude_posters"]
+    if excluded:
+        held = conn.execute(
+            f"""select count(*) from results
+                 where duplicate in (0, 2) and ok is null and screened_at is null
+                   and poster_key in ({", ".join("?" for _ in excluded)})""",
+            excluded,
+        ).fetchone()[0]
+        print(f"{'own posts excluded':24s} {held} ({', '.join(excluded)})")
+    else:
+        print(f"{'own posts excluded':24s} 0 ⚠ screen_queue.exclude_posters is not configured")
     return 0
 
 

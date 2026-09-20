@@ -190,6 +190,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     logger.info("🔁 recomputing duplicate flags…")
     dupes = db.mark_duplicates(conn)
     db.refresh_image_counts(conn)
+    # Rows inserted by this run are keyed on the way in; this catches any left
+    # NULL by a store that predates the column.
+    db.refresh_poster_keys(conn)
 
     logger.info("📊 SUMMARY")
     logger.info("   images searched   %s", len(due))
