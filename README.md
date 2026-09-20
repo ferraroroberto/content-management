@@ -62,8 +62,12 @@ Five surfaces, one repo:
   control panel's ⚖️ check IP tab is where a match gets judged —
   legitimate share, or my work with the credit stripped off — and the
   `/check-ip` skill does the browser pass first, proposing a verdict and a
-  reason for each link. The skill **only proposes**: it never contacts
-  anyone, never files a report, and cannot write the verdict. See
+  reason for each link. A post counts as credited only if it **mentions
+  me**; a visible watermark on its own is not enough. `/check-ip <N>` fans
+  the work out to Sonnet workers in batches of ten, run strictly one at a
+  time — there is one browser and one LinkedIn account, and parallel
+  browsing risks it. The skill **only proposes**: it never contacts anyone,
+  never files a report, and cannot write the verdict. See
   [`check_ip/README.md`](check_ip/README.md).
 
 The four content pipelines read from the same Notion editorial database;

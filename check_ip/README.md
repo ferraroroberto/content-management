@@ -35,7 +35,7 @@ The store has two sets of decision columns, and they never mix:
 | columns | written by | meaning |
 |---|---|---|
 | `ok` `person` `chat` `report` `fixed` | **the owner only**, via the tab | the verdict and the follow-up trail |
-| `screen_verdict` `screen_reason` `screened_at` `screen_source` `poster_url` | the `/check-ip` skill | a *proposal*, nothing more |
+| `screen_verdict` `screen_reason` `screened_at` `screen_source` `poster_url` `screen_promotional` `screen_altered` | the `/check-ip` skill | a *proposal*, nothing more |
 
 `ok = 0` means "this is an infringement, act on it". `ok = 1` means "reviewed,
 acceptable use". The skill cannot write either — `check_ip.screen.record_verdict`
@@ -58,9 +58,40 @@ a queue of 13,000 links: the worst it can do is propose something wrong.
 
 # the screening queue
 & .\.venv\Scripts\python.exe -m check_ip.screen stats
-& .\.venv\Scripts\python.exe -m check_ip.screen next --limit 20
+& .\.venv\Scripts\python.exe -m check_ip.screen next --limit 10
 & .\.venv\Scripts\python.exe -m check_ip.screen verdict --id 123 --verdict infringement --reason "…"
+& .\.venv\Scripts\python.exe -m check_ip.screen verdict --id 123 --verdict infringement --promotional --altered --reason "…"
 ```
+
+## What counts as credit
+
+**The post has to mention me** — my name, a tag, or a link to the original.
+That is the whole test, and it is easy to get backwards: a visible
+`ROBERTOFERRARO.ART` watermark is **not** credit on its own. An intact
+watermark with no mention anywhere is still an infringement; the watermark's
+*absence* is what counts against a post, not its presence in its favour.
+
+Two flags record what makes an infringement worse, and `db.severity()` ranks
+them so the tab and the queue agree on what "worst" means:
+
+| severity | meaning |
+|---|---|
+| 0 | `acceptable`, or `unclear` — nothing to act on |
+| 1 | no mention anywhere |
+| 2 | …and either a self-promotional CTA (`screen_promotional`) or the image edited (`screen_altered`) |
+| 3 | no mention, self-promotion **and** the watermark removed — plain stealing |
+
+## How the queue ranks
+
+Posters holding many pending rows come first: one conversation settles several
+findings, while the large majority of posters appear exactly once. `poster_key`
+is derived from `found_link` so this works *before* anything is screened.
+
+`screen_queue.exclude_posters` drops accounts that are my own. Without it my
+own handle tops the ranking by a wide margin — 491 pending rows against 78 for
+the largest genuine reuser — and the queue serves my own posts first.
+`screen stats` prints the exclusion so a checkout missing it is visible rather
+than silently wrong (`config.json` is gitignored).
 
 ## Modules
 
@@ -89,7 +120,7 @@ A `check_ip` block in `config/config.json` (gitignored — see
 | `api_keys` | `serpapi_key`, `imgur_client_id`, `imgur_access_token` — a `${VAR}` placeholder falls back to that environment variable |
 | `processing_thresholds` | re-search windows (see below) |
 | `search_settings` | `do_exact_search` / `do_similar_search` |
-| `screen_queue` | default platform and batch size for the skill |
+| `screen_queue` | default platform, batch size, and `exclude_posters` (accounts that are my own) |
 
 **Credentials live in the repo-root `.env`**, which is gitignored (as is any
 `.env` anywhere in the tree):

@@ -323,8 +323,8 @@
         }
     },
     "check_ip": {
-        "images_folder": "C:\\Users\\rober\\iCloudDrive\\...\\Roberto\\check IP\\roberto_images",
-        "legacy_metadata_folder": "C:\\Users\\rober\\iCloudDrive\\...\\Roberto\\check IP\\roberto_metadata",
+        "images_folder": "C:/path/to/illustrations",
+        "legacy_metadata_folder": "C:/path/to/legacy-excel-store",
         "store_folder": "results/check_ip",
         "api_keys": {
             "serpapi_key": "${SERPAPI_KEY}",
@@ -350,7 +350,10 @@
         },
         "screen_queue": {
             "source": "LinkedIn",
-            "default_limit": 20
+            "default_limit": 10,
+            "exclude_posters": [
+                "your-own-linkedin-slug"
+            ]
         }
     }
 }
