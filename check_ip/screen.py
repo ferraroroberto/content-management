@@ -12,6 +12,12 @@ refuses to write them at all; ``verdict`` touches only ``db.SCREEN_COLUMNS``.
 That separation is what makes the skill safe to run unattended: the
 worst it can do is propose something wrong, which the owner then overrules.
 
+**The re-screen backlog is a queue of its own** (issue #300). ``next --unassessed``
+serves only rows that were screened while at least one licence condition went
+unestablished — the ones ``stats`` counts as ``not_fully_assessed``. They were
+judged under the old credit-only question, and left in the general queue they
+would sit behind thousands of never-screened rows forever.
+
 **A re-screen no longer destroys the answer it replaces** (issue #301). Before
 overwriting the screening columns, ``record_verdict`` copies them into
 ``screen_history`` in the same transaction — so the observation behind a
@@ -23,6 +29,7 @@ Usage::
 
     python -m check_ip.screen next --limit 20
     python -m check_ip.screen next --limit 20 --image "bicycle backwards - micromanagement.png"
+    python -m check_ip.screen next --limit 20 --unassessed   # the re-screen backlog
     python -m check_ip.screen verdict --id 12345 --verdict infringement \\
         --credit violated --noncommercial met --unmodified met \\
         --reason "no mention of the owner anywhere in the post" --poster-url https://…
@@ -62,6 +69,12 @@ DEFAULT_LIMIT = 10  # one worker batch; the skill fans out N/10 of them
 QUEUE_FIELDS = ("id", "local_image", "found_link", "title", "source", "post_date",
                 "match_type", "search_date", "linkedin_count", "poster_pending")
 
+# Added to those on a re-screen serve only (``next_batch(unassessed=True)``).
+# The owner columns stay excluded on every path — this is the *screening*
+# opinion being replaced, which a worker re-judging the row needs to see and a
+# first-time screening must never be shown.
+RESCREEN_FIELDS = ("screen_verdict", "screen_reason")
+
 # How the three condition states are spelled on the CLI and in error messages.
 # "unknown" is a first-class choice on purpose: a worker has to be able to say
 # it, and a reader has to be able to tell it from "met". The words go straight
@@ -93,6 +106,7 @@ def next_batch(
     source: Optional[str] = None,
     image: Optional[str] = None,
     include_screened: bool = False,
+    unassessed: bool = False,
     exclude_posters: Optional[list[str]] = None,
 ) -> list[dict]:
     """Serve the next batch of links to screen.
@@ -111,6 +125,25 @@ def next_batch(
     never screened twice under different images, and rows the owner already
     decided are skipped.
 
+    Two flags move the ``screened_at`` line, and they are not the same thing
+    (issue #300). ``include_screened`` merely *drops* the "never screened"
+    predicate, so a re-check competes with every unscreened row under the same
+    ranking — with 7k pending rows behind them, the backlog #295 created is
+    never reached that way. ``unassessed`` serves that backlog and nothing
+    else: screened, at least one licence condition still null, and not
+    permanently unassessable. It is the same set ``stats()`` counts as
+    ``not_fully_assessed`` — deliberately rendered from the same
+    ``db.assessed_sql`` / ``db.permanent_sql`` helpers so the number the tab
+    reports and the rows the queue serves cannot drift apart. Dropping the
+    permanent ones matters beyond parity: a ``nothing_to_assess`` row can
+    never become fully assessed, so including it would leave a queue that
+    never drains. ``unassessed`` wins when both are passed — it is the
+    narrower of the two, not a contradiction.
+
+    Everything else is identical on all three paths: same source filter, same
+    excluded posters, same retired/duplicate/``ok is null``/Exact Match
+    predicates, same ranking. A re-screen batch is ordered like any other.
+
     Two predicates keep ``Similar Match`` out (issue #292), and the redundancy
     is deliberate: ``retired`` covers whatever else gets retired later, while
     the explicit ``match_type`` test holds on a store where the retirement
@@ -125,7 +158,11 @@ def next_batch(
         "r.match_type = ?",
     ]
     params: list = [process.EXACT_MATCH]
-    if not include_screened:
+    if unassessed:
+        where.append("r.screened_at is not null")
+        where.append(f"not ({db.assessed_sql()})")
+        where.append(f"not ({db.permanent_sql()})")
+    elif not include_screened:
         where.append("r.screened_at is null")
     clause, clause_params = db.source_clause(source, "r.source")
     if clause:
@@ -140,6 +177,11 @@ def next_batch(
         params.extend(exclude_posters)
 
     params.append(int(limit))
+    # One conditional fragment rather than a second query: the re-screen serve
+    # differs from a normal one by two columns and nothing else, and a forked
+    # copy of this statement would be a second place for the ranking and the
+    # predicates to drift.
+    prior = "".join(f", r.{column}" for column in RESCREEN_FIELDS) if unassessed else ""
     rows = conn.execute(
         f"""
         with pending as (
@@ -156,7 +198,7 @@ def next_batch(
         select r.id, r.local_image, r.found_link, r.title, r.source,
                r.post_date, r.match_type, r.search_date,
                coalesce(i.linkedin_count, 0) as linkedin_count,
-               coalesce(pl.n, 1)             as poster_pending
+               coalesce(pl.n, 1)             as poster_pending{prior}
           from results r
           join pending p        on p.id = r.id
           left join images i    on i.filename = r.local_image
@@ -335,7 +377,11 @@ def main(argv: Optional[list[str]] = None) -> int:
                         help="platform to screen; 'any' removes the filter")
     p_next.add_argument("--image", default=None, help="restrict to one illustration")
     p_next.add_argument("--include-screened", action="store_true",
-                        help="also serve rows already screened (for a re-check)")
+                        help="also serve rows already screened, alongside the pending ones")
+    p_next.add_argument("--unassessed", action="store_true",
+                        help="serve only the re-screen backlog: rows screened with at least "
+                             "one licence condition never established (the count `stats` "
+                             "reports as not_fully_assessed). Narrows --include-screened")
     p_next.add_argument("--json", action="store_true", help="emit JSON instead of a table")
 
     p_verdict = sub.add_parser("verdict", help="record one proposed verdict")
@@ -370,11 +416,16 @@ def main(argv: Optional[list[str]] = None) -> int:
         source = None if args.source in ("any", "all", "") else args.source
         batch = next_batch(conn, limit=args.limit, source=source, image=args.image,
                            include_screened=args.include_screened,
+                           unassessed=args.unassessed,
                            exclude_posters=cfg["exclude_posters"])
         if args.json:
             print(json.dumps(batch, indent=2, ensure_ascii=False))
         elif not batch:
-            print("queue empty — nothing pending for this filter")
+            # The two queues empty for different reasons, and saying "nothing
+            # pending" when the re-screen backlog is drained reads as if the
+            # flag had found nothing to serve in the first place.
+            scope = "in the re-screen backlog" if args.unassessed else "pending"
+            print(f"queue empty — nothing {scope} for this filter")
         else:
             for row in batch:
                 repeat = (f" · poster has {row['poster_pending']} pending"
@@ -384,6 +435,12 @@ def main(argv: Optional[list[str]] = None) -> int:
                 print(f"    {row['found_link']}")
                 print(f"    {row['match_type']} · posted {row['post_date'] or 'unknown'} "
                       f"· found {row['search_date']}")
+                # Only served on the re-screen path, and shown rather than
+                # hidden: the worker is replacing this opinion, so it should
+                # be able to read what it is replacing (issue #300).
+                if args.unassessed:
+                    print(f"    previously {row['screen_verdict'] or 'unrecorded'}"
+                          f" — {row['screen_reason'] or 'no reason recorded'}")
         return 0
 
     if args.command == "verdict":

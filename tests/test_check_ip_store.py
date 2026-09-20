@@ -581,6 +581,173 @@ class CheckIpStoreTests(unittest.TestCase):
         self.assertEqual([r["id"] for r in served], [ids[0]],
                          "expected only the pending canonical LinkedIn row")
 
+    # ── the re-screen backlog (issue #300) ────────────────────────────────
+
+    def _screen(self, row_id, *, credit="unknown", noncommercial="unknown",
+                unmodified="unknown", outcome=None, reason=""):
+        """Record one verdict, deriving the verdict the conditions imply.
+
+        The three conditions are what these tests are about; re-deriving the
+        verdict here keeps each case a statement about conditions rather than
+        a hand-kept mapping that could drift from `db.verdict_for`.
+        """
+        verdict = db.verdict_for(credit, noncommercial, unmodified)
+        if verdict == "unclear" and outcome is None:
+            outcome = db.OUTCOME_AMBIGUOUS
+        return screen.record_verdict(
+            self.conn, row_id, verdict=verdict, reason=reason, outcome=outcome,
+            credit_ok=credit, noncommercial_ok=noncommercial, unmodified_ok=unmodified)
+
+    def test_unassessed_serves_exactly_the_not_fully_assessed_backlog(self):
+        """The flag's count must equal what `stats` calls `not_fully_assessed`.
+
+        That equality is the acceptance criterion of issue #300: the tab
+        counts a backlog the CLI could not select, and `--include-screened`
+        did not select it either — it only dropped the "never screened"
+        predicate, leaving 257 rows competing with 7k unscreened ones under
+        the same ranking.
+
+        Each row below is one way of *not* belonging to the backlog, so a
+        predicate that is too broad or too narrow fails on a specific row
+        rather than on an aggregate.
+        """
+        pending, partial, full, permanent = _seed(self.conn, [
+            {"found_link": "https://example.test/never-screened"},
+            {"found_link": "https://example.test/credit-only"},
+            {"found_link": "https://example.test/all-three"},
+            {"found_link": "https://example.test/post-is-gone"},
+        ])
+        # Judged under the old credit-only question: two conditions never looked at.
+        self._screen(partial, credit="met", reason="credit seen; the other two not checked")
+        self._screen(full, credit="met", noncommercial="met", unmodified="met")
+        self._screen(permanent, outcome=db.OUTCOME_NOTHING_TO_ASSESS,
+                     reason="the post no longer exists")
+
+        served = screen.next_batch(self.conn, limit=50, source="LinkedIn", unassessed=True)
+        self.assertEqual([r["id"] for r in served], [partial],
+                         "the flag must serve the partially-assessed row and only it")
+        self.assertNotIn(pending, [r["id"] for r in served],
+                         "a never-screened row is the *other* queue, not this one")
+        self.assertNotIn(permanent, [r["id"] for r in served],
+                         "a nothing_to_assess row can never become assessed — "
+                         "serving it leaves a queue that never drains")
+
+        self.assertEqual(len(served),
+                         screen.stats(self.conn, source="LinkedIn")["not_fully_assessed"],
+                         "the flag's count must match the number the tab reports")
+
+    def test_unassessed_serves_the_prior_screening_opinion_and_no_owner_column(self):
+        """A worker replacing an opinion may read it; a first screening may not."""
+        (row_id,) = _seed(self.conn, [{"found_link": "https://example.test/prior"}])
+        self._screen(row_id, credit="violated", reason="no attribution anywhere on the page")
+
+        (served,) = screen.next_batch(self.conn, limit=10, source="LinkedIn", unassessed=True)
+        self.assertEqual(served["screen_verdict"], "infringement")
+        self.assertEqual(served["screen_reason"], "no attribution anywhere on the page")
+        for owner_column in ("ok", "person", "chat", "report", "fixed"):
+            self.assertNotIn(owner_column, served,
+                             "the queue must never hand a worker an owner decision")
+
+        # The normal serve stays unprimed: no prior opinion, on any path.
+        (fresh,) = screen.next_batch(self.conn, limit=10, source="LinkedIn",
+                                     include_screened=True)
+        self.assertNotIn("screen_verdict", fresh,
+                         "a normal serve must not be primed by a past verdict")
+
+    def test_unassessed_keeps_every_other_queue_predicate(self):
+        """Source, exclusions, retired, duplicates and match type are unchanged.
+
+        Criterion 3 of issue #300, proven rather than inspected: each seeded
+        row is partially assessed, so the *only* thing that can keep it out of
+        the serve is the predicate it is named for.
+        """
+        eligible, decided, secondary, other_source, retired, similar, own = _seed(self.conn, [
+            {"found_link": "https://www.linkedin.com/posts/somebodyelse_a-activity-1-a"},
+            {"found_link": "https://example.test/decided", "ok": 1},
+            {"found_link": "https://example.test/secondary", "duplicate": 1},
+            {"found_link": "https://example.test/elsewhere", "source": "Instagram"},
+            {"found_link": "https://example.test/retired"},
+            {"found_link": "https://example.test/lookalike", "match_type": "Similar Match"},
+            {"found_link": "https://www.linkedin.com/posts/ferraroroberto_b-activity-2-a"},
+        ])
+        for row_id in (eligible, decided, secondary, other_source, retired, similar, own):
+            self._screen(row_id, credit="met", reason="only the credit was ever checked")
+        self.conn.execute("update results set retired = 1 where id = ?", (retired,))
+        self.conn.commit()
+
+        served = screen.next_batch(self.conn, limit=50, source="LinkedIn", unassessed=True,
+                                   exclude_posters=["ferraroroberto"])
+        self.assertEqual([r["id"] for r in served], [eligible],
+                         "the re-screen serve let through a row a normal serve excludes")
+
+    def test_unassessed_ranks_repeat_offenders_first_like_any_other_serve(self):
+        """Same ordering as a normal serve: poster load, then reuse, then date."""
+        self.conn.executemany(
+            "insert into images (filename, linkedin_count) values (?, ?)",
+            [("viral.png", 900), ("rare.png", 2)],
+        )
+        self.conn.commit()
+        ids = _seed(self.conn, [
+            {"found_link": "https://www.linkedin.com/posts/oneoff_x-activity-1-a",
+             "local_image": "viral.png"},
+            {"found_link": "https://www.linkedin.com/posts/serial_x-activity-2-a",
+             "local_image": "rare.png"},
+            {"found_link": "https://www.linkedin.com/posts/serial_y-activity-3-a",
+             "local_image": "rare.png"},
+            {"found_link": "https://www.linkedin.com/posts/serial_z-activity-4-a",
+             "local_image": "rare.png"},
+        ])
+        for row_id in ids:
+            self._screen(row_id, credit="met", reason="only the credit was ever checked")
+
+        served = screen.next_batch(self.conn, limit=10, source="LinkedIn", unassessed=True)
+        self.assertEqual(len(served), 4)
+        self.assertEqual(served[0]["local_image"], "rare.png",
+                         "poster load must outrank image reuse here too")
+        self.assertEqual(served[0]["poster_pending"], 3)
+        self.assertEqual(served[-1]["poster_pending"], 1)
+
+    def test_draining_the_backlog_leaves_the_flag_serving_nothing(self):
+        """Re-screening every row against all three conditions empties the queue."""
+        ids = _seed(self.conn, [
+            {"found_link": "https://example.test/one"},
+            {"found_link": "https://example.test/two"},
+        ])
+        for row_id in ids:
+            self._screen(row_id, credit="met", reason="only the credit was ever checked")
+        self.assertEqual(
+            len(screen.next_batch(self.conn, limit=50, source="LinkedIn", unassessed=True)), 2)
+
+        for row_id in ids:
+            self._screen(row_id, credit="met", noncommercial="violated", unmodified="met",
+                         reason="credited, but the post sells a course")
+        self.assertEqual(
+            screen.next_batch(self.conn, limit=50, source="LinkedIn", unassessed=True), [],
+            "a fully re-screened backlog must serve nothing")
+        self.assertEqual(screen.stats(self.conn, source="LinkedIn")["not_fully_assessed"], 0)
+
+    def test_include_screened_keeps_its_previous_meaning(self):
+        """The new flag is separate; the old one still serves pending + screened."""
+        pending, partial = _seed(self.conn, [
+            {"found_link": "https://example.test/pending"},
+            {"found_link": "https://example.test/partial"},
+        ])
+        self._screen(partial, credit="met", reason="only the credit was ever checked")
+
+        self.assertEqual(
+            sorted(r["id"] for r in screen.next_batch(self.conn, limit=50, source="LinkedIn",
+                                                      include_screened=True)),
+            sorted([pending, partial]),
+            "--include-screened must still serve the screened row alongside the pending one")
+        self.assertEqual(
+            [r["id"] for r in screen.next_batch(self.conn, limit=50, source="LinkedIn")],
+            [pending], "the default serve must still be unscreened rows only")
+        # Passed together, the narrower flag wins rather than contradicting.
+        self.assertEqual(
+            [r["id"] for r in screen.next_batch(self.conn, limit=50, source="LinkedIn",
+                                                include_screened=True, unassessed=True)],
+            [partial])
+
     def test_open_web_filter_selects_unattributed_rows_only(self):
         """`(open web)` must be a NULL test, not "no filter"."""
         _seed(self.conn, [

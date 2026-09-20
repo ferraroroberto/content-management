@@ -69,6 +69,11 @@ a queue of 13,000 links: the worst it can do is propose something wrong.
 & .\.venv\Scripts\python.exe -m check_ip.screen stats
 & .\.venv\Scripts\python.exe -m check_ip.screen next --limit 10
 
+# the re-screen backlog only — the rows `stats` counts as not_fully_assessed
+# (issue #300). `--include-screened` does not select them: it just stops
+# excluding screened rows, so they compete with every pending one.
+& .\.venv\Scripts\python.exe -m check_ip.screen next --limit 10 --unassessed
+
 # no credit, nothing else wrong → severity 1
 & .\.venv\Scripts\python.exe -m check_ip.screen verdict --id 123 --verdict infringement `
     --credit violated --noncommercial met --unmodified met --reason "…"

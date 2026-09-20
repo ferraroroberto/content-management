@@ -59,7 +59,7 @@ These are corrections from live runs. They cost real rework, so they live here r
 - a number → that many links in total, screened in batches of 10.
 - `--image` → restrict to one illustration.
 - `--source` → another platform (`Twitter/X`, `Instagram`, `Facebook`, `any`). Default is LinkedIn: that is where 97% of the owner's past decisions are and the only place acting on a finding is practical.
-- `--recheck` → also serve rows already screened. This is how the backlog of **not fully assessed** rows gets re-screened: they were judged under the old credit-only question and two of their three conditions were never looked at.
+- `--recheck` → drain the **not fully assessed** backlog instead of the pending queue: rows judged under the old credit-only question, where two of their three conditions were never looked at. It runs `screen next --unassessed`, which serves *only* those rows — the count `stats` reports as `not_fully_assessed`. Do **not** reach for `--include-screened`: that flag only stops excluding screened rows, so the backlog competes with every pending row under the same ranking and is never reached (issue #300).
 
 ## Step 1 — pre-flight
 
@@ -85,7 +85,9 @@ Hand each worker the brief below verbatim, with its own 10 rows pulled fresh:
 & .\.venv\Scripts\python.exe -m check_ip.screen next --limit 10 --json
 ```
 
-Pull the *next* batch only after the previous worker has finished, so rows it screened are already excluded — that is what makes an interrupted run resumable with no bookkeeping.
+Under `--recheck`, add `--unassessed` to that command. Each served row then also carries `screen_verdict` and `screen_reason` — the opinion this pass is replacing. Hand them to the worker as context, not as an answer: it re-judges all three conditions from the page, and `record_verdict` preserves the old opinion in `screen_history` either way (issue #301).
+
+Pull the *next* batch only after the previous worker has finished, so rows it screened are already excluded — that is what makes an interrupted run resumable with no bookkeeping. This holds for `--recheck` too: a re-screened row leaves the `--unassessed` set as soon as its three conditions are recorded, so the backlog drains to zero batch by batch.
 
 ### Worker brief — pass this to each subagent
 
