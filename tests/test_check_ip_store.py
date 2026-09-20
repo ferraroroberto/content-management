@@ -424,6 +424,167 @@ class CheckIpStoreTests(unittest.TestCase):
         ).fetchone()["local_image"]
         self.assertEqual(primary, "b.png", "the oldest sighting should be the primary")
 
+    # ── the canonical link: one post, many mirrors (issue #291) ───────────
+
+    def test_canonical_link_folds_mirrors_of_one_page(self):
+        """Locale host, locale query, fragment, trailing slash and case.
+
+        The shapes are the ones the live store really holds: LinkedIn serves a
+        post under a per-country host, X under ``?lang=``.
+        """
+        post = "https://www.linkedin.com/posts/someslug_a-headline-activity-1-abcd"
+        for mirror in (
+            "https://tn.linkedin.com/posts/someslug_a-headline-activity-1-abcd",
+            "https://my.linkedin.com/posts/someslug_a-headline-activity-1-abcd/",
+            "https://linkedin.com/posts/someslug_a-headline-activity-1-abcd",
+            "https://www.linkedin.com/posts/someslug_a-headline-activity-1-abcd?trk=public_post",
+            "https://rs.linkedin.com/posts/someslug_a-headline-activity-1-abcd?originalSubdomain=rs",
+            "https://www.linkedin.com/posts/someslug_a-headline-activity-1-ABCD#comments",
+            "  https://GR.LinkedIn.com/posts/someslug_a-headline-activity-1-abcd  ",
+        ):
+            with self.subTest(mirror=mirror):
+                self.assertEqual(db.canonical_link_for(mirror), db.canonical_link_for(post))
+
+        x_post = "https://x.com/someone/status/1537042233553846272"
+        for mirror in (
+            "https://x.com/SomeOne/status/1537042233553846272?lang=ar-x-fm",
+            "https://x.com/someone/status/1537042233553846272?lang=bg",
+        ):
+            with self.subTest(mirror=mirror):
+                self.assertEqual(db.canonical_link_for(mirror), db.canonical_link_for(x_post))
+
+    def test_canonical_link_keeps_genuinely_distinct_pages_apart(self):
+        """The query identifies the page on half the web — it is not dropped.
+
+        Measured against the live store before the denylist was written:
+        dropping the query wholesale merged 3,913 YouTube videos and 2,324
+        Facebook photos into one row each, which would have hidden real
+        findings behind the duplicate flag.
+        """
+        distinct = [
+            ("https://www.youtube.com/watch?v=aaaaaaaaaaa",
+             "https://www.youtube.com/watch?v=bbbbbbbbbbb"),
+            ("https://www.facebook.com/photo.php?fbid=111&set=a.1",
+             "https://www.facebook.com/photo.php?fbid=222&set=a.1"),
+            ("https://stock.adobe.com/search?k=pencil",
+             "https://stock.adobe.com/search?k=eraser"),
+            # A different LinkedIn site, not a locale mirror of the same post.
+            ("https://business.linkedin.com/talent-solutions",
+             "https://www.linkedin.com/talent-solutions"),
+            ("https://example.test/a", "https://example.test/b"),
+        ]
+        for left, right in distinct:
+            with self.subTest(left=left):
+                self.assertNotEqual(db.canonical_link_for(left), db.canonical_link_for(right))
+
+        # Parameter order must not split a group, and the locale parameter
+        # alongside a real one drops on its own.
+        self.assertEqual(db.canonical_link_for("https://www.facebook.com/photo.php?fbid=1&set=a.2"),
+                         db.canonical_link_for("https://www.facebook.com/photo.php?set=a.2&fbid=1"))
+        self.assertEqual(
+            db.canonical_link_for("https://www.facebook.com/photo.php?fbid=1&locale=es_ES"),
+            db.canonical_link_for("https://www.facebook.com/photo.php?fbid=1"))
+
+        for blank in (None, "", "   "):
+            with self.subTest(blank=blank):
+                self.assertIsNone(db.canonical_link_for(blank))
+
+    def test_queue_serves_a_post_found_under_two_locale_hosts_once(self):
+        """The symptom in issue #291: one post, five page loads, five verdicts."""
+        slug = "someslug_a-headline-activity-1-abcd"
+        _seed(self.conn, [
+            {"found_link": f"https://www.linkedin.com/posts/{slug}", "local_image": "a.png"},
+            {"found_link": f"https://tn.linkedin.com/posts/{slug}", "local_image": "a.png"},
+            {"found_link": f"https://rs.linkedin.com/posts/{slug}?trk=public_post",
+             "local_image": "a.png"},
+            {"found_link": "https://www.linkedin.com/posts/other_x-activity-2-efgh",
+             "local_image": "a.png"},
+        ])
+        db.mark_duplicates(self.conn)
+
+        served = screen.next_batch(self.conn, limit=50, source="LinkedIn")
+        keys = [db.canonical_link_for(r["found_link"]) for r in served]
+        self.assertEqual(len(keys), len(set(keys)), "the queue served the same post twice")
+        self.assertEqual(len(served), 2, "expected one row per post, plus the unrelated post")
+
+    def test_mark_duplicates_does_not_rewrite_found_link(self):
+        """The stored URL stays the one that was actually found and opened."""
+        stored = "https://TN.linkedin.com/posts/someslug_a-activity-1-abcd/?trk=public_post"
+        (row_id,) = _seed(self.conn, [{"found_link": stored}])
+        db.mark_duplicates(self.conn)
+        self.assertEqual(self.conn.execute(
+            "select found_link from results where id = ?", (row_id,)).fetchone()["found_link"],
+            stored)
+
+    def test_mark_duplicates_elects_the_screened_mirror_as_the_primary(self):
+        """A judged post must not come back through the queue as a mirror.
+
+        The newer mirror is the one carrying the verdict, so date order alone
+        would hand the primary slot to the unscreened row — the post returns to
+        the queue and the recorded verdict sits on a row nobody serves.
+        """
+        slug = "someslug_a-headline-activity-1-abcd"
+        older, screened = _seed(self.conn, [
+            {"found_link": f"https://www.linkedin.com/posts/{slug}",
+             "search_date": "2026-01-01 00:00:00"},
+            {"found_link": f"https://tn.linkedin.com/posts/{slug}",
+             "search_date": "2026-03-01 00:00:00"},
+        ])
+        screen.record_verdict(self.conn, screened, verdict="acceptable", reason="tagged me")
+        db.mark_duplicates(self.conn)
+
+        flags = {r["id"]: r["duplicate"] for r in self.conn.execute(
+            "select id, duplicate from results")}
+        self.assertEqual(flags[screened], 2, "the screened row lost the primary slot")
+        self.assertEqual(flags[older], 1)
+        self.assertEqual(screen.next_batch(self.conn, limit=50, source="LinkedIn"), [],
+                         "an already-screened post was re-queued as its mirror")
+        self.assertEqual(self.conn.execute(
+            "select screen_verdict from results where id = ?", (screened,)
+        ).fetchone()["screen_verdict"], "acceptable", "the verdict did not survive the pass")
+
+    def test_mark_duplicates_keeps_a_live_row_canonical_over_a_retired_mirror(self):
+        """A retired mirror must not take the primary slot and hide the post.
+
+        The retired row is filtered out by ``retired = 0`` and its live twin by
+        ``duplicate = 1``, so electing the retired one would drop the post out
+        of the queue and the tab altogether (issue #292 meets issue #291).
+        """
+        slug = "someslug_a-headline-activity-1-abcd"
+        retired, live = _seed(self.conn, [
+            {"found_link": f"https://tn.linkedin.com/posts/{slug}",
+             "match_type": "Similar Match", "search_date": "2026-01-01 00:00:00"},
+            {"found_link": f"https://www.linkedin.com/posts/{slug}",
+             "match_type": "Exact Match", "search_date": "2026-03-01 00:00:00"},
+        ])
+        db.retire_similar_matches(self.conn)
+        db.mark_duplicates(self.conn)
+
+        flags = {r["id"]: r["duplicate"] for r in self.conn.execute(
+            "select id, duplicate from results")}
+        self.assertEqual(flags[live], 2, "a retired mirror outranked the servable row")
+        self.assertEqual(flags[retired], 1)
+        self.assertEqual([r["id"] for r in screen.next_batch(self.conn, limit=50,
+                                                             source="LinkedIn")], [live])
+
+    def test_mark_duplicates_keeps_an_annotated_row_on_the_tab(self):
+        """An owner decision must not be folded behind a mirror he never saw."""
+        slug = "someslug_a-headline-activity-1-abcd"
+        plain, annotated = _seed(self.conn, [
+            {"found_link": f"https://www.linkedin.com/posts/{slug}",
+             "search_date": "2026-01-01 00:00:00"},
+            {"found_link": f"https://my.linkedin.com/posts/{slug}",
+             "search_date": "2026-03-01 00:00:00", "ok": 0, "person": "contact-ref"},
+        ])
+        db.mark_duplicates(self.conn)
+
+        flags = {r["id"]: r["duplicate"] for r in self.conn.execute(
+            "select id, duplicate from results")}
+        self.assertEqual(flags[annotated], 2, "the annotated row dropped off the tab")
+        self.assertEqual(flags[plain], 1)
+        frame = review.results_frame(self.conn, source="LinkedIn", status="everything")
+        self.assertEqual(list(frame["id"]), [annotated])
+
     def test_same_link_from_both_searches_is_two_rows(self):
         """The row identity still spans match_type, so historic rows round-trip.
 

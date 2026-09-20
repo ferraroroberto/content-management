@@ -23,6 +23,7 @@ import sqlite3
 import sys
 from pathlib import Path
 from typing import Iterable, Optional
+from urllib.parse import urlsplit
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
@@ -108,6 +109,64 @@ def poster_key_for(link: Optional[str]) -> Optional[str]:
             if slug and slug != "activity":
                 return slug
     return None
+
+
+# ---------------------------------------------------------------------------
+# canonical link — the dedupe key, never what gets stored
+
+# LinkedIn serves one post under a per-country host (`tn.`, `my.`, `rs.`, …),
+# which is a different string for the same page, so the duplicate flag never
+# fired and the queue screened the post once per mirror (issue #291). Every
+# LinkedIn host in the store is either `www.` or a two-letter country code, so
+# the pattern stays exactly that narrow — `business.`/`learning.`/`careers.`
+# linkedin.com are different sites, not mirrors of one post.
+_LOCALE_HOST = re.compile(r"^(?:[a-z]{2}\.)?linkedin\.com$", re.I)
+
+# Query parameters that carry a locale or a referrer breadcrumb and nothing
+# else. A denylist, not "drop the query" — that was measured against the live
+# store first, where the query is what identifies the page on half the web:
+# dropping it wholesale merged 3,913 distinct YouTube videos (`?v=`), 2,324
+# distinct Facebook photos (`?fbid=`) and every stock-site search (`?k=`) into
+# one row each. `?lang=` on X is the mirror that matters here, and it is the
+# same locale dimension as LinkedIn's host.
+_LOCALE_PARAMS = frozenset({
+    "lang", "locale", "hl", "tl",              # locale selectors
+    "trk", "trackingid", "originalsubdomain",  # LinkedIn referrer breadcrumbs
+    "rcm", "fbclid", "gclid", "igshid", "si", "src", "ref_src", "ref_url",
+})
+
+
+def _is_locale_param(segment: str) -> bool:
+    name = segment.split("=", 1)[0].strip().lower()
+    return name in _LOCALE_PARAMS or name.startswith("utm_")
+
+
+def canonical_link_for(link: Optional[str]) -> Optional[str]:
+    """The dedupe key for ``link``: mirrors of one page fold onto one string.
+
+    Lowercases the host and path, folds a LinkedIn locale host onto `www.`,
+    drops the fragment, a trailing slash and the locale/tracking query
+    parameters above, and sorts whatever query is left so parameter order
+    cannot split a group.
+
+    **Never stored.** ``found_link`` keeps the URL that was actually found and
+    opened; this is only what ``mark_duplicates`` partitions on. Returns None
+    for a blank link, matching ``poster_key_for``.
+    """
+    if not link or not str(link).strip():
+        return None
+    raw = str(link).strip()
+    parts = urlsplit(raw)
+    if not parts.netloc:
+        # Not an absolute URL — nothing to normalise beyond case and the slash.
+        return raw.lower().rstrip("/") or None
+    host = parts.netloc.lower()
+    if _LOCALE_HOST.match(host):
+        host = "www.linkedin.com"
+    path = parts.path.rstrip("/").lower()
+    kept = sorted(seg for seg in parts.query.split("&") if seg and not _is_locale_param(seg))
+    query = f"?{'&'.join(kept)}" if kept else ""
+    return f"{parts.scheme.lower()}://{host}{path}{query}"
 
 
 def severity(verdict: Optional[str], promotional: object = None,
@@ -329,29 +388,53 @@ def counts(conn: sqlite3.Connection) -> dict:
 def mark_duplicates(conn: sqlite3.Connection) -> dict:
     """Recompute the duplicate flag across the whole results table.
 
-    0 = the URL appears once · 2 = oldest row for a URL seen several times
-    (the primary) · 1 = every later row for that URL.
+    0 = the page appears once · 2 = the primary row for a page seen several
+    times · 1 = every other row for that page.
 
-    One SQL pass with a window function, where the Excel version rebuilt and
-    rewrote a 38 MB workbook on every run. Ordering matches the original:
-    oldest search_date first, then post_date, then the result's position.
+    Rows group by ``canonical_link_for(found_link)``, not by the raw string
+    (issue #291): LinkedIn's locale hosts and X's ``?lang=`` are mirrors of one
+    post, and partitioning on the raw URL left every mirror ``duplicate = 0``,
+    so the queue served the same post once per host.
+
+    The primary is **elected**, not simply the oldest, because widening the
+    group is what makes the choice load-bearing — a mirror taking the primary
+    slot from the row that carries the work would send an already-judged post
+    back through the queue as a different row while the verdict sat on a row
+    nobody serves. In order: a live row before a retired one (a retired mirror
+    must not hide a servable row), a row the owner annotated before one he has
+    not (an annotated secondary would drop off the tab), a screened row before
+    an unscreened one, and only then the original ordering — oldest
+    search_date, then post_date, then the result's position.
+
+    Still one SQL pass with a window function, where the Excel version rebuilt
+    and rewrote a 38 MB workbook on every run.
     """
+    conn.create_function("canonical_link", 1, canonical_link_for, deterministic=True)
+    annotated = " or ".join(f"{c} is not null" for c in OWNER_COLUMNS)
     conn.execute(
-        """
-        with ranked as (
+        f"""
+        with keyed as (
+            select id, retired, screened_at, search_date, post_date, "order",
+                   canonical_link(found_link) as key,
+                   case when ({annotated}) then 0 else 1 end as unjudged
+              from results
+        ),
+        ranked as (
             select id,
-                   count(*) over (partition by found_link) as n,
+                   count(*) over (partition by key) as n,
                    row_number() over (
-                       partition by found_link
-                       order by search_date, coalesce(post_date, '9999'), "order", id
+                       partition by key
+                       order by retired,
+                                unjudged,
+                                case when screened_at is null then 1 else 0 end,
+                                search_date, coalesce(post_date, '9999'), "order", id
                    ) as rn
-            from results
+              from keyed
         )
         update results
-           set duplicate = (
-                 select case when r.n = 1 then 0 when r.rn = 1 then 2 else 1 end
-                   from ranked r where r.id = results.id
-               )
+           set duplicate = case when r.n = 1 then 0 when r.rn = 1 then 2 else 1 end
+          from ranked r
+         where r.id = results.id
         """
     )
     conn.commit()

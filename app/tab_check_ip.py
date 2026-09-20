@@ -108,8 +108,9 @@ def _render_header() -> None:
     cols[0].metric("illustrations", f"{ov['images']:,}")
     cols[1].metric("links found", f"{ov['results']:,}")
     cols[2].metric("canonical", f"{ov['canonical']:,}",
-                   help="Unique findings still worth judging — the duplicates of a link found "
-                        "under several images are folded away, and retired rows are excluded.")
+                   help="Unique findings still worth judging — a page found under several "
+                        "images, or through several of its URLs, is folded to one row, and "
+                        "retired rows are excluded.")
     cols[3].metric("retired", f"{ov['retired']:,}",
                    help=f"Kept, never shown: {db.RETIRED_REASON}. Nothing was deleted.")
     cols[4].metric("decided", f"{ov['decided']:,}")

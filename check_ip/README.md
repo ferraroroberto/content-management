@@ -59,6 +59,9 @@ a queue of 13,000 links: the worst it can do is propose something wrong.
 # retire the stored 'Similar Match' rows (issue #292) — flags them, deletes nothing
 & .\.venv\Scripts\python.exe -m check_ip.migrate --retire-similar
 
+# re-elect the canonical row of every group (issue #291) — writes only `duplicate`
+& .\.venv\Scripts\python.exe -m check_ip.migrate --recompute-duplicates
+
 # the screening queue
 & .\.venv\Scripts\python.exe -m check_ip.screen stats
 & .\.venv\Scripts\python.exe -m check_ip.screen next --limit 10
@@ -92,6 +95,35 @@ A retired row is out of the queue, out of the tab and out of every `screen
 stats` total except `retired`, which prints its reason next to it. A row
 carrying an owner annotation is **never** retired, so no decision can vanish
 from the tab — there are none today, and the guard is what keeps it that way.
+
+## One post, many URLs
+
+LinkedIn serves the same post under a host per country — `www.`, `tn.`, `my.`,
+`rs.`, … — and X under `?lang=`. Those are different strings for one page, so
+the duplicate flag never fired on them and the queue served the post once per
+mirror: one live batch of ten rows held five distinct posts
+([#291](https://github.com/ferraroroberto/content-management/issues/291)).
+
+`db.canonical_link_for()` builds the dedupe key `mark_duplicates` groups on:
+lowercase host and path, a LinkedIn locale host folded onto `www.`, no
+fragment, no trailing slash, and the locale/tracking query parameters dropped.
+**The query is not dropped wholesale** — measured against the live store first,
+that would have merged 3,913 distinct YouTube videos (`?v=`) and 2,324 distinct
+Facebook photos (`?fbid=`) into one row each, so it is a denylist of the
+parameters that only ever carry a locale or a referrer breadcrumb.
+
+`found_link` is never rewritten: the stored URL stays the one that was actually
+found and opened, and only the `duplicate` flag moves.
+
+Which row wins the group matters once the group spans mirrors, so the primary
+is **elected**: a live row before a retired one, a row the owner annotated
+before one he has not, a screened row before an unscreened one, then the
+original oldest-first ordering. Without that, a mirror could take the primary
+slot from the row carrying the verdict and the post would come back through the
+queue as a different row while the verdict sat on a row nobody serves. Across
+the live store the pass folded 4,353 canonical rows away, took 3,301 rows out
+of the pending queue, returned 16 annotated rows to the tab, and left every
+verdict, every annotation and every stored URL byte-identical.
 
 ## What counts as credit
 
@@ -127,9 +159,9 @@ than silently wrong (`config.json` is gitignored).
 
 | module | does |
 |---|---|
-| `db.py` | the store — connection, schema, duplicate marking, per-image tallies, retirement |
+| `db.py` | the store — connection, schema, the canonical link, duplicate marking, per-image tallies, retirement |
 | `schema.sql` | three tables plus a `meta` bookkeeping row |
-| `migrate.py` | one-shot Excel → SQLite import + payload extraction; also the store's bulk-update lane (`--retire-similar`) |
+| `migrate.py` | one-shot Excel → SQLite import + payload extraction; also the store's bulk-update lanes (`--retire-similar`, `--recompute-duplicates`) |
 | `process.py` | pure helpers: post-date extraction, platform identification, row building |
 | `imgur.py` | upload each illustration once, with backoff |
 | `lens.py` | one Google Lens search per call, logged to the store |
@@ -194,5 +226,6 @@ hits. Everything else waits **180 days**. `--force` ignores both.
 - **Retired is not deleted.** `results.retired = 1` hides a row from the queue
   and the tab; the row, its verdict and its history all stay. `update results
   set retired = 0 where match_type = 'Similar Match'` brings them all back.
-- **Only canonical rows are served and shown.** A URL matching several
-  illustrations is judged once (`duplicate` 0 or 2), not once per illustration.
+- **Only canonical rows are served and shown.** A page matching several
+  illustrations — or reached through several of its URLs — is judged once
+  (`duplicate` 0 or 2), not once per illustration and not once per mirror.

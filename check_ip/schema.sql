@@ -28,7 +28,10 @@ create table if not exists results (
     uploaded_url   text,
     found_link     text not null,
     title          text,
-    duplicate      integer not null default 0,   -- 0 unique · 1 secondary · 2 primary
+    -- 0 unique · 1 secondary · 2 primary. Set only by db.mark_duplicates(),
+    -- which groups rows by db.canonical_link_for(found_link) — LinkedIn's
+    -- locale hosts are mirrors of one post, not distinct findings (issue #291).
+    duplicate      integer not null default 0,
     match_type     text,                         -- 'Exact Match' | 'Similar Match' (retired)
 
     -- 1 = out of scope for the queue and the tab, kept for the record.
