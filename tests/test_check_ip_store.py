@@ -10,9 +10,11 @@ Run: & .\\.venv\\Scripts\\python.exe -m unittest discover tests -v
 
 from __future__ import annotations
 
+import sqlite3
 import sys
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -29,8 +31,9 @@ def _seed(conn, rows):
             """
             insert into results
                 (local_image, uploaded_url, found_link, title, duplicate, match_type,
-                 source, post_date, search_date, "order", ok, person, chat, report, fixed)
-            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 source, post_date, search_date, "order", ok, person, chat, report, fixed,
+                 poster_key)
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 row.get("local_image", "img.png"), row.get("uploaded_url", "https://i/x.png"),
@@ -39,6 +42,9 @@ def _seed(conn, rows):
                 row.get("post_date"), row.get("search_date", "2026-01-01 00:00:00"),
                 row.get("order", 1), row.get("ok"), row.get("person"), row.get("chat"),
                 row.get("report"), row.get("fixed"),
+                # Derived here exactly as upsert_results derives it in production,
+                # so the queue's ranking is exercised the way it really runs.
+                db.poster_key_for(row["found_link"]),
             ),
         )
         ids.append(cur.lastrowid)
@@ -68,8 +74,11 @@ class CheckIpStoreTests(unittest.TestCase):
             "select ok, person, chat, report, fixed from results where id = ?", (row_id,)
         ).fetchone())
 
-        screen.record_verdict(self.conn, row_id, verdict="acceptable",
-                              reason="credited in the caption", poster_url="https://example.test/p")
+        # Worst-case write: an infringement carrying both aggravators, which
+        # touches every screening column there is.
+        screen.record_verdict(self.conn, row_id, verdict="infringement",
+                              reason="no mention anywhere", poster_url="https://example.test/p",
+                              promotional=True, altered=True)
 
         after = dict(self.conn.execute(
             "select ok, person, chat, report, fixed from results where id = ?", (row_id,)
@@ -77,13 +86,15 @@ class CheckIpStoreTests(unittest.TestCase):
         self.assertEqual(before, after, "record_verdict altered an owner column")
 
         written = dict(self.conn.execute(
-            "select screen_verdict, screen_reason, poster_url, screened_at, screen_source "
-            "from results where id = ?", (row_id,)
+            "select screen_verdict, screen_reason, poster_url, screened_at, screen_source, "
+            "screen_promotional, screen_altered from results where id = ?", (row_id,)
         ).fetchone())
-        self.assertEqual(written["screen_verdict"], "acceptable")
-        self.assertEqual(written["screen_reason"], "credited in the caption")
+        self.assertEqual(written["screen_verdict"], "infringement")
+        self.assertEqual(written["screen_reason"], "no mention anywhere")
         self.assertEqual(written["poster_url"], "https://example.test/p")
         self.assertIsNotNone(written["screened_at"])
+        self.assertEqual(written["screen_promotional"], 1)
+        self.assertEqual(written["screen_altered"], 1)
 
     def test_record_verdict_rejects_an_unknown_verdict(self):
         (row_id,) = _seed(self.conn, [{"found_link": "https://example.test/b"}])
@@ -92,6 +103,177 @@ class CheckIpStoreTests(unittest.TestCase):
         self.assertIsNone(self.conn.execute(
             "select screen_verdict from results where id = ?", (row_id,)
         ).fetchone()["screen_verdict"])
+
+    # ── the credit policy: severity and its aggravators ───────────────────
+
+    def test_severity_ranks_aggravators(self):
+        """0 nothing to act on · 1 no mention · 2 one aggravator · 3 all three."""
+        self.assertEqual(db.severity("acceptable"), 0)
+        self.assertEqual(db.severity("unclear"), 0, "an unresolved row is not a mild finding")
+        self.assertEqual(db.severity("infringement"), 1)
+        self.assertEqual(db.severity("infringement", promotional=True), 2)
+        self.assertEqual(db.severity("infringement", altered=True), 2)
+        self.assertEqual(db.severity("infringement", promotional=True, altered=True), 3)
+
+    def test_severity_sql_agrees_with_python(self):
+        """The ordering expression and severity() must never drift apart.
+
+        There are two implementations of the same rule — one for sorting in
+        SQL, one for reporting in Python — so the test compares them across
+        every combination rather than trusting either alone.
+        """
+        cases = [
+            ("acceptable", False, False), ("unclear", False, False),
+            ("infringement", False, False), ("infringement", True, False),
+            ("infringement", False, True), ("infringement", True, True),
+        ]
+        for verdict, promo, altered in cases:
+            (row_id,) = _seed(self.conn, [{"found_link": f"https://e.test/{verdict}{promo}{altered}"}])
+            screen.record_verdict(self.conn, row_id, verdict=verdict,
+                                  promotional=promo, altered=altered)
+            from_sql = self.conn.execute(
+                f"select ({db.severity_sql('results')}) as s from results where id = ?", (row_id,)
+            ).fetchone()["s"]
+            with self.subTest(verdict=verdict, promotional=promo, altered=altered):
+                self.assertEqual(from_sql, db.severity(verdict, promo, altered))
+
+    def test_aggravators_are_cleared_on_a_non_infringement_verdict(self):
+        """Flags only mean something next to an infringement.
+
+        Left set on an `acceptable` row, the stored severity would disagree
+        with severity(), and the tab would sort a cleared row above real ones.
+
+        Nothing stops a worker passing `--promotional` next to `acceptable`,
+        so the flags are asserted here rather than left to default — otherwise
+        this test passes whether or not the clearing exists.
+        """
+        (row_id,) = _seed(self.conn, [{"found_link": "https://example.test/flip"}])
+        for verdict in ("acceptable", "unclear"):
+            screen.record_verdict(self.conn, row_id, verdict=verdict,
+                                  reason="owner is tagged in the caption after all",
+                                  promotional=True, altered=True)
+            row = self.conn.execute(
+                "select screen_promotional, screen_altered from results where id = ?", (row_id,)
+            ).fetchone()
+            with self.subTest(verdict=verdict):
+                self.assertEqual((row["screen_promotional"], row["screen_altered"]), (0, 0))
+                self.assertEqual(db.severity(verdict, True, True), 0)
+
+    # ── poster identity, which drives the queue ranking ───────────────────
+
+    def test_poster_key_extraction(self):
+        cases = {
+            "https://www.linkedin.com/posts/someslug_a-headline-activity-7448108730174390272-5iOu":
+                "someslug",
+            "https://www.linkedin.com/posts/Mixed.Case_x-activity-1-a": "mixed.case",
+            "https://www.linkedin.com/in/someprofile": "someprofile",
+            "https://www.linkedin.com/company/somecompany/": "somecompany",
+            # No slug in the path at all — must stay None rather than become "activity".
+            "https://www.linkedin.com/posts/activity-7385170299475972096-1YPV": None,
+            "https://example.test/not-linkedin": None,
+            "": None,
+            None: None,
+        }
+        for link, expected in cases.items():
+            with self.subTest(link=link):
+                self.assertEqual(db.poster_key_for(link), expected)
+
+    def test_queue_ranks_repeat_offenders_ahead_of_one_offs(self):
+        """A poster holding several pending rows outranks a more-reused image.
+
+        This is the point of the ranking: one conversation settles several
+        findings, so it beats the single hit on the most-copied illustration.
+        """
+        self.conn.executemany(
+            "insert into images (filename, linkedin_count) values (?, ?)",
+            [("viral.png", 900), ("rare.png", 2)],
+        )
+        self.conn.commit()
+        _seed(self.conn, [
+            {"found_link": "https://www.linkedin.com/posts/oneoff_x-activity-1-a",
+             "local_image": "viral.png"},
+            {"found_link": "https://www.linkedin.com/posts/serial_x-activity-2-a",
+             "local_image": "rare.png"},
+            {"found_link": "https://www.linkedin.com/posts/serial_y-activity-3-a",
+             "local_image": "rare.png"},
+            {"found_link": "https://www.linkedin.com/posts/serial_z-activity-4-a",
+             "local_image": "rare.png"},
+        ])
+        served = screen.next_batch(self.conn, limit=10, source="LinkedIn")
+        self.assertEqual(served[0]["local_image"], "rare.png")
+        self.assertEqual(served[0]["poster_pending"], 3)
+        self.assertEqual(served[-1]["poster_pending"], 1)
+
+    def test_queue_excludes_the_owners_own_posts(self):
+        """The owner's own account must never reach the screening queue.
+
+        It is by far the largest poster in the real store — 491 pending rows
+        against 78 for the biggest genuine reuser — so without this the
+        ranking serves his own posts first and the first fifty batches are
+        spent screening them.
+        """
+        _seed(self.conn, [
+            {"found_link": "https://www.linkedin.com/posts/ferraroroberto_a-activity-1-a"},
+            {"found_link": "https://www.linkedin.com/posts/ferraroroberto_b-activity-2-a"},
+            {"found_link": "https://www.linkedin.com/posts/somebodyelse_c-activity-3-a"},
+        ])
+        served = screen.next_batch(self.conn, limit=10, source="LinkedIn",
+                                   exclude_posters=["ferraroroberto"])
+        self.assertEqual([r["found_link"].split("/posts/")[1].split("_")[0] for r in served],
+                         ["somebodyelse"])
+
+        # Without the exclusion the owner's two rows outrank the single one.
+        unfiltered = screen.next_batch(self.conn, limit=10, source="LinkedIn")
+        self.assertEqual(len(unfiltered), 3)
+        self.assertEqual(unfiltered[0]["poster_pending"], 2)
+
+    def test_refresh_poster_keys_backfills_without_touching_anything_else(self):
+        (row_id,) = _seed(self.conn, [{
+            "found_link": "https://www.linkedin.com/posts/backfill_x-activity-9-a",
+            "ok": 1, "person": "contact-ref",
+        }])
+        self.conn.execute("update results set poster_key = null where id = ?", (row_id,))
+        self.conn.commit()
+
+        self.assertEqual(db.refresh_poster_keys(self.conn), 1)
+
+        row = self.conn.execute(
+            "select poster_key, ok, person from results where id = ?", (row_id,)
+        ).fetchone()
+        self.assertEqual(row["poster_key"], "backfill")
+        self.assertEqual((row["ok"], row["person"]), (1, "contact-ref"))
+
+    def test_ensure_schema_adds_columns_to_a_store_that_predates_them(self):
+        """`create table if not exists` is a no-op on an existing table.
+
+        A store migrated before these columns existed would silently never get
+        them, so ensure_schema has an additive alter pass. Rebuild that older
+        shape and prove the pass fills it in without disturbing the row.
+        """
+        older = Path(self._tmp.name) / "older.db"
+        # The v1 shape: every base column, none of the three added later. The
+        # indexes in schema.sql span both sets, which is what makes the order
+        # of the alter pass load-bearing.
+        with closing(sqlite3.connect(older)) as raw:
+            raw.execute(
+                "create table results ("
+                " id integer primary key, local_image text, uploaded_url text,"
+                " found_link text not null, title text, duplicate integer default 0,"
+                " match_type text, source text, post_date text, search_date text,"
+                ' "order" integer, ok integer, person text, chat text, report text,'
+                " fixed integer, screen_verdict text, screen_reason text,"
+                " screened_at text, screen_source text, poster_url text)"
+            )
+            raw.execute("insert into results (local_image, found_link, ok) values (?, ?, ?)",
+                        ("img.png", "https://example.test/old", 0))
+            raw.commit()
+
+        with closing(db.connect(older)) as conn:
+            columns = {r["name"] for r in conn.execute("pragma table_info(results)")}
+            for added, _decl in db.ADDED_RESULT_COLUMNS:
+                self.assertIn(added, columns, f"ensure_schema did not add {added}")
+            row = conn.execute("select ok, found_link from results").fetchone()
+            self.assertEqual(row["ok"], 0, "the additive pass disturbed an owner column")
 
     # ── the queue ─────────────────────────────────────────────────────────
 

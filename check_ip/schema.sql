@@ -45,11 +45,24 @@ create table if not exists results (
     fixed          integer,   -- 0/1 — taken down or corrected
 
     -- ── Screening columns. The skill writes ONLY these. ───────────────────
-    screen_verdict text,      -- 'infringement' | 'acceptable' | 'unclear'
-    screen_reason  text,
-    screened_at    text,
-    screen_source  text,      -- who/what produced the verdict
-    poster_url     text,      -- profile of whoever posted it, for one-click follow-up
+    -- The verdict answers one question: does the post credit the owner? A
+    -- visible ROBERTOFERRARO.ART watermark is NOT credit on its own — the
+    -- policy is that the post must mention him (name, tag, or link). The two
+    -- flags record what makes an infringement worse, and are kept separate
+    -- from the verdict so the backlog can be sliced by type later without a
+    -- schema change. See db.severity() for how they rank.
+    screen_verdict     text,    -- 'infringement' | 'acceptable' | 'unclear'
+    screen_reason      text,
+    screened_at        text,
+    screen_source      text,    -- who/what produced the verdict
+    poster_url         text,    -- profile of whoever posted it, for one-click follow-up
+    screen_promotional integer, -- 1 = carries a self-promotional or commercial call to action
+    screen_altered     integer, -- 1 = the image was edited: watermark cropped, painted over, removed
+
+    -- Whoever posted it, derived from found_link (db.poster_key_for). Needed
+    -- *before* screening so the queue can rank repeat offenders first, which
+    -- poster_url cannot do — that is only known once a row has been screened.
+    poster_key     text,
 
     -- The same link legitimately appears more than once for one image: the
     -- exact-match and visual-match searches both return it, and a later run
@@ -65,6 +78,9 @@ create table if not exists results (
 -- filters by image; these two cover both without bloating the store.
 create index if not exists results_queue_idx on results (source, duplicate, screened_at, ok);
 create index if not exists results_image_idx on results (local_image);
+-- The queue ranks by how many pending rows a poster holds, which is a grouped
+-- count over this column on every `screen next` call.
+create index if not exists results_poster_idx on results (poster_key);
 
 create table if not exists api_history (
     id                  integer primary key,

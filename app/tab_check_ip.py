@@ -57,10 +57,11 @@ def _images(source: str | None) -> list[dict]:
 
 
 @st.cache_data(ttl=5, show_spinner=False)
-def _frame(source: str | None, image: str | None, status: str, canonical: bool, limit: int) -> pd.DataFrame:
+def _frame(source: str | None, image: str | None, status: str, canonical: bool, limit: int,
+           sort: str) -> pd.DataFrame:
     with closing(db.connect()) as conn:
         return review.results_frame(conn, source=source, image=image, status=status,
-                                    canonical_only=canonical, limit=limit)
+                                    canonical_only=canonical, limit=limit, sort=sort)
 
 
 @st.cache_data(ttl=5, show_spinner=False)
@@ -175,6 +176,7 @@ def _render_table() -> None:
         source = st.selectbox("platform", list(review.SOURCES) + [review.OPEN_WEB, "any"],
                               index=0, key="check-ip-source")
         status = st.selectbox("show", list(review.STATUS_FILTERS), index=0, key="check-ip-status")
+        sort = st.selectbox("order", list(review.SORT_ORDERS), index=0, key="check-ip-sort")
         limit = st.selectbox("rows", [100, 250, 500, 1000], index=1, key="check-ip-limit-rows")
 
     # None means "every platform"; review.OPEN_WEB means "no recognised
@@ -185,7 +187,7 @@ def _render_table() -> None:
     image = st.selectbox("illustration", image_options, index=0, key="check-ip-image")
     image_arg = None if image == image_options[0] else image
 
-    frame = _frame(source_arg, image_arg, status, True, int(limit))
+    frame = _frame(source_arg, image_arg, status, True, int(limit), sort)
     if frame.empty:
         st.info("nothing matches these filters")
         return
@@ -196,8 +198,9 @@ def _render_table() -> None:
     qs = _queue_stats(source_arg)
     st.caption(
         f"{qs['pending']:,} undecided of {qs['canonical']:,} canonical on this platform · "
-        f"{qs['screened']:,} screened · {qs['proposed_infringement']:,} proposed as infringement. "
-        "Showing the most-reused illustrations first. Nothing saves until you click Apply."
+        f"{qs['screened']:,} screened · {qs['proposed_infringement']:,} proposed as infringement"
+        + (f", {qs['severity_3']:,} of them worst-case" if qs["severity_3"] else "")
+        + f". Ordered {sort}. Nothing saves until you click Apply."
     )
 
     # Wrapped in a keyed container so the docs-capture mask can target this
@@ -212,12 +215,14 @@ def _render_table() -> None:
             num_rows="fixed",
             width="stretch",
             height=min(900, 80 + 36 * len(frame)),
-            column_order=["ok", "found_link", "local_image", "screen_verdict", "screen_reason",
+            column_order=["ok", "severity", "found_link", "local_image", "screen_verdict",
+                          "screen_promotional", "screen_altered", "screen_reason",
                           "poster_url", "person", "chat", "report", "fixed", "title",
                           "post_date", "match_type", "source", "search_date"],
             disabled=["id", "local_image", "found_link", "title", "source", "match_type",
                       "post_date", "search_date", "duplicate", "screen_verdict",
-                      "screen_reason", "poster_url", "screened_at"],
+                      "screen_reason", "poster_url", "screened_at", "severity",
+                      "screen_promotional", "screen_altered"],
             column_config={
                 "ok": st.column_config.SelectboxColumn(
                     "verdict", options=[0, 1], width="small",
@@ -225,6 +230,15 @@ def _render_table() -> None:
                 "found_link": st.column_config.LinkColumn("where it appears", display_text="open ↗",
                                                           width="small"),
                 "local_image": st.column_config.TextColumn("illustration", width="medium"),
+                "severity": st.column_config.NumberColumn(
+                    "⚠", width="small", format="%d",
+                    help="0 nothing to act on · 1 no mention · 2 one aggravator · "
+                         "3 no mention, self-promotion and the image edited"),
+                "screen_promotional": st.column_config.CheckboxColumn(
+                    "promo", width="small", help="the post pushes the poster's own following, "
+                                                 "product or course"),
+                "screen_altered": st.column_config.CheckboxColumn(
+                    "edited", width="small", help="watermark cropped, painted over or removed"),
                 "screen_verdict": st.column_config.TextColumn("skill says", width="small",
                                                               help="Proposed by the check-ip skill — never a decision."),
                 "screen_reason": st.column_config.TextColumn("why", width="large"),

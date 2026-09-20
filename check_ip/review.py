@@ -34,16 +34,32 @@ FRAME_COLUMNS = [
     "id", "local_image", "found_link", "title", "source", "match_type",
     "post_date", "search_date", "duplicate",
     "screen_verdict", "screen_reason", "poster_url", "screened_at",
+    "screen_promotional", "screen_altered",
     "ok", "person", "chat", "report", "fixed",
 ]
+
+# Derived, not stored: one expression shared with the queue so the tab and the
+# skill agree on what "worst" means. Appended to the select, not a real column.
+DERIVED_COLUMNS = {"severity": db.severity_sql()}
 
 STATUS_FILTERS = {
     "needs a decision": "r.ok is null",
     "screened, awaiting my call": "r.ok is null and r.screened_at is not null",
+    "worst only — no credit, promoted, image edited": f"r.ok is null and ({db.severity_sql()}) = 3",
+    "proposed infringement, any severity": "r.ok is null and r.screen_verdict = 'infringement'",
     "flagged as infringement": "r.ok = 0",
     "marked acceptable": "r.ok = 1",
     "reported": "r.report is not null and r.report != '0'",
     "everything": "1 = 1",
+}
+
+# How the table is ordered. Severity-first is the point of the two flags: it
+# puts the cases worth a message at the top instead of the most-reused image.
+SORT_ORDERS = {
+    "worst first": f"({db.severity_sql()}) desc, coalesce(i.linkedin_count, 0) desc, "
+                   "r.post_date desc, r.id",
+    "most reused first": "coalesce(i.linkedin_count, 0) desc, r.post_date desc, r.id",
+    "newest post first": "r.post_date desc, r.id",
 }
 
 
@@ -86,6 +102,7 @@ def results_frame(
     status: str = "needs a decision",
     canonical_only: bool = True,
     limit: int = 500,
+    sort: str = "worst first",
 ) -> pd.DataFrame:
     """The table the tab renders.
 
@@ -107,20 +124,26 @@ def results_frame(
     where.append(STATUS_FILTERS.get(status, "1 = 1"))
     params.append(int(limit))
 
+    selected = [f"r.{c}" for c in FRAME_COLUMNS]
+    selected += [f"({expr}) as {name}" for name, expr in DERIVED_COLUMNS.items()]
+    columns = FRAME_COLUMNS + list(DERIVED_COLUMNS)
+
     rows = conn.execute(
         f"""
-        select {", ".join("r." + c for c in FRAME_COLUMNS)}
+        select {", ".join(selected)}
           from results r
           left join images i on i.filename = r.local_image
          where {" and ".join(where)}
-         order by coalesce(i.linkedin_count, 0) desc, r.post_date desc, r.id
+         order by {SORT_ORDERS.get(sort, SORT_ORDERS["worst first"])}
          limit ?
         """,
         params,
     ).fetchall()
-    frame = pd.DataFrame([dict(r) for r in rows], columns=FRAME_COLUMNS)
+    frame = pd.DataFrame([dict(r) for r in rows], columns=columns)
     if frame.empty:
         return frame
+    for flag in ("screen_promotional", "screen_altered"):
+        frame[flag] = frame[flag].map({1: True, 0: False}).astype("object")
     # Streamlit's checkbox column wants a real bool; the store keeps 0/1/NULL
     # so "not yet decided" stays distinguishable from "decided: no".
     frame["fixed"] = frame["fixed"].map({1: True, 0: False}).astype("object")

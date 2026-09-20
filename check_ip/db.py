@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -37,9 +38,19 @@ SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 OWNER_COLUMNS = ("ok", "person", "chat", "report", "fixed")
 
 # Columns only the screening pass writes.
-SCREEN_COLUMNS = ("screen_verdict", "screen_reason", "screened_at", "screen_source", "poster_url")
+SCREEN_COLUMNS = ("screen_verdict", "screen_reason", "screened_at", "screen_source",
+                  "poster_url", "screen_promotional", "screen_altered")
 
 VERDICTS = ("infringement", "acceptable", "unclear")
+
+# Columns added after the first release. ensure_schema() adds any that a store
+# predating them is missing, because `create table if not exists` in schema.sql
+# is a no-op once the table exists and would otherwise silently skip them.
+ADDED_RESULT_COLUMNS = (
+    ("screen_promotional", "integer"),
+    ("screen_altered", "integer"),
+    ("poster_key", "text"),
+)
 
 # Platform value meaning "no recognised platform" — the open web. Distinct from
 # passing None, which means "every platform".
@@ -57,6 +68,69 @@ def source_clause(source: Optional[str], column: str = "source") -> tuple[str, l
     if source == OPEN_WEB:
         return f"{column} is null", []
     return f"{column} = ?", [source]
+
+
+# ---------------------------------------------------------------------------
+# poster identity and severity
+
+# LinkedIn post URLs carry the poster in the path: /posts/<slug>_<headline>-
+# activity-<id>-<hash>. Some carry no slug at all (/posts/activity-<id>-<hash>),
+# which is why this returns None rather than inventing a key.
+_POSTER_PATTERNS = (
+    re.compile(r"linkedin\.com/posts/([^_/?#]+)_", re.I),
+    re.compile(r"linkedin\.com/(?:in|company)/([^/?#]+)", re.I),
+)
+
+
+def poster_key_for(link: Optional[str]) -> Optional[str]:
+    """Best-effort poster identity for ``link``, lowercased, or None.
+
+    Used to rank repeat offenders ahead of one-offs. It is a ranking signal,
+    not an identity claim: a miss costs nothing but ordering, so the patterns
+    stay deliberately conservative rather than guessing at unusual URL shapes.
+    """
+    if not link:
+        return None
+    for pattern in _POSTER_PATTERNS:
+        match = pattern.search(link)
+        if match:
+            slug = match.group(1).strip().lower()
+            if slug and slug != "activity":
+                return slug
+    return None
+
+
+def severity(verdict: Optional[str], promotional: object = None,
+             altered: object = None) -> int:
+    """Rank how much an infringement warrants acting on it: 0 low → 3 worst.
+
+    0 is "nothing to act on" and covers both ``acceptable`` and ``unclear`` —
+    an unresolved row is not a mild infringement, it is not yet a finding at
+    all, and lumping it above acceptable would push guesses up the queue.
+    Every aggravator adds one: no mention is 1, plus a self-promotional or
+    commercial call to action, plus an edited image. 3 is all three together —
+    the case the owner calls plain stealing.
+    """
+    if verdict != "infringement":
+        return 0
+    return 1 + (1 if promotional else 0) + (1 if altered else 0)
+
+
+def severity_sql(alias: str = "r") -> str:
+    """``severity()`` as an SQL expression, qualified with the results alias.
+
+    Both callers join ``results`` against ``images``, so the columns are
+    qualified rather than bare — an unqualified ``screen_verdict`` resolves
+    today only because ``images`` happens not to have one. Sharing the
+    expression keeps the tab's ordering and the queue's stats from drifting
+    apart from the Python version above.
+    """
+    prefix = f"{alias}." if alias else ""
+    return (
+        f"case when {prefix}screen_verdict = 'infringement' "
+        f"then 1 + coalesce({prefix}screen_promotional, 0) "
+        f"+ coalesce({prefix}screen_altered, 0) else 0 end"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +235,29 @@ def connect(path: Optional[Path] = None) -> sqlite3.Connection:
 
 
 def ensure_schema(conn: sqlite3.Connection) -> None:
-    """Apply ``schema.sql``. Idempotent — every statement is ``if not exists``."""
+    """Apply ``schema.sql``, then add any columns a pre-existing store lacks.
+
+    ``schema.sql`` is all ``if not exists``, so on a store created before a
+    column was introduced the ``create table`` is skipped entirely and the new
+    column never appears. The ``alter table`` pass below closes that gap. It is
+    additive only: nothing here drops, renames or rewrites a column, so no
+    owner annotation can be lost by running it.
+
+    The pass runs *before* the script, not after, because the script also
+    creates an index over one of the added columns — on an existing store that
+    index would be built against a column that does not exist yet and the whole
+    call would fail. On a fresh store ``results`` is absent here, the pass is a
+    no-op, and the script creates the table complete.
+    """
+    table_exists = conn.execute(
+        "select 1 from sqlite_master where type = 'table' and name = 'results'"
+    ).fetchone()
+    if table_exists:
+        existing = {r["name"] for r in conn.execute("pragma table_info(results)")}
+        for column, decl in ADDED_RESULT_COLUMNS:
+            if column not in existing:
+                conn.execute(f"alter table results add column {column} {decl}")
+                logger.info("➕ added results.%s", column)
     conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
     conn.commit()
 
@@ -181,6 +277,25 @@ def set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
         "on conflict(key) do update set value = excluded.value",
         (key, str(value)),
     )
+
+
+def refresh_poster_keys(conn: sqlite3.Connection, *, only_missing: bool = True) -> int:
+    """Populate ``results.poster_key`` from ``found_link``. Returns rows written.
+
+    Rows imported before the column existed have it NULL, and the queue ranking
+    needs it for every pending row, so the migration and the run both call this.
+    Derived purely from ``found_link``, so re-running it cannot lose anything.
+    """
+    where = "found_link is not null"
+    if only_missing:
+        where += " and poster_key is null"
+    rows = conn.execute(f"select id, found_link from results where {where}").fetchall()
+    updates = [(poster_key_for(r["found_link"]), r["id"]) for r in rows]
+    updates = [(key, row_id) for key, row_id in updates if key is not None]
+    if updates:
+        conn.executemany("update results set poster_key = ? where id = ?", updates)
+        conn.commit()
+    return len(updates)
 
 
 def counts(conn: sqlite3.Connection) -> dict:
@@ -268,6 +383,7 @@ def upsert_results(conn: sqlite3.Connection, rows: Iterable[dict]) -> int:
             r.get("local_image"), r.get("uploaded_url"), r.get("found_link"), r.get("title"),
             r.get("duplicate", 0), r.get("match_type"), r.get("source"),
             r.get("post_date"), r.get("search_date"), r.get("order"),
+            poster_key_for(r.get("found_link")),
         )
         for r in rows
     ]
@@ -277,13 +393,14 @@ def upsert_results(conn: sqlite3.Connection, rows: Iterable[dict]) -> int:
         """
         insert into results
             (local_image, uploaded_url, found_link, title, duplicate,
-             match_type, source, post_date, search_date, "order")
-        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             match_type, source, post_date, search_date, "order", poster_key)
+        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         on conflict(local_image, found_link, match_type, search_date) do update set
             title       = excluded.title,
             source      = excluded.source,
             post_date   = excluded.post_date,
-            "order"     = excluded."order"
+            "order"     = excluded."order",
+            poster_key  = excluded.poster_key
         """,
         payload,
     )
