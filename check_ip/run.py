@@ -107,8 +107,17 @@ def main(argv: Optional[list[str]] = None) -> int:
     search_types = [t for t, on in (("exact_matches", settings.get("do_exact_search", True)),
                                     ("visual_matches", settings.get("do_similar_search", False)))
                     if on]
+    # A retired search type still costs a SerpAPI call and would now yield
+    # nothing, so it is dropped here rather than in build_rows — the cheapest
+    # place to not spend the money is before the call (issue #292).
+    retired = [t for t in search_types if t in process.RETIRED_MATCH_TYPES]
+    for search_type in retired:
+        logger.warning("⚠️ %s is enabled in config but '%s' results are retired (#292) — "
+                       "skipping it; set search_settings.do_similar_search to false",
+                       search_type, process.RETIRED_MATCH_TYPES[search_type])
+    search_types = [t for t in search_types if t not in process.RETIRED_MATCH_TYPES]
     if not search_types:
-        logger.error("❌ both exact and visual search are disabled in config — nothing to do")
+        logger.error("❌ no ingestable search type is enabled in config — nothing to do")
         return 1
 
     calls = len(due) * len(search_types)

@@ -27,6 +27,7 @@ from typing import Iterable, Optional
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+from check_ip import process  # noqa: E402 — pure helpers, no store access
 from config.loader import load_full_config  # noqa: E402
 
 logger = logging.getLogger("check_ip.db")
@@ -50,6 +51,15 @@ ADDED_RESULT_COLUMNS = (
     ("screen_promotional", "integer"),
     ("screen_altered", "integer"),
     ("poster_key", "text"),
+    ("retired", "integer not null default 0"),
+)
+
+# Why any row currently carries ``retired = 1``. One reason exists, so it is a
+# string rather than a column: `screen stats` and the migration both print it,
+# which is what stops a fresh checkout being silently wrong about what it is
+# skipping. A second reason is the moment to make it a column.
+RETIRED_REASON = (
+    f"{process.SIMILAR_MATCH}: a style lookalike, not a reuse — retired by issue #292"
 )
 
 # Platform value meaning "no recognised platform" — the open web. Distinct from
@@ -310,6 +320,9 @@ def counts(conn: sqlite3.Connection) -> dict:
     out["screened"] = conn.execute(
         "select count(*) as n from results where screened_at is not null"
     ).fetchone()["n"]
+    out["retired"] = conn.execute(
+        "select count(*) as n from results where retired = 1"
+    ).fetchone()["n"]
     return out
 
 
@@ -348,14 +361,64 @@ def mark_duplicates(conn: sqlite3.Connection) -> dict:
     return {int(r["duplicate"]): r["n"] for r in rows}
 
 
+def retire_similar_matches(conn: sqlite3.Connection) -> dict:
+    """Flag every stored ``Similar Match`` row as out of scope. Never deletes.
+
+    Retirement is a one-way door only in intent: the rows, their titles, their
+    dates and their screening verdicts all stay exactly where they are, and
+    clearing the flag brings them back. That matters because each one cost a
+    SerpAPI call and no amount of code could re-derive it for free.
+
+    A row carrying **any** owner annotation is left alone. There are none today
+    — ten months of manual triage produced zero decisions on a similar match,
+    which is most of why the category is being retired — but a decision the
+    owner made is a decision that stays visible in the tab, and skipping those
+    rows makes that structurally true rather than merely true-by-count.
+
+    Returns the counts: ``retired`` newly flagged, ``already_retired``,
+    ``kept_annotated`` left visible.
+    """
+    annotated = " or ".join(f"{c} is not null" for c in OWNER_COLUMNS)
+    row = conn.execute(
+        f"""
+        select
+            sum(case when retired = 0 and not ({annotated}) then 1 else 0 end) as to_retire,
+            sum(case when retired = 1 then 1 else 0 end)                       as already_retired,
+            sum(case when retired = 0 and ({annotated}) then 1 else 0 end)     as kept_annotated
+          from results
+         where match_type = ?
+        """,
+        (process.SIMILAR_MATCH,),
+    ).fetchone()
+    counts = {
+        "retired": row["to_retire"] or 0,
+        "already_retired": row["already_retired"] or 0,
+        "kept_annotated": row["kept_annotated"] or 0,
+    }
+    if counts["retired"]:
+        conn.execute(
+            f"update results set retired = 1 "
+            f"where match_type = ? and retired = 0 and not ({annotated})",
+            (process.SIMILAR_MATCH,),
+        )
+        conn.commit()
+    return counts
+
+
 def refresh_image_counts(conn: sqlite3.Connection) -> int:
-    """Recompute the per-image link tallies from the results table."""
+    """Recompute the per-image link tallies from the results table.
+
+    Counts every stored row, retired ones included — these tallies are the
+    search history of an illustration, not the screening backlog, and
+    ``similar_match_count`` would otherwise read 0 for images that really did
+    return similar matches before they were retired.
+    """
     conn.execute(
-        """
+        f"""
         update images set
             total_links         = (select count(*) from results r where r.local_image = images.filename),
-            exact_match_count   = (select count(*) from results r where r.local_image = images.filename and r.match_type = 'Exact Match'),
-            similar_match_count = (select count(*) from results r where r.local_image = images.filename and r.match_type = 'Similar Match'),
+            exact_match_count   = (select count(*) from results r where r.local_image = images.filename and r.match_type = '{process.EXACT_MATCH}'),
+            similar_match_count = (select count(*) from results r where r.local_image = images.filename and r.match_type = '{process.SIMILAR_MATCH}'),
             linkedin_count      = (select count(*) from results r where r.local_image = images.filename and r.source = 'LinkedIn'),
             instagram_count     = (select count(*) from results r where r.local_image = images.filename and r.source = 'Instagram'),
             twitter_count       = (select count(*) from results r where r.local_image = images.filename and r.source = 'Twitter/X'),

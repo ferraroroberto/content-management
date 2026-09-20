@@ -309,6 +309,86 @@ class CheckIpStoreTests(unittest.TestCase):
         self.assertEqual(screen.stats(self.conn, source=None)["canonical"], 2,
                          "None must still mean every platform")
 
+    # ── the retired match type (issue #292) ───────────────────────────────
+
+    def test_queue_serves_only_exact_matches(self):
+        """A `Similar Match` is never screened, retired or not.
+
+        Both guards are asserted separately: the explicit `match_type` test is
+        what protects a store the retirement migration has not reached yet, so
+        a test that only ever saw retired rows would pass with it deleted.
+        """
+        exact, similar_retired, similar_live = _seed(self.conn, [
+            {"found_link": "https://example.test/exact", "match_type": "Exact Match"},
+            {"found_link": "https://example.test/retired", "match_type": "Similar Match"},
+            {"found_link": "https://example.test/live", "match_type": "Similar Match"},
+        ])
+        self.conn.execute("update results set retired = 1 where id = ?", (similar_retired,))
+        self.conn.commit()
+
+        served = screen.next_batch(self.conn, limit=50, source="LinkedIn")
+        self.assertEqual([r["id"] for r in served], [exact],
+                         "the queue served a Similar Match row")
+
+        # …and not even with the re-check flag, which is the only other way in.
+        served = screen.next_batch(self.conn, limit=50, source="LinkedIn",
+                                   include_screened=True)
+        self.assertEqual([r["id"] for r in served], [exact])
+        self.assertNotIn(similar_live, [r["id"] for r in served],
+                         "an un-retired Similar Match row reached the queue")
+
+    def test_retire_similar_matches_flags_without_deleting(self):
+        """The retirement is reversible and leaves every annotated row alone."""
+        exact, plain, annotated = _seed(self.conn, [
+            {"found_link": "https://example.test/exact", "match_type": "Exact Match"},
+            {"found_link": "https://example.test/plain", "match_type": "Similar Match"},
+            {"found_link": "https://example.test/judged", "match_type": "Similar Match",
+             "ok": 1, "person": "contact-ref"},
+        ])
+
+        result = db.retire_similar_matches(self.conn)
+        self.assertEqual(result, {"retired": 1, "already_retired": 0, "kept_annotated": 1})
+
+        rows = {r["id"]: r for r in self.conn.execute(
+            "select id, retired, ok, person, match_type from results")}
+        self.assertEqual(len(rows), 3, "retirement deleted a row")
+        self.assertEqual(rows[plain]["retired"], 1)
+        self.assertEqual(rows[exact]["retired"], 0, "an Exact Match row was retired")
+        self.assertEqual(rows[annotated]["retired"], 0,
+                         "a row carrying an owner decision was hidden from the tab")
+        self.assertEqual((rows[annotated]["ok"], rows[annotated]["person"]), (1, "contact-ref"))
+
+        # Idempotent: a second pass finds nothing new to do.
+        self.assertEqual(db.retire_similar_matches(self.conn),
+                         {"retired": 0, "already_retired": 1, "kept_annotated": 1})
+
+    def test_stats_reports_retired_rows_outside_the_workable_totals(self):
+        _seed(self.conn, [
+            {"found_link": "https://example.test/exact", "match_type": "Exact Match"},
+            {"found_link": "https://example.test/similar", "match_type": "Similar Match"},
+        ])
+        before = screen.stats(self.conn, source="LinkedIn")
+        self.assertEqual((before["canonical"], before["retired"]), (2, 0))
+
+        db.retire_similar_matches(self.conn)
+        after = screen.stats(self.conn, source="LinkedIn")
+        self.assertEqual(after["canonical"], 1, "a retired row still counts as workable")
+        self.assertEqual(after["retired"], 1)
+        self.assertEqual(after["pending"], 1)
+
+    def test_the_tab_does_not_list_retired_rows(self):
+        _seed(self.conn, [
+            {"found_link": "https://example.test/exact", "match_type": "Exact Match"},
+            {"found_link": "https://example.test/similar", "match_type": "Similar Match"},
+        ])
+        db.retire_similar_matches(self.conn)
+
+        frame = review.results_frame(self.conn, source="LinkedIn", status="everything")
+        self.assertEqual(list(frame["found_link"]), ["https://example.test/exact"])
+        self.assertEqual(review.overview(self.conn)["retired"], 1)
+        self.assertEqual(review.overview(self.conn)["results"], 2,
+                         "the search history must not shrink")
+
     def test_queue_ranks_most_reused_image_first(self):
         self.conn.executemany(
             "insert into images (filename, linkedin_count) values (?, ?)",
@@ -345,7 +425,12 @@ class CheckIpStoreTests(unittest.TestCase):
         self.assertEqual(primary, "b.png", "the oldest sighting should be the primary")
 
     def test_same_link_from_both_searches_is_two_rows(self):
-        """The exact and visual searches finding one URL are two distinct findings."""
+        """The row identity still spans match_type, so historic rows round-trip.
+
+        `Similar Match` is no longer ingested (#292), but 139k of them are in
+        the store paired with an exact-match row on the same URL. Narrowing the
+        uniqueness constraint would collapse those pairs.
+        """
         _seed(self.conn, [
             {"found_link": "https://example.test/x", "match_type": "Exact Match"},
             {"found_link": "https://example.test/x", "match_type": "Similar Match"},
@@ -419,17 +504,29 @@ class CheckIpProcessTests(unittest.TestCase):
         self.assertEqual((added, skipped), (1, 0))
         self.assertEqual(rows[0]["match_type"], "Exact Match")
 
-        # The same URL from the visual search is a new finding, not a duplicate.
-        payload = {"visual_matches": [{"link": "https://example.test/a", "title": "A"}]}
-        _, added, skipped = process.build_rows(payload, "visual_matches", "i.png",
-                                               "https://i/x.png", "2026-01-01 00:00:00", existing)
-        self.assertEqual((added, skipped), (1, 0))
-
-        # Re-running the same search is.
+        # Re-running the same search is a duplicate.
         payload = {"exact_matches": [{"link": "https://example.test/a", "title": "A"}]}
         _, added, skipped = process.build_rows(payload, "exact_matches", "i.png",
                                                "https://i/x.png", "2026-01-01 00:00:00", existing)
         self.assertEqual((added, skipped), (0, 1))
+
+    def test_build_rows_no_longer_ingests_the_visual_match_section(self):
+        """A new search stores no `Similar Match` row (issue #292).
+
+        Asserted on a payload Lens really would return — a populated
+        `visual_matches` list — so an empty result proves the section is
+        dropped, not that the fixture had nothing in it.
+        """
+        payload = {"visual_matches": [
+            {"link": "https://example.test/lookalike", "title": "someone else's chart"},
+            {"link": "https://example.test/lookalike-2", "title": "another one"},
+        ]}
+        rows, added, skipped = process.build_rows(payload, "visual_matches", "i.png",
+                                                  "https://i/x.png", "2026-01-01 00:00:00", set())
+        self.assertEqual((rows, added, skipped), ([], 0, 0))
+        self.assertNotIn("visual_matches", process.MATCH_TYPES)
+        self.assertEqual(process.RETIRED_MATCH_TYPES["visual_matches"], "Similar Match",
+                         "the retired section must stay named, not be deleted")
 
     def test_is_recently_processed_uses_the_high_linkedin_window(self):
         from datetime import datetime, timedelta

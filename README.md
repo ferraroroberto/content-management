@@ -58,7 +58,10 @@ Five surfaces, one repo:
   [`engagement/README.md`](engagement/README.md) for the full design.
 - **Check IP** (`check_ip/`) — finds where my published illustrations are
   being reused. Each illustration is reverse-image-searched through Google
-  Lens (SerpAPI) and every match lands in a local SQLite store. The
+  Lens (SerpAPI) and every **exact** match lands in a local SQLite store —
+  Lens's "similar" matches are another artist working in the same idiom, not
+  reuse, so they are no longer searched for, queued or shown (and the ones
+  already stored are retired, never deleted). The
   control panel's ⚖️ check IP tab is where a match gets judged —
   legitimate share, or my work with the credit stripped off — and the
   `/check-ip` skill does the browser pass first, proposing a verdict and a

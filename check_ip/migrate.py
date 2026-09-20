@@ -21,9 +21,13 @@ What it deliberately preserves:
 
 Usage::
 
-    python -m check_ip.migrate --report     # reconcile only, write nothing
-    python -m check_ip.migrate              # import
-    python -m check_ip.migrate --skip-raw   # import, leave the payloads alone
+    python -m check_ip.migrate --report           # reconcile only, write nothing
+    python -m check_ip.migrate                    # import
+    python -m check_ip.migrate --skip-raw         # import, leave the payloads alone
+    python -m check_ip.migrate --retire-similar   # retire the Similar Match rows (#292)
+
+The last one is the store's bulk-update lane: no workbooks needed, no DELETE,
+and it reports what it flagged plus the annotation count either side of it.
 """
 
 from __future__ import annotations
@@ -32,6 +36,7 @@ import argparse
 import logging
 import sqlite3
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -40,7 +45,7 @@ import pandas as pd
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from check_ip import db  # noqa: E402
+from check_ip import db, process  # noqa: E402
 
 logger = logging.getLogger("check_ip.migrate")
 
@@ -319,12 +324,47 @@ def reconcile(conn: sqlite3.Connection, folder: Path) -> dict:
     return {"stored": stored, "source": source}
 
 
+def _retire_similar(conn: sqlite3.Connection) -> int:
+    """Run the ``Similar Match`` retirement and prove it cost no annotation.
+
+    The same guard the full import ends on: the owner's decisions are the one
+    thing in this store that cannot be regenerated, so the count is taken
+    before and after and a change is a failure, not a warning.
+    """
+    before = db.counts(conn)
+    result = db.retire_similar_matches(conn)
+    after = db.counts(conn)
+
+    logger.info("🗃️  retiring '%s' rows — %s", process.SIMILAR_MATCH, db.RETIRED_REASON)
+    logger.info("   %-16s %s", "retired now", result["retired"])
+    logger.info("   %-16s %s", "already retired", result["already_retired"])
+    logger.info("   %-16s %s (left visible — the owner ruled on them)",
+                "kept annotated", result["kept_annotated"])
+    logger.info("   %-16s %s → %s", "annotations", before["annotated"], after["annotated"])
+    logger.info("   %-16s %s → %s", "rows", before["results"], after["results"])
+
+    if after["annotated"] != before["annotated"] or after["results"] != before["results"]:
+        logger.error("❌ the store changed shape — refusing to call this a success")
+        return 1
+
+    db.set_meta(conn, "retired_similar_match_rows",
+                str(result["retired"] + result["already_retired"]))
+    db.set_meta(conn, "retired_similar_match_at",
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    conn.commit()
+    logger.info("✅ retirement complete — nothing deleted, clearing `retired` undoes it")
+    return 0
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Migrate the check_ip Excel store into SQLite.")
     parser.add_argument("--report", action="store_true",
                         help="Reconcile the store against the workbooks and write nothing.")
     parser.add_argument("--skip-raw", action="store_true",
                         help="Import api_history metadata without extracting the payload sidecars.")
+    parser.add_argument("--retire-similar", action="store_true",
+                        help="Retire the stored 'Similar Match' rows (issue #292) and stop. "
+                             "Sets a flag; deletes nothing. Needs no workbooks.")
     args = parser.parse_args(argv)
 
     # Reconfigure before basicConfig grabs sys.stdout — the log lines carry
@@ -333,6 +373,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     sys.stderr.reconfigure(encoding="utf-8")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s",
                         handlers=[logging.StreamHandler(sys.stdout)])
+
+    # Stands on its own: it touches only the store, so it must not demand the
+    # legacy workbooks a machine that already migrated no longer has.
+    if args.retire_similar:
+        conn = db.connect()
+        logger.info("💾 store: %s", db.db_path())
+        return _retire_similar(conn)
 
     folder = legacy_folder()
     conn = db.connect()
@@ -347,6 +394,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                         rec["stored"][table], rec["source"][table])
         logger.info("   %-12s stored=%s", "annotated", rec["stored"]["annotated"])
         logger.info("   %-12s stored=%s", "screened", rec["stored"]["screened"])
+        logger.info("   %-12s stored=%s (%s)", "retired", rec["stored"]["retired"],
+                    db.RETIRED_REASON)
         return 0
 
     before = db.counts(conn)
@@ -378,13 +427,19 @@ def main(argv: Optional[list[str]] = None) -> int:
     logger.info("👤 deriving poster keys…")
     logger.info("   %s rows keyed", db.refresh_poster_keys(conn))
 
+    # The workbooks still hold the retired category, so an import re-lands
+    # those rows un-flagged. Retiring here is what keeps a re-run idempotent
+    # in behaviour and not just in row count.
+    if _retire_similar(conn) != 0:
+        return 1
+
     after = db.counts(conn)
     db.set_meta(conn, "last_migration_source", str(folder))
     db.set_meta(conn, "last_migration_results", str(after["results"]))
     conn.commit()
 
     logger.info("📊 SUMMARY")
-    for key in ("images", "results", "api_history", "annotated", "screened"):
+    for key in ("images", "results", "api_history", "annotated", "screened", "retired"):
         delta = after[key] - before[key]
         logger.info("   %-12s %-8s (%+d)", key, after[key], delta)
 

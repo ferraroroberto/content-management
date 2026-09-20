@@ -73,9 +73,13 @@ def store_exists() -> bool:
 
 
 def images(conn: sqlite3.Connection, *, source: Optional[str] = None) -> list[dict]:
-    """Images that have at least one result, most-reused first."""
+    """Images that have at least one result the tab would show, most-reused first.
+
+    Retired rows are excluded so the illustration picker cannot offer an image
+    whose table then comes back empty.
+    """
     clause, params = db.source_clause(source, "r.source")
-    where = f"where {clause}" if clause else ""
+    where = f"where {clause} and r.retired = 0" if clause else "where r.retired = 0"
     rows = conn.execute(
         f"""
         select i.filename,
@@ -109,8 +113,12 @@ def results_frame(
     Capped by ``limit`` on purpose — the store holds 310k rows and no editable
     grid wants all of them. The filters, not the scrollbar, are how the owner
     narrows to what matters.
+
+    Retired rows never appear, whatever the status filter says — the point of
+    retiring them was to take them off this table (issue #292). A row the owner
+    already annotated is never retired, so no past decision can disappear here.
     """
-    where = ["r.found_link is not null"]
+    where = ["r.found_link is not null", "r.retired = 0"]
     params: list = []
     if canonical_only:
         where.append("r.duplicate in (0, 2)")
@@ -210,13 +218,20 @@ def _as_text(value) -> Optional[str]:
 
 
 def overview(conn: sqlite3.Connection) -> dict:
-    """Headline numbers for the top of the tab."""
+    """Headline numbers for the top of the tab.
+
+    ``results`` counts everything ever found, retired rows included — that is
+    the search history and it did not shrink. ``canonical`` counts what is
+    still judgeable, and ``retired`` says how much the difference is, so the
+    header adds up instead of quietly losing 115k rows.
+    """
     row = conn.execute(
         """
         select
             (select count(*) from images)  as images,
             (select count(*) from results) as results,
-            (select count(*) from results where duplicate in (0, 2)) as canonical,
+            (select count(*) from results where duplicate in (0, 2) and retired = 0) as canonical,
+            (select count(*) from results where retired = 1)         as retired,
             (select count(*) from results where ok is not null)      as decided,
             (select count(*) from results where ok = 0)              as infringements,
             (select count(*) from results where screened_at is not null) as screened,
@@ -227,7 +242,7 @@ def overview(conn: sqlite3.Connection) -> dict:
 
 
 def source_breakdown(conn: sqlite3.Connection) -> pd.DataFrame:
-    """Canonical rows and outstanding decisions per platform."""
+    """Canonical, non-retired rows and outstanding decisions per platform."""
     rows = conn.execute(
         """
         select coalesce(source, ?) as source,
@@ -236,7 +251,7 @@ def source_breakdown(conn: sqlite3.Connection) -> pd.DataFrame:
                sum(case when ok = 0 then 1 else 0 end)              as infringements,
                sum(case when screened_at is not null then 1 else 0 end) as screened
           from results
-         where duplicate in (0, 2)
+         where duplicate in (0, 2) and retired = 0
          group by coalesce(source, ?)
          order by canonical desc
         """,
