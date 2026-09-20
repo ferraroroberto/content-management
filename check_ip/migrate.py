@@ -534,10 +534,11 @@ def _assess_conditions(conn: sqlite3.Connection) -> int:
                                                                    key=lambda kv: str(kv[0])))
         logger.info("   %-24s %s", label, spread or "none")
     for column, tally in result["conditions"].items():
-        logger.info("   %-24s met=%s violated=%s not-assessed=%s",
+        logger.info("   %-24s met=%s violated=%s could-not-establish=%s not-assessed=%s",
                     column.removeprefix("screen_"),
-                    tally["met"], tally["violated"], tally["not_assessed"])
-    logger.info("   %-24s %s (screened, but a condition was never established)",
+                    tally["met"], tally["violated"], tally["indeterminate"],
+                    tally["not_assessed"])
+    logger.info("   %-24s %s (screened, but a condition was never looked at)",
                 "not fully assessed", result["not_fully_assessed"])
     logger.info("   %-24s %s → %s", "annotations", before["annotated"], after["annotated"])
     logger.info("   %-24s %s → %s", "screened", before["screened"], after["screened"])

@@ -57,14 +57,27 @@ create table if not exists results (
     -- ── Screening columns. The skill writes ONLY these. ───────────────────
     -- The illustrations are published under CC BY-NC-ND 4.0, which is three
     -- conditions that must ALL hold. Each gets its own column with the same
-    -- polarity (issue #295):
+    -- polarity (issues #295, #305):
     --
-    --     1 = condition met · 0 = condition violated · NULL = NOT ASSESSED
+    --     1 = condition met
+    --     0 = condition violated
+    --     2 = assessed, could not be established
+    --     NULL = NEVER ASSESSED
     --
     -- NULL is a state of its own and never collapses into the passing one. A
     -- row whose non-commercial condition was never looked at is not compliant,
-    -- it is unchecked — see db.severity(), db.assessed_sql() and the tab's
+    -- it is unchecked — see db.severity(), db.met_sql() and the tab's
     -- "not fully assessed" filter, none of which coalesce a NULL to 1.
+    --
+    -- 2 was split back out of NULL by issue #305 and is purely additive: no
+    -- existing row changed value or meaning, so no migration was needed. It
+    -- says a worker opened the post and could not establish the condition —
+    -- common for NC, which usually cannot be read off a single post. Before
+    -- it existed that answer was stored as NULL, so the row read as never
+    -- assessed and `screen next --unassessed` re-served it forever; two live
+    -- batches were handed the identical ten rows. A 2 counts as assessed
+    -- (db.assessed_sql) and never as met (db.met_sql), so the queue drains
+    -- while the row stays `unclear` rather than becoming compliant.
     screen_credit_ok        integer, -- BY: named, tagged, linked, or his own comment claims it
     screen_noncommercial_ok integer, -- NC: no promotional CTA and no paid/business context
     screen_unmodified_ok    integer, -- ND: no crop, filter, added logo or text, translation; signature intact

@@ -71,7 +71,8 @@ a queue of 13,000 links: the worst it can do is propose something wrong.
 
 # the re-screen backlog only — the rows `stats` counts as not_fully_assessed
 # (issue #300). `--include-screened` does not select them: it just stops
-# excluding screened rows, so they compete with every pending one.
+# excluding screened rows, so they compete with every pending one. Screening a
+# row removes it from here even if a condition came back `unknown` (#305).
 & .\.venv\Scripts\python.exe -m check_ip.screen next --limit 10 --unassessed
 
 # no credit, nothing else wrong → severity 1
@@ -85,6 +86,12 @@ a queue of 13,000 links: the worst it can do is propose something wrong.
 # the post is gone — permanently unassessable, not "acceptable"
 & .\.venv\Scripts\python.exe -m check_ip.screen verdict --id 123 --verdict unclear `
     --outcome nothing_to_assess --reason "…"
+
+# looked at all three, but the post cannot say whether the use is commercial —
+# `unknown` stores a 2: an answer, never a pass, and the row leaves the
+# --unassessed queue instead of being served again forever (issue #305)
+& .\.venv\Scripts\python.exe -m check_ip.screen verdict --id 123 --verdict unclear `
+    --outcome ambiguous --credit met --noncommercial unknown --unmodified met --reason "…"
 ```
 
 ## Only exact matches count
@@ -148,7 +155,8 @@ verdict, every annotation and every stored URL byte-identical.
 The illustrations are published under **CC BY-NC-ND 4.0**
 ([robertoferraro.net/art](https://robertoferraro.net/art)), which is three
 conditions that must *all* hold. Each has its own column with the same polarity
-— `1` met, `0` violated, **`NULL` not assessed**:
+— `1` met, `0` violated, `2` **assessed but not establishable**, **`NULL` never
+assessed**:
 
 | column | condition | met when |
 |---|---|---|
@@ -163,13 +171,30 @@ violation), not its presence in its favour.
 
 **`NULL` never collapses into a pass.** An unassessed condition is its own
 state — `db.severity()` counts only conditions *found violated*, and
-`db.fully_assessed()` is the separate question of whether all three were even
-looked at. A severity of 0 alone says nothing was proven wrong, not that the
-post is compliant; the tab prints both and the `not fully assessed` metric is
-the gap between them. Any `coalesce(col, 1)` here would silently undo the whole
-model, which is why `tests/test_check_ip_store.py` asserts it in Python, in
-SQL, in the queue stats and in the tab's frame
+`db.all_conditions_met()` is the separate question of whether all three were
+positively established. A severity of 0 alone says nothing was proven wrong,
+not that the post is compliant; the tab prints both and the `not fully
+assessed` metric is the gap between them. Any `coalesce(col, 1)` here would
+silently undo the whole model, which is why `tests/test_check_ip_store.py`
+asserts it in Python, in SQL, in the queue stats and in the tab's frame
 ([#295](https://github.com/ferraroroberto/content-management/issues/295)).
+
+**`2` is an answer; `NULL` is the absence of one.** A worker that opens a post
+and cannot establish a condition from it — most often NC, which a single post
+usually cannot settle — records `unknown`, which stores `2`. That is *not* the
+same as never having looked, and conflating the two is what stopped the
+re-screen queue draining: `--unassessed` selects on a `NULL` condition, so an
+honest `unknown` re-queued the row forever and two live batches were served the
+identical ten rows. `db.fully_assessed()` (has anyone looked?) counts a `2`;
+`db.all_conditions_met()` (did it pass?) does not, so the row leaves the queue
+while staying `unclear`. The split is purely additive — no stored row changed
+value, severity or verdict, and no migration was needed
+([#305](https://github.com/ferraroroberto/content-management/issues/305)).
+
+`screen stats` and the tab report the two separately, because they ask for
+different things: a `not_fully_assessed` row wants another screening pass, an
+`indeterminate` row has had one and wants the owner's own judgement. They never
+overlap — `indeterminate` requires every condition answered.
 
 `screen_verdict` is **derived**, not primary, and `record_verdict` refuses a
 verdict that contradicts the conditions rather than normalising one:
@@ -177,7 +202,7 @@ verdict that contradicts the conditions rather than normalising one:
 | severity | verdict | meaning |
 |---|---|---|
 | 0 | `acceptable` | all three conditions met — the only compliant state |
-| 0 | `unclear` | nothing violated, but something was never assessed |
+| 0 | `unclear` | nothing violated, but something was never assessed or could not be established |
 | 1 | `infringement` | one condition violated — no credit, **or** commercial use, **or** modified |
 | 2 | `infringement` | two of the three |
 | 3 | `infringement` | no credit, commercial **and** modified — plain stealing |
