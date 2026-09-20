@@ -914,6 +914,177 @@ class CheckIpStoreTests(unittest.TestCase):
         self.assertEqual(self.conn.execute(
             "select fixed from results where id = ?", (row_id,)).fetchone()["fixed"], 1)
 
+    # ── superseded screening opinions (issue #301) ────────────────────────
+    #
+    # Every reason below is invented. The real ones name real accounts and real
+    # posts, this repo is public, and a fixture is the easiest place for one to
+    # leak into git.
+
+    def test_re_screening_preserves_the_opinion_it_replaces(self):
+        """The whole of issue #301: the old answer stays retrievable.
+
+        Verdict, outcome, reason, the three conditions, the timestamp and the
+        source all have to survive — the reason in particular is the evidence
+        behind a potential accusation, not a disposable intermediate.
+        """
+        (row_id,) = _seed(self.conn, [{"found_link": "https://example.test/a"}])
+        screen.record_verdict(
+            self.conn, row_id, verdict="unclear", outcome=db.OUTCOME_AMBIGUOUS,
+            reason="first pass: could not tell from the visible caption",
+            poster_url="https://example.test/p1", screen_source="credit-only pass",
+            credit_ok=1)
+        first = dict(self.conn.execute(
+            "select screen_verdict, screen_outcome, screen_reason, screened_at, "
+            "screen_source, poster_url, screen_credit_ok, screen_noncommercial_ok, "
+            "screen_unmodified_ok from results where id = ?", (row_id,)).fetchone())
+
+        out = screen.record_verdict(
+            self.conn, row_id, verdict="infringement",
+            reason="second pass: all three conditions checked against the page",
+            screen_source="three-condition re-screen",
+            credit_ok=0, noncommercial_ok=0, unmodified_ok=1)
+
+        history = self.conn.execute(
+            "select * from screen_history where result_id = ?", (row_id,)).fetchall()
+        self.assertEqual(len(history), 1, "exactly one superseded opinion expected")
+        kept = dict(history[0])
+        for column, value in first.items():
+            self.assertEqual(kept[column], value,
+                             f"screen_history lost {column} from the superseded opinion")
+        self.assertIsNotNone(kept["recorded_at"])
+        self.assertTrue(out["superseded"],
+                        "a re-screen must report that it superseded an opinion")
+
+        # And the current opinion is the new one, on results, exactly once.
+        current = self.conn.execute(
+            "select screen_verdict, screen_reason from results where id = ?",
+            (row_id,)).fetchone()
+        self.assertEqual(current["screen_verdict"], "infringement")
+        self.assertEqual(current["screen_reason"],
+                         "second pass: all three conditions checked against the page")
+
+    def test_a_first_screening_supersedes_nothing(self):
+        """No history row for a row that had no previous opinion to replace."""
+        (row_id,) = _seed(self.conn, [{"found_link": "https://example.test/b"}])
+        out = screen.record_verdict(self.conn, row_id, verdict="infringement",
+                                    reason="invented reason", credit_ok=0,
+                                    noncommercial_ok=1, unmodified_ok=1)
+        self.assertFalse(out["superseded"])
+        self.assertEqual(self.conn.execute(
+            "select count(*) n from screen_history").fetchone()["n"], 0,
+            "an empty opinion was preserved as if it were an observation")
+
+    def test_the_history_write_is_atomic_with_the_verdict(self):
+        """A failed verdict write must leave neither the update nor the copy.
+
+        The trigger makes the UPDATE abort for a real SQLite reason, after the
+        history insert has already run in the same transaction — which is the
+        only ordering where a non-atomic implementation would leak a history
+        row for a verdict that was never recorded.
+        """
+        (row_id,) = _seed(self.conn, [{"found_link": "https://example.test/c"}])
+        screen.record_verdict(self.conn, row_id, verdict="infringement",
+                              reason="the opinion that must not be duplicated",
+                              credit_ok=0, noncommercial_ok=1, unmodified_ok=1)
+        before = dict(self.conn.execute(
+            "select screen_verdict, screen_reason from results where id = ?",
+            (row_id,)).fetchone())
+
+        self.conn.execute(
+            "create trigger fail_update before update on results "
+            "begin select raise(abort, 'no writes today'); end")
+        try:
+            with self.assertRaises(sqlite3.DatabaseError):
+                screen.record_verdict(self.conn, row_id, verdict="acceptable",
+                                      reason="a verdict that never lands",
+                                      credit_ok=1, noncommercial_ok=1, unmodified_ok=1)
+        finally:
+            self.conn.execute("drop trigger fail_update")
+
+        self.assertEqual(self.conn.execute(
+            "select count(*) n from screen_history").fetchone()["n"], 0,
+            "a history row survived a verdict write that was rolled back")
+        after = dict(self.conn.execute(
+            "select screen_verdict, screen_reason from results where id = ?",
+            (row_id,)).fetchone())
+        self.assertEqual(before, after, "the failed write changed results anyway")
+
+    def test_screen_history_holds_no_owner_column(self):
+        """The owner's five decisions are not the skill's to keep history of.
+
+        Asserted against the live table definition rather than the source, so
+        adding one of them to schema.sql fails here rather than shipping.
+        """
+        columns = {r["name"] for r in self.conn.execute("pragma table_info(screen_history)")}
+        self.assertTrue(columns, "screen_history is missing from the schema")
+        self.assertEqual(columns & set(db.OWNER_COLUMNS), set(),
+                         "screen_history carries an owner decision column")
+        # And it does preserve every screening column, or a re-screen would
+        # silently drop whichever one was left out.
+        self.assertEqual(set(db.SCREEN_HISTORY_COLUMNS) - columns, set())
+
+    def test_backfilling_history_writes_no_row_twice_and_leaves_results_alone(self):
+        """The back-fill lane: idempotent, and `results` is not touched at all.
+
+        Also covers the convergence that matters after it — a later re-screen
+        of a back-filled row records no second copy of the opinion already in
+        the table, because it is the same (row, screening timestamp).
+        """
+        ids = _seed(self.conn, [
+            {"found_link": "https://example.test/d"},
+            {"found_link": "https://example.test/e"},
+        ])
+        export = [
+            {"id": ids[0], "screen_verdict": "unclear", "screen_outcome": "ambiguous",
+             "screen_reason": "invented observation one", "screened_at": "2026-01-01 00:00:00",
+             "screen_source": "credit-only pass", "screen_credit_ok": 1},
+            {"id": ids[1], "screen_verdict": "infringement", "screen_outcome": None,
+             "screen_reason": "invented observation two", "screened_at": "2026-01-02 00:00:00",
+             "screen_source": "credit-only pass", "screen_credit_ok": 0},
+            {"id": max(ids) + 9999, "screen_verdict": "unclear",
+             "screen_reason": "row that is not in the store",
+             "screened_at": "2026-01-03 00:00:00"},
+        ]
+        fingerprint = self.conn.execute(
+            "select count(*) n, coalesce(sum(coalesce(ok, 0)), 0) s from results").fetchone()
+
+        first = db.backfill_screen_history(self.conn, export)
+        self.assertEqual(first["inserted"], 2)
+        self.assertEqual(first["unknown_ids"], [max(ids) + 9999],
+                         "an id absent from the store must be reported, not invented")
+
+        second = db.backfill_screen_history(self.conn, export)
+        self.assertEqual(second["inserted"], 0, "the back-fill is not idempotent")
+        self.assertEqual(second["already_present"], 2)
+        self.assertEqual(self.conn.execute(
+            "select count(*) n from screen_history").fetchone()["n"], 2)
+
+        after = self.conn.execute(
+            "select count(*) n, coalesce(sum(coalesce(ok, 0)), 0) s from results").fetchone()
+        self.assertEqual(tuple(fingerprint), tuple(after),
+                         "the back-fill wrote to results")
+
+        # Now re-screen a back-filled row whose current state is the one the
+        # export recorded: the opinion is already preserved, so nothing is added.
+        self.conn.execute(
+            "update results set screen_verdict = 'unclear', screen_outcome = 'ambiguous', "
+            "screen_reason = 'invented observation one', screened_at = '2026-01-01 00:00:00', "
+            "screen_source = 'credit-only pass', screen_credit_ok = 1 where id = ?", (ids[0],))
+        self.conn.commit()
+        out = screen.record_verdict(self.conn, ids[0], verdict="infringement",
+                                    reason="invented re-screen observation",
+                                    screen_source="three-condition re-screen",
+                                    credit_ok=0, noncommercial_ok=1, unmodified_ok=1)
+        self.assertEqual(self.conn.execute(
+            "select count(*) n from screen_history where result_id = ?",
+            (ids[0],)).fetchone()["n"], 1,
+            "the re-screen duplicated an opinion the back-fill had already kept")
+        # Still a supersession, even though this call wrote no history row: the
+        # question is whether the replaced opinion is preserved, not whether
+        # this particular write is what preserved it.
+        self.assertTrue(out["superseded"],
+                        "a re-screen of a back-filled row reported nothing superseded")
+
 
 class CheckIpProcessTests(unittest.TestCase):
     """The ported pure helpers — behaviour must match the sibling repo's."""

@@ -121,6 +121,51 @@ create index if not exists results_image_idx on results (local_image);
 -- count over this column on every `screen next` call.
 create index if not exists results_poster_idx on results (poster_key);
 
+-- Every screening opinion that has been replaced by a later one (issue #301).
+-- Append-only: nothing here is ever updated or deleted, and the *current*
+-- opinion stays on `results`, so every existing query, stat and tab column
+-- keeps its meaning.
+--
+-- Why it exists: `record_verdict` overwrites the screening columns in place,
+-- and `screen_reason` is the sentence recording what was actually seen on the
+-- page — the evidence behind a potential accusation, not a disposable
+-- intermediate. The screening question has already changed twice (credit-only
+-- → credit + aggravators → the three licence conditions), so rows get
+-- re-answered under a question their previous answer never addressed. Two
+-- verdicts have already been recorded, found wrong and reverted; without this
+-- table, reconstructing either meant reading chat scrollback.
+--
+-- The owner's five decision columns (ok/person/chat/report/fixed) are
+-- deliberately ABSENT. Screening history is a record of what the *skill*
+-- proposed; the owner's decisions are authoritative, are never written by this
+-- package, and have nothing to be superseded by.
+create table if not exists screen_history (
+    id                      integer primary key,
+    result_id               integer not null references results(id),
+
+    -- The screening columns exactly as they stood before the write that
+    -- replaced them — db.SCREEN_COLUMNS, same names, same polarity.
+    screen_verdict          text,
+    screen_outcome          text,
+    screen_reason           text,
+    screened_at             text,        -- when the superseded opinion was formed
+    screen_source           text,        -- which pass/tool formed it
+    poster_url              text,
+    screen_credit_ok        integer,
+    screen_noncommercial_ok integer,
+    screen_unmodified_ok    integer,
+
+    recorded_at             text not null,  -- when this history row was written
+
+    -- One row per (result, screening timestamp). `insert or ignore` against
+    -- this key is what makes the back-fill idempotent AND stops the first
+    -- re-screen of a back-filled row recording the same opinion twice: the
+    -- state it would preserve is the one already in here. `screened_at` is
+    -- never NULL in this table — db.push_screen_history only copies rows that
+    -- have one — so the key never degrades into SQLite's "NULLs are distinct".
+    unique (result_id, screened_at)
+);
+
 create table if not exists api_history (
     id                  integer primary key,
     api_id              text unique,
