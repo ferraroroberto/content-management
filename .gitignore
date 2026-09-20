@@ -14,8 +14,12 @@ docs/screenshots/*
 !docs/screenshots/*-desktop.png
 logs/
 
-# Ignore config.json file and .env file in the process directory
+# Ignore config.json file and .env files — these carry live credentials.
+# The root .env holds the check_ip API keys (SerpAPI / Imgur); any .env
+# anywhere in the tree is a secret file and must never be committed.
 config.json
+.env
+**/.env
 reporting/process/.env
 
 # Per-platform dedicated Chrome user-data directories (cookies, profile) — never commit.

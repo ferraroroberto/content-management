@@ -26,8 +26,8 @@
         "[data-testid=\"stAlert\"]",
         "[data-testid=\"stDateInput\"]"
       ],
-      "input_hash": "820c7a321d8253111a8c3cc4a44ad64264fbcb79fbddf885fcc9ff6d94e94e05",
-      "captured_at": "2026-08-21T16:10:41+00:00",
+      "input_hash": "c62b98d06b3072c91384fa0c3ea2f4bf5edbedf589edc09da5b9b452670e2aa4",
+      "captured_at": "2026-09-20T06:46:57+00:00",
       "files": [
         "docs/screenshots/reporting-desktop.png"
       ]
@@ -51,8 +51,8 @@
         "[data-testid=\"stAlertContainer\"]",
         "[data-testid=\"stAlert\"]"
       ],
-      "input_hash": "62bfee80a62636f3ecfc0ac8adab037ec6f6ca30f146d39c29a5d3afa03f7414",
-      "captured_at": "2026-08-21T16:10:44+00:00",
+      "input_hash": "b57bf163a0e4bebcd97aea2775e2c8c58ca4aeeba5248da72921ac6e39c3887e",
+      "captured_at": "2026-09-20T06:47:01+00:00",
       "files": [
         "docs/screenshots/editorial-desktop.png"
       ]
@@ -76,8 +76,8 @@
         "[data-testid=\"stAlertContainer\"]",
         "[data-testid=\"stAlert\"]"
       ],
-      "input_hash": "e74c7b7e785279316b24068a3b1048dceda3390f83ac5afdb09bee1ccf9e9bd2",
-      "captured_at": "2026-08-21T16:10:47+00:00",
+      "input_hash": "26e479aa55f9e9576a5458928e304771e31fa5a7421b754cadccfa1ec75aeab5",
+      "captured_at": "2026-09-20T06:47:05+00:00",
       "files": [
         "docs/screenshots/planning-desktop.png"
       ]
@@ -101,8 +101,8 @@
         "[data-testid=\"stAlertContainer\"]",
         "[data-testid=\"stAlert\"]"
       ],
-      "input_hash": "4b4ca7454c25cbfffa7b9c5c091abc2d6fe82f19fc68d4ab77c8751ec1b4d91e",
-      "captured_at": "2026-08-22T11:44:15+00:00",
+      "input_hash": "0ae5a48215560e6011a5cf6f2a78a9350f0422e22ce1a685d32163aa9898fb34",
+      "captured_at": "2026-09-20T06:47:08+00:00",
       "files": [
         "docs/screenshots/newsletter-desktop.png"
       ]
@@ -132,8 +132,8 @@
         "[data-testid=\"stMetric\"]",
         "[data-testid=\"stDataFrame\"]"
       ],
-      "input_hash": "e7bc8bef2f26d9576c72e748db233c41f5341e53c0e8da0eabc76299f9f64e27",
-      "captured_at": "2026-08-21T16:10:54+00:00",
+      "input_hash": "1dfa52185f5b2a30d528a7d99fd21cd71cc1f67c42839079a9d83987cf0467bf",
+      "captured_at": "2026-09-20T06:47:16+00:00",
       "files": [
         "docs/screenshots/engagement-desktop.png"
       ]
@@ -162,10 +162,37 @@
         "[data-testid=\"stTextArea\"]",
         "[data-testid=\"stExpander\"]"
       ],
-      "input_hash": "b04c3aea47508002c828e397d8e281f926e792dfc23b1ea5ca44feb7f4fad18e",
-      "captured_at": "2026-08-21T16:41:10+00:00",
+      "input_hash": "ef4bdb82451ed9a8e09ebb2e5953407ac17282085f2949a92d6a570f83a71c8b",
+      "captured_at": "2026-09-20T06:47:23+00:00",
       "files": [
         "docs/screenshots/triage-desktop.png"
+      ]
+    },
+    "check_ip": {
+      "title": "⚖️ Check IP",
+      "description": "Illustration copyright check: reverse-image-search results for every published illustration, ranked most-reused first. Shows what the /check-ip skill proposed for each link, and the verdict plus follow-up trail the owner sets and saves with Apply. Platform, status and illustration filters; the cost-gated search run sits behind its own expander.",
+      "source_globs": [
+        "app/app.py",
+        "app/process_runner.py",
+        "app/tab_check_ip.py",
+        "check_ip/review.py"
+      ],
+      "reach": {
+        "label": "check IP"
+      },
+      "wait": {
+        "text": "Apply decisions"
+      },
+      "mask": [
+        "[data-testid=\"stCode\"]",
+        "[data-testid=\"stAlertContainer\"]",
+        "[data-testid=\"stAlert\"]",
+        ".st-key-check-ip-grid"
+      ],
+      "input_hash": "e8a649b813aff1425ec3487c3bae0e91ceecaa63ba6775bb04fee568bb253a36",
+      "captured_at": "2026-09-20T06:49:40+00:00",
+      "files": [
+        "docs/screenshots/check_ip-desktop.png"
       ]
     }
   }

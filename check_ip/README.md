@@ -91,9 +91,19 @@ A `check_ip` block in `config/config.json` (gitignored — see
 | `search_settings` | `do_exact_search` / `do_similar_search` |
 | `screen_queue` | default platform and batch size for the skill |
 
-**Credentials never go in the repo.** Either paste them into
-`config/config.json` (gitignored) or leave the `${…}` placeholders and export
-`SERPAPI_KEY` / `IMGUR_CLIENT_ID` / `IMGUR_ACCESS_TOKEN`.
+**Credentials live in the repo-root `.env`**, which is gitignored (as is any
+`.env` anywhere in the tree):
+
+```
+SERPAPI_KEY=…
+IMGUR_CLIENT_ID=…
+IMGUR_ACCESS_TOKEN=…
+```
+
+`config.json` keeps `${SERPAPI_KEY}`-style placeholders, which mean "read this
+from the environment". Pasting a real value into `config.json` also works — it
+is gitignored too — but `.env` keeps secrets out of the file that carries
+ordinary settings.
 
 ## Re-search windows
 

@@ -90,7 +90,20 @@ def _secret(cfg: dict, name: str, env: str) -> str:
 
 
 def credentials() -> dict:
-    """The three API credentials, from config.json's api_keys or the environment."""
+    """The three API credentials, from config.json's api_keys or the environment.
+
+    Loads the repo-root ``.env`` first so the keys can live there rather than
+    in ``config.json`` — both are gitignored, but a ``.env`` keeps secrets out
+    of the file that also carries ordinary settings. Never logged, never
+    returned anywhere that renders.
+    """
+    try:
+        from dotenv import load_dotenv  # noqa: PLC0415 — optional at import time
+
+        load_dotenv(REPO_ROOT / ".env")
+    except ImportError:  # pragma: no cover — python-dotenv is in requirements
+        logger.debug("python-dotenv unavailable; reading credentials from the environment only")
+
     cfg = config()
     return {
         "serpapi_key": _secret(cfg, "serpapi_key", "SERPAPI_KEY"),

@@ -200,42 +200,47 @@ def _render_table() -> None:
         "Showing the most-reused illustrations first. Nothing saves until you click Apply."
     )
 
-    st.data_editor(
-        frame,
-        key=editor_key,
-        hide_index=True,
-        num_rows="fixed",
-        width="stretch",
-        height=min(900, 80 + 36 * len(frame)),
-        column_order=["ok", "found_link", "local_image", "screen_verdict", "screen_reason",
-                      "poster_url", "person", "chat", "report", "fixed", "title",
-                      "post_date", "match_type", "source", "search_date"],
-        disabled=["id", "local_image", "found_link", "title", "source", "match_type",
-                  "post_date", "search_date", "duplicate", "screen_verdict",
-                  "screen_reason", "poster_url", "screened_at"],
-        column_config={
-            "ok": st.column_config.SelectboxColumn(
-                "verdict", options=[0, 1], width="small",
-                help="0 = infringement, act on it · 1 = reviewed, acceptable use"),
-            "found_link": st.column_config.LinkColumn("where it appears", display_text="open ↗",
-                                                      width="small"),
-            "local_image": st.column_config.TextColumn("illustration", width="medium"),
-            "screen_verdict": st.column_config.TextColumn("skill says", width="small",
-                                                          help="Proposed by the check-ip skill — never a decision."),
-            "screen_reason": st.column_config.TextColumn("why", width="large"),
-            "poster_url": st.column_config.LinkColumn("who posted", display_text="profile ↗",
-                                                      width="small"),
-            "person": st.column_config.TextColumn("contact", width="medium"),
-            "chat": st.column_config.TextColumn("outreach", width="medium"),
-            "report": st.column_config.TextColumn("report", width="small"),
-            "fixed": st.column_config.CheckboxColumn("fixed", width="small"),
-            "title": st.column_config.TextColumn("page title", width="large"),
-            "post_date": st.column_config.TextColumn("posted", width="small"),
-            "match_type": st.column_config.TextColumn("match", width="small"),
-            "source": st.column_config.TextColumn("platform", width="small"),
-            "search_date": st.column_config.TextColumn("found", width="small"),
-        },
-    )
+    # Wrapped in a keyed container so the docs-capture mask can target this
+    # grid alone (`.st-key-check-ip-grid`). Masking every [data-testid="stDataFrame"]
+    # also hits the collapsed by-platform expander, which paints a phantom box
+    # over the page — and that table is aggregate counts needing no mask.
+    with st.container(key="check-ip-grid"):
+        st.data_editor(
+            frame,
+            key=editor_key,
+            hide_index=True,
+            num_rows="fixed",
+            width="stretch",
+            height=min(900, 80 + 36 * len(frame)),
+            column_order=["ok", "found_link", "local_image", "screen_verdict", "screen_reason",
+                          "poster_url", "person", "chat", "report", "fixed", "title",
+                          "post_date", "match_type", "source", "search_date"],
+            disabled=["id", "local_image", "found_link", "title", "source", "match_type",
+                      "post_date", "search_date", "duplicate", "screen_verdict",
+                      "screen_reason", "poster_url", "screened_at"],
+            column_config={
+                "ok": st.column_config.SelectboxColumn(
+                    "verdict", options=[0, 1], width="small",
+                    help="0 = infringement, act on it · 1 = reviewed, acceptable use"),
+                "found_link": st.column_config.LinkColumn("where it appears", display_text="open ↗",
+                                                          width="small"),
+                "local_image": st.column_config.TextColumn("illustration", width="medium"),
+                "screen_verdict": st.column_config.TextColumn("skill says", width="small",
+                                                              help="Proposed by the check-ip skill — never a decision."),
+                "screen_reason": st.column_config.TextColumn("why", width="large"),
+                "poster_url": st.column_config.LinkColumn("who posted", display_text="profile ↗",
+                                                          width="small"),
+                "person": st.column_config.TextColumn("contact", width="medium"),
+                "chat": st.column_config.TextColumn("outreach", width="medium"),
+                "report": st.column_config.TextColumn("report", width="small"),
+                "fixed": st.column_config.CheckboxColumn("fixed", width="small"),
+                "title": st.column_config.TextColumn("page title", width="large"),
+                "post_date": st.column_config.TextColumn("posted", width="small"),
+                "match_type": st.column_config.TextColumn("match", width="small"),
+                "source": st.column_config.TextColumn("platform", width="small"),
+                "search_date": st.column_config.TextColumn("found", width="small"),
+            },
+        )
 
     st.button("✅ Apply decisions", key=f"check-ip-apply-{editor_key}", type="primary",
               on_click=_apply, args=(editor_key,),
