@@ -13,6 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+import newsletter  # noqa: E402
 from newsletter.triage import db  # noqa: E402
 from newsletter.triage import handoff as ho  # noqa: E402
 from tests.test_triage_db import FakeSupabase  # noqa: E402
@@ -94,8 +95,13 @@ class HandoffTests(unittest.TestCase):
         fake_tabs = types.SimpleNamespace(connect=lambda port: browser, list_tabs=lambda b: [tab],
                                           close_browser=lambda b: None)
         fake_boot = types.SimpleNamespace(ensure_chrome=lambda: 0)
+        # ``open_in_chrome`` does ``from newsletter import chrome_tabs``, which
+        # reads the package *attribute* whenever the real submodule is already
+        # imported (as it is once any test imports newsletter.pipeline) — so the
+        # sys.modules entry alone is not enough to stand in for it.
         with unittest.mock.patch.dict(sys.modules, {"newsletter.chrome_tabs": fake_tabs,
-                                                    "newsletter.bootstrap_chrome": fake_boot}):
+                                                    "newsletter.bootstrap_chrome": fake_boot}), \
+             unittest.mock.patch.object(newsletter, "chrome_tabs", fake_tabs, create=True):
             res = ho.open_in_chrome(["https://a.com/x", "https://b.com/y?utm_source=z"], dry_run=True)
             self.assertEqual((res["would_open"], res["skipped_open"], res["opened"]), (1, 1, 0))
             ctx.new_page.assert_not_called()

@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from newsletter import llm
+from newsletter.topics import TOPICS, match_topic
 
 logger = logging.getLogger("newsletter_triage.score")
 
@@ -76,7 +77,6 @@ class LLMCache:
             tmp.write_text(json.dumps(self._data, ensure_ascii=False), encoding="utf-8")
             tmp.replace(self.path)
 
-TOPICS = ("leadership and management", "personal development", "innovation")
 TIER_WEIGHT = {"never": 0.0, "rarely": 0.35, "review": 1.0, "usually": 1.25, "always": 1.5}
 NEW_SENDER_WEIGHT = 0.85
 FLOOR_WEIGHT = 0.25
@@ -195,18 +195,6 @@ def _clamp(v: Any, lo: int = 0, hi: int = 5) -> Optional[int]:
         return None
 
 
-def _topic(v: Any) -> Optional[str]:
-    s = (str(v) if v is not None else "").strip().lower()
-    for t in TOPICS:
-        if s == t or s.startswith(t[:10]):
-            return t
-    aliases = {"leadership": TOPICS[0], "management": TOPICS[0], "personal": TOPICS[1], "innovation": TOPICS[2], "ai": TOPICS[2]}
-    for k, t in aliases.items():
-        if k in s:
-            return t
-    return None
-
-
 # ---------------------------------------------------------------------------
 # stage A — metadata, batched
 
@@ -277,7 +265,7 @@ def score_metadata(items: Sequence[Dict[str, str]], criteria: Dict[str, Any], *,
                 continue
             gi = idxs[idx - 1]
             ms = out[gi]
-            ms.topic, ms.fit = _topic(obj.get("topic")), _clamp(obj.get("fit"))
+            ms.topic, ms.fit = match_topic(obj.get("topic")), _clamp(obj.get("fit"))
             ms.news, ms.promo = bool(obj.get("news")), bool(obj.get("promo"))
             ms.reason, ms.ok = str(obj.get("reason") or "")[:160], ms.fit is not None
             if cache is not None and ms.ok:
@@ -335,7 +323,7 @@ def score_content(*, title: str, author: str, sender: str, domain: str, excerpt:
     if not isinstance(data, dict):
         cs.reason = "llm-unparseable"
         return cs
-    cs.topic, cs.relevance, cs.star = _topic(data.get("topic")), _clamp(data.get("relevance")), _clamp(data.get("star"))
+    cs.topic, cs.relevance, cs.star = match_topic(data.get("topic")), _clamp(data.get("relevance")), _clamp(data.get("star"))
     cs.news, cs.promo, cs.paywall = bool(data.get("news")), bool(data.get("promo")), bool(data.get("paywall"))
     cs.summary, cs.reason = str(data.get("summary") or "")[:240], str(data.get("reason") or "")[:160]
     cs.ok = cs.relevance is not None

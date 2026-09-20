@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -30,15 +30,26 @@ from newsletter import (  # noqa: E402
 )
 from newsletter.cache import CacheState  # noqa: E402
 
+# process_url outcomes. Anything other than CREATED leaves the tab open.
+CREATED = "created"
+SKIPPED = "skipped"
+UNCLASSIFIED = "unclassified"
+
 
 def process_url(
     *, url: str, page, archive_cfg: Dict[str, Any], client, cache: CacheState,
     write: bool, logger: logging.Logger,
-) -> bool:
-    """Process a single tab. Returns True if a page was (or would be) created."""
+) -> str:
+    """Process a single tab.
+
+    Returns :data:`CREATED` if a page was (or in a dry run would be) created,
+    :data:`UNCLASSIFIED` if the topic classifier produced no valid label, and
+    :data:`SKIPPED` for every other no-write outcome (duplicate, body too
+    short, no newsletter row with room).
+    """
     if cache.find_article(url):
         logger.info("⏭️  Already in Notion (duplicate URL): %s", url)
-        return False
+        return SKIPPED
 
     logger.info("📥 Extracting: %s", url)
     art = extractor.extract(page)
@@ -53,13 +64,21 @@ def process_url(
         logger.warning("⏭️  Body too short (%d < %d chars) — skipping LLM "
                         "steps, leaving tab open: %s",
                         len(art.body_text), min_body, url)
-        return False
+        return SKIPPED
 
+    # No valid label means "unknown", not "personal development" — the three
+    # topics are the only Notion select options and the only keys in
+    # topic_to_rollup, so an unclassified article has no row to be filed in.
+    # Leave the tab open for the owner exactly like the too-short body above.
     topic = classifier.classify(
         base_url=archive_cfg["llm_hub_base_url"],
         model=archive_cfg["llm_model"],
         title=art.title, body_text=art.body_text,
     )
+    if topic is None:
+        logger.warning("⏭️  Topic could not be classified — not archiving with a "
+                       "guessed topic, leaving tab open: %s", url)
+        return UNCLASSIFIED
     logger.info("🏷️  Topic: %s", topic)
 
     summary = summarizer.summarize(
@@ -111,7 +130,7 @@ def process_url(
     )
     if not newsletter:
         logger.error("❌ No future newsletter has room for topic '%s' — stopping", topic)
-        return False
+        return SKIPPED
     nl_number = (
         newsletter.get("properties", {}).get("number", {}).get("title", [{}])[0]
         .get("plain_text", "?")
@@ -120,7 +139,7 @@ def process_url(
 
     if not write:
         logger.info("🧪 [DRY-RUN] Would create article page now; skipping write")
-        return True
+        return CREATED
 
     notion_io.create_article(
         client,
@@ -134,7 +153,7 @@ def process_url(
         body_text=art.body_text,
         cache=cache,
     )
-    return True
+    return CREATED
 
 
 def run_batch(*, write: bool, debug: bool = False) -> int:
@@ -173,6 +192,7 @@ def run_batch(*, write: bool, debug: bool = False) -> int:
     failure_limit = archive_cfg.get("consecutive_failure_limit", 3)
     archived = skipped = 0
     failed_urls: list[str] = []
+    unclassified_urls: list[str] = []
     consecutive = 0
     aborted = False
 
@@ -188,15 +208,19 @@ def run_batch(*, write: bool, debug: bool = False) -> int:
         for t in targets:
             logger.info("▶️  Tab: %s", t.url)
             try:
-                created = process_url(
+                result = process_url(
                     url=t.url, page=t.page, archive_cfg=archive_cfg,
                     client=client, cache=cache, write=write, logger=logger,
                 )
-                if created:
+                if result == CREATED:
                     archived += 1
                     if write:
                         t.page.close()
                         logger.info("🗑️  Closed tab")
+                elif result == UNCLASSIFIED:
+                    # Not an error and not a silent skip — the owner has to
+                    # file this one (or re-run it) by hand.
+                    unclassified_urls.append(t.url)
                 else:
                     # Duplicate or empty-body skip — not an error.
                     skipped += 1
@@ -216,8 +240,12 @@ def run_batch(*, write: bool, debug: bool = False) -> int:
     finally:
         chrome_tabs.close_browser(browser)
 
-    logger.info("📊 %d archived, %d skipped, %d failed",
-                archived, skipped, len(failed_urls))
+    logger.info("📊 %d archived, %d skipped, %d unclassified, %d failed",
+                archived, skipped, len(unclassified_urls), len(failed_urls))
+    if unclassified_urls:
+        logger.warning("🏷️ Unclassified — no topic, not archived (left open):")
+        for u in unclassified_urls:
+            logger.warning("   • %s", u)
     if failed_urls:
         logger.info("❌ Failed URLs (left open for re-run):")
         for u in failed_urls:
