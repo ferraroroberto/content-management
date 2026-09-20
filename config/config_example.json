@@ -321,5 +321,36 @@
             "cache_path": "engagement/classify/.llm_cache.json",
             "timeout_seconds": 20
         }
+    },
+    "check_ip": {
+        "images_folder": "C:\\Users\\rober\\iCloudDrive\\...\\Roberto\\check IP\\roberto_images",
+        "legacy_metadata_folder": "C:\\Users\\rober\\iCloudDrive\\...\\Roberto\\check IP\\roberto_metadata",
+        "store_folder": "results/check_ip",
+        "api_keys": {
+            "serpapi_key": "${SERPAPI_KEY}",
+            "imgur_client_id": "${IMGUR_CLIENT_ID}",
+            "imgur_access_token": "${IMGUR_ACCESS_TOKEN}"
+        },
+        "search_endpoint": "https://serpapi.com/search",
+        "allowed_extensions": [
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".gif",
+            ".bmp"
+        ],
+        "processing_thresholds": {
+            "linkedin_high_threshold": 30,
+            "high_linkedin_days": 6,
+            "standard_days": 180
+        },
+        "search_settings": {
+            "do_exact_search": true,
+            "do_similar_search": false
+        },
+        "screen_queue": {
+            "source": "LinkedIn",
+            "default_limit": 20
+        }
     }
 }

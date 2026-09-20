@@ -1,0 +1,266 @@
+"""Regression tests for the check_ip store, queue and review layer (issue #286).
+
+The load-bearing guarantee here is the one in the middle: the screening pass
+proposes, it never decides. ``check_ip.screen.record_verdict`` must not be able
+to touch ``ok`` / ``person`` / ``chat`` / ``report`` / ``fixed`` — those are ten
+months of manual triage and the skill runs unattended against them.
+
+Run: & .\\.venv\\Scripts\\python.exe -m unittest discover tests -v
+"""
+
+from __future__ import annotations
+
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from check_ip import db, process, review, screen  # noqa: E402
+
+
+def _seed(conn, rows):
+    """Insert result rows, returning their ids in order."""
+    ids = []
+    for row in rows:
+        cur = conn.execute(
+            """
+            insert into results
+                (local_image, uploaded_url, found_link, title, duplicate, match_type,
+                 source, post_date, search_date, "order", ok, person, chat, report, fixed)
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                row.get("local_image", "img.png"), row.get("uploaded_url", "https://i/x.png"),
+                row["found_link"], row.get("title", ""), row.get("duplicate", 0),
+                row.get("match_type", "Exact Match"), row.get("source", "LinkedIn"),
+                row.get("post_date"), row.get("search_date", "2026-01-01 00:00:00"),
+                row.get("order", 1), row.get("ok"), row.get("person"), row.get("chat"),
+                row.get("report"), row.get("fixed"),
+            ),
+        )
+        ids.append(cur.lastrowid)
+    conn.commit()
+    return ids
+
+
+class CheckIpStoreTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.conn = db.connect(Path(self._tmp.name) / "t.db")
+
+    def tearDown(self):
+        self.conn.close()
+        self._tmp.cleanup()
+
+    # ── the guarantee the skill depends on ────────────────────────────────
+
+    def test_record_verdict_never_touches_owner_columns(self):
+        """A verdict may be written over a fully-annotated row without changing it."""
+        (row_id,) = _seed(self.conn, [{
+            "found_link": "https://example.test/a",
+            "ok": 0, "person": "contact-ref", "chat": "thread-ref",
+            "report": "1", "fixed": 1,
+        }])
+        before = dict(self.conn.execute(
+            "select ok, person, chat, report, fixed from results where id = ?", (row_id,)
+        ).fetchone())
+
+        screen.record_verdict(self.conn, row_id, verdict="acceptable",
+                              reason="credited in the caption", poster_url="https://example.test/p")
+
+        after = dict(self.conn.execute(
+            "select ok, person, chat, report, fixed from results where id = ?", (row_id,)
+        ).fetchone())
+        self.assertEqual(before, after, "record_verdict altered an owner column")
+
+        written = dict(self.conn.execute(
+            "select screen_verdict, screen_reason, poster_url, screened_at, screen_source "
+            "from results where id = ?", (row_id,)
+        ).fetchone())
+        self.assertEqual(written["screen_verdict"], "acceptable")
+        self.assertEqual(written["screen_reason"], "credited in the caption")
+        self.assertEqual(written["poster_url"], "https://example.test/p")
+        self.assertIsNotNone(written["screened_at"])
+
+    def test_record_verdict_rejects_an_unknown_verdict(self):
+        (row_id,) = _seed(self.conn, [{"found_link": "https://example.test/b"}])
+        with self.assertRaises(ValueError):
+            screen.record_verdict(self.conn, row_id, verdict="probably-bad")
+        self.assertIsNone(self.conn.execute(
+            "select screen_verdict from results where id = ?", (row_id,)
+        ).fetchone()["screen_verdict"])
+
+    # ── the queue ─────────────────────────────────────────────────────────
+
+    def test_queue_skips_decided_screened_and_secondary_rows(self):
+        ids = _seed(self.conn, [
+            {"found_link": "https://example.test/pending"},
+            {"found_link": "https://example.test/decided", "ok": 1},
+            {"found_link": "https://example.test/secondary", "duplicate": 1},
+            {"found_link": "https://example.test/other-platform", "source": "Instagram"},
+        ])
+        screen.record_verdict(self.conn, ids[0], verdict="unclear")
+        served = screen.next_batch(self.conn, limit=50, source="LinkedIn")
+        self.assertEqual(served, [], "an already-screened row was served again")
+
+        served = screen.next_batch(self.conn, limit=50, source="LinkedIn",
+                                   include_screened=True)
+        self.assertEqual([r["id"] for r in served], [ids[0]],
+                         "expected only the pending canonical LinkedIn row")
+
+    def test_open_web_filter_selects_unattributed_rows_only(self):
+        """`(open web)` must be a NULL test, not "no filter"."""
+        _seed(self.conn, [
+            {"found_link": "https://example.test/li", "source": "LinkedIn"},
+            {"found_link": "https://example.test/blog", "source": None},
+        ])
+        served = screen.next_batch(self.conn, limit=10, source=db.OPEN_WEB)
+        self.assertEqual([r["found_link"] for r in served], ["https://example.test/blog"])
+
+        frame = review.results_frame(self.conn, source=db.OPEN_WEB)
+        self.assertEqual(list(frame["found_link"]), ["https://example.test/blog"])
+
+        self.assertEqual(screen.stats(self.conn, source=db.OPEN_WEB)["canonical"], 1)
+        self.assertEqual(screen.stats(self.conn, source=None)["canonical"], 2,
+                         "None must still mean every platform")
+
+    def test_queue_ranks_most_reused_image_first(self):
+        self.conn.executemany(
+            "insert into images (filename, linkedin_count) values (?, ?)",
+            [("rare.png", 2), ("viral.png", 900)],
+        )
+        self.conn.commit()
+        _seed(self.conn, [
+            {"found_link": "https://example.test/1", "local_image": "rare.png"},
+            {"found_link": "https://example.test/2", "local_image": "viral.png"},
+        ])
+        served = screen.next_batch(self.conn, limit=10, source="LinkedIn")
+        self.assertEqual(served[0]["local_image"], "viral.png")
+
+    # ── duplicate marking ─────────────────────────────────────────────────
+
+    def test_mark_duplicates_flags_oldest_as_primary(self):
+        _seed(self.conn, [
+            {"found_link": "https://example.test/shared", "local_image": "a.png",
+             "search_date": "2026-03-01 00:00:00"},
+            {"found_link": "https://example.test/shared", "local_image": "b.png",
+             "search_date": "2026-01-01 00:00:00"},
+            {"found_link": "https://example.test/shared", "local_image": "c.png",
+             "search_date": "2026-02-01 00:00:00"},
+            {"found_link": "https://example.test/alone", "local_image": "d.png"},
+        ])
+        counts = db.mark_duplicates(self.conn)
+        self.assertEqual(counts.get(2), 1, "exactly one primary per repeated URL")
+        self.assertEqual(counts.get(1), 2)
+        self.assertEqual(counts.get(0), 1, "a URL seen once stays unique")
+
+        primary = self.conn.execute(
+            "select local_image from results where duplicate = 2"
+        ).fetchone()["local_image"]
+        self.assertEqual(primary, "b.png", "the oldest sighting should be the primary")
+
+    def test_same_link_from_both_searches_is_two_rows(self):
+        """The exact and visual searches finding one URL are two distinct findings."""
+        _seed(self.conn, [
+            {"found_link": "https://example.test/x", "match_type": "Exact Match"},
+            {"found_link": "https://example.test/x", "match_type": "Similar Match"},
+        ])
+        self.assertEqual(
+            self.conn.execute("select count(*) as n from results").fetchone()["n"], 2)
+
+    # ── owner writes ──────────────────────────────────────────────────────
+
+    def test_apply_decisions_writes_only_edited_rows(self):
+        ids = _seed(self.conn, [
+            {"found_link": "https://example.test/1"},
+            {"found_link": "https://example.test/2", "ok": 1},
+        ])
+        result = review.apply_decisions(self.conn, [
+            {"id": ids[0], "ok": 0, "person": "someone", "chat": None, "report": None,
+             "fixed": None},
+            {"id": ids[1], "ok": 1, "person": None, "chat": None, "report": None,
+             "fixed": None},
+        ])
+        self.assertEqual(result, {"changed": 1, "flagged": 1},
+                         "an unchanged row should not count as a write")
+        self.assertEqual(self.conn.execute(
+            "select ok from results where id = ?", (ids[0],)).fetchone()["ok"], 0)
+
+    def test_apply_decisions_round_trips_a_checkbox(self):
+        (row_id,) = _seed(self.conn, [{"found_link": "https://example.test/1"}])
+        review.apply_decisions(self.conn, [
+            {"id": row_id, "ok": 0, "person": None, "chat": None, "report": None, "fixed": True},
+        ])
+        self.assertEqual(self.conn.execute(
+            "select fixed from results where id = ?", (row_id,)).fetchone()["fixed"], 1)
+
+
+class CheckIpProcessTests(unittest.TestCase):
+    """The ported pure helpers — behaviour must match the sibling repo's."""
+
+    def test_extract_linkedin_post_date(self):
+        # Synthetic id built as (epoch_ms << 22) for 2023-06-15T12:00Z — exercises
+        # the real arithmetic without embedding a third party's post id in a
+        # public repo.
+        url = "https://www.linkedin.com/feed/update/urn:li:activity:7075079494041600000/"
+        self.assertEqual(process.extract_post_date(url), "2023-06-15 12:00:00 UTC")
+
+    def test_extract_twitter_post_date(self):
+        # Synthetic snowflake for 2022-06-15T12:00Z: (epoch_ms - twitter_epoch) << 22.
+        url = "https://x.com/someone/status/1537042233553846272"
+        self.assertEqual(process.extract_post_date(url), "2022-06-15 12:00:00 UTC")
+
+    def test_extract_post_date_returns_none_off_platform(self):
+        self.assertIsNone(process.extract_post_date("https://example.test/blog/post"))
+
+    def test_extract_post_date_survives_a_junk_id(self):
+        self.assertIsNone(process.extract_post_date("https://x.com/a/status/999999999999999999999999"))
+
+    def test_identify_source(self):
+        cases = {
+            "https://www.linkedin.com/posts/someone_thing-activity-7392771581359513600-wLzA": "LinkedIn",
+            "https://x.com/someone/status/1985821858432684125": "Twitter/X",
+            "https://www.instagram.com/someone/p/Ab1Cd2Ef3Gh/": "Instagram",
+            "https://example.test/gallery": None,
+        }
+        for url, expected in cases.items():
+            self.assertEqual(process.identify_source(url), expected, url)
+
+    def test_build_rows_treats_match_type_as_part_of_identity(self):
+        payload = {"exact_matches": [{"link": "https://example.test/a", "title": "A"}]}
+        existing: set = set()
+        rows, added, skipped = process.build_rows(payload, "exact_matches", "i.png",
+                                                  "https://i/x.png", "2026-01-01 00:00:00", existing)
+        self.assertEqual((added, skipped), (1, 0))
+        self.assertEqual(rows[0]["match_type"], "Exact Match")
+
+        # The same URL from the visual search is a new finding, not a duplicate.
+        payload = {"visual_matches": [{"link": "https://example.test/a", "title": "A"}]}
+        _, added, skipped = process.build_rows(payload, "visual_matches", "i.png",
+                                               "https://i/x.png", "2026-01-01 00:00:00", existing)
+        self.assertEqual((added, skipped), (1, 0))
+
+        # Re-running the same search is.
+        payload = {"exact_matches": [{"link": "https://example.test/a", "title": "A"}]}
+        _, added, skipped = process.build_rows(payload, "exact_matches", "i.png",
+                                               "https://i/x.png", "2026-01-01 00:00:00", existing)
+        self.assertEqual((added, skipped), (0, 1))
+
+    def test_is_recently_processed_uses_the_high_linkedin_window(self):
+        from datetime import datetime, timedelta
+        recent = (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d %H:%M:%S")
+        # 10 days ago: inside the 180-day standard window…
+        self.assertTrue(process.is_recently_processed(recent, 0, 30, 6, 180))
+        # …but past the 6-day window a heavily-reused image gets.
+        self.assertFalse(process.is_recently_processed(recent, 99, 30, 6, 180))
+
+    def test_is_recently_processed_treats_an_unparseable_date_as_never(self):
+        self.assertFalse(process.is_recently_processed("not a date", 0, 30, 6, 180))
+        self.assertFalse(process.is_recently_processed(None, 0, 30, 6, 180))
+
+
+if __name__ == "__main__":
+    unittest.main()
