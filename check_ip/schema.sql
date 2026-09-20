@@ -55,19 +55,48 @@ create table if not exists results (
     fixed          integer,   -- 0/1 — taken down or corrected
 
     -- ── Screening columns. The skill writes ONLY these. ───────────────────
-    -- The verdict answers one question: does the post credit the owner? A
-    -- visible ROBERTOFERRARO.ART watermark is NOT credit on its own — the
-    -- policy is that the post must mention him (name, tag, or link). The two
-    -- flags record what makes an infringement worse, and are kept separate
-    -- from the verdict so the backlog can be sliced by type later without a
-    -- schema change. See db.severity() for how they rank.
+    -- The illustrations are published under CC BY-NC-ND 4.0, which is three
+    -- conditions that must ALL hold. Each gets its own column with the same
+    -- polarity (issue #295):
+    --
+    --     1 = condition met · 0 = condition violated · NULL = NOT ASSESSED
+    --
+    -- NULL is a state of its own and never collapses into the passing one. A
+    -- row whose non-commercial condition was never looked at is not compliant,
+    -- it is unchecked — see db.severity(), db.assessed_sql() and the tab's
+    -- "not fully assessed" filter, none of which coalesce a NULL to 1.
+    screen_credit_ok        integer, -- BY: named, tagged, linked, or his own comment claims it
+    screen_noncommercial_ok integer, -- NC: no promotional CTA and no paid/business context
+    screen_unmodified_ok    integer, -- ND: no crop, filter, added logo or text, translation; signature intact
+
+    -- Derived from the three columns above, not primary: 'infringement' when
+    -- any condition is violated, 'acceptable' only when all three are met,
+    -- 'unclear' while any is unassessed. db.verdict_for() owns the rule and
+    -- screen.record_verdict refuses a verdict that contradicts the conditions.
     screen_verdict     text,    -- 'infringement' | 'acceptable' | 'unclear'
+
+    -- Which kind of 'unclear' this is, set only alongside that verdict:
+    -- 'ambiguous'         — could not tell; another look may settle it
+    -- 'nothing_to_assess' — the post is gone, or carries no illustration at all
+    -- The second is permanent and irreducible, which is why it is nameable:
+    -- the tab excludes it rather than parking it in a re-screen pile forever.
+    screen_outcome     text,
+
     screen_reason      text,
     screened_at        text,
     screen_source      text,    -- who/what produced the verdict
     poster_url         text,    -- profile of whoever posted it, for one-click follow-up
-    screen_promotional integer, -- 1 = carries a self-promotional or commercial call to action
-    screen_altered     integer, -- 1 = the image was edited: watermark cropped, painted over, removed
+
+    -- ── Frozen. Superseded by the three condition columns above (#295). ───
+    -- The record of the credit-only screening pass: 1 = the poster pushed
+    -- their own following or product · 1 = the watermark was cropped, painted
+    -- over or removed. Both were narrower than the licence they stood in for,
+    -- so `migrate --assess-conditions` mapped them onto screen_noncommercial_ok
+    -- and screen_unmodified_ok and nothing writes them any more. Kept, not
+    -- dropped: they are what that pass actually established, and the mapping
+    -- is only auditable while the input survives.
+    screen_promotional integer,
+    screen_altered     integer,
 
     -- Whoever posted it, derived from found_link (db.poster_key_for). Needed
     -- *before* screening so the queue can rank repeat offenders first, which

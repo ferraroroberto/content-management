@@ -1,15 +1,15 @@
 """The screening queue: serve links to check, record the verdicts.
 
 This is the interface the ``check-ip`` skill drives. The skill pulls a ranked
-batch of un-screened links, opens each in a browser, judges whether the
-illustration is used and whether it is credited, and writes a *proposed*
-verdict back here.
+batch of un-screened links, opens each in a browser, judges the post against
+the three conditions of the licence the illustrations are published under, and
+writes a *proposed* verdict back here.
 
 **The screening pass never writes an owner decision.** ``ok`` / ``person`` /
 ``chat`` / ``report`` / ``fixed`` are ten months of manual triage and remain
 the owner's alone — set in the control-panel tab, never from here. This module
-refuses to write them at all; ``verdict`` touches only the five screening
-columns. That separation is what makes the skill safe to run unattended: the
+refuses to write them at all; ``verdict`` touches only ``db.SCREEN_COLUMNS``.
+That separation is what makes the skill safe to run unattended: the
 worst it can do is propose something wrong, which the owner then overrules.
 
 Usage::
@@ -17,15 +17,19 @@ Usage::
     python -m check_ip.screen next --limit 20
     python -m check_ip.screen next --limit 20 --image "bicycle backwards - micromanagement.png"
     python -m check_ip.screen verdict --id 12345 --verdict infringement \\
+        --credit violated --noncommercial met --unmodified met \\
         --reason "no mention of the owner anywhere in the post" --poster-url https://…
-    python -m check_ip.screen verdict --id 12345 --verdict infringement --promotional --altered \\
-        --reason "watermark cropped off; caption sells the poster's course"
+    python -m check_ip.screen verdict --id 12345 --verdict infringement \\
+        --credit met --noncommercial violated --unmodified met \\
+        --reason "credited in the caption, but the post sells the poster's course"
+    python -m check_ip.screen verdict --id 12345 --verdict unclear --outcome nothing_to_assess \\
+        --reason "the post no longer exists"
     python -m check_ip.screen stats
 
-The verdict answers one question: **does the post credit the owner?** A visible
-watermark is not credit on its own — the policy is that the post must mention
-him. ``--promotional`` and ``--altered`` record what makes an infringement
-worse; see ``db.severity``.
+The licence is **CC BY-NC-ND 4.0**: credit, non-commercial use and no
+derivatives must *all* hold, and each is recorded separately as met, violated
+or not assessed. Not assessed is a real answer — see ``db.severity`` and
+``db.fully_assessed``, neither of which reads a missing answer as a pass.
 """
 
 from __future__ import annotations
@@ -50,6 +54,14 @@ DEFAULT_LIMIT = 10  # one worker batch; the skill fans out N/10 of them
 # the skill should judge the page, not be primed by a past decision.
 QUEUE_FIELDS = ("id", "local_image", "found_link", "title", "source", "post_date",
                 "match_type", "search_date", "linkedin_count", "poster_pending")
+
+# How the three condition states are spelled on the CLI and in error messages.
+# "unknown" is a first-class choice on purpose: a worker has to be able to say
+# it, and a reader has to be able to tell it from "met". The words go straight
+# to db.condition_state — argparse restricts the input, that function owns the
+# meaning, and there is no second word-to-value table to drift out of step.
+CONDITION_CHOICES = ("met", "violated", "unknown")
+CONDITION_WORDS = {1: "met", 0: "violated", None: "not assessed"}
 
 
 def queue_config() -> dict:
@@ -161,22 +173,48 @@ def record_verdict(
     reason: str = "",
     poster_url: Optional[str] = None,
     screen_source: str = "check-ip skill",
-    promotional: bool = False,
-    altered: bool = False,
+    credit_ok: object = None,
+    noncommercial_ok: object = None,
+    unmodified_ok: object = None,
+    outcome: Optional[str] = None,
 ) -> dict:
     """Write one proposed verdict. Owner columns are not in the statement.
 
-    ``promotional`` (a self-promotional or commercial call to action) and
-    ``altered`` (the image was edited — watermark cropped, painted over or
-    removed) are aggravators, and only mean anything alongside an
-    ``infringement`` verdict. Recording them on an ``acceptable`` row would
-    make the stored severity disagree with ``db.severity()``, so they are
-    cleared rather than trusted.
+    The three conditions are recorded as given — ``1`` met, ``0`` violated,
+    ``None`` not assessed — and **nothing is cleared**. The old model blanked
+    the aggravators on a non-infringement verdict, which is exactly how a
+    credited-but-commercial post ended up stored as compliant (issue #295).
+
+    ``verdict`` is checked against ``db.verdict_for()`` rather than normalised:
+    a worker that says ``acceptable`` while reporting a violated condition has
+    contradicted itself, and silently picking one of the two answers would hide
+    which. ``outcome`` says which kind of ``unclear`` this is and is required
+    with that verdict, refused with any other.
     """
     if verdict not in db.VERDICTS:
         raise ValueError(f"verdict must be one of {db.VERDICTS}, got {verdict!r}")
-    if verdict != "infringement":
-        promotional = altered = False
+    conditions = (db.condition_state(credit_ok), db.condition_state(noncommercial_ok),
+                  db.condition_state(unmodified_ok))
+
+    implied = db.verdict_for(*conditions)
+    if implied != verdict:
+        named = ", ".join(f"{column.removeprefix('screen_')}={CONDITION_WORDS[state]}"
+                          for column, state in zip(db.CONDITION_COLUMNS, conditions))
+        raise ValueError(
+            f"verdict {verdict!r} contradicts the conditions ({named}), which imply "
+            f"{implied!r} — record what you saw, not a summary of it"
+        )
+
+    if verdict == "unclear":
+        if outcome not in db.UNCLEAR_OUTCOMES:
+            raise ValueError(
+                f"an 'unclear' verdict needs --outcome one of {db.UNCLEAR_OUTCOMES}: "
+                f"'{db.OUTCOME_AMBIGUOUS}' if another look could settle it, "
+                f"'{db.OUTCOME_NOTHING_TO_ASSESS}' if the post is gone or carries no "
+                f"illustration at all"
+            )
+    elif outcome is not None:
+        raise ValueError(f"--outcome only applies to an 'unclear' verdict, not {verdict!r}")
 
     row = conn.execute("select id, local_image, found_link from results where id = ?",
                        (row_id,)).fetchone()
@@ -186,25 +224,28 @@ def record_verdict(
     conn.execute(
         """
         update results
-           set screen_verdict     = ?,
-               screen_reason      = ?,
-               screened_at        = ?,
-               screen_source      = ?,
-               poster_url         = coalesce(?, poster_url),
-               screen_promotional = ?,
-               screen_altered     = ?
+           set screen_verdict          = ?,
+               screen_outcome          = ?,
+               screen_reason           = ?,
+               screened_at             = ?,
+               screen_source           = ?,
+               poster_url              = coalesce(?, poster_url),
+               screen_credit_ok        = ?,
+               screen_noncommercial_ok = ?,
+               screen_unmodified_ok    = ?
          where id = ?
         """,
-        (verdict, reason or None, datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-         screen_source, poster_url or None,
-         1 if promotional else 0, 1 if altered else 0, row_id),
+        (verdict, outcome, reason or None, datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+         screen_source, poster_url or None, *conditions, row_id),
     )
     conn.commit()
     return {
         "id": row_id,
         "verdict": verdict,
+        "outcome": outcome,
         "found_link": row["found_link"],
-        "severity": db.severity(verdict, promotional, altered),
+        "severity": db.severity(*conditions),
+        "fully_assessed": db.fully_assessed(*conditions),
     }
 
 
@@ -215,6 +256,13 @@ def stats(conn: sqlite3.Connection, *, source: Optional[str] = None) -> dict:
     all of them and reported on their own as ``retired``, so the totals match
     what the queue and the tab will actually serve rather than counting 115k
     rows nothing will ever look at again.
+
+    ``not_fully_assessed`` is the number issue #295 exists for: rows that were
+    screened but whose licence conditions were not all established. They are
+    **not** compliant rows and are counted apart from ``proposed_acceptable``,
+    which only holds rows where all three conditions were met. The permanently
+    unassessable ones (``nothing_to_assess``) are counted on their own instead,
+    since no re-screen will ever move them.
     """
     clause, params = db.source_clause(source, "r.source")
     scope = clause or "1 = 1"
@@ -230,6 +278,11 @@ def stats(conn: sqlite3.Connection, *, source: Optional[str] = None) -> dict:
                      and r.ok is null then 1 else 0 end)               as proposed_infringement,
             sum(case when r.screen_verdict = 'acceptable' then 1 else 0 end) as proposed_acceptable,
             sum(case when r.screen_verdict = 'unclear' then 1 else 0 end)    as proposed_unclear,
+            sum(case when r.screened_at is not null
+                      and not ({db.assessed_sql()})
+                      and not ({db.permanent_sql()})
+                     then 1 else 0 end)                                as not_fully_assessed,
+            sum(case when {db.permanent_sql()} then 1 else 0 end)      as nothing_to_assess,
             sum(case when r.ok is null and ({db.severity_sql()}) = 3
                      then 1 else 0 end)                                as severity_3,
             sum(case when r.ok is null and ({db.severity_sql()}) = 2
@@ -274,10 +327,21 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_verdict.add_argument("--reason", default="")
     p_verdict.add_argument("--poster-url", default=None)
     p_verdict.add_argument("--screen-source", default="check-ip skill")
-    p_verdict.add_argument("--promotional", action="store_true",
-                           help="the post carries a self-promotional or commercial CTA")
-    p_verdict.add_argument("--altered", action="store_true",
-                           help="the image was edited: watermark cropped, painted over, removed")
+    # Each condition defaults to `unknown`, never to `met`: the default has to
+    # be the state that claims nothing, or a worker who forgets one silently
+    # certifies compliance it never checked.
+    p_verdict.add_argument("--credit", default="unknown", choices=CONDITION_CHOICES,
+                           help="BY — the post names, tags or links him (default: unknown)")
+    p_verdict.add_argument("--noncommercial", default="unknown", choices=CONDITION_CHOICES,
+                           help="NC — no promotional CTA and no paid/business context "
+                                "(default: unknown)")
+    p_verdict.add_argument("--unmodified", default="unknown", choices=CONDITION_CHOICES,
+                           help="ND — no crop, filter, added logo or text, no translation, "
+                                "signature intact (default: unknown)")
+    p_verdict.add_argument("--outcome", default=None, choices=list(db.UNCLEAR_OUTCOMES),
+                           help="required with --verdict unclear: 'ambiguous' if another look "
+                                "could settle it, 'nothing_to_assess' if the post is gone or "
+                                "carries no illustration")
 
     p_stats = sub.add_parser("stats", help="queue depth and progress")
     p_stats.add_argument("--source", default=cfg["source"])
@@ -306,10 +370,24 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 0
 
     if args.command == "verdict":
-        out = record_verdict(conn, args.id, verdict=args.verdict, reason=args.reason,
-                             poster_url=args.poster_url, screen_source=args.screen_source,
-                             promotional=args.promotional, altered=args.altered)
+        try:
+            out = record_verdict(
+                conn, args.id, verdict=args.verdict, reason=args.reason,
+                poster_url=args.poster_url, screen_source=args.screen_source,
+                credit_ok=args.credit, noncommercial_ok=args.noncommercial,
+                unmodified_ok=args.unmodified,
+                outcome=args.outcome,
+            )
+        except (ValueError, KeyError) as err:
+            # Non-zero and loud: a rejected verdict must not read like a
+            # recorded one to whatever is driving the CLI.
+            print(f"❌ [{args.id}] not recorded — {err}")
+            return 2
         tag = f" · severity {out['severity']}" if out["severity"] else ""
+        if out["outcome"]:
+            tag += f" · {out['outcome']}"
+        elif not out["fully_assessed"]:
+            tag += " · not fully assessed"
         print(f"✅ [{out['id']}] {out['verdict']}{tag} — {out['found_link']}")
         return 0
 
