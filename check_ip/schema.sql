@@ -29,7 +29,14 @@ create table if not exists results (
     found_link     text not null,
     title          text,
     duplicate      integer not null default 0,   -- 0 unique · 1 secondary · 2 primary
-    match_type     text,                         -- 'Exact Match' | 'Similar Match'
+    match_type     text,                         -- 'Exact Match' | 'Similar Match' (retired)
+
+    -- 1 = out of scope for the queue and the tab, kept for the record.
+    -- Set only by db.retire_similar_matches() via `migrate --retire-similar`
+    -- (issue #292). Deliberately a flag and not a DELETE: every row cost a
+    -- SerpAPI call and could not be re-derived without paying for it again,
+    -- so a change of heart stays one UPDATE away.
+    retired        integer not null default 0,
     source         text,                         -- LinkedIn | Twitter/X | Instagram | Facebook | Pinterest | NULL
     post_date      text,
     search_date    text,

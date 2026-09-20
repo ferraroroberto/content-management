@@ -41,7 +41,7 @@ from typing import Optional
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from check_ip import db  # noqa: E402
+from check_ip import db, process  # noqa: E402
 
 DEFAULT_SOURCE = "LinkedIn"
 DEFAULT_LIMIT = 10  # one worker batch; the skill fans out N/10 of them
@@ -91,13 +91,21 @@ def next_batch(
     Only canonical rows (``duplicate`` 0 or 2) are served, so the same URL is
     never screened twice under different images, and rows the owner already
     decided are skipped.
+
+    Two predicates keep ``Similar Match`` out (issue #292), and the redundancy
+    is deliberate: ``retired`` covers whatever else gets retired later, while
+    the explicit ``match_type`` test holds on a store where the retirement
+    migration has not run yet — a fresh clone against an old database must not
+    start proposing accusations off style lookalikes.
     """
     where = [
         "r.duplicate in (0, 2)",
         "r.found_link is not null",
         "r.ok is null",  # the owner already ruled on it — nothing to propose
+        "r.retired = 0",
+        "r.match_type = ?",
     ]
-    params: list = []
+    params: list = [process.EXACT_MATCH]
     if not include_screened:
         where.append("r.screened_at is null")
     clause, clause_params = db.source_clause(source, "r.source")
@@ -201,7 +209,13 @@ def record_verdict(
 
 
 def stats(conn: sqlite3.Connection, *, source: Optional[str] = None) -> dict:
-    """Queue depth and screening progress, for the tab header and the skill."""
+    """Queue depth and screening progress, for the tab header and the skill.
+
+    Every figure is over the *workable* rows: retired ones are excluded from
+    all of them and reported on their own as ``retired``, so the totals match
+    what the queue and the tab will actually serve rather than counting 115k
+    rows nothing will ever look at again.
+    """
     clause, params = db.source_clause(source, "r.source")
     scope = clause or "1 = 1"
     row = conn.execute(
@@ -221,11 +235,17 @@ def stats(conn: sqlite3.Connection, *, source: Optional[str] = None) -> dict:
             sum(case when r.ok is null and ({db.severity_sql()}) = 2
                      then 1 else 0 end)                                as severity_2
           from results r
-         where r.duplicate in (0, 2) and {scope}
+         where r.duplicate in (0, 2) and r.retired = 0 and {scope}
         """,
         params,
     ).fetchone()
-    return {k: (row[k] or 0) for k in row.keys()}
+    out = {k: (row[k] or 0) for k in row.keys()}
+    out["retired"] = conn.execute(
+        f"""select count(*) from results r
+             where r.duplicate in (0, 2) and r.retired = 1 and {scope}""",
+        params,
+    ).fetchone()[0]
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +315,11 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     source = None if args.source in ("any", "all", "") else args.source
     for key, value in stats(conn, source=source).items():
-        print(f"{key:24s} {value}")
+        # The retired count carries its reason inline: a checkout that has not
+        # run `migrate --retire-similar` shows 0 here, and one that has should
+        # not have to go read the schema to find out what was skipped and why.
+        note = f"  ({db.RETIRED_REASON})" if key == "retired" else ""
+        print(f"{key:24s} {value}{note}")
     # Surfaced rather than silent: config.json is gitignored, so a checkout
     # without this set would quietly rank the owner's own posts first.
     excluded = cfg["exclude_posters"]

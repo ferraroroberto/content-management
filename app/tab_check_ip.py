@@ -104,15 +104,18 @@ def _launch(cmd: list[str]) -> None:
 
 def _render_header() -> None:
     ov = _overview()
-    cols = st.columns(6)
+    cols = st.columns(7)
     cols[0].metric("illustrations", f"{ov['images']:,}")
     cols[1].metric("links found", f"{ov['results']:,}")
     cols[2].metric("canonical", f"{ov['canonical']:,}",
-                   help="Unique findings — the duplicates of a link found under several images are folded away.")
-    cols[3].metric("decided", f"{ov['decided']:,}")
-    cols[4].metric("infringements", f"{ov['infringements']:,}",
+                   help="Unique findings still worth judging — the duplicates of a link found "
+                        "under several images are folded away, and retired rows are excluded.")
+    cols[3].metric("retired", f"{ov['retired']:,}",
+                   help=f"Kept, never shown: {db.RETIRED_REASON}. Nothing was deleted.")
+    cols[4].metric("decided", f"{ov['decided']:,}")
+    cols[5].metric("infringements", f"{ov['infringements']:,}",
                    help="Rows you marked ok = 0.")
-    cols[5].metric("screened", f"{ov['screened']:,}",
+    cols[6].metric("screened", f"{ov['screened']:,}",
                    help="Rows the check-ip skill has proposed a verdict for.")
     if ov.get("last_search"):
         st.caption(f"last reverse-image search: {ov['last_search']}")
@@ -303,6 +306,15 @@ proposes something wrong and I overrule it here.
 
 The same URL often matches several illustrations. Only the canonical row of each
 group is shown, so one reused post is judged once rather than eleven times.
+
+### Retired rows
+
+Google Lens returns exact matches (the same file) and *similar* matches (something
+that merely looks like it). Only the first is evidence of reuse: a similar match is
+another artist working in the same minimalist idiom, and every one ever screened
+came back `unclear`. They are no longer searched for, no longer queued and no
+longer listed here — but they are **not deleted**, because each one cost a search
+to find. The **retired** metric above is how many are being held back.
 """
 
 

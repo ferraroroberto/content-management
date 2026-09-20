@@ -34,7 +34,20 @@ PLATFORM_PATTERNS = (
 _TWITTER_EPOCH_MS = 1288834974657
 _SNOWFLAKE_SHIFT = 22
 
-MATCH_TYPES = {"exact_matches": "Exact Match", "visual_matches": "Similar Match"}
+EXACT_MATCH = "Exact Match"
+SIMILAR_MATCH = "Similar Match"
+
+# Lens response section → the ``match_type`` stored for rows built from it.
+MATCH_TYPES = {"exact_matches": EXACT_MATCH}
+
+# Retired, not forgotten (issue #292). A ``Similar Match`` is Lens saying "this
+# looks like your picture", which for minimalist business illustration means
+# another artist drawing in the same idiom — never evidence of reuse. Every one
+# ever screened resolved to `unclear`, none of ten months of owner decisions is
+# on one, and the screener reliably over-reads a run of them into an accusation
+# against a peer. The mapping stays here rather than being deleted so the Lens
+# section it came from keeps its name and a live run can say why it skipped it.
+RETIRED_MATCH_TYPES = {"visual_matches": SIMILAR_MATCH}
 
 
 def extract_post_date(url: str) -> Optional[str]:
@@ -123,12 +136,17 @@ def build_rows(
     ``existing`` holds the (found_link, match_type) pairs already stored for
     this image — the same URL legitimately arrives from both the exact-match
     and the visual-match search, and those are two distinct findings, so the
-    match type is part of the identity.
+    match type is part of the identity. Only the exact-match section is
+    ingested now (``MATCH_TYPES``); a retired section yields nothing.
 
     Returns (rows, added, skipped).
     """
     match_type = MATCH_TYPES.get(search_type)
     if match_type is None:
+        retired = RETIRED_MATCH_TYPES.get(search_type)
+        if retired:
+            logger.info("⏭️ %s: %s results are no longer ingested (issue #292)",
+                        search_type, retired)
         return [], 0, 0
 
     rows: list[dict] = []

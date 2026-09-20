@@ -56,12 +56,42 @@ a queue of 13,000 links: the worst it can do is propose something wrong.
 & .\.venv\Scripts\python.exe -m check_ip.run                 # everything that is due
 & .\.venv\Scripts\python.exe -m check_ip.run --force         # ignore re-search windows
 
+# retire the stored 'Similar Match' rows (issue #292) — flags them, deletes nothing
+& .\.venv\Scripts\python.exe -m check_ip.migrate --retire-similar
+
 # the screening queue
 & .\.venv\Scripts\python.exe -m check_ip.screen stats
 & .\.venv\Scripts\python.exe -m check_ip.screen next --limit 10
 & .\.venv\Scripts\python.exe -m check_ip.screen verdict --id 123 --verdict infringement --reason "…"
 & .\.venv\Scripts\python.exe -m check_ip.screen verdict --id 123 --verdict infringement --promotional --altered --reason "…"
 ```
+
+## Only exact matches count
+
+Google Lens returns two kinds of hit. An **exact match** is the same image file
+— that is evidence of reuse. A **similar match** is Lens saying "this looks
+like your picture", which for minimalist business illustration means another
+artist drawing buckets, staircases and book piles in the same idiom. It is not
+reuse and it never was: of 1,277 manual decisions over ten months, **zero** are
+on a similar match, and every one the skill ever screened came back `unclear`.
+
+Worse, the category is actively dangerous. Handed ten lookalikes from one
+illustrator, the screener built a theory of a serial infringer and re-read its
+own earlier verdicts to fit it — nine severity-3 accusations against a peer,
+all reverted. Removing the category removes the exposure
+([#292](https://github.com/ferraroroberto/content-management/issues/292)).
+
+So: `MATCH_TYPES` no longer maps the `visual_matches` section, a live run skips
+that search rather than paying for it, `next_batch` filters on
+`match_type = 'Exact Match'`, and the 139,874 stored similar matches are
+**retired, not deleted** — `results.retired = 1`, set by
+`migrate --retire-similar`, reversible with one `update`. Each of those rows
+cost a SerpAPI call and could not be re-derived without paying again.
+
+A retired row is out of the queue, out of the tab and out of every `screen
+stats` total except `retired`, which prints its reason next to it. A row
+carrying an owner annotation is **never** retired, so no decision can vanish
+from the tab — there are none today, and the guard is what keeps it that way.
 
 ## What counts as credit
 
@@ -97,9 +127,9 @@ than silently wrong (`config.json` is gitignored).
 
 | module | does |
 |---|---|
-| `db.py` | the store — connection, schema, duplicate marking, per-image tallies |
+| `db.py` | the store — connection, schema, duplicate marking, per-image tallies, retirement |
 | `schema.sql` | three tables plus a `meta` bookkeeping row |
-| `migrate.py` | one-shot Excel → SQLite import + payload extraction |
+| `migrate.py` | one-shot Excel → SQLite import + payload extraction; also the store's bulk-update lane (`--retire-similar`) |
 | `process.py` | pure helpers: post-date extraction, platform identification, row building |
 | `imgur.py` | upload each illustration once, with backoff |
 | `lens.py` | one Google Lens search per call, logged to the store |
@@ -119,7 +149,7 @@ A `check_ip` block in `config/config.json` (gitignored — see
 | `store_folder` | defaults to `results/check_ip` |
 | `api_keys` | `serpapi_key`, `imgur_client_id`, `imgur_access_token` — a `${VAR}` placeholder falls back to that environment variable |
 | `processing_thresholds` | re-search windows (see below) |
-| `search_settings` | `do_exact_search` / `do_similar_search` |
+| `search_settings` | `do_exact_search` / `do_similar_search` — leave the latter `false`; a run warns and skips it rather than paying for results it would discard (#292) |
 | `screen_queue` | default platform, batch size, and `exclude_posters` (accounts that are my own) |
 
 **Credentials live in the repo-root `.env`**, which is gitignored (as is any
@@ -155,9 +185,14 @@ hits. Everything else waits **180 days**. `--force` ignores both.
   mid-JSON. Those are stored as `.json.truncated` and flagged
   `raw_truncated = 1` — don't parse them. Payloads written from now on are whole.
 - **One URL can legitimately appear several times**: the exact-match and
-  visual-match searches both return it, and a later run re-finds it. The
+  visual-match searches both returned it, and a later run re-finds it. The
   identity of a row is `(local_image, found_link, match_type, search_date)`.
   Eleven such groups carry *conflicting* owner verdicts from different dates —
-  collapsing them would destroy real decisions.
+  collapsing them would destroy real decisions. `match_type` stays in that
+  key even though only one kind is ingested now: 139k stored rows depend on it
+  to round-trip.
+- **Retired is not deleted.** `results.retired = 1` hides a row from the queue
+  and the tab; the row, its verdict and its history all stay. `update results
+  set retired = 0 where match_type = 'Similar Match'` brings them all back.
 - **Only canonical rows are served and shown.** A URL matching several
   illustrations is judged once (`duplicate` 0 or 2), not once per illustration.
