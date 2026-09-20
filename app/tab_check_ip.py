@@ -104,7 +104,7 @@ def _launch(cmd: list[str]) -> None:
 
 def _render_header() -> None:
     ov = _overview()
-    cols = st.columns(7)
+    cols = st.columns(8)
     cols[0].metric("illustrations", f"{ov['images']:,}")
     cols[1].metric("links found", f"{ov['results']:,}")
     cols[2].metric("canonical", f"{ov['canonical']:,}",
@@ -118,6 +118,20 @@ def _render_header() -> None:
                    help="Rows you marked ok = 0.")
     cols[6].metric("screened", f"{ov['screened']:,}",
                    help="Rows the check-ip skill has proposed a verdict for.")
+    cols[7].metric("not fully assessed", f"{ov['not_fully_assessed']:,}",
+                   help="Screened, but at least one of the three licence conditions was "
+                        "never established. These are unchecked, not compliant — pick "
+                        "\"not fully assessed\" below to re-screen them.")
+    if ov["not_fully_assessed"]:
+        st.warning(
+            f"⚠️ {ov['not_fully_assessed']:,} of {ov['screened']:,} screened rows are "
+            "**not fully assessed** — an earlier pass only asked whether the post credited "
+            "me, so non-commercial use and no-derivatives were never checked on them. "
+            "They are counted as unknown, never as compliant."
+            + (f" Not counted there: {ov['nothing_to_assess']:,} that can never be assessed "
+               "at all — the post is gone, or carries no illustration of mine."
+               if ov["nothing_to_assess"] else "")
+        )
     if ov.get("last_search"):
         st.caption(f"last reverse-image search: {ov['last_search']}")
 
@@ -204,6 +218,10 @@ def _render_table() -> None:
         f"{qs['pending']:,} undecided of {qs['canonical']:,} canonical on this platform · "
         f"{qs['screened']:,} screened · {qs['proposed_infringement']:,} proposed as infringement"
         + (f", {qs['severity_3']:,} of them worst-case" if qs["severity_3"] else "")
+        + f" · {qs['not_fully_assessed']:,} screened but not fully assessed "
+          f"(unknown, not compliant)"
+        + (f" · {qs['nothing_to_assess']:,} with nothing left to assess"
+           if qs["nothing_to_assess"] else "")
         + f". Ordered {sort}. Nothing saves until you click Apply."
     )
 
@@ -220,13 +238,14 @@ def _render_table() -> None:
             width="stretch",
             height=min(900, 80 + 36 * len(frame)),
             column_order=["ok", "severity", "found_link", "local_image", "screen_verdict",
-                          "screen_promotional", "screen_altered", "screen_reason",
+                          "assessed", "screen_credit_ok", "screen_noncommercial_ok",
+                          "screen_unmodified_ok", "screen_outcome", "screen_reason",
                           "poster_url", "person", "chat", "report", "fixed", "title",
                           "post_date", "match_type", "source", "search_date"],
             disabled=["id", "local_image", "found_link", "title", "source", "match_type",
                       "post_date", "search_date", "duplicate", "screen_verdict",
-                      "screen_reason", "poster_url", "screened_at", "severity",
-                      "screen_promotional", "screen_altered"],
+                      "screen_reason", "poster_url", "screened_at", "severity", "assessed",
+                      "screen_outcome", *db.CONDITION_COLUMNS],
             column_config={
                 "ok": st.column_config.SelectboxColumn(
                     "verdict", options=[0, 1], width="small",
@@ -236,13 +255,27 @@ def _render_table() -> None:
                 "local_image": st.column_config.TextColumn("illustration", width="medium"),
                 "severity": st.column_config.NumberColumn(
                     "⚠", width="small", format="%d",
-                    help="0 nothing to act on · 1 no mention · 2 one aggravator · "
-                         "3 no mention, self-promotion and the image edited"),
-                "screen_promotional": st.column_config.CheckboxColumn(
-                    "promo", width="small", help="the post pushes the poster's own following, "
-                                                 "product or course"),
-                "screen_altered": st.column_config.CheckboxColumn(
-                    "edited", width="small", help="watermark cropped, painted over or removed"),
+                    help="How many of the three licence conditions were found violated. "
+                         "0 means none was — not that the post is compliant; check the "
+                         "assessed column for that."),
+                "assessed": st.column_config.CheckboxColumn(
+                    "all 3 checked", width="small",
+                    help="Ticked only when credit, non-commercial and no-derivatives were "
+                         "all established. Unticked means at least one is unknown."),
+                "screen_credit_ok": st.column_config.TextColumn(
+                    "credit (BY)", width="small",
+                    help="Named, tagged, linked, or his own comment claims it. A bare "
+                         "ROBERTOFERRARO.ART watermark is not credit."),
+                "screen_noncommercial_ok": st.column_config.TextColumn(
+                    "non-commercial (NC)", width="small",
+                    help="No promotional call to action and no paid or business context."),
+                "screen_unmodified_ok": st.column_config.TextColumn(
+                    "unmodified (ND)", width="small",
+                    help="No crop, filter, added logo or text, no translation; signature intact."),
+                "screen_outcome": st.column_config.TextColumn(
+                    "unclear kind", width="small",
+                    help="ambiguous = another look may settle it · nothing_to_assess = the "
+                         "post is gone or carries no illustration, and never will be."),
                 "screen_verdict": st.column_config.TextColumn("skill says", width="small",
                                                               help="Proposed by the check-ip skill — never a decision."),
                 "screen_reason": st.column_config.TextColumn("why", width="large"),
@@ -302,6 +335,25 @@ profile. Its proposal shows in the **skill says** and **why** columns.
 **The skill never decides and never contacts anyone.** It writes only its own
 columns; the verdict and the whole follow-up trail stay mine. Worst case it
 proposes something wrong and I overrule it here.
+
+### The three licence conditions
+
+My illustrations are published under **CC BY-NC-ND 4.0**, which is three
+conditions that must *all* hold: **credit** me, **don't use it commercially**,
+**don't modify it**. Each gets its own column, and each has three states —
+`✅ met`, `❌ violated`, or `— not assessed`.
+
+**Not assessed is not a pass.** The `⚠` column counts only the conditions found
+*violated*, so a `0` there means "nothing proven wrong", not "compliant". The
+**all 3 checked** column is what says a post was really cleared. An earlier
+screening pass only ever asked whether the post credited me, so most rows it
+touched carry two unknowns — the banner above says how many, and the *not fully
+assessed* filter lists them for a re-screen.
+
+An `unclear` verdict comes in two kinds. `ambiguous` means another look may
+settle it; `nothing_to_assess` means the post is gone or never carried an
+illustration, so no look ever will — those are filtered out separately rather
+than sitting in the re-screen pile forever.
 
 ### Duplicates
 

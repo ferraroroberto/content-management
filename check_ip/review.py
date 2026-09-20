@@ -33,20 +33,41 @@ OPEN_WEB = db.OPEN_WEB
 FRAME_COLUMNS = [
     "id", "local_image", "found_link", "title", "source", "match_type",
     "post_date", "search_date", "duplicate",
-    "screen_verdict", "screen_reason", "poster_url", "screened_at",
-    "screen_promotional", "screen_altered",
+    "screen_verdict", "screen_outcome", "screen_reason", "poster_url", "screened_at",
+    *db.CONDITION_COLUMNS,
     "ok", "person", "chat", "report", "fixed",
 ]
 
-# Derived, not stored: one expression shared with the queue so the tab and the
-# skill agree on what "worst" means. Appended to the select, not a real column.
-DERIVED_COLUMNS = {"severity": db.severity_sql()}
+# How a condition renders in the grid. A tri-state has no honest checkbox —
+# an unticked box reads as "no" and NULL here means "nobody looked", so the
+# three states get three distinct words instead (issue #295).
+CONDITION_LABELS = {1: "✅ met", 0: "❌ violated", None: "— not assessed"}
+
+# Derived, not stored: expressions shared with the queue so the tab and the
+# skill agree on what "worst" and "assessed" mean. Appended to the select.
+DERIVED_COLUMNS = {
+    "severity": db.severity_sql(),
+    # 1/0 rather than a bool: sqlite has no boolean and the frame maps it below.
+    "assessed": f"case when {db.assessed_sql()} then 1 else 0 end",
+}
+
+# Rows nobody can ever assess further — the post is gone or never carried an
+# illustration. Excluded from the re-screen views so they do not sit in a pile
+# that can never be cleared.
+_PERMANENT = db.permanent_sql()
 
 STATUS_FILTERS = {
     "needs a decision": "r.ok is null",
     "screened, awaiting my call": "r.ok is null and r.screened_at is not null",
-    "worst only — no credit, promoted, image edited": f"r.ok is null and ({db.severity_sql()}) = 3",
+    "not fully assessed — needs a re-screen":
+        f"r.screened_at is not null and not ({db.assessed_sql()}) and not {_PERMANENT}",
+    "worst only — no credit, commercial, image edited": f"r.ok is null and ({db.severity_sql()}) = 3",
     "proposed infringement, any severity": "r.ok is null and r.screen_verdict = 'infringement'",
+    "fully assessed and compliant": f"r.screened_at is not null and {db.assessed_sql()} "
+                                    f"and ({db.severity_sql()}) = 0",
+    "unclear — another look may settle it":
+        f"r.ok is null and r.screen_verdict = 'unclear' and not {_PERMANENT}",
+    "unclear — nothing left to assess": f"r.screen_verdict = 'unclear' and {_PERMANENT}",
     "flagged as infringement": "r.ok = 0",
     "marked acceptable": "r.ok = 1",
     "reported": "r.report is not null and r.report != '0'",
@@ -150,8 +171,16 @@ def results_frame(
     frame = pd.DataFrame([dict(r) for r in rows], columns=columns)
     if frame.empty:
         return frame
-    for flag in ("screen_promotional", "screen_altered"):
-        frame[flag] = frame[flag].map({1: True, 0: False}).astype("object")
+    for column in db.CONDITION_COLUMNS:
+        # `.map` on a column holding NULLs yields NaN, not None, so the NULL
+        # key is filled explicitly — otherwise an unassessed condition renders
+        # as a blank cell, which is the one thing it must never look like.
+        frame[column] = (frame[column].map(CONDITION_LABELS)
+                         .fillna(CONDITION_LABELS[None]).astype("object"))
+    frame["assessed"] = frame["assessed"].map({1: True, 0: False}).astype("object")
+    # Only an `unclear` row has a kind; a blank cell says "not applicable"
+    # where the literal string "None" would read like a third kind.
+    frame["screen_outcome"] = frame["screen_outcome"].fillna("").astype("object")
     # Streamlit's checkbox column wants a real bool; the store keeps 0/1/NULL
     # so "not yet decided" stays distinguishable from "decided: no".
     frame["fixed"] = frame["fixed"].map({1: True, 0: False}).astype("object")
@@ -224,9 +253,15 @@ def overview(conn: sqlite3.Connection) -> dict:
     the search history and it did not shrink. ``canonical`` counts what is
     still judgeable, and ``retired`` says how much the difference is, so the
     header adds up instead of quietly losing 115k rows.
+
+    ``not_fully_assessed`` is the honest half of ``screened``: rows a screening
+    pass touched without establishing all three licence conditions. They are
+    counted here rather than left to look compliant, which is what the
+    credit-only model did to them (issue #295).
     """
+    permanent = db.permanent_sql("")
     row = conn.execute(
-        """
+        f"""
         select
             (select count(*) from images)  as images,
             (select count(*) from results) as results,
@@ -235,6 +270,10 @@ def overview(conn: sqlite3.Connection) -> dict:
             (select count(*) from results where ok is not null)      as decided,
             (select count(*) from results where ok = 0)              as infringements,
             (select count(*) from results where screened_at is not null) as screened,
+            (select count(*) from results
+              where screened_at is not null and not ({db.assessed_sql('')})
+                and not {permanent})                                 as not_fully_assessed,
+            (select count(*) from results where {permanent})          as nothing_to_assess,
             (select max(last_processed_date) from images)            as last_search
         """
     ).fetchone()

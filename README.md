@@ -65,10 +65,14 @@ Five surfaces, one repo:
   reuse, so they are no longer searched for, queued or shown (and the ones
   already stored are retired, never deleted). The
   control panel's ⚖️ check IP tab is where a match gets judged —
-  legitimate share, or my work with the credit stripped off — and the
+  legitimate share, or a breach of the licence — and the
   `/check-ip` skill does the browser pass first, proposing a verdict and a
-  reason for each link. A post counts as credited only if it **mentions
-  me**; a visible watermark on its own is not enough. `/check-ip <N>` fans
+  reason for each link. The illustrations are published under **CC BY-NC-ND
+  4.0**, so a post is judged on all three conditions separately: it must
+  **credit me** (a visible watermark on its own is not enough), must not be
+  **commercial**, and must not **modify** the image. Each condition is met,
+  violated, or **not assessed** — and not assessed is never counted as a
+  pass. `/check-ip <N>` fans
   the work out to Sonnet workers in batches of ten, run strictly one at a
   time — there is one browser and one LinkedIn account, and parallel
   browsing risks it. The skill **only proposes**: it never contacts anyone,

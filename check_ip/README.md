@@ -35,7 +35,7 @@ The store has two sets of decision columns, and they never mix:
 | columns | written by | meaning |
 |---|---|---|
 | `ok` `person` `chat` `report` `fixed` | **the owner only**, via the tab | the verdict and the follow-up trail |
-| `screen_verdict` `screen_reason` `screened_at` `screen_source` `poster_url` `screen_promotional` `screen_altered` | the `/check-ip` skill | a *proposal*, nothing more |
+| `screen_credit_ok` `screen_noncommercial_ok` `screen_unmodified_ok` `screen_verdict` `screen_outcome` `screen_reason` `screened_at` `screen_source` `poster_url` | the `/check-ip` skill | a *proposal*, nothing more |
 
 `ok = 0` means "this is an infringement, act on it". `ok = 1` means "reviewed,
 acceptable use". The skill cannot write either — `check_ip.screen.record_verdict`
@@ -62,11 +62,24 @@ a queue of 13,000 links: the worst it can do is propose something wrong.
 # re-elect the canonical row of every group (issue #291) — writes only `duplicate`
 & .\.venv\Scripts\python.exe -m check_ip.migrate --recompute-duplicates
 
+# map screened rows onto the three licence conditions (issue #295)
+& .\.venv\Scripts\python.exe -m check_ip.migrate --assess-conditions
+
 # the screening queue
 & .\.venv\Scripts\python.exe -m check_ip.screen stats
 & .\.venv\Scripts\python.exe -m check_ip.screen next --limit 10
-& .\.venv\Scripts\python.exe -m check_ip.screen verdict --id 123 --verdict infringement --reason "…"
-& .\.venv\Scripts\python.exe -m check_ip.screen verdict --id 123 --verdict infringement --promotional --altered --reason "…"
+
+# no credit, nothing else wrong → severity 1
+& .\.venv\Scripts\python.exe -m check_ip.screen verdict --id 123 --verdict infringement `
+    --credit violated --noncommercial met --unmodified met --reason "…"
+
+# credited, but it is a company's marketing → still an infringement
+& .\.venv\Scripts\python.exe -m check_ip.screen verdict --id 123 --verdict infringement `
+    --credit met --noncommercial violated --unmodified met --reason "…"
+
+# the post is gone — permanently unassessable, not "acceptable"
+& .\.venv\Scripts\python.exe -m check_ip.screen verdict --id 123 --verdict unclear `
+    --outcome nothing_to_assess --reason "…"
 ```
 
 ## Only exact matches count
@@ -125,23 +138,70 @@ the live store the pass folded 4,353 canonical rows away, took 3,301 rows out
 of the pending queue, returned 16 annotated rows to the tab, and left every
 verdict, every annotation and every stored URL byte-identical.
 
-## What counts as credit
+## Three licence conditions, not one
 
-**The post has to mention me** — my name, a tag, or a link to the original.
-That is the whole test, and it is easy to get backwards: a visible
-`ROBERTOFERRARO.ART` watermark is **not** credit on its own. An intact
-watermark with no mention anywhere is still an infringement; the watermark's
-*absence* is what counts against a post, not its presence in its favour.
+The illustrations are published under **CC BY-NC-ND 4.0**
+([robertoferraro.net/art](https://robertoferraro.net/art)), which is three
+conditions that must *all* hold. Each has its own column with the same polarity
+— `1` met, `0` violated, **`NULL` not assessed**:
 
-Two flags record what makes an infringement worse, and `db.severity()` ranks
-them so the tab and the queue agree on what "worst" means:
+| column | condition | met when |
+|---|---|---|
+| `screen_credit_ok` | **BY** — attribution | the post names me, tags me, links to the original, my own comment claims it, or it is a reshare carrying the original credited caption |
+| `screen_noncommercial_ok` | **NC** — non-commercial | no promotional call to action **and** no paid or business context |
+| `screen_unmodified_ok` | **ND** — no derivatives | no crop, filter, added logo or text, no translation; signature intact |
 
-| severity | meaning |
-|---|---|
-| 0 | `acceptable`, or `unclear` — nothing to act on |
-| 1 | no mention anywhere |
-| 2 | …and either a self-promotional CTA (`screen_promotional`) or the image edited (`screen_altered`) |
-| 3 | no mention, self-promotion **and** the watermark removed — plain stealing |
+**A visible `ROBERTOFERRARO.ART` watermark is not credit.** The easiest rule to
+get backwards: an intact watermark with no mention anywhere is still a BY
+violation. The watermark's *absence* is what counts against a post (as an ND
+violation), not its presence in its favour.
+
+**`NULL` never collapses into a pass.** An unassessed condition is its own
+state — `db.severity()` counts only conditions *found violated*, and
+`db.fully_assessed()` is the separate question of whether all three were even
+looked at. A severity of 0 alone says nothing was proven wrong, not that the
+post is compliant; the tab prints both and the `not fully assessed` metric is
+the gap between them. Any `coalesce(col, 1)` here would silently undo the whole
+model, which is why `tests/test_check_ip_store.py` asserts it in Python, in
+SQL, in the queue stats and in the tab's frame
+([#295](https://github.com/ferraroroberto/content-management/issues/295)).
+
+`screen_verdict` is **derived**, not primary, and `record_verdict` refuses a
+verdict that contradicts the conditions rather than normalising one:
+
+| severity | verdict | meaning |
+|---|---|---|
+| 0 | `acceptable` | all three conditions met — the only compliant state |
+| 0 | `unclear` | nothing violated, but something was never assessed |
+| 1 | `infringement` | one condition violated — no credit, **or** commercial use, **or** modified |
+| 2 | `infringement` | two of the three |
+| 3 | `infringement` | no credit, commercial **and** modified — plain stealing |
+
+An `unclear` verdict carries a `screen_outcome` saying which kind it is:
+`ambiguous` (another look may settle it) or `nothing_to_assess` (the post is
+gone, or carries no illustration of mine — permanent, and the tab filters it
+out rather than parking it in a re-screen pile forever).
+
+### What the old credit-only pass left behind
+
+Before #295 the screener asked one question — "was he mentioned?" — and
+recorded commercial use and edits only as *aggravators on top of* a failed
+credit check, clearing both whenever the verdict was not `infringement`. So a
+post that credited me properly and was plainly a company's marketing scored
+`acceptable`, severity 0, and never reached the tab.
+
+`migrate --assess-conditions` maps those rows without inventing anything:
+`screen_credit_ok` from the old verdict (credit *was* the question that pass
+asked), and the other two set to `0` only where the old flag positively fired,
+`NULL` otherwise — a row not flagged promotional was never checked for a paid
+or business context. The deliberate, visible consequence is that a previously
+`acceptable` row becomes "credit met, the other two unknown" and needs a
+re-screen (`/check-ip --recheck`), because marking it compliant would invent a
+fact the screening never established.
+
+`screen_promotional` and `screen_altered` are **frozen** after that mapping:
+still in the table as the record of what that pass established and what the
+mapping read, no longer written by anything.
 
 ## How the queue ranks
 
@@ -161,7 +221,7 @@ than silently wrong (`config.json` is gitignored).
 |---|---|
 | `db.py` | the store — connection, schema, the canonical link, duplicate marking, per-image tallies, retirement |
 | `schema.sql` | three tables plus a `meta` bookkeeping row |
-| `migrate.py` | one-shot Excel → SQLite import + payload extraction; also the store's bulk-update lanes (`--retire-similar`, `--recompute-duplicates`) |
+| `migrate.py` | one-shot Excel → SQLite import + payload extraction; also the store's bulk-update lanes (`--retire-similar`, `--recompute-duplicates`, `--assess-conditions`) |
 | `process.py` | pure helpers: post-date extraction, platform identification, row building |
 | `imgur.py` | upload each illustration once, with backoff |
 | `lens.py` | one Google Lens search per call, logged to the store |

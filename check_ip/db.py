@@ -39,11 +39,26 @@ SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 # refuses to touch these — the skill proposes, the owner decides.
 OWNER_COLUMNS = ("ok", "person", "chat", "report", "fixed")
 
+# The three CC BY-NC-ND conditions, in severity-reporting order. Each holds
+# 1 = met · 0 = violated · NULL = not assessed (issue #295).
+CONDITION_COLUMNS = ("screen_credit_ok", "screen_noncommercial_ok", "screen_unmodified_ok")
+
 # Columns only the screening pass writes.
-SCREEN_COLUMNS = ("screen_verdict", "screen_reason", "screened_at", "screen_source",
-                  "poster_url", "screen_promotional", "screen_altered")
+SCREEN_COLUMNS = ("screen_verdict", "screen_outcome", "screen_reason", "screened_at",
+                  "screen_source", "poster_url") + CONDITION_COLUMNS
+
+# Superseded by CONDITION_COLUMNS and no longer written by anything (#295).
+# Named rather than deleted so the migration that mapped them stays auditable.
+FROZEN_SCREEN_COLUMNS = ("screen_promotional", "screen_altered")
 
 VERDICTS = ("infringement", "acceptable", "unclear")
+
+# The two kinds of ``unclear``, which live screening showed are unrelated.
+# ``ambiguous`` is worth another look; ``nothing_to_assess`` never will be, so
+# naming it is what lets the tab stop offering it.
+OUTCOME_AMBIGUOUS = "ambiguous"
+OUTCOME_NOTHING_TO_ASSESS = "nothing_to_assess"
+UNCLEAR_OUTCOMES = (OUTCOME_AMBIGUOUS, OUTCOME_NOTHING_TO_ASSESS)
 
 # Columns added after the first release. ensure_schema() adds any that a store
 # predating them is missing, because `create table if not exists` in schema.sql
@@ -53,6 +68,10 @@ ADDED_RESULT_COLUMNS = (
     ("screen_altered", "integer"),
     ("poster_key", "text"),
     ("retired", "integer not null default 0"),
+    ("screen_credit_ok", "integer"),
+    ("screen_noncommercial_ok", "integer"),
+    ("screen_unmodified_ok", "integer"),
+    ("screen_outcome", "text"),
 )
 
 # Why any row currently carries ``retired = 1``. One reason exists, so it is a
@@ -169,37 +188,116 @@ def canonical_link_for(link: Optional[str]) -> Optional[str]:
     return f"{parts.scheme.lower()}://{host}{path}{query}"
 
 
-def severity(verdict: Optional[str], promotional: object = None,
-             altered: object = None) -> int:
-    """Rank how much an infringement warrants acting on it: 0 low → 3 worst.
+def condition_state(value: object) -> Optional[int]:
+    """Normalise one licence condition to ``1`` met, ``0`` violated, ``None``.
 
-    0 is "nothing to act on" and covers both ``acceptable`` and ``unclear`` —
-    an unresolved row is not a mild infringement, it is not yet a finding at
-    all, and lumping it above acceptable would push guesses up the queue.
-    Every aggravator adds one: no mention is 1, plus a self-promotional or
-    commercial call to action, plus an edited image. 3 is all three together —
-    the case the owner calls plain stealing.
+    Accepts the shapes a caller realistically holds — ``True``/``False``, an
+    ``int``, a ``"met"``/``"violated"``/``"unknown"`` word, or ``None`` — and
+    rejects anything else rather than guessing. A rejected value must not fall
+    through as "not assessed": that would turn a typo into a silent NULL and
+    NULL is the state this whole model exists to keep honest.
     """
-    if verdict != "infringement":
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return 1 if value else 0
+    if isinstance(value, int):
+        if value in (0, 1):
+            return value
+        raise ValueError(f"licence condition must be 0, 1 or None, got {value!r}")
+    text = str(value).strip().lower()
+    if text in ("met", "ok", "1", "true", "yes"):
+        return 1
+    if text in ("violated", "broken", "0", "false", "no"):
         return 0
-    return 1 + (1 if promotional else 0) + (1 if altered else 0)
+    if text in ("unknown", "unassessed", "not assessed", "none", ""):
+        return None
+    raise ValueError(f"licence condition must be 0, 1 or None, got {value!r}")
+
+
+def severity(credit_ok: object = None, noncommercial_ok: object = None,
+             unmodified_ok: object = None) -> int:
+    """How many of the three licence conditions were found violated: 0–3.
+
+    The count is of conditions **positively established as broken**. An
+    unassessed condition (``None``) adds nothing — it is not evidence of a
+    violation — but it is not a pass either, which is why a severity of 0 is
+    never on its own a statement that a post is compliant. ``fully_assessed()``
+    is the other half of that sentence and the tab prints both.
+
+    3 is no credit **and** commercial use **and** a modified image: the case
+    the owner calls plain stealing.
+    """
+    return sum(1 for value in (credit_ok, noncommercial_ok, unmodified_ok)
+               if condition_state(value) == 0)
 
 
 def severity_sql(alias: str = "r") -> str:
     """``severity()`` as an SQL expression, qualified with the results alias.
 
-    Both callers join ``results`` against ``images``, so the columns are
-    qualified rather than bare — an unqualified ``screen_verdict`` resolves
-    today only because ``images`` happens not to have one. Sharing the
-    expression keeps the tab's ordering and the queue's stats from drifting
-    apart from the Python version above.
+    Callers join ``results`` against ``images``, so the columns are qualified
+    rather than bare. Sharing the expression keeps the tab's ordering and the
+    queue's stats from drifting apart from the Python version above; a test
+    compares the two across all 27 combinations.
+
+    ``col = 0`` is NULL for an unassessed condition and a NULL ``case``
+    predicate takes the ``else`` branch, so a NULL adds 0 — deliberately, and
+    without a ``coalesce`` that would make it indistinguishable from a pass.
     """
     prefix = f"{alias}." if alias else ""
-    return (
-        f"case when {prefix}screen_verdict = 'infringement' "
-        f"then 1 + coalesce({prefix}screen_promotional, 0) "
-        f"+ coalesce({prefix}screen_altered, 0) else 0 end"
+    return " + ".join(
+        f"case when {prefix}{column} = 0 then 1 else 0 end" for column in CONDITION_COLUMNS
     )
+
+
+def fully_assessed(credit_ok: object = None, noncommercial_ok: object = None,
+                   unmodified_ok: object = None) -> bool:
+    """Whether all three conditions were actually looked at.
+
+    The question the old model could not ask. A row can be severity 0 and not
+    assessed at all, and the difference between "checked, nothing wrong" and
+    "never checked" is the whole point of issue #295.
+    """
+    return all(condition_state(value) is not None
+               for value in (credit_ok, noncommercial_ok, unmodified_ok))
+
+
+def assessed_sql(alias: str = "r") -> str:
+    """``fully_assessed()`` as an SQL predicate."""
+    prefix = f"{alias}." if alias else ""
+    return " and ".join(f"{prefix}{column} is not null" for column in CONDITION_COLUMNS)
+
+
+def verdict_for(credit_ok: object = None, noncommercial_ok: object = None,
+                unmodified_ok: object = None) -> str:
+    """The verdict the three conditions imply. ``screen_verdict`` is derived.
+
+    ``infringement`` as soon as one condition is violated, ``acceptable`` only
+    once all three are met, and ``unclear`` while any is still unassessed —
+    which is why a post that credits the owner but was never checked for
+    commercial use reads as unclear rather than acceptable.
+    """
+    conditions = (credit_ok, noncommercial_ok, unmodified_ok)
+    if severity(*conditions):
+        return "infringement"
+    return "acceptable" if fully_assessed(*conditions) else "unclear"
+
+
+def verdict_sql(alias: str = "r") -> str:
+    """``verdict_for()`` as an SQL expression, composed of the two above."""
+    return (f"case when ({severity_sql(alias)}) > 0 then 'infringement' "
+            f"when {assessed_sql(alias)} then 'acceptable' else 'unclear' end")
+
+
+def permanent_sql(alias: str = "r") -> str:
+    """Predicate for a row no further look can ever assess.
+
+    One rendering shared by the tab's filters, its header and the queue stats —
+    they must agree on what gets excluded from the re-screen pile, and three
+    hand-written copies of a ``coalesce`` is how they would stop agreeing.
+    """
+    prefix = f"{alias}." if alias else ""
+    return f"coalesce({prefix}screen_outcome, '') = '{OUTCOME_NOTHING_TO_ASSESS}'"
 
 
 # ---------------------------------------------------------------------------
@@ -486,6 +584,112 @@ def retire_similar_matches(conn: sqlite3.Connection) -> dict:
         )
         conn.commit()
     return counts
+
+
+def backfill_licence_conditions(conn: sqlite3.Connection) -> dict:
+    """Map rows screened under the credit-only question onto the three
+    licence conditions (issue #295). Writes screening columns only.
+
+    The mapping invents nothing. ``screen_credit_ok`` is filled for every
+    screened row because credit *was* the question that pass asked; the other
+    two are filled only where the old flag positively fired, and left NULL
+    otherwise. A row that was not flagged promotional was never checked for a
+    paid or business context, and a row whose watermark was intact was never
+    checked for a crop, added text or a translation — recording either as met
+    would invent a fact the screening never established.
+
+    ``screen_verdict`` is then recomputed from the conditions, because it is
+    derived now. The visible consequence is deliberate: an ``acceptable`` row
+    becomes ``unclear`` carrying ``screen_credit_ok = 1``, which reads as
+    "credit met, the other two unknown" rather than "compliant".
+
+    A legacy ``unclear`` row establishes nothing, so all three conditions stay
+    NULL — which means the conditions alone cannot say whether a row has been
+    through here. ``screen_outcome`` is what marks it: those rows are set to
+    ``ambiguous``, the state that claims the least. The legacy bucket mixes
+    "could not tell" with "nothing to assess" and there is no way to tell which
+    from the store, so the mapping picks the one that keeps the row in the
+    re-screen pile rather than the one that quietly retires it.
+
+    Only rows that are screened, carry all three conditions NULL **and** have
+    no outcome are touched, so a re-run is a no-op and a row screened under the
+    new criteria is never overwritten. Nothing is deleted and no owner column
+    is in any statement here.
+    """
+    untouched = (" and ".join(f"{c} is null" for c in CONDITION_COLUMNS)
+                 + " and screen_outcome is null")
+    scope = f"screened_at is not null and {untouched}"
+
+    before = conn.execute(
+        """
+        select screen_verdict as verdict, count(*) as n
+          from results where screened_at is not null group by screen_verdict
+        """
+    ).fetchall()
+    to_map = conn.execute(f"select count(*) from results where {scope}").fetchone()[0]
+    already_mapped = conn.execute(
+        f"select count(*) from results where screened_at is not null and not ({untouched})"
+    ).fetchone()[0]
+
+    conn.execute(
+        f"""
+        update results
+           set screen_credit_ok = case screen_verdict
+                                      when 'infringement' then 0
+                                      when 'acceptable'   then 1
+                                      else null end,
+               screen_noncommercial_ok = case when screen_promotional = 1 then 0 else null end,
+               screen_unmodified_ok    = case when screen_altered = 1 then 0 else null end
+         where {scope}
+        """
+    )
+    # Second statement, not a second expression in the first: it reads the
+    # conditions the statement above just wrote, and SQLite evaluates an
+    # UPDATE's SET list against the pre-update row. Applied to every screened
+    # row, which is a no-op on rows screened under the new criteria —
+    # record_verdict already refuses to store a verdict the conditions deny,
+    # and the coalesce keeps an outcome such a row already chose for itself.
+    conn.execute(
+        f"""
+        update results
+           set screen_verdict = ({verdict_sql('')}),
+               screen_outcome = case when ({verdict_sql('')}) = 'unclear'
+                                     then coalesce(screen_outcome, '{OUTCOME_AMBIGUOUS}')
+                                     else null end
+         where screened_at is not null
+        """
+    )
+    conn.commit()
+
+    after = conn.execute(
+        """
+        select screen_verdict as verdict, count(*) as n
+          from results where screened_at is not null group by screen_verdict
+        """
+    ).fetchall()
+    per_condition = {}
+    for column in CONDITION_COLUMNS:
+        row = conn.execute(
+            f"""
+            select sum(case when {column} = 1 then 1 else 0 end) as met,
+                   sum(case when {column} = 0 then 1 else 0 end) as violated,
+                   sum(case when {column} is null then 1 else 0 end) as not_assessed
+              from results where screened_at is not null
+            """
+        ).fetchone()
+        per_condition[column] = {k: (row[k] or 0) for k in ("met", "violated", "not_assessed")}
+
+    return {
+        "mapped": to_map,
+        "already_mapped": already_mapped,
+        "verdicts_before": {r["verdict"]: r["n"] for r in before},
+        "verdicts_after": {r["verdict"]: r["n"] for r in after},
+        "conditions": per_condition,
+        "not_fully_assessed": conn.execute(
+            f"""select count(*) from results
+                 where screened_at is not null and not ({assessed_sql('')})"""
+        ).fetchone()[0],
+    }
 
 
 def refresh_image_counts(conn: sqlite3.Connection) -> int:

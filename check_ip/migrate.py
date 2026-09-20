@@ -26,9 +26,11 @@ Usage::
     python -m check_ip.migrate --skip-raw         # import, leave the payloads alone
     python -m check_ip.migrate --retire-similar   # retire the Similar Match rows (#292)
     python -m check_ip.migrate --recompute-duplicates  # re-elect the canonical rows (#291)
+    python -m check_ip.migrate --assess-conditions     # map onto the three licence conditions (#295)
 
-The last two are the store's bulk-update lanes: no workbooks needed, no DELETE,
-and each reports what it changed plus the annotation count either side of it.
+The last three are the store's bulk-update lanes: no workbooks needed, no
+DELETE, and each reports what it changed plus the annotation count either side
+of it.
 """
 
 from __future__ import annotations
@@ -427,6 +429,57 @@ def _recompute_duplicates(conn: sqlite3.Connection) -> int:
     return 0
 
 
+def _assess_conditions(conn: sqlite3.Connection) -> int:
+    """Map the credit-only screening onto the three licence conditions (#295).
+
+    Same shape as the two lanes above: it writes screening columns only, never
+    deletes, and takes the annotation and row counts either side — a change in
+    either is a failure, not a warning.
+
+    The number worth reading in the output is ``not fully assessed``. A row
+    that only ever answered "was he credited?" has two conditions nobody
+    looked at, and this lane is what makes that visible instead of letting it
+    read as compliance.
+    """
+    before = db.counts(conn)
+
+    logger.info("⚖️  mapping screened rows onto the three licence conditions (#295)")
+    result = db.backfill_licence_conditions(conn)
+
+    after = db.counts(conn)
+
+    logger.info("   %-24s %s", "rows mapped now", result["mapped"])
+    logger.info("   %-24s %s (left as screened under the new criteria)",
+                "already mapped", result["already_mapped"])
+    for label, key in (("verdicts before", "verdicts_before"), ("verdicts after", "verdicts_after")):
+        spread = ", ".join(f"{v or 'none'}={n}" for v, n in sorted(result[key].items(),
+                                                                   key=lambda kv: str(kv[0])))
+        logger.info("   %-24s %s", label, spread or "none")
+    for column, tally in result["conditions"].items():
+        logger.info("   %-24s met=%s violated=%s not-assessed=%s",
+                    column.removeprefix("screen_"),
+                    tally["met"], tally["violated"], tally["not_assessed"])
+    logger.info("   %-24s %s (screened, but a condition was never established)",
+                "not fully assessed", result["not_fully_assessed"])
+    logger.info("   %-24s %s → %s", "annotations", before["annotated"], after["annotated"])
+    logger.info("   %-24s %s → %s", "screened", before["screened"], after["screened"])
+    logger.info("   %-24s %s → %s", "rows", before["results"], after["results"])
+
+    if (after["annotated"] != before["annotated"]
+            or after["screened"] != before["screened"]
+            or after["results"] != before["results"]):
+        logger.error("❌ the store changed shape — refusing to call this a success")
+        return 1
+
+    db.set_meta(conn, "licence_conditions_mapped", str(result["mapped"]))
+    db.set_meta(conn, "licence_conditions_mapped_at",
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    conn.commit()
+    logger.info("✅ %s rows now carry the three conditions — %s of them still need a re-screen",
+                result["mapped"] + result["already_mapped"], result["not_fully_assessed"])
+    return 0
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Migrate the check_ip Excel store into SQLite.")
     parser.add_argument("--report", action="store_true",
@@ -439,6 +492,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--recompute-duplicates", action="store_true",
                         help="Re-elect the canonical row of every group on the canonical link "
                              "(issue #291) and stop. Writes only `duplicate`. Needs no workbooks.")
+    parser.add_argument("--assess-conditions", action="store_true",
+                        help="Map rows screened under the credit-only question onto the three "
+                             "licence conditions (issue #295) and stop. Writes only screening "
+                             "columns. Needs no workbooks.")
     args = parser.parse_args(argv)
 
     # Reconfigure before basicConfig grabs sys.stdout — the log lines carry
@@ -450,12 +507,14 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     # Stands on its own: it touches only the store, so it must not demand the
     # legacy workbooks a machine that already migrated no longer has.
-    if args.retire_similar or args.recompute_duplicates:
+    if args.retire_similar or args.recompute_duplicates or args.assess_conditions:
         conn = db.connect()
         logger.info("💾 store: %s", db.db_path())
         if args.retire_similar:
             return _retire_similar(conn)
-        return _recompute_duplicates(conn)
+        if args.recompute_duplicates:
+            return _recompute_duplicates(conn)
+        return _assess_conditions(conn)
 
     folder = legacy_folder()
     conn = db.connect()
@@ -497,6 +556,11 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     logger.info("👤 deriving poster keys…")
     logger.info("   %s rows keyed", db.refresh_poster_keys(conn))
+
+    # Screening columns survive an import untouched, so any row screened under
+    # the credit-only question still needs mapping. A no-op once it has run.
+    if _assess_conditions(conn) != 0:
+        return 1
 
     # The workbooks still hold the retired category, so an import re-lands
     # those rows un-flagged. Retiring here is what keeps a re-run idempotent

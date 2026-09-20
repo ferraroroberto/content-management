@@ -5,6 +5,11 @@ proposes, it never decides. ``check_ip.screen.record_verdict`` must not be able
 to touch ``ok`` / ``person`` / ``chat`` / ``report`` / ``fixed`` — those are ten
 months of manual triage and the skill runs unattended against them.
 
+The second one, added with issue #295, is that a licence condition nobody
+assessed stays ``NULL`` and is never counted, sorted or rendered as if it had
+passed. One ``coalesce(col, 1)`` would undo the whole model silently, so the
+tests assert it in Python, in SQL, in the queue stats and in the tab's frame.
+
 Run: & .\\.venv\\Scripts\\python.exe -m unittest discover tests -v
 """
 
@@ -74,11 +79,11 @@ class CheckIpStoreTests(unittest.TestCase):
             "select ok, person, chat, report, fixed from results where id = ?", (row_id,)
         ).fetchone())
 
-        # Worst-case write: an infringement carrying both aggravators, which
-        # touches every screening column there is.
+        # Worst-case write: all three conditions violated, which touches every
+        # screening column there is.
         screen.record_verdict(self.conn, row_id, verdict="infringement",
                               reason="no mention anywhere", poster_url="https://example.test/p",
-                              promotional=True, altered=True)
+                              credit_ok=0, noncommercial_ok=0, unmodified_ok=0)
 
         after = dict(self.conn.execute(
             "select ok, person, chat, report, fixed from results where id = ?", (row_id,)
@@ -87,14 +92,15 @@ class CheckIpStoreTests(unittest.TestCase):
 
         written = dict(self.conn.execute(
             "select screen_verdict, screen_reason, poster_url, screened_at, screen_source, "
-            "screen_promotional, screen_altered from results where id = ?", (row_id,)
+            "screen_credit_ok, screen_noncommercial_ok, screen_unmodified_ok "
+            "from results where id = ?", (row_id,)
         ).fetchone())
         self.assertEqual(written["screen_verdict"], "infringement")
         self.assertEqual(written["screen_reason"], "no mention anywhere")
         self.assertEqual(written["poster_url"], "https://example.test/p")
         self.assertIsNotNone(written["screened_at"])
-        self.assertEqual(written["screen_promotional"], 1)
-        self.assertEqual(written["screen_altered"], 1)
+        self.assertEqual((written["screen_credit_ok"], written["screen_noncommercial_ok"],
+                          written["screen_unmodified_ok"]), (0, 0, 0))
 
     def test_record_verdict_rejects_an_unknown_verdict(self):
         (row_id,) = _seed(self.conn, [{"found_link": "https://example.test/b"}])
@@ -104,60 +110,341 @@ class CheckIpStoreTests(unittest.TestCase):
             "select screen_verdict from results where id = ?", (row_id,)
         ).fetchone()["screen_verdict"])
 
-    # ── the credit policy: severity and its aggravators ───────────────────
+    # ── the three licence conditions (issue #295) ─────────────────────────
 
-    def test_severity_ranks_aggravators(self):
-        """0 nothing to act on · 1 no mention · 2 one aggravator · 3 all three."""
-        self.assertEqual(db.severity("acceptable"), 0)
-        self.assertEqual(db.severity("unclear"), 0, "an unresolved row is not a mild finding")
-        self.assertEqual(db.severity("infringement"), 1)
-        self.assertEqual(db.severity("infringement", promotional=True), 2)
-        self.assertEqual(db.severity("infringement", altered=True), 2)
-        self.assertEqual(db.severity("infringement", promotional=True, altered=True), 3)
+    def test_severity_counts_violated_conditions(self):
+        """Severity is how many of BY / NC / ND were found violated, 0–3."""
+        self.assertEqual(db.severity(1, 1, 1), 0)
+        self.assertEqual(db.severity(0, 1, 1), 1)
+        self.assertEqual(db.severity(1, 0, 1), 1, "commercial use alone is a violation")
+        self.assertEqual(db.severity(1, 1, 0), 1, "a derivative alone is a violation")
+        self.assertEqual(db.severity(0, 0, 1), 2)
+        self.assertEqual(db.severity(0, 0, 0), 3, "severity 3 must be reachable")
 
-    def test_severity_sql_agrees_with_python(self):
-        """The ordering expression and severity() must never drift apart.
+    def test_an_unassessed_condition_is_never_a_pass(self):
+        """The core of issue #295: NULL is its own state, not a satisfied one.
 
-        There are two implementations of the same rule — one for sorting in
-        SQL, one for reporting in Python — so the test compares them across
-        every combination rather than trusting either alone.
+        A single `coalesce(col, 1)` anywhere would make an unchecked condition
+        indistinguishable from a met one, which is exactly how a credited but
+        plainly commercial post came to be stored as compliant. Asserted on
+        severity, on the assessed predicate, on the derived verdict and on the
+        SQL renderings of all three.
         """
+        # Nothing violated, but nothing established either.
+        self.assertEqual(db.severity(None, None, None), 0)
+        self.assertFalse(db.fully_assessed(None, None, None))
+        self.assertEqual(db.verdict_for(None, None, None), "unclear")
+
+        # The shape the migration leaves behind: credit met, the rest unknown.
+        self.assertEqual(db.severity(1, None, None), 0)
+        self.assertFalse(db.fully_assessed(1, None, None),
+                         "a row with two unknowns must not read as assessed")
+        self.assertEqual(db.verdict_for(1, None, None), "unclear",
+                         "credit alone must not derive an 'acceptable' verdict")
+
+        # Only all three met is acceptable.
+        self.assertTrue(db.fully_assessed(1, 1, 1))
+        self.assertEqual(db.verdict_for(1, 1, 1), "acceptable")
+
+        # …and the same in SQL, where a coalesce would be easiest to slip in.
+        (row_id,) = _seed(self.conn, [{"found_link": "https://example.test/unassessed"}])
+        screen.record_verdict(self.conn, row_id, verdict="unclear",
+                              outcome=db.OUTCOME_AMBIGUOUS, credit_ok=1)
+        row = self.conn.execute(
+            f"""select ({db.severity_sql('results')}) as sev,
+                       case when {db.assessed_sql('results')} then 1 else 0 end as assessed,
+                       ({db.verdict_sql('results')}) as derived
+                  from results where id = ?""", (row_id,)
+        ).fetchone()
+        self.assertEqual((row["sev"], row["assessed"], row["derived"]), (0, 0, "unclear"))
+
+        # The tab counts it as not-fully-assessed rather than as compliant.
+        stats = screen.stats(self.conn, source="LinkedIn")
+        self.assertEqual(stats["not_fully_assessed"], 1)
+        self.assertEqual(stats["proposed_acceptable"], 0,
+                         "an unassessed row was counted as acceptable")
+        self.assertEqual(review.overview(self.conn)["not_fully_assessed"], 1)
+        frame = review.results_frame(self.conn, source="LinkedIn",
+                                     status="not fully assessed — needs a re-screen")
+        self.assertEqual(list(frame["id"]), [row_id])
+        self.assertEqual(list(frame["screen_noncommercial_ok"]),
+                         [review.CONDITION_LABELS[None]],
+                         "an unassessed condition must render as words, not a blank cell")
+        self.assertEqual(list(frame["assessed"]), [False])
+
+    def test_severity_and_verdict_sql_agree_with_python(self):
+        """Two renderings of one rule, compared across all 27 combinations.
+
+        There is a Python implementation for reporting and an SQL one for
+        sorting and counting; only comparing them everywhere proves neither
+        drifted. Written straight to the store rather than through
+        record_verdict, so combinations record_verdict would reject are
+        covered too.
+        """
+        states = (1, 0, None)
+        for credit in states:
+            for noncommercial in states:
+                for unmodified in states:
+                    (row_id,) = _seed(self.conn, [
+                        {"found_link": f"https://e.test/{credit}-{noncommercial}-{unmodified}"}])
+                    self.conn.execute(
+                        "update results set screen_credit_ok = ?, screen_noncommercial_ok = ?, "
+                        "screen_unmodified_ok = ? where id = ?",
+                        (credit, noncommercial, unmodified, row_id))
+                    self.conn.commit()
+                    row = self.conn.execute(
+                        f"""select ({db.severity_sql('results')}) as sev,
+                                   case when {db.assessed_sql('results')} then 1 else 0 end as ass,
+                                   ({db.verdict_sql('results')}) as verdict
+                              from results where id = ?""", (row_id,)
+                    ).fetchone()
+                    with self.subTest(credit=credit, noncommercial=noncommercial,
+                                      unmodified=unmodified):
+                        self.assertEqual(row["sev"], db.severity(credit, noncommercial, unmodified))
+                        self.assertEqual(bool(row["ass"]),
+                                         db.fully_assessed(credit, noncommercial, unmodified))
+                        self.assertEqual(row["verdict"],
+                                         db.verdict_for(credit, noncommercial, unmodified))
+
+    def test_a_credited_post_can_still_be_an_infringement(self):
+        """The two cases issue #295 names, which the old model could not hold.
+
+        Under `credit gate + aggravators` both of these scored `acceptable`,
+        severity 0, and never reached the review tab.
+        """
+        commercial, cropped = _seed(self.conn, [
+            {"found_link": "https://example.test/commercial"},
+            {"found_link": "https://example.test/cropped"},
+        ])
+        out = screen.record_verdict(
+            self.conn, commercial, verdict="infringement",
+            reason="credited in the caption, but the post sells the poster's workshop",
+            credit_ok=1, noncommercial_ok=0, unmodified_ok=1)
+        self.assertEqual((out["verdict"], out["severity"]), ("infringement", 1))
+
+        out = screen.record_verdict(
+            self.conn, cropped, verdict="infringement",
+            reason="credited, but the image is cropped and carries added text",
+            credit_ok=1, noncommercial_ok=1, unmodified_ok=0)
+        self.assertEqual((out["verdict"], out["severity"]), ("infringement", 1))
+
+        stored = {r["id"]: dict(r) for r in self.conn.execute(
+            f"select id, screen_verdict, ({db.severity_sql('results')}) as sev, "
+            f"screen_credit_ok from results")}
+        for row_id in (commercial, cropped):
+            with self.subTest(row=row_id):
+                self.assertEqual(stored[row_id]["screen_verdict"], "infringement")
+                self.assertEqual(stored[row_id]["sev"], 1)
+                self.assertEqual(stored[row_id]["screen_credit_ok"], 1,
+                                 "the met credit condition was lost")
+
+        self.assertEqual(screen.stats(self.conn, source="LinkedIn")["proposed_infringement"], 2)
+
+    def test_record_verdict_keeps_conditions_on_a_non_infringement_verdict(self):
+        """Nothing is cleared any more — that clearing was the bug (#295).
+
+        The old code blanked both aggravators whenever the verdict was not
+        `infringement`, so a met condition and a violated one both became 0.
+        """
+        (row_id,) = _seed(self.conn, [{"found_link": "https://example.test/keep"}])
+        screen.record_verdict(self.conn, row_id, verdict="acceptable",
+                              reason="tagged in the caption, personal post, image untouched",
+                              credit_ok=1, noncommercial_ok=1, unmodified_ok=1)
+        row = self.conn.execute(
+            "select screen_credit_ok, screen_noncommercial_ok, screen_unmodified_ok "
+            "from results where id = ?", (row_id,)).fetchone()
+        self.assertEqual(tuple(row), (1, 1, 1), "record_verdict cleared the conditions")
+
+        # …and an unclear row keeps the one condition that *was* established.
+        screen.record_verdict(self.conn, row_id, verdict="unclear",
+                              outcome=db.OUTCOME_AMBIGUOUS, credit_ok=1)
+        row = self.conn.execute(
+            "select screen_credit_ok, screen_noncommercial_ok, screen_unmodified_ok "
+            "from results where id = ?", (row_id,)).fetchone()
+        self.assertEqual(tuple(row), (1, None, None))
+
+    def test_record_verdict_rejects_an_inconsistent_combination(self):
+        """A verdict that contradicts the conditions is refused, not normalised."""
+        (row_id,) = _seed(self.conn, [{"found_link": "https://example.test/inconsistent"}])
         cases = [
-            ("acceptable", False, False), ("unclear", False, False),
-            ("infringement", False, False), ("infringement", True, False),
-            ("infringement", False, True), ("infringement", True, True),
+            # acceptable while a condition is violated
+            dict(verdict="acceptable", credit_ok=1, noncommercial_ok=0, unmodified_ok=1),
+            # acceptable while a condition was never assessed
+            dict(verdict="acceptable", credit_ok=1),
+            # infringement with nothing actually violated
+            dict(verdict="infringement", credit_ok=1, noncommercial_ok=1, unmodified_ok=1),
+            # infringement asserted without naming a single condition
+            dict(verdict="infringement"),
+            # unclear while a condition is violated — that is an infringement
+            dict(verdict="unclear", outcome=db.OUTCOME_AMBIGUOUS, credit_ok=0),
         ]
-        for verdict, promo, altered in cases:
-            (row_id,) = _seed(self.conn, [{"found_link": f"https://e.test/{verdict}{promo}{altered}"}])
-            screen.record_verdict(self.conn, row_id, verdict=verdict,
-                                  promotional=promo, altered=altered)
-            from_sql = self.conn.execute(
-                f"select ({db.severity_sql('results')}) as s from results where id = ?", (row_id,)
-            ).fetchone()["s"]
-            with self.subTest(verdict=verdict, promotional=promo, altered=altered):
-                self.assertEqual(from_sql, db.severity(verdict, promo, altered))
+        for case in cases:
+            with self.subTest(**case):
+                with self.assertRaises(ValueError):
+                    screen.record_verdict(self.conn, row_id, **case)
+        self.assertIsNone(self.conn.execute(
+            "select screened_at from results where id = ?", (row_id,)
+        ).fetchone()["screened_at"], "a rejected verdict was still written")
 
-    def test_aggravators_are_cleared_on_a_non_infringement_verdict(self):
-        """Flags only mean something next to an infringement.
+    def test_condition_state_rejects_a_value_it_cannot_read(self):
+        """A typo must raise, never fall through as 'not assessed'."""
+        for good, expected in ((None, None), (True, 1), (False, 0), (1, 1), (0, 0),
+                               ("met", 1), ("violated", 0), ("unknown", None)):
+            with self.subTest(value=good):
+                self.assertEqual(db.condition_state(good), expected)
+        for bad in ("maybe", "yep", 2, -1, "1.0"):
+            with self.subTest(value=bad):
+                with self.assertRaises(ValueError):
+                    db.condition_state(bad)
 
-        Left set on an `acceptable` row, the stored severity would disagree
-        with severity(), and the tab would sort a cleared row above real ones.
+    # ── the two kinds of 'unclear' (issue #295 §4) ────────────────────────
 
-        Nothing stops a worker passing `--promotional` next to `acceptable`,
-        so the flags are asserted here rather than left to default — otherwise
-        this test passes whether or not the clearing exists.
+    def test_unclear_needs_an_outcome_and_the_tab_can_exclude_the_permanent_one(self):
+        """'Could not tell' and 'nothing to assess' are unrelated states."""
+        ambiguous, permanent = _seed(self.conn, [
+            {"found_link": "https://example.test/ambiguous"},
+            {"found_link": "https://example.test/gone"},
+        ])
+        with self.assertRaises(ValueError):
+            screen.record_verdict(self.conn, ambiguous, verdict="unclear")
+        with self.assertRaises(ValueError):
+            screen.record_verdict(self.conn, ambiguous, verdict="acceptable",
+                                  credit_ok=1, noncommercial_ok=1, unmodified_ok=1,
+                                  outcome=db.OUTCOME_AMBIGUOUS)
+
+        screen.record_verdict(self.conn, ambiguous, verdict="unclear",
+                              outcome=db.OUTCOME_AMBIGUOUS,
+                              reason="caption truncated behind a login wall")
+        screen.record_verdict(self.conn, permanent, verdict="unclear",
+                              outcome=db.OUTCOME_NOTHING_TO_ASSESS,
+                              reason="the post no longer exists")
+
+        rescreen = review.results_frame(self.conn, source="LinkedIn",
+                                        status="not fully assessed — needs a re-screen")
+        self.assertEqual(list(rescreen["id"]), [ambiguous],
+                         "a permanently unassessable row sat in the re-screen pile")
+        worth_a_look = review.results_frame(self.conn, source="LinkedIn",
+                                            status="unclear — another look may settle it")
+        self.assertEqual(list(worth_a_look["id"]), [ambiguous])
+        dead = review.results_frame(self.conn, source="LinkedIn",
+                                    status="unclear — nothing left to assess")
+        self.assertEqual(list(dead["id"]), [permanent])
+
+        stats = screen.stats(self.conn, source="LinkedIn")
+        self.assertEqual((stats["not_fully_assessed"], stats["nothing_to_assess"]), (1, 1))
+        overview = review.overview(self.conn)
+        self.assertEqual((overview["not_fully_assessed"], overview["nothing_to_assess"]), (1, 1))
+
+    # ── the migration lane (issue #295 §5) ────────────────────────────────
+
+    def test_backfill_maps_the_credit_only_screening_without_inventing_facts(self):
+        """`migrate --assess-conditions`, on rows shaped like the live store's.
+
+        The mapping is deliberately lossy in one direction only: a flag that
+        fired becomes a violation, a flag that did not fire becomes NULL,
+        because "not flagged promotional" never meant "checked and clean".
         """
-        (row_id,) = _seed(self.conn, [{"found_link": "https://example.test/flip"}])
-        for verdict in ("acceptable", "unclear"):
-            screen.record_verdict(self.conn, row_id, verdict=verdict,
-                                  reason="owner is tagged in the caption after all",
-                                  promotional=True, altered=True)
-            row = self.conn.execute(
-                "select screen_promotional, screen_altered from results where id = ?", (row_id,)
-            ).fetchone()
-            with self.subTest(verdict=verdict):
-                self.assertEqual((row["screen_promotional"], row["screen_altered"]), (0, 0))
-                self.assertEqual(db.severity(verdict, True, True), 0)
+        plain, promo, altered, acceptable, unclear, unscreened = _seed(self.conn, [
+            {"found_link": "https://example.test/plain"},
+            {"found_link": "https://example.test/promo"},
+            {"found_link": "https://example.test/altered", "ok": 0, "person": "contact-ref"},
+            {"found_link": "https://example.test/acceptable"},
+            {"found_link": "https://example.test/unclear"},
+            {"found_link": "https://example.test/untouched"},
+        ])
+        # The pre-#295 shape, written directly: record_verdict no longer
+        # produces it, and the point is to migrate stores that already hold it.
+        for row_id, verdict, promotional, edited in (
+            (plain, "infringement", 0, 0),
+            (promo, "infringement", 1, 0),
+            (altered, "infringement", 0, 1),
+            (acceptable, "acceptable", 0, 0),
+            (unclear, "unclear", 0, 0),
+        ):
+            self.conn.execute(
+                "update results set screen_verdict = ?, screen_promotional = ?, "
+                "screen_altered = ?, screened_at = '2026-01-02 03:04:05', "
+                "screen_source = 'check-ip skill' where id = ?",
+                (verdict, promotional, edited, row_id))
+        self.conn.commit()
+
+        before = db.counts(self.conn)
+        result = db.backfill_licence_conditions(self.conn)
+        after = db.counts(self.conn)
+
+        self.assertEqual(result["mapped"], 5)
+        self.assertEqual((after["annotated"], after["results"], after["screened"]),
+                         (before["annotated"], before["results"], before["screened"]),
+                         "the migration changed the shape of the store")
+
+        mapped = {r["id"]: dict(r) for r in self.conn.execute(
+            "select id, screen_verdict, screen_outcome, screen_credit_ok, "
+            "screen_noncommercial_ok, screen_unmodified_ok from results")}
+
+        # An infringement was a failed credit check, and nothing else was asked.
+        self.assertEqual((mapped[plain]["screen_credit_ok"],
+                          mapped[plain]["screen_noncommercial_ok"],
+                          mapped[plain]["screen_unmodified_ok"]), (0, None, None))
+        self.assertEqual(mapped[plain]["screen_verdict"], "infringement")
+
+        # A flag that fired is the one thing that *was* established.
+        self.assertEqual(mapped[promo]["screen_noncommercial_ok"], 0)
+        self.assertIsNone(mapped[promo]["screen_unmodified_ok"])
+        self.assertEqual(mapped[altered]["screen_unmodified_ok"], 0)
+        self.assertIsNone(mapped[altered]["screen_noncommercial_ok"])
+
+        # The deliberate, visible consequence: an `acceptable` row becomes
+        # "credit met, the other two unknown", not "compliant".
+        self.assertEqual(mapped[acceptable]["screen_credit_ok"], 1)
+        self.assertIsNone(mapped[acceptable]["screen_noncommercial_ok"])
+        self.assertIsNone(mapped[acceptable]["screen_unmodified_ok"])
+        self.assertEqual(mapped[acceptable]["screen_verdict"], "unclear",
+                         "a credit-only pass still reads as acceptable")
+
+        # An unclear row established nothing at all. It is marked `ambiguous`
+        # rather than permanent: the legacy bucket mixed both kinds and the
+        # store cannot say which, so the row stays in the re-screen pile.
+        self.assertEqual((mapped[unclear]["screen_credit_ok"],
+                          mapped[unclear]["screen_noncommercial_ok"],
+                          mapped[unclear]["screen_unmodified_ok"]), (None, None, None))
+        for row_id in (acceptable, unclear):
+            with self.subTest(row=row_id):
+                self.assertEqual(mapped[row_id]["screen_outcome"], db.OUTCOME_AMBIGUOUS)
+        self.assertIsNone(mapped[plain]["screen_outcome"],
+                          "an infringement is not a kind of unclear")
+        self.assertEqual(
+            screen.stats(self.conn, source="LinkedIn")["nothing_to_assess"], 0,
+            "the mapping invented a permanently-unassessable row")
+
+        # A never-screened row is not touched.
+        self.assertIsNone(mapped[unscreened]["screen_verdict"])
+        self.assertEqual(result["not_fully_assessed"], 5)
+
+        # The owner's annotation on the altered row survived untouched.
+        self.assertEqual(dict(self.conn.execute(
+            "select ok, person from results where id = ?", (altered,)).fetchone()),
+            {"ok": 0, "person": "contact-ref"})
+
+        # Idempotent: a second pass finds nothing left to map and changes nothing.
+        again = db.backfill_licence_conditions(self.conn)
+        self.assertEqual((again["mapped"], again["already_mapped"]), (0, 5))
+        self.assertEqual(
+            {r["id"]: dict(r) for r in self.conn.execute(
+                "select id, screen_verdict, screen_outcome, screen_credit_ok, "
+                "screen_noncommercial_ok, screen_unmodified_ok from results")},
+            mapped, "a second pass rewrote rows it had already mapped")
+
+    def test_backfill_leaves_rows_screened_under_the_new_criteria_alone(self):
+        """A fully-assessed row must not be re-derived from the frozen flags."""
+        (row_id,) = _seed(self.conn, [{"found_link": "https://example.test/new"}])
+        screen.record_verdict(self.conn, row_id, verdict="acceptable",
+                              credit_ok=1, noncommercial_ok=1, unmodified_ok=1)
+        result = db.backfill_licence_conditions(self.conn)
+        self.assertEqual((result["mapped"], result["already_mapped"]), (0, 1))
+        row = self.conn.execute(
+            "select screen_verdict, screen_credit_ok, screen_noncommercial_ok, "
+            "screen_unmodified_ok from results where id = ?", (row_id,)).fetchone()
+        self.assertEqual(tuple(row), ("acceptable", 1, 1, 1))
 
     # ── poster identity, which drives the queue ranking ───────────────────
 
@@ -284,7 +571,8 @@ class CheckIpStoreTests(unittest.TestCase):
             {"found_link": "https://example.test/secondary", "duplicate": 1},
             {"found_link": "https://example.test/other-platform", "source": "Instagram"},
         ])
-        screen.record_verdict(self.conn, ids[0], verdict="unclear")
+        screen.record_verdict(self.conn, ids[0], verdict="unclear",
+                              outcome=db.OUTCOME_AMBIGUOUS)
         served = screen.next_batch(self.conn, limit=50, source="LinkedIn")
         self.assertEqual(served, [], "an already-screened row was served again")
 
@@ -530,7 +818,8 @@ class CheckIpStoreTests(unittest.TestCase):
             {"found_link": f"https://tn.linkedin.com/posts/{slug}",
              "search_date": "2026-03-01 00:00:00"},
         ])
-        screen.record_verdict(self.conn, screened, verdict="acceptable", reason="tagged me")
+        screen.record_verdict(self.conn, screened, verdict="acceptable", reason="tagged me",
+                              credit_ok=1, noncommercial_ok=1, unmodified_ok=1)
         db.mark_duplicates(self.conn)
 
         flags = {r["id"]: r["duplicate"] for r in self.conn.execute(
