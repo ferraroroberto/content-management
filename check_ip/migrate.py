@@ -27,8 +27,9 @@ Usage::
     python -m check_ip.migrate --retire-similar   # retire the Similar Match rows (#292)
     python -m check_ip.migrate --recompute-duplicates  # re-elect the canonical rows (#291)
     python -m check_ip.migrate --assess-conditions     # map onto the three licence conditions (#295)
+    python -m check_ip.migrate --backfill-history      # preserve the pre-re-screen opinions (#301)
 
-The last three are the store's bulk-update lanes: no workbooks needed, no
+The last four are the store's bulk-update lanes: no workbooks needed, no
 DELETE, and each reports what it changed plus the annotation count either side
 of it.
 """
@@ -36,6 +37,7 @@ of it.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sqlite3
 import sys
@@ -55,6 +57,11 @@ logger = logging.getLogger("check_ip.migrate")
 # Excel's hard limit on the characters in one cell. A stored payload exactly
 # this long was cut off by the writer, not by the API.
 EXCEL_CELL_CAP = 32767
+
+# The hand-taken export of what the pre-#295 screening passes observed, sitting
+# in the store folder. Gitignored and the only copy of those 310 observations
+# until `--backfill-history` lands them in screen_history (issue #301).
+PRE_RESCREEN_EXPORT = "screen_reasons_pre_rescreen.json"
 
 METADATA_FILE = "metadata.xlsx"
 RESULTS_FILE = "search_results_database.xlsx"
@@ -429,6 +436,77 @@ def _recompute_duplicates(conn: sqlite3.Connection) -> int:
     return 0
 
 
+def _backfill_history(conn: sqlite3.Connection) -> int:
+    """Land the pre-re-screen screening opinions into ``screen_history`` (#301).
+
+    Same shape as the three lanes above: no workbooks, no DELETE, writes only
+    the new history table, and takes the row / annotation / screened counts
+    either side — a change in any of them is a failure, not a warning. Nothing
+    on ``results`` is touched at all here, which makes that guard strict rather
+    than merely reassuring.
+
+    The source is the one-off JSON export taken by hand before the first
+    three-condition re-screen. It is gitignored and is the only surviving copy
+    of what that pass observed, which is the whole reason this lane exists; it
+    is read, never moved or deleted. Once the counts below confirm the landing,
+    the export is redundant and can be retired by whoever owns it.
+
+    Idempotent: the export's opinions key on ``(result_id, screened_at)``, so a
+    second run inserts nothing, and the first re-screen of a back-filled row
+    will not record the same opinion again.
+    """
+    export = db.store_dir() / PRE_RESCREEN_EXPORT
+    if not export.exists():
+        logger.error("❌ no export to back-fill from: %s", export)
+        return 1
+
+    payload = json.loads(export.read_text(encoding="utf-8"))
+    rows = payload.get("rows") if isinstance(payload, dict) else payload
+    if not rows:
+        logger.error("❌ %s carries no rows", export.name)
+        return 1
+
+    before = db.counts(conn)
+
+    logger.info("📚 back-filling superseded screening opinions (#301)")
+    logger.info("   %-24s %s", "export", export.name)
+    logger.info("   %-24s %s", "captured at",
+                payload.get("captured_at", "unknown") if isinstance(payload, dict) else "unknown")
+
+    result = db.backfill_screen_history(conn, rows)
+    after = db.counts(conn)
+
+    logger.info("   %-24s %s", "rows in export", result["source_rows"])
+    logger.info("   %-24s %s", "landed now", result["inserted"])
+    logger.info("   %-24s %s (same opinion already preserved)",
+                "already present", result["already_present"])
+    if result["no_timestamp"]:
+        logger.info("   %-24s %s (never screened — nothing to preserve)",
+                    "skipped, no timestamp", result["no_timestamp"])
+    if result["unknown_ids"]:
+        logger.warning("   %-24s %s — not in the store, skipped",
+                       "unknown ids", len(result["unknown_ids"]))
+    logger.info("   %-24s %s → %s", "history rows",
+                before["screen_history"], after["screen_history"])
+    logger.info("   %-24s %s → %s", "annotations", before["annotated"], after["annotated"])
+    logger.info("   %-24s %s → %s", "screened", before["screened"], after["screened"])
+    logger.info("   %-24s %s → %s", "rows", before["results"], after["results"])
+
+    if (after["annotated"] != before["annotated"]
+            or after["screened"] != before["screened"]
+            or after["results"] != before["results"]):
+        logger.error("❌ the store changed shape — refusing to call this a success")
+        return 1
+
+    db.set_meta(conn, "screen_history_backfilled", str(after["screen_history"]))
+    db.set_meta(conn, "screen_history_backfilled_at",
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    conn.commit()
+    logger.info("✅ %s superseded opinions preserved — `results` was not written to at all",
+                after["screen_history"])
+    return 0
+
+
 def _assess_conditions(conn: sqlite3.Connection) -> int:
     """Map the credit-only screening onto the three licence conditions (#295).
 
@@ -496,6 +574,11 @@ def main(argv: Optional[list[str]] = None) -> int:
                         help="Map rows screened under the credit-only question onto the three "
                              "licence conditions (issue #295) and stop. Writes only screening "
                              "columns. Needs no workbooks.")
+    parser.add_argument("--backfill-history", action="store_true",
+                        help="Land the pre-re-screen screening opinions from "
+                             f"{PRE_RESCREEN_EXPORT} into screen_history (issue #301) and stop. "
+                             "Writes only the history table; `results` is not touched. "
+                             "Needs no workbooks.")
     args = parser.parse_args(argv)
 
     # Reconfigure before basicConfig grabs sys.stdout — the log lines carry
@@ -507,13 +590,16 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     # Stands on its own: it touches only the store, so it must not demand the
     # legacy workbooks a machine that already migrated no longer has.
-    if args.retire_similar or args.recompute_duplicates or args.assess_conditions:
+    if (args.retire_similar or args.recompute_duplicates or args.assess_conditions
+            or args.backfill_history):
         conn = db.connect()
         logger.info("💾 store: %s", db.db_path())
         if args.retire_similar:
             return _retire_similar(conn)
         if args.recompute_duplicates:
             return _recompute_duplicates(conn)
+        if args.backfill_history:
+            return _backfill_history(conn)
         return _assess_conditions(conn)
 
     folder = legacy_folder()

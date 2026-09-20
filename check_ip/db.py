@@ -21,6 +21,7 @@ import os
 import re
 import sqlite3
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Optional
 from urllib.parse import urlsplit
@@ -46,6 +47,12 @@ CONDITION_COLUMNS = ("screen_credit_ok", "screen_noncommercial_ok", "screen_unmo
 # Columns only the screening pass writes.
 SCREEN_COLUMNS = ("screen_verdict", "screen_outcome", "screen_reason", "screened_at",
                   "screen_source", "poster_url") + CONDITION_COLUMNS
+
+# What `screen_history` preserves when one of those writes replaces another
+# (issue #301) — exactly SCREEN_COLUMNS, so a superseded opinion round-trips
+# whole. Derived from that tuple rather than retyped: a screening column added
+# later and not preserved here would be silently lost on the next re-screen.
+SCREEN_HISTORY_COLUMNS = SCREEN_COLUMNS
 
 # Superseded by CONDITION_COLUMNS and no longer written by anything (#295).
 # Named rather than deleted so the migration that mapped them stays auditable.
@@ -468,7 +475,7 @@ def refresh_poster_keys(conn: sqlite3.Connection, *, only_missing: bool = True) 
 def counts(conn: sqlite3.Connection) -> dict:
     """Row counts per table — the reconciliation the migration reports on."""
     out = {}
-    for table in ("images", "results", "api_history"):
+    for table in ("images", "results", "api_history", "screen_history"):
         out[table] = conn.execute(f"select count(*) as n from {table}").fetchone()["n"]
     annotated = " or ".join(f"{c} is not null" for c in OWNER_COLUMNS)
     out["annotated"] = conn.execute(
@@ -584,6 +591,119 @@ def retire_similar_matches(conn: sqlite3.Connection) -> dict:
         )
         conn.commit()
     return counts
+
+
+def push_screen_history(conn: sqlite3.Connection, row_id: int) -> bool:
+    """Ensure row ``row_id``'s current screening opinion is in ``screen_history``.
+
+    Returns True when this row carried an opinion and that opinion is now
+    confirmed preserved; False when the row has never been screened, where
+    there is no prior observation to keep and only an empty one to invent.
+    Raises ``RuntimeError`` when a prior opinion exists but preservation could
+    **not** be confirmed — the caller is about to overwrite the only other copy
+    of it, so "not confirmed" must abort the transaction rather than pass as
+    success.
+
+    **Deliberately does not commit.** The caller owns the transaction, because
+    the whole point of this function is that the copy and the overwrite that
+    supersedes it land together or not at all (issue #301). Committing here
+    would create exactly the window it exists to close.
+
+    ``insert or ignore`` resolves against ``unique (result_id, screened_at)``:
+    re-preserving a state already in the table is a no-op rather than a
+    duplicate. That is what lets the back-fill run twice, and what stops the
+    first re-screen of a back-filled row recording its opinion a second time.
+    The only constraint on the table is that key, so nothing else is masked —
+    and "already there" is just as good an answer as "written now", which is
+    why the check below asks whether the opinion is *preserved* rather than
+    whether this call happened to be the one that wrote it.
+
+    No owner column appears in either statement, or in the table they write to.
+    """
+    prior = conn.execute(
+        "select screened_at from results where id = ? and screened_at is not null",
+        (row_id,),
+    ).fetchone()
+    if prior is None:
+        return False
+
+    columns = ", ".join(SCREEN_HISTORY_COLUMNS)
+    conn.execute(
+        f"""
+        insert or ignore into screen_history (result_id, {columns}, recorded_at)
+        select id, {columns}, ?
+          from results
+         where id = ?
+        """,
+        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), row_id),
+    )
+    kept = conn.execute(
+        "select 1 from screen_history where result_id = ? and screened_at = ?",
+        (row_id, prior["screened_at"]),
+    ).fetchone()
+    if kept is None:
+        raise RuntimeError(
+            f"refusing to overwrite row {row_id}: its previous screening opinion "
+            f"could not be preserved in screen_history"
+        )
+    return True
+
+
+def backfill_screen_history(conn: sqlite3.Connection, rows: Iterable[dict]) -> dict:
+    """Land pre-existing screening opinions into ``screen_history`` (issue #301).
+
+    ``rows`` are dicts carrying ``id`` plus whichever of
+    ``SCREEN_HISTORY_COLUMNS`` the source recorded — the shape of the one-off
+    JSON export taken by hand before the first three-condition re-screen, which
+    is the only surviving copy of that pass's observations. A column the export
+    did not carry lands NULL rather than being guessed at; ``poster_url`` is the
+    only one in practice, and it is unaffected on ``results`` anyway because
+    ``record_verdict`` only ever coalesces it.
+
+    Nothing on ``results`` is read for content, written, or deleted here, and no
+    owner column is in any statement — the migration lane that calls this proves
+    it by taking the row, annotation and screened counts either side.
+
+    Idempotent by the same ``unique (result_id, screened_at)`` key
+    ``push_screen_history`` uses, so a second run inserts nothing.
+    """
+    rows = list(rows)
+    ids = [row["id"] for row in rows]
+    known = set()
+    # Chunked so the parameter list cannot outgrow SQLITE_MAX_VARIABLE_NUMBER
+    # on a larger export than today's 310.
+    for start in range(0, len(ids), 500):
+        chunk = ids[start:start + 500]
+        placeholders = ", ".join("?" for _ in chunk)
+        known.update(r["id"] for r in conn.execute(
+            f"select id from results where id in ({placeholders})", chunk))
+
+    recorded_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    payload = [
+        tuple([row["id"]] + [row.get(c) for c in SCREEN_HISTORY_COLUMNS] + [recorded_at])
+        for row in rows
+        if row["id"] in known and row.get("screened_at") is not None
+    ]
+
+    columns = ", ".join(SCREEN_HISTORY_COLUMNS)
+    placeholders = ", ".join("?" for _ in range(len(SCREEN_HISTORY_COLUMNS) + 2))
+    before = conn.total_changes
+    conn.executemany(
+        f"insert or ignore into screen_history (result_id, {columns}, recorded_at) "
+        f"values ({placeholders})",
+        payload,
+    )
+    inserted = conn.total_changes - before
+    conn.commit()
+
+    return {
+        "source_rows": len(rows),
+        "inserted": inserted,
+        "already_present": len(payload) - inserted,
+        "unknown_ids": sorted(set(ids) - known),
+        "no_timestamp": sum(1 for row in rows
+                            if row["id"] in known and row.get("screened_at") is None),
+    }
 
 
 def backfill_licence_conditions(conn: sqlite3.Connection) -> dict:

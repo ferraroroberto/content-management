@@ -12,6 +12,13 @@ refuses to write them at all; ``verdict`` touches only ``db.SCREEN_COLUMNS``.
 That separation is what makes the skill safe to run unattended: the
 worst it can do is propose something wrong, which the owner then overrules.
 
+**A re-screen no longer destroys the answer it replaces** (issue #301). Before
+overwriting the screening columns, ``record_verdict`` copies them into
+``screen_history`` in the same transaction — so the observation behind a
+previous verdict stays retrievable, which matters because the screening
+question itself has changed twice. ``screen_history`` holds no owner column
+either.
+
 Usage::
 
     python -m check_ip.screen next --limit 20
@@ -221,24 +228,29 @@ def record_verdict(
     if row is None:
         raise KeyError(f"no result row with id {row_id}")
 
-    conn.execute(
-        """
-        update results
-           set screen_verdict          = ?,
-               screen_outcome          = ?,
-               screen_reason           = ?,
-               screened_at             = ?,
-               screen_source           = ?,
-               poster_url              = coalesce(?, poster_url),
-               screen_credit_ok        = ?,
-               screen_noncommercial_ok = ?,
-               screen_unmodified_ok    = ?
-         where id = ?
-        """,
-        (verdict, outcome, reason or None, datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-         screen_source, poster_url or None, *conditions, row_id),
-    )
-    conn.commit()
+    # One transaction: the opinion being replaced is copied into screen_history
+    # and the replacement is written, or neither happens (issue #301). `with
+    # conn` commits on success and rolls back on any exception — the copy must
+    # never survive a failed update, nor the update a failed copy.
+    with conn:
+        preserved = db.push_screen_history(conn, row_id)
+        conn.execute(
+            """
+            update results
+               set screen_verdict          = ?,
+                   screen_outcome          = ?,
+                   screen_reason           = ?,
+                   screened_at             = ?,
+                   screen_source           = ?,
+                   poster_url              = coalesce(?, poster_url),
+                   screen_credit_ok        = ?,
+                   screen_noncommercial_ok = ?,
+                   screen_unmodified_ok    = ?
+             where id = ?
+            """,
+            (verdict, outcome, reason or None, datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+             screen_source, poster_url or None, *conditions, row_id),
+        )
     return {
         "id": row_id,
         "verdict": verdict,
@@ -246,6 +258,11 @@ def record_verdict(
         "found_link": row["found_link"],
         "severity": db.severity(*conditions),
         "fully_assessed": db.fully_assessed(*conditions),
+        # True when this write replaced an earlier opinion and that opinion is
+        # confirmed preserved in screen_history; False on a first screening,
+        # which supersedes nothing. A prior opinion that could not be preserved
+        # raises instead of landing here — the update never happens.
+        "superseded": preserved,
     }
 
 
@@ -388,6 +405,10 @@ def main(argv: Optional[list[str]] = None) -> int:
             tag += f" · {out['outcome']}"
         elif not out["fully_assessed"]:
             tag += " · not fully assessed"
+        # Says out loud that an earlier opinion was replaced and kept, so a
+        # re-screening pass is visibly not destroying what it overwrites (#301).
+        if out["superseded"]:
+            tag += " · previous opinion kept"
         print(f"✅ [{out['id']}] {out['verdict']}{tag} — {out['found_link']}")
         return 0
 

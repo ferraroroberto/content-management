@@ -18,7 +18,7 @@ flowchart TB
     IMG[["illustrations<br/>(iCloud folder)"]] --> RUN["check_ip.run"]
     RUN -->|"upload once"| IMGUR[("Imgur")]
     IMGUR -->|"public URL"| LENS["check_ip.lens<br/>Google Lens via SerpAPI"]
-    LENS --> STORE[("results/check_ip/check_ip.db<br/>images · results · api_history")]
+    LENS --> STORE[("results/check_ip/check_ip.db<br/>images · results · api_history · screen_history")]
     LENS -->|"full payload"| RAW[["results/check_ip/api_raw/<br/>one file per call"]]
     STORE --> SCREEN["check_ip.screen<br/>ranked queue"]
     SCREEN --> SKILL["/check-ip skill<br/>browser pass"]
@@ -203,6 +203,42 @@ fact the screening never established.
 still in the table as the record of what that pass established and what the
 mapping read, no longer written by anything.
 
+## Superseded screening opinions are kept
+
+A re-screen used to destroy the answer it replaced. `screen_reason` is the
+sentence recording what was actually seen on the page — the evidence behind a
+potential accusation — and the screening question has now changed twice, so
+rows get re-answered under a question their previous answer never addressed.
+Two verdicts have already been recorded, found wrong and reverted, and
+reconstructing either meant reading chat scrollback.
+
+`screen_history` (issue
+[#301](https://github.com/ferraroroberto/content-management/issues/301)) is the
+append-only record of every opinion that has been replaced: `result_id`, all
+nine screening columns exactly as they stood, and `recorded_at`. It is written
+by `record_verdict` **in the same transaction as the update**, so a failed write
+leaves neither. `results` still carries exactly one *current* opinion, so no
+existing query, stat or tab column changes meaning.
+
+Things worth knowing:
+
+- **The owner's five columns are not in the table at all.** History is a record
+  of what the skill proposed. The owner's decisions are authoritative, are never
+  written by this package, and have nothing to be superseded by. A test asserts
+  the column list, so adding one fails the suite rather than shipping.
+- **One row per `(result_id, screened_at)`.** Re-preserving a state already in
+  the table is a no-op, which is what makes the back-fill idempotent and stops
+  the first re-screen of a back-filled row recording the same opinion twice.
+- **`migrate --backfill-history`** lands the opinions from
+  `screen_reasons_pre_rescreen.json` — a one-off export taken by hand before the
+  first three-condition re-screen, and the only surviving copy of what those 310
+  rows observed. The lane writes only `screen_history`, reads the export without
+  moving it, and takes the row / annotation / screened counts either side; a
+  change in any of them is a failure, not a warning. The export carried no
+  `poster_url`, so back-filled rows have it NULL — it is unaffected on `results`,
+  which only ever coalesces it.
+- **Growth is negligible** — a few hundred rows per re-screen pass.
+
 ## How the queue ranks
 
 Posters holding many pending rows come first: one conversation settles several
@@ -219,9 +255,9 @@ than silently wrong (`config.json` is gitignored).
 
 | module | does |
 |---|---|
-| `db.py` | the store — connection, schema, the canonical link, duplicate marking, per-image tallies, retirement |
-| `schema.sql` | three tables plus a `meta` bookkeeping row |
-| `migrate.py` | one-shot Excel → SQLite import + payload extraction; also the store's bulk-update lanes (`--retire-similar`, `--recompute-duplicates`, `--assess-conditions`) |
+| `db.py` | the store — connection, schema, the canonical link, duplicate marking, per-image tallies, retirement, screening history |
+| `schema.sql` | four tables plus a `meta` bookkeeping row |
+| `migrate.py` | one-shot Excel → SQLite import + payload extraction; also the store's bulk-update lanes (`--retire-similar`, `--recompute-duplicates`, `--assess-conditions`, `--backfill-history`) |
 | `process.py` | pure helpers: post-date extraction, platform identification, row building |
 | `imgur.py` | upload each illustration once, with backoff |
 | `lens.py` | one Google Lens search per call, logged to the store |

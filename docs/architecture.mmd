@@ -134,11 +134,13 @@ illustration once"]
     CILENS["lens.py — Google Lens via SerpAPI
 payload to a sidecar file, not the DB"]
     CIDB["db.py + schema.sql
-images · results · api_history"]
+images · results · api_history · screen_history"]
     CIMIG["migrate.py — one-shot Excel import
-(idempotent, preserves every annotation)"]
+(idempotent, preserves every annotation)
++ bulk lanes, incl. --backfill-history"]
     CISCREEN["screen.py — ranked queue
-+ verdict writer"]
++ verdict writer
+(supersedes into screen_history, same txn)"]
     CIREVIEW["review.py — the tab's reads/writes"]
   end
   ILLUS[["illustrations
