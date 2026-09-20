@@ -175,7 +175,7 @@ creates the rows that follow:
 | `article` (title) | readability `short_title()` (fallback: `<title>`); normalised to sentence case by `normalize_names` |
 | `link` (url) | tab URL, cleaned of tracking params by `normalize_url` |
 | `summary` (rich_text) | LLM 3-line plain text |
-| `topic` (select) | LLM classifier (`personal development` / `innovation` / `leadership and management`) |
+| `topic` (select) | LLM classifier (`personal development` / `innovation` / `leadership and management`) — the three options exactly; an article the classifier can't label is **not archived** (see *Unclassified articles*) |
 | `type` (select) | always `article` |
 | `author or source` (relation → connections) | see *Author resolution* below |
 | `news` (relation → newsletter) | first future newsletter where the per-topic rollup is `< 8` |
@@ -208,6 +208,31 @@ The resolver in `author_resolver.py` follows this order:
 
 We **never** create a connection from LLM output — only from a real
 byline. The fallback exists so the pipeline never invents people.
+
+## Unclassified articles
+
+`classifier.py` asks the model twice and matches the reply tolerantly
+(`**innovation**`, `Topic: leadership and management` and
+`innovation (AI tooling)` all resolve — `topics.match_topic`, the same
+function triage scoring uses). If neither reply names one of the three
+topics it returns `None`, and the article is **not** written to Notion.
+
+There is no fourth topic to write it under: the three labels are the whole
+`topic` select, and `topic_to_rollup` maps exactly those three to the
+newsletter rollups — an unclassified article has no row to be filed in. So
+the pipeline treats it like a too-short body: the tab is **left open**, the
+raw model replies are logged at warning level, and the run summary counts it
+separately and lists the URL:
+
+```
+📊 12 archived, 3 skipped, 1 unclassified, 0 failed
+🏷️ Unclassified — no topic, not archived (left open):
+   • https://example.com/the-article
+```
+
+Re-run the archive step on the still-open tab, or set the topic by hand.
+The classifier never guesses a topic — the same rule as the author resolver
+never inventing people.
 
 ## Gotchas
 
@@ -249,7 +274,8 @@ byline. The fallback exists so the pipeline never invents people.
 - `chrome_tabs.py` — CDP attach, list, skip filter, tab close.
 - `extractor.py` — Playwright + readability-lxml + meta-tag fallback.
 - `llm.py` — local-llm-hub `/v1/messages` wrapper.
-- `classifier.py` — topic classifier with validation + fallback.
+- `topics.py` — the three canonical topic labels + the tolerant matcher shared by the archive classifier and triage scoring.
+- `classifier.py` — topic classifier; tolerant matching via `topics.py`, `None` when no reply is a valid label.
 - `summarizer.py` — 3-line summarizer.
 - `author_resolver.py` — byline / LLM-pick-primary / `(not classified)` fallback.
 - `cache.py` — in-memory caches + URL canonicaliser + fuzzy name match.

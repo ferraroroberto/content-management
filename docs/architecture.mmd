@@ -71,7 +71,8 @@ flowchart TB
   subgraph newsletter_mod["newsletter/ — weekly issue pipeline"]
     NSCHED["schedule_editions.py\n(top up future edition rows)"]
     NBOOT["bootstrap_chrome.py\n(dedicated Chrome, CDP :9222)"]
-    NARCHIVE["chrome_tabs + extractor +\nauthor_resolver + summarizer/llm"]
+    NARCHIVE["chrome_tabs + extractor +\nauthor_resolver + classifier + summarizer/llm"]
+    NTOPICS["topics.py\n(3 canonical labels +\ntolerant matcher)"]
     NNORM["normalize_names + normalize_url"]
     NBUILD["build_newsletter.py"]
     NSBDRAFT["substack_draft.py\n(optional, explicit step)"]
@@ -84,6 +85,8 @@ flowchart TB
   NSCHED -->|"max number + max Date →\ncreate N{NNN} rows, weekly cadence"| NOTION
   NSCHED -.->|"future rows archive can target"| NARCHIVE
   NPIPE --> NBOOT --> NARCHIVE --> NNORM --> NBUILD
+  NARCHIVE -.->|"one matcher, no guessed topic"| NTOPICS
+  NTRIAGERUN -.->|"same matcher"| NTOPICS
   NTRIAGE -->|"gmail.readonly via vendored\ngmail_readonly/ + google_oauth_common/"| GMAILAPI[("Gmail API\nlabel 'newsletters'")]
   NTRIAGE -->|"positives: articles + editions"| NOTION
   NTRIAGE --> RESULTSTRIAGE[["results/newsletter/triage/\nhistory/ + redirects.json"]]

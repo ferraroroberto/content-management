@@ -28,7 +28,9 @@ Five surfaces, one repo:
   3-line summary → author resolved against the connections DB with exact
   / fuzzy / LLM-pick-primary / `(not classified)` fallback — never
   invents → first future newsletter row with `< 8` per topic → write +
-  close tab). **Normalize** rewrites article titles to sentence case
+  close tab). An article the classifier can't label is never archived
+  under a guessed topic: its tab stays open and the run summary counts it
+  as `unclassified`. **Normalize** rewrites article titles to sentence case
   (preserving a proper-name whitelist; spaCy PERSON entities optional)
   and strips tracking query params from each URL except for video /
   tweet domains. **Build** emits the ready-to-paste HTML at

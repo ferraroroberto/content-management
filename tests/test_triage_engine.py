@@ -139,8 +139,10 @@ class PriorsTests(unittest.TestCase):
         self.assertEqual(sc._parse_json('```json\n[{"i": 1}]\n```'), [{"i": 1}])
         self.assertEqual(sc._parse_json('Sure! {"topic": "innovation"} done'), {"topic": "innovation"})
         self.assertIsNone(sc._parse_json("no json here"))
-        self.assertEqual(sc._topic("Leadership & Management"), "leadership and management")
-        self.assertEqual(sc._topic("Personal Development"), "personal development")
+        # The label matcher now lives in newsletter/topics.py, shared with the
+        # archive classifier (issue #284); score re-exports it under this name.
+        self.assertEqual(sc.match_topic("Leadership & Management"), "leadership and management")
+        self.assertEqual(sc.match_topic("Personal Development"), "personal development")
 
 
 class PaywallTests(unittest.TestCase):

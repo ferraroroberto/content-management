@@ -23,7 +23,7 @@ force_utf8_stdio()
 
 from config.logger_config import setup_logger  # noqa: E402
 from newsletter import chrome_tabs, notion_io  # noqa: E402
-from newsletter.pipeline import load_config, process_url  # noqa: E402
+from newsletter.pipeline import CREATED, UNCLASSIFIED, load_config, process_url  # noqa: E402
 
 
 def main() -> int:
@@ -88,12 +88,14 @@ def main() -> int:
         logger.info("🎯 Chosen tab: %s", chosen.url)
         write = not args.no_write
 
-        created = process_url(
+        result = process_url(
             url=chosen.url, page=chosen.page, archive_cfg=archive_cfg,
             client=client, cache=cache, write=write, logger=logger,
         )
+        if result == UNCLASSIFIED:
+            logger.warning("🏷️ Unclassified — no topic, nothing written; tab left open")
 
-        if write and created and not args.keep_tab:
+        if write and result == CREATED and not args.keep_tab:
             chosen.page.close()
             logger.info("🗑️  Closed tab")
         elif args.keep_tab:
