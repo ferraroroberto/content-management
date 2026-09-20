@@ -41,7 +41,21 @@ SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 OWNER_COLUMNS = ("ok", "person", "chat", "report", "fixed")
 
 # The three CC BY-NC-ND conditions, in severity-reporting order. Each holds
-# 1 = met · 0 = violated · NULL = not assessed (issue #295).
+# one of four states (issues #295, #305):
+#
+#     1    = met
+#     0    = violated
+#     2    = assessed, could not be established
+#     NULL = never assessed
+#
+# #295 gave NULL its own meaning — never assessed, never a pass. #305 split the
+# second meaning back out of it: a worker that looked at the post and could not
+# establish a condition was storing the same NULL as a row nobody had ever
+# opened, so the re-screen queue re-served rows that had just been judged and
+# never drained. Two live batches were served the identical ten rows that way.
+CONDITION_MET = 1
+CONDITION_VIOLATED = 0
+CONDITION_INDETERMINATE = 2
 CONDITION_COLUMNS = ("screen_credit_ok", "screen_noncommercial_ok", "screen_unmodified_ok")
 
 # Columns only the screening pass writes.
@@ -196,41 +210,52 @@ def canonical_link_for(link: Optional[str]) -> Optional[str]:
 
 
 def condition_state(value: object) -> Optional[int]:
-    """Normalise one licence condition to ``1`` met, ``0`` violated, ``None``.
+    """Normalise one licence condition to ``1`` met, ``0`` violated, ``2``
+    assessed-but-indeterminate, or ``None`` never assessed.
 
     Accepts the shapes a caller realistically holds — ``True``/``False``, an
     ``int``, a ``"met"``/``"violated"``/``"unknown"`` word, or ``None`` — and
     rejects anything else rather than guessing. A rejected value must not fall
     through as "not assessed": that would turn a typo into a silent NULL and
     NULL is the state this whole model exists to keep honest.
+
+    ``"unknown"`` is the word a worker uses when it looked and could not tell,
+    so it maps to ``2`` — an answer — and **not** to ``None`` (issue #305).
+    ``None`` is reachable only by passing ``None`` or by naming the absence of
+    an answer outright (``"unassessed"``, ``""``), which is what a caller that
+    simply omitted the condition does.
     """
     if value is None:
         return None
     if isinstance(value, bool):
-        return 1 if value else 0
+        return CONDITION_MET if value else CONDITION_VIOLATED
     if isinstance(value, int):
-        if value in (0, 1):
+        if value in (CONDITION_VIOLATED, CONDITION_MET, CONDITION_INDETERMINATE):
             return value
-        raise ValueError(f"licence condition must be 0, 1 or None, got {value!r}")
+        raise ValueError(f"licence condition must be 0, 1, 2 or None, got {value!r}")
     text = str(value).strip().lower()
     if text in ("met", "ok", "1", "true", "yes"):
-        return 1
+        return CONDITION_MET
     if text in ("violated", "broken", "0", "false", "no"):
-        return 0
-    if text in ("unknown", "unassessed", "not assessed", "none", ""):
+        return CONDITION_VIOLATED
+    if text in ("unknown", "indeterminate", "could not establish", "2"):
+        return CONDITION_INDETERMINATE
+    if text in ("unassessed", "not assessed", "none", ""):
         return None
-    raise ValueError(f"licence condition must be 0, 1 or None, got {value!r}")
+    raise ValueError(f"licence condition must be 0, 1, 2 or None, got {value!r}")
 
 
 def severity(credit_ok: object = None, noncommercial_ok: object = None,
              unmodified_ok: object = None) -> int:
     """How many of the three licence conditions were found violated: 0–3.
 
-    The count is of conditions **positively established as broken**. An
-    unassessed condition (``None``) adds nothing — it is not evidence of a
-    violation — but it is not a pass either, which is why a severity of 0 is
-    never on its own a statement that a post is compliant. ``fully_assessed()``
-    is the other half of that sentence and the tab prints both.
+    The count is of conditions **positively established as broken**. Neither
+    an unassessed condition (``None``) nor an indeterminate one (``2``) adds
+    anything — neither is evidence of a violation — but neither is a pass
+    either, which is why a severity of 0 is never on its own a statement that
+    a post is compliant. ``all_conditions_met()`` is the other half of that
+    sentence and the tab prints both. Severity is therefore untouched by issue
+    #305: no existing row's severity moves.
 
     3 is no credit **and** commercial use **and** a modified image: the case
     the owner calls plain stealing.
@@ -250,6 +275,7 @@ def severity_sql(alias: str = "r") -> str:
     ``col = 0`` is NULL for an unassessed condition and a NULL ``case``
     predicate takes the ``else`` branch, so a NULL adds 0 — deliberately, and
     without a ``coalesce`` that would make it indistinguishable from a pass.
+    An indeterminate ``2`` is simply not ``0`` and adds 0 the same way.
     """
     prefix = f"{alias}." if alias else ""
     return " + ".join(
@@ -264,6 +290,12 @@ def fully_assessed(credit_ok: object = None, noncommercial_ok: object = None,
     The question the old model could not ask. A row can be severity 0 and not
     assessed at all, and the difference between "checked, nothing wrong" and
     "never checked" is the whole point of issue #295.
+
+    "Looked at" is the test, not "settled": an indeterminate ``2`` counts here,
+    because a worker did open the post and answer. That is what lets the
+    re-screen queue drain (issue #305) — the queue asks *has anyone looked*,
+    while ``all_conditions_met()`` below asks *did it pass*, and conflating the
+    two is what served the same ten rows twice.
     """
     return all(condition_state(value) is not None
                for value in (credit_ok, noncommercial_ok, unmodified_ok))
@@ -275,25 +307,80 @@ def assessed_sql(alias: str = "r") -> str:
     return " and ".join(f"{prefix}{column} is not null" for column in CONDITION_COLUMNS)
 
 
+def all_conditions_met(credit_ok: object = None, noncommercial_ok: object = None,
+                       unmodified_ok: object = None) -> bool:
+    """Whether all three conditions were positively established as met.
+
+    The compliance test, kept apart from ``fully_assessed()`` on purpose. Only
+    a ``1`` counts: a ``2`` is an answer, but the answer is "could not tell",
+    and NULL is not an answer at all. Neither may ever read as a pass.
+    """
+    return all(condition_state(value) == CONDITION_MET
+               for value in (credit_ok, noncommercial_ok, unmodified_ok))
+
+
+def met_sql(alias: str = "r") -> str:
+    """``all_conditions_met()`` as an SQL predicate.
+
+    ``col = 1`` is NULL for an unassessed condition and false for a ``2``, and
+    an ``and`` chain with a NULL in it is never true — so neither state can
+    reach the ``acceptable`` branch of ``verdict_sql`` or the tab's compliant
+    filter. Rendered here once rather than hand-written at each call site,
+    which is how ``assessed_sql`` came to be standing in for it.
+    """
+    prefix = f"{alias}." if alias else ""
+    return " and ".join(f"{prefix}{column} = {CONDITION_MET}" for column in CONDITION_COLUMNS)
+
+
+def indeterminate(credit_ok: object = None, noncommercial_ok: object = None,
+                  unmodified_ok: object = None) -> bool:
+    """Whether every condition was answered and at least one came back ``2``.
+
+    The state issue #305 created, and it needs its own counter because it calls
+    for a different action from the one NULL calls for: a NULL wants another
+    screening pass, while this row has had its screening pass and what is left
+    is the owner's own judgement, or nothing at all. Deliberately false while
+    any condition is still NULL — such a row belongs in the re-screen queue and
+    is counted there, not here, so the two counters never double-count a row.
+    """
+    conditions = (credit_ok, noncommercial_ok, unmodified_ok)
+    return (fully_assessed(*conditions)
+            and any(condition_state(value) == CONDITION_INDETERMINATE for value in conditions))
+
+
+def indeterminate_sql(alias: str = "r") -> str:
+    """``indeterminate()`` as an SQL predicate."""
+    prefix = f"{alias}." if alias else ""
+    any_two = " or ".join(f"{prefix}{column} = {CONDITION_INDETERMINATE}"
+                          for column in CONDITION_COLUMNS)
+    return f"({assessed_sql(alias)}) and ({any_two})"
+
+
 def verdict_for(credit_ok: object = None, noncommercial_ok: object = None,
                 unmodified_ok: object = None) -> str:
     """The verdict the three conditions imply. ``screen_verdict`` is derived.
 
     ``infringement`` as soon as one condition is violated, ``acceptable`` only
-    once all three are met, and ``unclear`` while any is still unassessed —
-    which is why a post that credits the owner but was never checked for
-    commercial use reads as unclear rather than acceptable.
+    once all three are *met*, and ``unclear`` otherwise — which is why a post
+    that credits the owner but was never checked for commercial use reads as
+    unclear rather than acceptable.
+
+    A row whose conditions were all answered but where one came back
+    indeterminate stays ``unclear`` too (issue #305): nothing was found wrong,
+    and nothing was established either. It leaves the re-screen queue — another
+    automated look would return the same answer — without ever claiming to be
+    compliant.
     """
     conditions = (credit_ok, noncommercial_ok, unmodified_ok)
     if severity(*conditions):
         return "infringement"
-    return "acceptable" if fully_assessed(*conditions) else "unclear"
+    return "acceptable" if all_conditions_met(*conditions) else "unclear"
 
 
 def verdict_sql(alias: str = "r") -> str:
     """``verdict_for()`` as an SQL expression, composed of the two above."""
     return (f"case when ({severity_sql(alias)}) > 0 then 'infringement' "
-            f"when {assessed_sql(alias)} then 'acceptable' else 'unclear' end")
+            f"when ({met_sql(alias)}) then 'acceptable' else 'unclear' end")
 
 
 def permanent_sql(alias: str = "r") -> str:
@@ -791,13 +878,19 @@ def backfill_licence_conditions(conn: sqlite3.Connection) -> dict:
     for column in CONDITION_COLUMNS:
         row = conn.execute(
             f"""
-            select sum(case when {column} = 1 then 1 else 0 end) as met,
-                   sum(case when {column} = 0 then 1 else 0 end) as violated,
+            select sum(case when {column} = {CONDITION_MET} then 1 else 0 end) as met,
+                   sum(case when {column} = {CONDITION_VIOLATED} then 1 else 0 end) as violated,
+                   sum(case when {column} = {CONDITION_INDETERMINATE}
+                            then 1 else 0 end) as indeterminate,
                    sum(case when {column} is null then 1 else 0 end) as not_assessed
               from results where screened_at is not null
             """
         ).fetchone()
-        per_condition[column] = {k: (row[k] or 0) for k in ("met", "violated", "not_assessed")}
+        # The four buckets are exhaustive and must stay that way: this summary
+        # is read as a reconciliation of every screened row, so a state missing
+        # a bucket would silently stop it adding up (issue #305).
+        per_condition[column] = {k: (row[k] or 0)
+                                 for k in ("met", "violated", "indeterminate", "not_assessed")}
 
     return {
         "mapped": to_map,

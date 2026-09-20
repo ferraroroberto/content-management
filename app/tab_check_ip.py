@@ -104,7 +104,7 @@ def _launch(cmd: list[str]) -> None:
 
 def _render_header() -> None:
     ov = _overview()
-    cols = st.columns(8)
+    cols = st.columns(9)
     cols[0].metric("illustrations", f"{ov['images']:,}")
     cols[1].metric("links found", f"{ov['results']:,}")
     cols[2].metric("canonical", f"{ov['canonical']:,}",
@@ -120,8 +120,16 @@ def _render_header() -> None:
                    help="Rows the check-ip skill has proposed a verdict for.")
     cols[7].metric("not fully assessed", f"{ov['not_fully_assessed']:,}",
                    help="Screened, but at least one of the three licence conditions was "
-                        "never established. These are unchecked, not compliant — pick "
+                        "never looked at. These are unchecked, not compliant — pick "
                         "\"not fully assessed\" below to re-screen them.")
+    # The two unresolved states are shown side by side because they call for
+    # different things (issue #305): the one on the left needs another
+    # screening pass, this one has had its pass and needs my eye instead.
+    cols[8].metric("could not establish", f"{ov['indeterminate']:,}",
+                   help="All three conditions were looked at and at least one could not be "
+                        "established from the post — usually non-commercial use. Not "
+                        "compliant and not re-screenable: pick \"could not be established\" "
+                        "below to judge them myself.")
     if ov["not_fully_assessed"]:
         st.warning(
             f"⚠️ {ov['not_fully_assessed']:,} of {ov['screened']:,} screened rows are "
@@ -131,6 +139,13 @@ def _render_header() -> None:
             + (f" Not counted there: {ov['nothing_to_assess']:,} that can never be assessed "
                "at all — the post is gone, or carries no illustration of mine."
                if ov["nothing_to_assess"] else "")
+        )
+    if ov["indeterminate"]:
+        st.info(
+            f"🔍 {ov['indeterminate']:,} screened rows had **all three conditions looked at** "
+            "and at least one could not be established from the post itself. Another "
+            "screening pass would return the same answer, so they are mine to judge — they "
+            "are not compliant, and they are not in the re-screen queue."
         )
     if ov.get("last_search"):
         st.caption(f"last reverse-image search: {ov['last_search']}")
@@ -220,6 +235,8 @@ def _render_table() -> None:
         + (f", {qs['severity_3']:,} of them worst-case" if qs["severity_3"] else "")
         + f" · {qs['not_fully_assessed']:,} screened but not fully assessed "
           f"(unknown, not compliant)"
+        + (f" · {qs['indeterminate']:,} assessed but not establishable"
+           if qs["indeterminate"] else "")
         + (f" · {qs['nothing_to_assess']:,} with nothing left to assess"
            if qs["nothing_to_assess"] else "")
         + f". Ordered {sort}. Nothing saves until you click Apply."
@@ -260,8 +277,11 @@ def _render_table() -> None:
                          "assessed column for that."),
                 "assessed": st.column_config.CheckboxColumn(
                     "all 3 checked", width="small",
-                    help="Ticked only when credit, non-commercial and no-derivatives were "
-                         "all established. Unticked means at least one is unknown."),
+                    help="Ticked when credit, non-commercial and no-derivatives were all "
+                         "looked at. Unticked means at least one was never assessed. "
+                         "Ticked is not the same as compliant: a condition can be looked "
+                         "at and still come back \"could not establish\", so read the "
+                         "three condition columns for that."),
                 "screen_credit_ok": st.column_config.TextColumn(
                     "credit (BY)", width="small",
                     help="Named, tagged, linked, or his own comment claims it. A bare "
@@ -340,15 +360,22 @@ proposes something wrong and I overrule it here.
 
 My illustrations are published under **CC BY-NC-ND 4.0**, which is three
 conditions that must *all* hold: **credit** me, **don't use it commercially**,
-**don't modify it**. Each gets its own column, and each has three states —
-`✅ met`, `❌ violated`, or `— not assessed`.
+**don't modify it**. Each gets its own column, and each has four states —
+`✅ met`, `❌ violated`, `🔍 could not establish`, or `— not assessed`.
 
-**Not assessed is not a pass.** The `⚠` column counts only the conditions found
-*violated*, so a `0` there means "nothing proven wrong", not "compliant". The
-**all 3 checked** column is what says a post was really cleared. An earlier
-screening pass only ever asked whether the post credited me, so most rows it
-touched carry two unknowns — the banner above says how many, and the *not fully
-assessed* filter lists them for a re-screen.
+**Neither of the last two is a pass.** The `⚠` column counts only the conditions
+found *violated*, so a `0` there means "nothing proven wrong", not "compliant".
+Only all three `✅ met` clears a post, which is what the *fully assessed and
+compliant* filter lists.
+
+The difference between the last two states is who acts next. `— not assessed`
+means nobody looked: an earlier screening pass only ever asked whether the post
+credited me, so most rows it touched carry two of them — the banner above says
+how many, and the *not fully assessed* filter lists them for a re-screen.
+`🔍 could not establish` means the screening pass did look and the post did not
+say — typically whether the use was commercial, which a single post often
+cannot answer. Re-screening those would return the same answer, so they leave
+the queue and land in the *could not be established — my call* filter for me.
 
 An `unclear` verdict comes in two kinds. `ambiguous` means another look may
 settle it; `nothing_to_assess` means the post is gone or never carried an

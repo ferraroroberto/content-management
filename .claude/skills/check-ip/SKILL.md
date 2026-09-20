@@ -27,13 +27,15 @@ The illustrations are published under **CC BY-NC-ND 4.0**. Three conditions, and
 | **NC** | non-commercial | no promotional call to action **and** no paid or business context |
 | **ND** | no derivatives | the image is un-edited: no crop, no filter, no added logo or text, no translation, signature intact |
 
-**Each is recorded on its own, with three possible answers: `met`, `violated`, or `unknown`.** `unknown` is a real answer and the default — it means you did not establish that condition. It is *not* a pass, and the store, the counters and the review tab all keep it apart from one. Never guess a condition to `met` to finish a row: an honest `unknown` puts the row in the re-screen pile, while a wrong `met` retires it as compliant forever.
+**Each is recorded on its own, with three possible answers: `met`, `violated`, or `unknown`.** `unknown` is a real answer — it means you looked and the post did not let you establish that condition. It is *not* a pass, and the store, the counters and the review tab all keep it apart from one. Never guess a condition to `met` to finish a row: an honest `unknown` hands the row to the owner to judge, while a wrong `met` retires it as compliant forever.
+
+**Answer all three on every row.** A condition you leave out is stored as *never assessed*, which is a different state from `unknown`: it says nobody has looked yet, so the row stays in the re-screen queue and will be served to another worker. That is right when you truly could not open the post, and wrong — it burns a whole second batch on a post you already read — when you did look and simply could not tell. Say `unknown` then (issue #305).
 
 The verdict follows from the three conditions and the CLI refuses a combination that contradicts them:
 
 - **`infringement`** — at least one condition violated. Severity is how many: 1, 2 or 3.
 - **`acceptable`** — all three met. Anything less is not acceptable, it is unassessed.
-- **`unclear`** — nothing violated but something unknown. Needs `--outcome`:
+- **`unclear`** — nothing violated but something not established, whether `unknown` or unanswered. Needs `--outcome`:
   - `ambiguous` — another look could settle it (login wall, truncated caption, you genuinely could not tell).
   - `nothing_to_assess` — the post is gone, or carries no illustration of his at all. Permanent; the tab stops offering it.
 
@@ -122,7 +124,7 @@ Pull the *next* batch only after the previous worker has finished, so rows it sc
 > ```
 > The verdict must agree with the conditions or the command refuses the write and exits non-zero: `infringement` if any condition is `violated`, `acceptable` only if all three are `met`, `unclear` otherwise — and `unclear` needs `--outcome`. If it refuses, fix your own answer; never soften a condition to make a verdict fit.
 >
-> Each condition defaults to `unknown` if you omit it. That is the safe default, but pass all three explicitly so the record says what you actually looked at.
+> A condition you omit is recorded as *never assessed* — the safe default, because it claims nothing, but it also leaves the row in the re-screen queue for another worker. **Pass all three explicitly on every row**, using `unknown` where you looked and could not tell, so the record says what you actually looked at and the row does not come back.
 >
 > The reason is one plain sentence saying *what you saw*, not a restatement of the verdict. "Credited in the caption, but the account is an agency selling the same workshop the post advertises" beats "appears to be an infringement".
 >

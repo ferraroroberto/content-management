@@ -38,10 +38,13 @@ FRAME_COLUMNS = [
     "ok", "person", "chat", "report", "fixed",
 ]
 
-# How a condition renders in the grid. A tri-state has no honest checkbox —
-# an unticked box reads as "no" and NULL here means "nobody looked", so the
-# three states get three distinct words instead (issue #295).
-CONDITION_LABELS = {1: "✅ met", 0: "❌ violated", None: "— not assessed"}
+# How a condition renders in the grid. A four-state has no honest checkbox —
+# an unticked box reads as "no", NULL here means "nobody looked" and 2 means
+# "someone looked and could not tell", so each state gets its own words
+# instead (issues #295, #305). The 2 reads as an answer, because it is one;
+# what it must never read as is a pass.
+CONDITION_LABELS = {1: "✅ met", 0: "❌ violated", 2: "🔍 could not establish",
+                    None: "— not assessed"}
 
 # Derived, not stored: expressions shared with the queue so the tab and the
 # skill agree on what "worst" and "assessed" mean. Appended to the select.
@@ -61,10 +64,18 @@ STATUS_FILTERS = {
     "screened, awaiting my call": "r.ok is null and r.screened_at is not null",
     "not fully assessed — needs a re-screen":
         f"r.screened_at is not null and not ({db.assessed_sql()}) and not {_PERMANENT}",
+    # Screened, every condition answered, and at least one answer was "could
+    # not tell" (issue #305). Deliberately its own row in this list and not
+    # folded into the one above: another screening pass would return the same
+    # answer, so what these rows want is the owner's eye, not the queue.
+    "could not be established — my call": f"r.screened_at is not null and "
+                                          f"({db.indeterminate_sql()}) and not {_PERMANENT}",
     "worst only — no credit, commercial, image edited": f"r.ok is null and ({db.severity_sql()}) = 3",
     "proposed infringement, any severity": "r.ok is null and r.screen_verdict = 'infringement'",
-    "fully assessed and compliant": f"r.screened_at is not null and {db.assessed_sql()} "
-                                    f"and ({db.severity_sql()}) = 0",
+    # `met_sql`, not `assessed_sql` + severity 0: an indeterminate condition is
+    # assessed and is not a violation, so the old pair would have listed a row
+    # nothing was established about as compliant (issue #305).
+    "fully assessed and compliant": f"r.screened_at is not null and ({db.met_sql()})",
     "unclear — another look may settle it":
         f"r.ok is null and r.screen_verdict = 'unclear' and not {_PERMANENT}",
     "unclear — nothing left to assess": f"r.screen_verdict = 'unclear' and {_PERMANENT}",
@@ -255,9 +266,15 @@ def overview(conn: sqlite3.Connection) -> dict:
     header adds up instead of quietly losing 115k rows.
 
     ``not_fully_assessed`` is the honest half of ``screened``: rows a screening
-    pass touched without establishing all three licence conditions. They are
+    pass touched without looking at all three licence conditions. They are
     counted here rather than left to look compliant, which is what the
     credit-only model did to them (issue #295).
+
+    ``indeterminate`` is the other honest half, and the two do not overlap:
+    every condition was answered and at least one answer was "could not be
+    established" (issue #305). Those rows are done with the queue and waiting
+    on the owner; keeping them in ``not_fully_assessed`` is what made the
+    re-screen backlog unable to drain.
     """
     permanent = db.permanent_sql("")
     row = conn.execute(
@@ -273,6 +290,9 @@ def overview(conn: sqlite3.Connection) -> dict:
             (select count(*) from results
               where screened_at is not null and not ({db.assessed_sql('')})
                 and not {permanent})                                 as not_fully_assessed,
+            (select count(*) from results
+              where screened_at is not null and ({db.indeterminate_sql('')})
+                and not {permanent})                                 as indeterminate,
             (select count(*) from results where {permanent})          as nothing_to_assess,
             (select max(last_processed_date) from images)            as last_search
         """

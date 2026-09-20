@@ -10,6 +10,13 @@ assessed stays ``NULL`` and is never counted, sorted or rendered as if it had
 passed. One ``coalesce(col, 1)`` would undo the whole model silently, so the
 tests assert it in Python, in SQL, in the queue stats and in the tab's frame.
 
+The third, added with issue #305, is that the two halves of that NULL are kept
+apart: "a worker looked and could not establish this" (``2``) and "nobody ever
+looked" (``NULL``) were one value, so ``screen next --unassessed`` re-served
+rows that had just been judged and two live batches went to the identical ten
+posts. Screening a row must remove it from that queue, and the new value must
+not become a back door into the passing state — both are asserted below.
+
 Run: & .\\.venv\\Scripts\\python.exe -m unittest discover tests -v
 """
 
@@ -173,15 +180,20 @@ class CheckIpStoreTests(unittest.TestCase):
         self.assertEqual(list(frame["assessed"]), [False])
 
     def test_severity_and_verdict_sql_agree_with_python(self):
-        """Two renderings of one rule, compared across all 27 combinations.
+        """Two renderings of one rule, compared across all 64 combinations.
 
         There is a Python implementation for reporting and an SQL one for
         sorting and counting; only comparing them everywhere proves neither
         drifted. Written straight to the store rather than through
         record_verdict, so combinations record_verdict would reject are
         covered too.
+
+        Four states since issue #305, so 64 rather than 27 — and the sweep now
+        covers the two new predicates as well, because ``met_sql`` standing in
+        for ``assessed_sql`` is exactly the substitution that would quietly
+        turn a "could not establish" into a pass.
         """
-        states = (1, 0, None)
+        states = (1, 0, 2, None)
         for credit in states:
             for noncommercial in states:
                 for unmodified in states:
@@ -195,16 +207,29 @@ class CheckIpStoreTests(unittest.TestCase):
                     row = self.conn.execute(
                         f"""select ({db.severity_sql('results')}) as sev,
                                    case when {db.assessed_sql('results')} then 1 else 0 end as ass,
+                                   case when ({db.met_sql('results')}) then 1 else 0 end as met,
+                                   case when ({db.indeterminate_sql('results')})
+                                        then 1 else 0 end as indet,
                                    ({db.verdict_sql('results')}) as verdict
                               from results where id = ?""", (row_id,)
                     ).fetchone()
+                    conditions = (credit, noncommercial, unmodified)
                     with self.subTest(credit=credit, noncommercial=noncommercial,
                                       unmodified=unmodified):
-                        self.assertEqual(row["sev"], db.severity(credit, noncommercial, unmodified))
-                        self.assertEqual(bool(row["ass"]),
-                                         db.fully_assessed(credit, noncommercial, unmodified))
-                        self.assertEqual(row["verdict"],
-                                         db.verdict_for(credit, noncommercial, unmodified))
+                        self.assertEqual(row["sev"], db.severity(*conditions))
+                        self.assertEqual(bool(row["ass"]), db.fully_assessed(*conditions))
+                        self.assertEqual(bool(row["met"]), db.all_conditions_met(*conditions))
+                        self.assertEqual(bool(row["indet"]), db.indeterminate(*conditions))
+                        self.assertEqual(row["verdict"], db.verdict_for(*conditions))
+                        # The two states that are not answers to "did it pass"
+                        # must never reach the compliant branch, in either
+                        # rendering (issues #295, #305).
+                        if None in conditions or 2 in conditions:
+                            self.assertNotEqual(row["verdict"], "acceptable")
+                            self.assertFalse(row["met"])
+                        # Severity is the count of 0s and nothing else, so #305
+                        # cannot have moved any existing row's severity.
+                        self.assertEqual(row["sev"], sum(1 for c in conditions if c == 0))
 
     def test_a_credited_post_can_still_be_an_infringement(self):
         """The two cases issue #295 names, which the old model could not hold.
@@ -289,13 +314,39 @@ class CheckIpStoreTests(unittest.TestCase):
     def test_condition_state_rejects_a_value_it_cannot_read(self):
         """A typo must raise, never fall through as 'not assessed'."""
         for good, expected in ((None, None), (True, 1), (False, 0), (1, 1), (0, 0),
-                               ("met", 1), ("violated", 0), ("unknown", None)):
+                               ("met", 1), ("violated", 0), (2, 2), ("unknown", 2),
+                               ("indeterminate", 2), ("unassessed", None),
+                               ("not assessed", None), ("", None)):
             with self.subTest(value=good):
                 self.assertEqual(db.condition_state(good), expected)
-        for bad in ("maybe", "yep", 2, -1, "1.0"):
+        for bad in ("maybe", "yep", 3, -1, "1.0"):
             with self.subTest(value=bad):
                 with self.assertRaises(ValueError):
                     db.condition_state(bad)
+
+    def test_unknown_and_never_assessed_are_different_stored_values(self):
+        """Acceptance criterion 1 of issue #305, at the storage layer.
+
+        "A worker looked and could not establish this" and "nobody has ever
+        looked" were the same NULL, which is what made the re-screen queue
+        unable to tell a re-judged row from an untouched one. They must be two
+        values, and the word a worker says must reach the store unflattened.
+        """
+        self.assertEqual(db.condition_state("unknown"), db.CONDITION_INDETERMINATE)
+        self.assertIsNone(db.condition_state(None))
+        self.assertNotEqual(db.CONDITION_INDETERMINATE, db.CONDITION_MET,
+                            "an indeterminate answer must never share a value with a pass")
+
+        (row_id,) = _seed(self.conn, [{"found_link": "https://example.test/two-states"}])
+        screen.record_verdict(self.conn, row_id, verdict="unclear",
+                              outcome=db.OUTCOME_AMBIGUOUS,
+                              credit_ok="met", noncommercial_ok="unknown",
+                              reason="credited; the account gives no sign either way")
+        row = self.conn.execute(
+            "select screen_credit_ok, screen_noncommercial_ok, screen_unmodified_ok "
+            "from results where id = ?", (row_id,)).fetchone()
+        self.assertEqual(tuple(row), (1, db.CONDITION_INDETERMINATE, None),
+                         "the answered condition and the unanswered one collapsed together")
 
     # ── the two kinds of 'unclear' (issue #295 §4) ────────────────────────
 
@@ -583,13 +634,19 @@ class CheckIpStoreTests(unittest.TestCase):
 
     # ── the re-screen backlog (issue #300) ────────────────────────────────
 
-    def _screen(self, row_id, *, credit="unknown", noncommercial="unknown",
-                unmodified="unknown", outcome=None, reason=""):
+    def _screen(self, row_id, *, credit=None, noncommercial=None,
+                unmodified=None, outcome=None, reason=""):
         """Record one verdict, deriving the verdict the conditions imply.
 
         The three conditions are what these tests are about; re-deriving the
         verdict here keeps each case a statement about conditions rather than
         a hand-kept mapping that could drift from `db.verdict_for`.
+
+        An unnamed condition defaults to ``None`` — never assessed — mirroring
+        the CLI, where omitting a flag is the only way to say "nobody looked".
+        It was ``"unknown"`` until issue #305 gave that word its own value; the
+        cases below mean "this condition was never looked at", so they follow
+        the CLI rather than the word.
         """
         verdict = db.verdict_for(credit, noncommercial, unmodified)
         if verdict == "unclear" and outcome is None:
@@ -725,6 +782,171 @@ class CheckIpStoreTests(unittest.TestCase):
             screen.next_batch(self.conn, limit=50, source="LinkedIn", unassessed=True), [],
             "a fully re-screened backlog must serve nothing")
         self.assertEqual(screen.stats(self.conn, source="LinkedIn")["not_fully_assessed"], 0)
+
+    # ── an unknown answer is not "never assessed" (issue #305) ────────────
+
+    def test_screening_a_row_with_an_unknown_condition_removes_it_from_the_queue(self):
+        """The acceptance criterion issue #305 exists for.
+
+        Two live batches were served the identical ten rows: the second worker
+        re-opened every post, re-judged it, recorded its verdicts and left the
+        queue exactly as it found it — roughly 37 minutes of browsing against
+        the owner's real account, for rows that had just been done. It happened
+        because an honest `unknown` on a condition stored the same NULL as a
+        row nobody had ever looked at, and `--unassessed` selects on NULL.
+
+        Deliberately written against the public API only — `record_verdict`
+        then `next_batch` — so that against pre-#305 code it fails on the queue
+        still holding the row, which is the actual defect, rather than on a
+        helper that does not exist yet.
+        """
+        (row_id,) = _seed(self.conn, [{"found_link": "https://example.test/rescreened"}])
+        # Judged under the old credit-only question: in the backlog.
+        self._screen(row_id, credit="met", reason="credit seen; the other two not checked")
+        self.assertEqual(
+            [r["id"] for r in screen.next_batch(self.conn, limit=50, source="LinkedIn",
+                                                unassessed=True)],
+            [row_id], "the partially-assessed row should start in the re-screen queue")
+
+        # A worker re-screens it. It can establish credit and that the image is
+        # untouched, but the post itself says nothing about commercial use —
+        # the common case, and the honest answer is `unknown`.
+        screen.record_verdict(
+            self.conn, row_id, verdict="unclear", outcome=db.OUTCOME_AMBIGUOUS,
+            credit_ok="met", noncommercial_ok="unknown", unmodified_ok="met",
+            reason="credited in the caption, image untouched, nothing says what the "
+                   "account is for")
+
+        self.assertEqual(
+            screen.next_batch(self.conn, limit=50, source="LinkedIn", unassessed=True), [],
+            "a row screened with an `unknown` condition was served to the queue again — "
+            "this is the bug that cost two identical live batches")
+        self.assertEqual(screen.stats(self.conn, source="LinkedIn")["not_fully_assessed"], 0)
+
+        # …and it did not buy that by turning an unestablished condition into a
+        # pass: the row is still not compliant, and severity did not move.
+        row = self.conn.execute(
+            f"""select screen_verdict, screen_noncommercial_ok as nc,
+                       ({db.severity_sql('results')}) as sev,
+                       case when ({db.met_sql('results')}) then 1 else 0 end as met
+                  from results where id = ?""", (row_id,)).fetchone()
+        self.assertEqual(row["screen_verdict"], "unclear",
+                         "nothing was violated, but nothing was established either")
+        self.assertEqual(row["nc"], db.CONDITION_INDETERMINATE)
+        self.assertEqual((row["sev"], row["met"]), (0, 0))
+
+    def test_the_two_unresolved_states_are_counted_and_filtered_apart(self):
+        """`stats`, the tab's overview and its filters keep them separate.
+
+        They ask for different things — a never-assessed condition wants
+        another screening pass, an unestablishable one wants the owner's own
+        judgement — so one counter covering both is what let the backlog look
+        permanent. They must also never double-count a row.
+        """
+        never, indeterminate, compliant = _seed(self.conn, [
+            {"found_link": "https://example.test/nobody-looked"},
+            {"found_link": "https://example.test/looked-cannot-tell"},
+            {"found_link": "https://example.test/clean"},
+        ])
+        self._screen(never, credit="met", reason="only the credit was ever checked")
+        self._screen(indeterminate, credit="met", noncommercial="unknown", unmodified="met",
+                     reason="credited, image untouched, the account gives no sign either way")
+        self._screen(compliant, credit="met", noncommercial="met", unmodified="met",
+                     reason="tagged in a personal post, image untouched")
+
+        stats = screen.stats(self.conn, source="LinkedIn")
+        self.assertEqual((stats["not_fully_assessed"], stats["indeterminate"]), (1, 1),
+                         "the two states must be reported separately, never as one pile")
+        self.assertEqual(stats["proposed_acceptable"], 1,
+                         "only the row with all three conditions met is acceptable")
+
+        overview = review.overview(self.conn)
+        self.assertEqual((overview["not_fully_assessed"], overview["indeterminate"]), (1, 1))
+
+        rescreen = review.results_frame(self.conn, source="LinkedIn",
+                                        status="not fully assessed — needs a re-screen")
+        self.assertEqual(list(rescreen["id"]), [never],
+                         "a row whose conditions were all answered sat in the re-screen pile")
+        mine = review.results_frame(self.conn, source="LinkedIn",
+                                    status="could not be established — my call")
+        self.assertEqual(list(mine["id"]), [indeterminate])
+        clean = review.results_frame(self.conn, source="LinkedIn",
+                                     status="fully assessed and compliant")
+        self.assertEqual(list(clean["id"]), [compliant],
+                         "an unestablished condition was listed as compliant")
+
+        # The grid renders the new state as words of its own — never blank,
+        # never the same words as a pass or as nobody-looked.
+        frame = review.results_frame(self.conn, source="LinkedIn", status="everything")
+        labels = dict(zip(frame["id"], frame["screen_noncommercial_ok"]))
+        self.assertEqual(labels[indeterminate], review.CONDITION_LABELS[2])
+        self.assertEqual(labels[never], review.CONDITION_LABELS[None])
+        self.assertEqual(labels[compliant], review.CONDITION_LABELS[1])
+        self.assertEqual(len({labels[indeterminate], labels[never], labels[compliant]}), 3)
+
+    def test_an_unestablished_condition_is_never_a_pass(self):
+        """#295's guarantee, carried over to the state #305 split out of NULL.
+
+        The risk the new value introduces is the one #295 was filed for: a `2`
+        counts as assessed, so any predicate that reads "assessed" as "cleared"
+        now certifies compliance nobody established. Asserted in Python, in
+        SQL, in the queue stats and in the tab's compliant filter.
+        """
+        self.assertEqual(db.severity(1, 2, 1), 0, "an unestablished condition is not a violation")
+        self.assertTrue(db.fully_assessed(1, 2, 1), "it was looked at")
+        self.assertFalse(db.all_conditions_met(1, 2, 1), "…but it was not established")
+        self.assertEqual(db.verdict_for(1, 2, 1), "unclear")
+        self.assertEqual(db.verdict_for(2, 2, 2), "unclear")
+        self.assertEqual(db.verdict_for(0, 2, 1), "infringement",
+                         "a violation still outranks everything else")
+        self.assertTrue(db.indeterminate(1, 2, 1))
+        self.assertFalse(db.indeterminate(1, 2, None),
+                         "a row still carrying a NULL belongs to the re-screen queue")
+        self.assertFalse(db.indeterminate(1, 1, 1))
+
+        (row_id,) = _seed(self.conn, [{"found_link": "https://example.test/not-a-pass"}])
+        self._screen(row_id, credit="unknown", noncommercial="unknown", unmodified="unknown",
+                     reason="the page would not load past the login wall")
+        stats = screen.stats(self.conn, source="LinkedIn")
+        self.assertEqual(stats["proposed_acceptable"], 0,
+                         "a row nothing was established about was counted as compliant")
+        self.assertEqual((stats["not_fully_assessed"], stats["indeterminate"]), (0, 1))
+        compliant = review.results_frame(self.conn, source="LinkedIn",
+                                         status="fully assessed and compliant")
+        self.assertTrue(compliant.empty,
+                        "a row where every condition came back unestablished was "
+                        "listed as compliant")
+
+    def test_an_omitted_condition_is_still_stored_as_never_assessed(self):
+        """Omitting a flag must not inherit `unknown`'s new meaning.
+
+        The CLI used to default each condition to the word `unknown`. Now that
+        the word records "someone looked", that default would claim a look
+        nobody took and drain the row out of the re-screen queue on the
+        strength of it — so the default had to become the absence of an answer.
+        """
+        parser = screen.build_parser({"source": "LinkedIn", "default_limit": 10,
+                                      "exclude_posters": []})
+        args = parser.parse_args(["verdict", "--id", "1", "--verdict", "unclear",
+                                  "--outcome", "ambiguous"])
+        self.assertEqual((args.credit, args.noncommercial, args.unmodified), (None, None, None),
+                         "an omitted condition must default to never-assessed, not to the "
+                         "word `unknown` — which now records that somebody looked")
+        self.assertEqual(db.condition_state(args.noncommercial), None)
+
+        (row_id,) = _seed(self.conn, [{"found_link": "https://example.test/omitted"}])
+        screen.record_verdict(self.conn, row_id, verdict="unclear",
+                              outcome=db.OUTCOME_AMBIGUOUS, credit_ok="met",
+                              reason="credit seen; the other two never looked at")
+        row = self.conn.execute(
+            "select screen_noncommercial_ok, screen_unmodified_ok from results where id = ?",
+            (row_id,)).fetchone()
+        self.assertEqual(tuple(row), (None, None),
+                         "an omitted condition must stay NULL — nobody looked at it")
+        self.assertEqual(
+            [r["id"] for r in screen.next_batch(self.conn, limit=50, source="LinkedIn",
+                                                unassessed=True)],
+            [row_id], "a row with conditions nobody looked at must stay in the queue")
 
     def test_include_screened_keeps_its_previous_meaning(self):
         """The new flag is separate; the old one still serves pending + screened."""

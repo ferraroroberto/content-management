@@ -40,10 +40,19 @@ Usage::
         --reason "the post no longer exists"
     python -m check_ip.screen stats
 
+**An honest "could not tell" no longer re-queues a row forever** (issue #305).
+A condition now holds four states: met, violated, *assessed but not
+establishable*, and never assessed. The third used to be stored as the fourth,
+so a worker that opened a post and could not establish (say) non-commercial use
+left the row looking untouched — and ``--unassessed`` served it again, and
+again. Two live batches were handed the identical ten rows. ``--credit`` and
+friends take ``unknown`` for the third; **omitting** the flag is the fourth.
+
 The licence is **CC BY-NC-ND 4.0**: credit, non-commercial use and no
-derivatives must *all* hold, and each is recorded separately as met, violated
-or not assessed. Not assessed is a real answer — see ``db.severity`` and
-``db.fully_assessed``, neither of which reads a missing answer as a pass.
+derivatives must *all* hold, and each is recorded separately. Neither a
+never-assessed condition nor an indeterminate one is a pass — see
+``db.severity`` and ``db.all_conditions_met``, neither of which reads a missing
+or unsettled answer as compliance.
 """
 
 from __future__ import annotations
@@ -80,8 +89,14 @@ RESCREEN_FIELDS = ("screen_verdict", "screen_reason")
 # it, and a reader has to be able to tell it from "met". The words go straight
 # to db.condition_state — argparse restricts the input, that function owns the
 # meaning, and there is no second word-to-value table to drift out of step.
+#
+# There is deliberately no word for NULL (issue #305). NULL means nobody ever
+# looked, and the only honest way to say that is to not answer at all — which
+# is what omitting the flag does. A worker that looked and could not tell says
+# `unknown`, which is an answer and stores a 2.
 CONDITION_CHOICES = ("met", "violated", "unknown")
-CONDITION_WORDS = {1: "met", 0: "violated", None: "not assessed"}
+CONDITION_WORDS = {1: "met", 0: "violated", 2: "could not be established",
+                   None: "not assessed"}
 
 
 def queue_config() -> dict:
@@ -130,8 +145,10 @@ def next_batch(
     predicate, so a re-check competes with every unscreened row under the same
     ranking — with 7k pending rows behind them, the backlog #295 created is
     never reached that way. ``unassessed`` serves that backlog and nothing
-    else: screened, at least one licence condition still null, and not
-    permanently unassessable. It is the same set ``stats()`` counts as
+    else: screened, at least one licence condition never looked at (still
+    null — an ``unknown`` answer is a ``2`` and does not qualify, which is what
+    makes the queue drain, issue #305), and not permanently unassessable. It is
+    the same set ``stats()`` counts as
     ``not_fully_assessed`` — deliberately rendered from the same
     ``db.assessed_sql`` / ``db.permanent_sql`` helpers so the number the tab
     reports and the rows the queue serves cannot drift apart. Dropping the
@@ -230,7 +247,8 @@ def record_verdict(
     """Write one proposed verdict. Owner columns are not in the statement.
 
     The three conditions are recorded as given — ``1`` met, ``0`` violated,
-    ``None`` not assessed — and **nothing is cleared**. The old model blanked
+    ``2`` assessed but not establishable, ``None`` never assessed — and
+    **nothing is cleared**. The old model blanked
     the aggravators on a non-infringement verdict, which is exactly how a
     credited-but-commercial post ended up stored as compliant (issue #295).
 
@@ -317,11 +335,20 @@ def stats(conn: sqlite3.Connection, *, source: Optional[str] = None) -> dict:
     rows nothing will ever look at again.
 
     ``not_fully_assessed`` is the number issue #295 exists for: rows that were
-    screened but whose licence conditions were not all established. They are
+    screened but whose licence conditions were not all looked at. They are
     **not** compliant rows and are counted apart from ``proposed_acceptable``,
     which only holds rows where all three conditions were met. The permanently
     unassessable ones (``nothing_to_assess``) are counted on their own instead,
     since no re-screen will ever move them.
+
+    ``indeterminate`` is the number issue #305 exists for, and it is reported
+    separately because it asks for something different: every condition was
+    answered, and at least one answer was "could not be established". A
+    ``not_fully_assessed`` row wants another screening pass; an
+    ``indeterminate`` row has already had one and wants the owner's own
+    judgement, or nothing. The two never overlap — ``db.indeterminate_sql``
+    requires every condition answered — so they add up rather than
+    double-counting, and neither is ever folded into ``proposed_acceptable``.
     """
     clause, params = db.source_clause(source, "r.source")
     scope = clause or "1 = 1"
@@ -341,6 +368,10 @@ def stats(conn: sqlite3.Connection, *, source: Optional[str] = None) -> dict:
                       and not ({db.assessed_sql()})
                       and not ({db.permanent_sql()})
                      then 1 else 0 end)                                as not_fully_assessed,
+            sum(case when r.screened_at is not null
+                      and ({db.indeterminate_sql()})
+                      and not ({db.permanent_sql()})
+                     then 1 else 0 end)                                as indeterminate,
             sum(case when {db.permanent_sql()} then 1 else 0 end)      as nothing_to_assess,
             sum(case when r.ok is null and ({db.severity_sql()}) = 3
                      then 1 else 0 end)                                as severity_3,
@@ -364,12 +395,17 @@ def stats(conn: sqlite3.Connection, *, source: Optional[str] = None) -> dict:
 # CLI
 
 
-def main(argv: Optional[list[str]] = None) -> int:
-    sys.stdout.reconfigure(encoding="utf-8")
+def build_parser(cfg: dict) -> argparse.ArgumentParser:
+    """The CLI surface, built from a queue config.
+
+    Separate from ``main`` so the defaults can be asserted without opening the
+    store — the condition defaults in particular, which carry meaning: one of
+    them silently changing from "nobody looked" to "somebody looked" is what
+    issue #305 is about, and it is invisible in any test that calls
+    ``record_verdict`` directly.
+    """
     parser = argparse.ArgumentParser(description="check_ip screening queue")
     sub = parser.add_subparsers(dest="command", required=True)
-
-    cfg = queue_config()
 
     p_next = sub.add_parser("next", help="serve the next batch of links to screen")
     p_next.add_argument("--limit", type=int, default=cfg["default_limit"])
@@ -380,8 +416,10 @@ def main(argv: Optional[list[str]] = None) -> int:
                         help="also serve rows already screened, alongside the pending ones")
     p_next.add_argument("--unassessed", action="store_true",
                         help="serve only the re-screen backlog: rows screened with at least "
-                             "one licence condition never established (the count `stats` "
-                             "reports as not_fully_assessed). Narrows --include-screened")
+                             "one licence condition never looked at (the count `stats` "
+                             "reports as not_fully_assessed). A condition answered "
+                             "`unknown` counts as looked at, so screening a row removes "
+                             "it from here. Narrows --include-screened")
     p_next.add_argument("--json", action="store_true", help="emit JSON instead of a table")
 
     p_verdict = sub.add_parser("verdict", help="record one proposed verdict")
@@ -390,17 +428,21 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_verdict.add_argument("--reason", default="")
     p_verdict.add_argument("--poster-url", default=None)
     p_verdict.add_argument("--screen-source", default="check-ip skill")
-    # Each condition defaults to `unknown`, never to `met`: the default has to
-    # be the state that claims nothing, or a worker who forgets one silently
-    # certifies compliance it never checked.
-    p_verdict.add_argument("--credit", default="unknown", choices=CONDITION_CHOICES,
-                           help="BY — the post names, tags or links him (default: unknown)")
-    p_verdict.add_argument("--noncommercial", default="unknown", choices=CONDITION_CHOICES,
+    # An omitted condition defaults to None — never assessed — and never to
+    # `met`: the default has to be the state that claims nothing, or a worker
+    # who forgets one silently certifies compliance it never checked. It is no
+    # longer `unknown` either (issue #305): `unknown` now records that someone
+    # looked, which would be a claim about a flag the caller never passed, and
+    # would drain the row out of the re-screen queue on the strength of it.
+    p_verdict.add_argument("--credit", default=None, choices=CONDITION_CHOICES,
+                           help="BY — the post names, tags or links him "
+                                "(omitted: never assessed)")
+    p_verdict.add_argument("--noncommercial", default=None, choices=CONDITION_CHOICES,
                            help="NC — no promotional CTA and no paid/business context "
-                                "(default: unknown)")
-    p_verdict.add_argument("--unmodified", default="unknown", choices=CONDITION_CHOICES,
+                                "(omitted: never assessed)")
+    p_verdict.add_argument("--unmodified", default=None, choices=CONDITION_CHOICES,
                            help="ND — no crop, filter, added logo or text, no translation, "
-                                "signature intact (default: unknown)")
+                                "signature intact (omitted: never assessed)")
     p_verdict.add_argument("--outcome", default=None, choices=list(db.UNCLEAR_OUTCOMES),
                            help="required with --verdict unclear: 'ambiguous' if another look "
                                 "could settle it, 'nothing_to_assess' if the post is gone or "
@@ -408,8 +450,13 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     p_stats = sub.add_parser("stats", help="queue depth and progress")
     p_stats.add_argument("--source", default=cfg["source"])
+    return parser
 
-    args = parser.parse_args(argv)
+
+def main(argv: Optional[list[str]] = None) -> int:
+    sys.stdout.reconfigure(encoding="utf-8")
+    cfg = queue_config()
+    args = build_parser(cfg).parse_args(argv)
     conn = db.connect()
 
     if args.command == "next":
