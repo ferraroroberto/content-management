@@ -214,7 +214,9 @@ byline. The fallback exists so the pipeline never invents people.
 `classifier.py` asks the model twice and matches the reply tolerantly
 (`**innovation**`, `Topic: leadership and management` and
 `innovation (AI tooling)` all resolve — `topics.match_topic`, the same
-function triage scoring uses). If neither reply names one of the three
+function triage scoring uses; `ai` only counts as a whole word, so a reply
+like `unavailable` or a refusal about "the available text" does not become
+`innovation`). If neither reply names one of the three
 topics it returns `None`, and the article is **not** written to Notion.
 
 There is no fourth topic to write it under: the three labels are the whole
