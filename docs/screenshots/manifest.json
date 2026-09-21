@@ -189,8 +189,8 @@
         "[data-testid=\"stAlert\"]",
         ".st-key-check-ip-grid"
       ],
-      "input_hash": "632cfb914e7d55c52e44d792a9e778cf2f95d1017bdaa92849e5c1b08714ac3f",
-      "captured_at": "2026-09-20T08:26:35+00:00",
+      "input_hash": "1f4ca4937df42d1539d3510d28e7fb52f690970fbe698327f0eef102b36ed9bf",
+      "captured_at": "2026-09-20T12:27:57+00:00",
       "files": [
         "docs/screenshots/check_ip-desktop.png"
       ]
