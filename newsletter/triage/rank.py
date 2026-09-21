@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from urllib.parse import urlsplit
 
+from newsletter.topics import TOPICS
 from newsletter.triage.score import ContentScore, MetaScore
 
 
@@ -26,7 +27,6 @@ def slug_title(url: str) -> str:
         return (url or "")[:160]
     return " ".join(words).capitalize()[:160]
 
-TOPICS = ("leadership and management", "personal development", "innovation")
 MIN_SCORE = 3.0          # below this a link is a "candidate", never auto-selected
 WEAK_FILL = 7.0          # selected but below this = "weak fill": listed, unticked, flagged
 ORG_AUTHORS = {"harvardbiz", "harvard business review", "mckinsey", "(not classified)", ""}

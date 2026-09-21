@@ -48,6 +48,7 @@ from config.console import force_utf8_stdio  # noqa: E402
 from config.loader import load_block, load_full_config  # noqa: E402
 from newsletter import notion_io  # noqa: E402
 from newsletter.cache import canonicalize_url  # noqa: E402
+from newsletter.topics import TOPICS  # noqa: E402
 from newsletter.triage import gmail as gm  # noqa: E402
 
 logger = logging.getLogger("newsletter_triage.history")
@@ -55,7 +56,6 @@ logger = logging.getLogger("newsletter_triage.history")
 HISTORY_DIR = REPO_ROOT / "results" / "newsletter" / "triage" / "history"
 REDIRECT_CACHE = REPO_ROOT / "results" / "newsletter" / "triage" / "redirects.json"
 
-TOPICS = ("leadership and management", "personal development", "innovation")
 
 # ---------------------------------------------------------------------------
 # small io helpers

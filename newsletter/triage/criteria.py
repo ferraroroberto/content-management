@@ -37,12 +37,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config.console import force_utf8_stdio  # noqa: E402
+from newsletter.topics import TOPICS  # noqa: E402
 
 TRIAGE_RESULTS_DIR = REPO_ROOT / "results" / "newsletter" / "triage"
 STATS_PATH = TRIAGE_RESULTS_DIR / "history" / "stats.json"
 CRITERIA_PATH = TRIAGE_RESULTS_DIR / "criteria.json"
-
-TOPICS = ("leadership and management", "personal development", "innovation")
 
 # ---------------------------------------------------------------------------
 # hand-written rules (numbers = measured on N174–N227, 2025-08 → 2026-08)

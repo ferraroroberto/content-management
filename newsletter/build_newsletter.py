@@ -43,7 +43,10 @@ from newsletter import notion_io
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = REPO_ROOT / "results" / "newsletter"
 
-TOPICS: List[str] = [
+# The published newsletter's section order: a presentation choice, deliberately
+# not ``newsletter.topics.TOPICS`` (same labels, different order). Paired
+# positionally with TOPIC_HEADINGS below.
+SECTION_ORDER: List[str] = [
     "personal development",
     "innovation",
     "leadership and management",
@@ -193,7 +196,7 @@ def build_article_summary_map(articles: List[Dict[str, Any]]) -> Dict[Tuple[str,
     return out
 
 
-def group_articles_by_topic(articles: List[Dict[str, Any]], topics: Sequence[str] = TOPICS
+def group_articles_by_topic(articles: List[Dict[str, Any]], topics: Sequence[str] = SECTION_ORDER
                             ) -> Dict[str, List[Tuple[str, str]]]:
     """Group + sort raw Notion article pages by topic (star desc → niche asc → title asc).
 
@@ -251,7 +254,7 @@ def _render_link(name: str, url: str) -> str:
     return f"  <li>{safe_name} ({html.escape(url, quote=True)})</li>"
 
 
-def generate_html_lists(grouped: Dict[str, List[Tuple[str, str]]], topics: Sequence[str] = TOPICS) -> str:
+def generate_html_lists(grouped: Dict[str, List[Tuple[str, str]]], topics: Sequence[str] = SECTION_ORDER) -> str:
     out: List[str] = []
     for topic in topics:
         heading = topic[0].upper() + topic[1:]
@@ -268,7 +271,7 @@ def generate_html_lists(grouped: Dict[str, List[Tuple[str, str]]], topics: Seque
     return "\n".join(out)
 
 
-def generate_complete_html(grouped: Dict[str, List[Tuple[str, str]]], topics: Sequence[str] = TOPICS) -> str:
+def generate_complete_html(grouped: Dict[str, List[Tuple[str, str]]], topics: Sequence[str] = SECTION_ORDER) -> str:
     html_content = generate_html_lists(grouped, topics)
     return f"""<!DOCTYPE html>
 <html lang=\"en\">
@@ -447,7 +450,7 @@ def run(newsletter_number: str, debug: bool = False, *,
     out_path.write_text(complete_html, encoding="utf-8")
     logging.info(f"💾 HTML saved to: {out_path}")
 
-    top_names = top_article_names_by_topic(TOPICS, grouped)
+    top_names = top_article_names_by_topic(SECTION_ORDER, grouped)
     sidecar = _write_topics_sidecar(nl_num, TOPIC_HEADINGS, top_names)
     logging.info(f"🗂️ Topics sidecar: {sidecar}")
 
@@ -463,7 +466,7 @@ def run(newsletter_number: str, debug: bool = False, *,
             copy_to_clipboard(line)
             logging.info(f"📋 Must-read line (copied to clipboard): {line}")
     elif interactive_must_read:
-        prompt_must_read_line(TOPICS, grouped)
+        prompt_must_read_line(SECTION_ORDER, grouped)
 
     return out_path
 

@@ -49,7 +49,7 @@ from config.loader import load_block
 from config.logger_config import configure_root_logging
 from newsletter.books import find_book_for_newsletter
 from newsletter.build_newsletter import (
-    TOPICS,
+    SECTION_ORDER,
     NotionClient,
     build_article_summary_map,
     format_must_read_line,
@@ -155,11 +155,11 @@ def run(
     if not articles:
         raise ValueError(f"No articles found for newsletter '{nl_num}'")
     grouped = group_articles_by_topic(articles)
-    sections = build_sections(grouped, TOPICS)
-    title_line = compose_title_line(TOPICS, grouped, must_read)
+    sections = build_sections(grouped, SECTION_ORDER)
+    title_line = compose_title_line(SECTION_ORDER, grouped, must_read)
 
     summaries = build_article_summary_map(articles)
-    must_read_article = compose_must_read_article(TOPICS, grouped, summaries, must_read)
+    must_read_article = compose_must_read_article(SECTION_ORDER, grouped, summaries, must_read)
     lead_nodes = build_must_read_nodes(*must_read_article) if must_read_article else None
 
     book = find_book_for_newsletter(nl["id"])
