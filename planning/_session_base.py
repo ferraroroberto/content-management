@@ -206,6 +206,16 @@ class PlatformSession:
         """Navigate to ``url``. Raise :class:`LoginRequiredError` on a login redirect."""
         self.logger.debug("➡️ Navigating to %s", url)
         self.page.goto(url, timeout=timeout_ms or self.default_timeout_ms, wait_until="domcontentloaded")
+        self.raise_if_login_page()
+
+    def raise_if_login_page(self) -> None:
+        """Raise :class:`LoginRequiredError` if the current URL is a login page.
+
+        ``goto_with_login_check`` calls this right after ``domcontentloaded``,
+        but some login redirects are client-side and land later (LinkedIn's
+        ``/authwall``, issue #310) — callers re-check on their failure paths so
+        an expired session is reported as one, not as a parse error.
+        """
         current = (self.page.url or "").lower()
         if any(marker in current for marker in self.login_markers):
             raise LoginRequiredError(

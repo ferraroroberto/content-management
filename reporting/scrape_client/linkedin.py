@@ -76,6 +76,19 @@ def _extract_followers(text: str) -> Optional[int]:
     return parse_int(m.group(1)) if m else None
 
 
+def _raise_if_logged_out(s: LinkedInSession) -> None:
+    """Report a late client-side login redirect as login-required (issue #310).
+
+    ``/in/<handle>/`` pages bounce an expired session to ``/authwall`` after
+    ``domcontentloaded``, past ``goto_with_login_check``'s own check — without
+    this re-check the failure reads as a parse error or a selector timeout.
+    """
+    try:
+        s.raise_if_login_page()
+    except LoginRequiredError as err:
+        raise ScrapeError(f"LinkedIn login required: {err}") from err
+
+
 def fetch_profile(target_date: Optional[str] = None) -> Optional[dict]:
     """Scrape LinkedIn follower count.
 
@@ -99,6 +112,7 @@ def fetch_profile(target_date: Optional[str] = None) -> Optional[dict]:
         try:
             s.page.locator("main").wait_for(state="visible", timeout=20000)
         except Exception as err:
+            _raise_if_logged_out(s)
             s.screenshot_failure(f"{target_date}-profile-main-not-visible")
             raise ScrapeError(f"<main> never became visible on {activity_url}: {err}") from err
 
@@ -138,6 +152,7 @@ def fetch_profile(target_date: Optional[str] = None) -> Optional[dict]:
         except Exception:
             pass
 
+        _raise_if_logged_out(s)
         s.screenshot_failure(f"{target_date}-profile-followers-not-parsed")
         raise ScrapeError(f"Could not parse follower count from {activity_url}.")
 
@@ -201,6 +216,7 @@ def fetch_posts(target_date: Optional[str] = None) -> Optional[dict]:
         try:
             s.page.wait_for_selector("[data-urn^='urn:li:activity:']", timeout=20000)
         except Exception as err:
+            _raise_if_logged_out(s)
             s.screenshot_failure(f"{target_date}-activity-no-posts")
             raise ScrapeError(f"No activity posts appeared at {activity_url}: {err}") from err
 
@@ -210,6 +226,7 @@ def fetch_posts(target_date: Optional[str] = None) -> Optional[dict]:
         count = post_locator.count()
         logger.info("ℹ️ LinkedIn recent-activity: %d post containers visible", count)
         if count == 0:
+            _raise_if_logged_out(s)
             s.screenshot_failure(f"{target_date}-activity-zero-posts")
             raise ScrapeError("LinkedIn recent-activity page rendered no posts.")
 
