@@ -593,6 +593,35 @@ def scrape_post_comments(
 
 # ---------- Orchestrator ----------
 
+def _dedupe_comments_by_id(rows: list[dict]) -> list[dict]:
+    """Collapse rows sharing a `comment_id` into one before the upsert.
+
+    A reply that doesn't carry its own `replaceableComment_...` DOM wrapper
+    inherits its parent comment's URN in `_extract_comment_id`, so two
+    distinct comments can land in the same batch with the same id —
+    Postgres then rejects the *entire* `ON CONFLICT` upsert rather than just
+    the colliding rows (issue #313). Keep whichever row carries a reply
+    (more information survives), logging the collision so a genuine
+    URN-extraction bug stays visible instead of silently dropping data.
+    """
+    by_id: dict[str, dict] = {}
+    for row in rows:
+        cid = row.get("comment_id")
+        existing = by_id.get(cid)
+        if existing is None:
+            by_id[cid] = row
+            continue
+        logger.warning(
+            "⚠️ duplicate comment_id %s — post=%s account=%s vs post=%s account=%s; keeping one",
+            cid,
+            existing.get("post_url"), existing.get("commenter_url"),
+            row.get("post_url"), row.get("commenter_url"),
+        )
+        if not existing.get("my_reply_text") and row.get("my_reply_text"):
+            by_id[cid] = row
+    return list(by_id.values())
+
+
 def _evaluate_scrape_health(total_posts: int, structural_errors: list[str]) -> str:
     """Return `"broken"` when every attempted post's outcome was a structural
     extractor error (or an unhandled exception) rather than a legitimate empty
@@ -676,6 +705,7 @@ def run(days: int, *, headless: bool = False, dry_run: bool = False, limit: Opti
         # the upsert is about to write. Idempotent — only runs where a new URN
         # exists AND a matching fallback row is present.
         migrate_fallback_ids_to_urn(platform="linkedin", new_comments=persistable_comments)
+        persistable_comments = _dedupe_comments_by_id(persistable_comments)
         upsert_commenters(list(all_commenters.values()))
         upsert_comments(persistable_comments)
         # Auto-mark "I already replied" rows as ignored so the triage inbox
