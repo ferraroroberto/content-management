@@ -21,6 +21,7 @@ from __future__ import annotations
 import unittest
 
 from planning.linkedin.linkedin_composer import (
+    COMPOSER_REMOUNT_TIMEOUT_MS,
     SCHEDULE_CONFIRM_TIMEOUT_MS,
     schedule_pre_state,
     wait_for_schedule_confirmation,
@@ -193,6 +194,50 @@ class SchedulePreStateTests(unittest.TestCase):
 
         page = _FakePage(_Exploding())
         self.assertEqual(schedule_pre_state(page, _Exploding()), (0, False))
+
+    def test_waits_for_the_composer_to_remount(self):
+        """Issue #319: the snapshot must not land in the post-Confirm gap.
+
+        Confirm closes the Schedule dialog and LinkedIn re-renders the
+        composer a beat later. A snapshot taken in that gap used to read 0,
+        which silently disabled the composer-closed signal for the row.
+        """
+        toast = _FakeLocator([0])
+        page = _FakePage(toast)
+        composer = _FakeLocator([0, 0, 0, 1])
+        self.assertEqual(schedule_pre_state(page, composer), (1, False))
+        self.assertGreater(page._now, 0)
+        self.assertLess(page._now, COMPOSER_REMOUNT_TIMEOUT_MS)
+
+    def test_already_mounted_composer_costs_no_wait(self):
+        toast = _FakeLocator([0])
+        page = _FakePage(toast)
+        self.assertEqual(schedule_pre_state(page, _FakeLocator([1])), (1, False))
+        self.assertEqual(page._now, 0)
+
+    def test_composer_that_never_remounts_gives_a_zero_baseline(self):
+        """The wait is bounded, and a timeout keeps the toast-only rule."""
+        toast = _FakeLocator([0])
+        page = _FakePage(toast)
+        self.assertEqual(schedule_pre_state(page, _FakeLocator([0])), (0, False))
+        self.assertGreaterEqual(page._now, COMPOSER_REMOUNT_TIMEOUT_MS)
+        self.assertLess(page._now, SCHEDULE_CONFIRM_TIMEOUT_MS)
+
+    def test_late_composer_then_close_confirms_without_the_toast(self):
+        """The #319 sequence end to end: late re-mount, click, composer closes.
+
+        No toast ever arrives (as with a video still processing), yet the row
+        is confirmed on the composer signal instead of timing out as FAIL.
+        """
+        toast = _FakeLocator([0])
+        page = _FakePage(toast)
+        composer = _FakeLocator([0, 0, 1, 1, 1, 0])
+        pre_state = schedule_pre_state(page, composer)
+        self.assertEqual(pre_state, (1, False))
+        signal = wait_for_schedule_confirmation(
+            page, composer, pre_state, label="20260929",
+        )
+        self.assertEqual(signal, "composer-closed")
 
 
 if __name__ == "__main__":

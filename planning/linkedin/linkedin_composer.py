@@ -479,11 +479,54 @@ SCHEDULE_CONFIRM_TIMEOUT_MS = 45000
 # faster just burns CDP round-trips.
 SCHEDULE_CONFIRM_POLL_MS = 400
 
+# Budget for the composer to re-mount after the Schedule dialog's Confirm.
+#
+# Confirm closes the Schedule dialog and LinkedIn then re-renders the composer
+# from scratch; for a video that took ~2.1 s after the click in a live probe,
+# while the callers only sleep 1.5 s. A snapshot inside that gap matched zero
+# composers, which disables the composer-closed signal and leaves the row to
+# the toast alone — and for videos the toast often lands after the 45 s wait,
+# so a scheduled post was reported FAIL (issue #319). Only paid in full when
+# the composer genuinely never comes back.
+COMPOSER_REMOUNT_TIMEOUT_MS = 10000
+COMPOSER_REMOUNT_POLL_MS = 250
+
+
+def _wait_for_composer(page: Page, composer) -> int:
+    """Poll until ``composer`` matches, up to ``COMPOSER_REMOUNT_TIMEOUT_MS``.
+
+    Returns the last count seen (0 on timeout). A locator that raises counts as
+    0 — this runs one click away from a scheduled post and must never be what
+    fails the row.
+    """
+    start = page.evaluate("() => Date.now()")
+    deadline = start + COMPOSER_REMOUNT_TIMEOUT_MS
+    polls = 0
+    while True:
+        try:
+            count = composer.count()
+        except Exception:
+            count = 0
+        now = page.evaluate("() => Date.now()")
+        if count or now >= deadline:
+            break
+        polls += 1
+        page.wait_for_timeout(COMPOSER_REMOUNT_POLL_MS)
+    if count and polls:
+        logger.info("ℹ️ Composer re-mounted %d ms after the Schedule dialog closed.", now - start)
+    elif not count:
+        logger.warning(
+            "⚠️ Composer did not re-mount within %d s of the Schedule dialog "
+            "closing.", COMPOSER_REMOUNT_TIMEOUT_MS // 1000,
+        )
+    return count
+
 
 def schedule_pre_state(page: Page, composer) -> tuple[int, bool]:
     """Snapshot the two signals ``wait_for_schedule_confirmation`` compares against.
 
-    Must be called immediately BEFORE the final Schedule click.
+    Must be called immediately BEFORE the final Schedule click. Waits (bounded)
+    for the composer to re-mount first — see ``COMPOSER_REMOUNT_TIMEOUT_MS``.
 
     Returns ``(composer_count, toast_already_visible)``:
 
@@ -494,10 +537,7 @@ def schedule_pre_state(page: Page, composer) -> tuple[int, bool]:
       on screen, left over from the previous row in the same session. When it
       is, the toast cannot confirm THIS row and the waiter ignores it.
     """
-    try:
-        count = composer.count()
-    except Exception:
-        count = 0
+    count = _wait_for_composer(page, composer)
     try:
         toast_visible = page.get_by_text(POST_SCHEDULED_TOAST_RE).count() > 0
     except Exception:
@@ -573,4 +613,5 @@ __all__ = [
     "schedule_pre_state",
     "wait_for_schedule_confirmation",
     "SCHEDULE_CONFIRM_TIMEOUT_MS",
+    "COMPOSER_REMOUNT_TIMEOUT_MS",
 ]

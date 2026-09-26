@@ -201,6 +201,11 @@ attach helper. See:
   Instagram Reels URL-only check further down, and the same fix — confirm on
   the platform's own signal, not on a side effect. Full account in
   [`planning/linkedin/README.md`](../linkedin/README.md).
+- **The video composer re-mounts ~2 s after the Schedule dialog's Confirm.**
+  A pre-click snapshot inside that gap matched no composer, leaving the row
+  to the toast alone, and the video toast often arrives after the 45 s wait —
+  a scheduled post was reported FAIL. `schedule_pre_state` now waits (up to
+  10 s) for the composer before snapshotting (issue #319).
 - **LinkedIn keeps uploading the video AFTER the composer closes.** The
   composer disappears shortly after `Schedule` is clicked, but LinkedIn
   finishes the .mp4 upload in the background. If the Playwright context
