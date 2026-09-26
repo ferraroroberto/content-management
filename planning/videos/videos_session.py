@@ -25,6 +25,7 @@ import ctypes
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -74,7 +75,9 @@ class ClipPayload:
     ``video_path`` and ``thumb_path`` are derived from the clip page's
     ``clipPC`` (folder, already terminated with a slash) and ``filePC``
     (bare filename without extension): video = ``<clipPC><filePC>.mp4``,
-    thumb = ``<clipPC><filePC>.png``.
+    thumb = ``<clipPC><filePC>.png``. When ``filePC`` carries characters
+    Windows can't store, the Windows-safe form of the name is used instead
+    (issue #317).
 
     ``caption_short`` is the clip page's ``Text`` property — used by IG,
     TW, TH, and SB.
@@ -546,6 +549,42 @@ def ensure_platform_safe_clip(video_path: Path, tcfg: Optional[dict] = None) -> 
     return video_path
 
 
+# Characters Windows refuses in a filename. A clip's ``filePC`` derives from its
+# Notion title, which may contain them ("start small: the 10-at-10 method"),
+# while the exported file on disk had them dropped (issue #317).
+_WIN_ILLEGAL_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*]')
+
+
+def windows_safe_filename(name: str) -> str:
+    """Return ``name`` as Windows would have saved it: illegal characters
+    dropped, the whitespace they leave behind collapsed, and no trailing dots
+    or spaces."""
+    cleaned = _WIN_ILLEGAL_FILENAME_CHARS.sub("", name)
+    return re.sub(r"\s+", " ", cleaned).strip().rstrip(". ")
+
+
+def _resolve_clip_file(folder: str, fname: str, ext: str) -> Path:
+    """Return the on-disk clip file for ``folder + fname + ext``.
+
+    The verbatim name wins when it exists. Otherwise fall back to its
+    Windows-safe form, and if that doesn't exist either, return the verbatim
+    path so the caller's not-found error names what Notion asked for.
+    """
+    verbatim = Path(f"{folder}{fname}{ext}")
+    if verbatim.exists():
+        return verbatim
+    safe = windows_safe_filename(fname)
+    if safe != fname:
+        candidate = Path(f"{folder}{safe}{ext}")
+        if candidate.exists():
+            logger.info(
+                "ℹ️ %r not on disk; using Windows-safe name %r.",
+                verbatim.name, candidate.name,
+            )
+            return candidate
+    return verbatim
+
+
 def load_clip_payload(notion, editorial_row: dict, video_cols: dict, clip_cols: dict) -> ClipPayload:
     """Resolve the shared clip relation off the editorial row and build a payload.
 
@@ -579,13 +618,13 @@ def load_clip_payload(notion, editorial_row: dict, video_cols: dict, clip_cols: 
     sep = "\\" if "\\" in folder else "/"
     if not folder.endswith(("\\", "/")):
         folder = folder + sep
-    video_str = f"{folder}{fname}.mp4"
-    thumb_str = f"{folder}{fname}.png"
-    video_path = Path(video_str)
-    thumb_path = Path(thumb_str)
+    video_path = _resolve_clip_file(folder, fname, ".mp4")
+    thumb_path = _resolve_clip_file(folder, fname, ".png")
 
     if not video_path.exists():
-        raise FileNotFoundError(f"Video file not found: {video_path}")
+        safe = windows_safe_filename(fname)
+        also = f" (also tried Windows-safe name {safe + '.mp4'!r})" if safe != fname else ""
+        raise FileNotFoundError(f"Video file not found: {video_path}{also}")
     # Materialise the clip locally before any driver feeds it to set_input_files —
     # an online-only OneDrive placeholder passes .exists() but uploads as no/partial
     # media (issue #104). Raises loudly if it can't hydrate within the budget.
