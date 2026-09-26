@@ -60,7 +60,7 @@ flowchart TD
 | `clip_pc` | `clipPC` | Folder path (already terminated with `\`) |
 | `file_pc` | `filePC` | Bare filename without extension |
 
-Video file = `<clipPC><filePC>.mp4`. Thumb = `<clipPC><filePC>.png` (LinkedIn auto-extracts a thumbnail; the .png is logged-and-skipped if missing).
+Video file = `<clipPC><filePC>.mp4`. Thumb = `<clipPC><filePC>.png` (LinkedIn auto-extracts a thumbnail; the .png is logged-and-skipped if missing). If `filePC` contains characters Windows can't store in a filename (`<>:"/\|?*`, e.g. a colon in the clip title) and the verbatim file is missing, the Windows-safe form of the name is used instead (those characters dropped, whitespace collapsed), with an info log line (#317).
 
 ## Selectors per platform
 
