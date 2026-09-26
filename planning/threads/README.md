@@ -68,7 +68,7 @@ from the IG side of the editorial DB. The scheduler only **reads** these
 
 | Step | Selector | Notes |
 |------|----------|-------|
-| Open composer | `text="What's new?"` on the profile feed | Opens the `New thread` dialog. The placeholder text re-appears inside the dialog too. |
+| Open composer | `get_by_role("button", name=COMPOSE_ENTRY_BTN_RE)` on the profile feed (aria-label `Empty text field. Type to compose a new post.`), falling back to the `WHATS_NEW_PLACEHOLDER_RE` text | Opens the `New thread` dialog. The placeholder text re-appears inside the dialog too. Since 2026-09 it uses a curly apostrophe (`What’s new?`, U+2019), so never match it with a straight-quote literal (#315). |
 | Caption textarea (inside dialog) | `[role="dialog"] div[contenteditable="true"]` | Lexical editor — type via `keyboard.type(...)`. |
 | Image upload | `[role="dialog"] input[type="file"]` | Pre-mounted; `set_input_files(path)` works directly. |
 | Top-right 3-dots | Positional JS picker (rightmost icon-only button in dialog header band, y < 80 from dialog top) | No aria-label, no test-id, no stable class. The header has 2 svg-only buttons; the rightmost is the 3-dots, the one next to it is "Drafts". |

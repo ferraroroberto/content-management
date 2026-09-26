@@ -37,12 +37,14 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from planning.threads.threads_labels import (  # noqa: E402
     ATTACH_MEDIA_BTN_RE,
     CANCEL_DISCARD_BTN_RES,
+    COMPOSE_ENTRY_BTN_RE,
     DISCARD_BTN_RE,
     DONE_BTN_RE,
     FINAL_SCHEDULE_BTN_RE,
     NEXT_MONTH_BTN_RE,
     SCHEDULE_MENUITEM_RE,
     SCHEDULE_TEXT_RE,
+    WHATS_NEW_PLACEHOLDER_RE,
     WHATS_NEW_TEXTBOX_RE,
     calendar_header,
 )
@@ -107,11 +109,16 @@ def _open_composer(page: Page) -> None:
         page,
         [
             # Profile-row click target. Several variants observed across
-            # Threads builds — tried in order on every round.
-            ("placeholder text", page.locator('text="What\'s new?"')),
-            ("aria create-thread", page.locator('[aria-label="Create new thread" i]')),
+            # Threads builds — tried in order on every round. The placeholder
+            # switched to a curly apostrophe in 2026-09 (#315), so match it
+            # through the labels regex, never a straight-quote literal.
+            ("aria compose-entry",
+             page.get_by_role("button", name=COMPOSE_ENTRY_BTN_RE)),
+            ("placeholder text", page.get_by_text(WHATS_NEW_PLACEHOLDER_RE)),
             ("role=button placeholder",
-             page.locator('div[role="button"]:has-text("What\'s new?")')),
+             page.locator('div[role="button"]').filter(
+                 has_text=WHATS_NEW_PLACEHOLDER_RE
+             )),
         ],
         effect=page.locator(
             '[role="dialog"] div[contenteditable="true"], '
