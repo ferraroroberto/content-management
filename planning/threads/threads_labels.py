@@ -24,9 +24,28 @@ from __future__ import annotations
 
 import re
 
-# Caption contenteditable inside the composer dialog, anchored on the
-# "What's new?" placeholder.
-WHATS_NEW_TEXTBOX_RE = re.compile(r"what's new", re.I)
+# Threads renders the placeholder with a typographic apostrophe ("What’s new?",
+# U+2019) since 2026-09; older builds used the ASCII one. Accept both — a
+# straight-quote-only selector matched nothing and failed every row (#315).
+_APOS = "['’]"
+
+# The profile feed's inline composer row that opens the New thread dialog.
+# Its accessible name is an aria-label, not the placeholder it displays;
+# "Create new thread" is the pre-2026-09 variant.
+COMPOSE_ENTRY_BTN_RE = re.compile(
+    r"^(empty text field\. type to compose a new post\.?|create new thread)$",
+    re.I,
+)
+
+# Visible placeholder text on that composer row (and again inside the dialog).
+WHATS_NEW_PLACEHOLDER_RE = re.compile(rf"what{_APOS}s new\?", re.I)
+
+# Caption contenteditable inside the composer dialog. Its accessible name is
+# the same aria-label as the profile row; older builds named it after the
+# placeholder.
+WHATS_NEW_TEXTBOX_RE = re.compile(
+    rf"what{_APOS}s new|type to compose a new post", re.I
+)
 
 # First media-row icon that opens the file picker.
 ATTACH_MEDIA_BTN_RE = re.compile(
@@ -79,6 +98,8 @@ def calendar_header(target) -> str:
 
 
 __all__ = [
+    "COMPOSE_ENTRY_BTN_RE",
+    "WHATS_NEW_PLACEHOLDER_RE",
     "WHATS_NEW_TEXTBOX_RE",
     "ATTACH_MEDIA_BTN_RE",
     "SCHEDULE_MENUITEM_RE",
