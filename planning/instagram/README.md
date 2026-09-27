@@ -227,21 +227,29 @@ Meta's class names are obfuscated and rotate — never anchor on classes. These 
 
 ## Replication template for other platforms
 
-`substack/` and `linkedin/` already exist; `instagram/` joins them. `twitter/` and `threads/` need the same shape:
+`substack/`, `linkedin/`, `twitter/`, `threads/` and `instagram/` already exist and follow this shape:
 
 ```
 <platform>/
 ├── __init__.py
 ├── README.md
-├── bootstrap_session.py
-├── <platform>_session.py
+├── bootstrap_session.py     — thin shim over planning._bootstrap.run_bootstrap
+├── <platform>_session.py    — subclasses planning._session_base.PlatformSession
+├── <platform>_labels.py     — centralised accessible-name label registry
 ├── schedule_<platform>_posts.py
 └── chrome_user_data/        (gitignored)
 ```
 
-Each new platform must:
+A new platform must:
 
-- Import `stealth_launch_kwargs` + `STEALTH_INIT_SCRIPT` from `config/chrome_launch.py`. Never inline launch args.
+- Subclass `planning._session_base.PlatformSession` for the session lifecycle
+  (persistent-context, stealth launch args, the real-profile safety guard) —
+  never re-inline any of that in the platform module.
+- Add a `bootstrap_session.py` that calls `planning._bootstrap.run_bootstrap`
+  (mirror the existing platforms' shims).
+- Add a `<platform>_labels.py` centralising accessible-name selectors as
+  compiled regexes; keep DOM-structure selectors (`data-testid`,
+  `role="dialog"`, CSS/`text=` engine selectors) inline in the driver.
 - Use `notion/editorial.py` for all Notion access.
 - Add a `<platform>` block to `config/config.json` with the platform-specific URLs and `editorial_columns` + `illustration_columns` role maps.
 - Add `<platform>/chrome_user_data/` to `.gitignore`.

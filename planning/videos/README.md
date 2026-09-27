@@ -35,7 +35,7 @@ flowchart TD
 | `python -m planning.videos.schedule_videos_posts --date 20260512 --live` | Single-day mode (only that row's video). |
 | `python -m planning.videos.schedule_videos_posts --all-wip --live --skip-li --skip-th` | Schedule only the platforms not flagged with `--skip-*`. |
 | `python -m planning.videos.schedule_videos_posts --all-wip --live --force` | Schedule even if already marked scheduled (`link <P>(v)` populated, or a tag-along ledger entry). |
-| `python -m planning.substack.post_substack_video_note --date 20260512 --live --force` | Standalone Substack video-note publish (also invoked automatically by the daily pipeline on video days). |
+| `python -m planning.substack.post_substack_video_note --date 20260512 --force` | Standalone Substack video-note publish (also invoked automatically by the daily pipeline on video days). |
 | `python planning_pipeline.py --live` | Full planning orchestrator: LI → IG → TW → TH → **Videos** (Videos runs last). |
 
 ## Notion fields read

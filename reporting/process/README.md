@@ -22,7 +22,7 @@ in this module were removed as stale/broken (issue #196).
 ### 📊 data_processor.py
 
 The main data processing engine that:
-- Reads raw JSON files from the `results/raw` directory
+- Reads raw JSON files from the `reporting/results/raw` directory
 - Applies field mappings from `config/mapping.json`
 - Transforms nested JSON structures into flat DataFrames
 - Handles different data types (posts, profiles, etc.)
@@ -246,7 +246,7 @@ python -m reporting.process.posts_consolidator --debug
 
 ## 📊 Data Flow
 
-1. **Input**: Raw JSON files in `results/raw/` directory
+1. **Input**: Raw JSON files in `reporting/results/raw/` directory
    - Format: `{platform}_{datatype}_{YYYY-MM-DD}.json`
 
 2. **Processing**: 

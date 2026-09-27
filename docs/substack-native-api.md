@@ -153,9 +153,6 @@ Caveats worth knowing:
   stored `body_json` to be byte-identical to what was sent.
 - **There is no dry-run at the API layer**, because a Note has no draft state.
   `--dry-run` is enforced in `post_substack_note.py` *before* the publish call.
-- **Video notes are not supported natively.** They upload through a separate mux
-  pipeline (`mux_asset_id` / `mux_playback_id` on the attachment) that was not
-  reverse-engineered; `post_substack_video_note.py` stays on Playwright.
 
 ### Reacting to ("liking") a Note (issue #186)
 

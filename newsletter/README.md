@@ -57,7 +57,9 @@ flowchart LR
    articles + connections + newsletter DB ids, LLM hub url + model,
    fuzzy threshold, category cap, topic→rollup map,
    `author_fallback_name` (e.g. `"(not classified)"`),
-   `url_preserve_domains` (youtube / vimeo / twitter / x).
+   `url_preserve_domains` (youtube / vimeo / twitter / x),
+   `books_db_id` (the Notion "books" database, for the `substack-draft`
+   "one book" trailer section — see [Substack draft edition](#substack-draft-edition)).
 4. Make sure a connection named exactly **`(not classified)`** exists in
    the connections DB. It's the fallback used when the author can't be
    identified — required so the pipeline never invents people.
@@ -81,9 +83,10 @@ sequence:
 
 1. **Bootstrap Chrome** — launches the dedicated newsletter Chrome on `:9222`
    *without touching your everyday browser.* If `:9222` is already up it reuses
-   it (your tabs stay); otherwise it kills only the Chrome bound to
-   `newsletter\chrome_user_data` (if any) and relaunches with
-   `--remote-debugging-port=9222`.
+   it (your tabs stay); otherwise, if a non-debug Chrome is holding the
+   newsletter profile, it waits with exponential backoff (60→480 s) and never
+   kills that holder — see Gotchas below. Once the profile is free it
+   relaunches with `--remote-debugging-port=9222`.
 2. **Wait** — you open the newsletter article tabs in that Chrome window
    (clicking links in Gmail is fine — they'll open there). Press Enter
    when ready.
@@ -457,8 +460,14 @@ no DOM selectors.
 It reads exactly what `build` reads (the Notion articles + newsletter DBs) and
 reuses the same grouping/sorting, so the draft and the HTML can't drift. Each
 topic becomes an `<h2>`-equivalent heading followed by a bullet list of linked
-article titles; `--must-read N` prepends the composed must-read line as the
-opening paragraph.
+article titles. With `--must-read N`, the composed must-read line becomes the
+**draft title** (override with `--title`) and the body opens with a "one must
+read" block for that article (title, link, AI-generated summary). The body
+also trails with a "One book" section — title, author, link — when a book is
+linked to the newsletter via the Notion "books" database's `newsletter`
+relation (`newsletter/books.py`); omitted when no book is linked. The books
+database id is the `books_db_id` key in the `newsletter_archive` config block
+(see [One-time setup](#one-time-setup)).
 
 - **It never publishes.** The draft is private and emails no one — publishing
   stays a deliberate action in the Substack editor. There is no `--confirm`

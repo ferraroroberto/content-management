@@ -340,7 +340,7 @@ flowchart LR
     A1[RapidAPI<br/>x10 endpoints]:::rapidapi --> B
     A2[Playwright<br/>x10 endpoints]:::playwright --> B
     B[reporting.social_client<br/>dispatch on 'source']
-    B --> C[results/raw/<br/>JSON dump]
+    B --> C[reporting/results/raw/<br/>JSON dump]
     C --> D[reporting.process.data_processor]
     D --> E[(Supabase<br/>PostgreSQL)]
     E --> F[reporting.process<br/>profile_aggregator<br/>posts_consolidator]
@@ -440,10 +440,12 @@ Note *posting* has its own flag, `substack.note_source` (`"playwright"` default
 / `"native"`), because it is a **write** to a public platform rather than a
 read. The native backend publishes the daily Note over the same HTTP API and
 records the permalink of the note it just created, instead of re-reading the
-profile and taking whatever is topmost. Video notes stay Playwright-only.
+profile and taking whatever is topmost. Video Notes are covered too — the same
+`substack.note_source` flag selects `post_substack_video_note.py`'s native
+branch, with Playwright as the one-key rollback.
 
 The downstream pipeline is source-agnostic — `data_processor` reads the
-JSON envelope from `results/raw/<platform>_<data_type>_<YYYY-MM-DD>.json`
+JSON envelope from `reporting/results/raw/<platform>_<data_type>_<YYYY-MM-DD>.json`
 and uses the matching `<key>` mapping in `config/mapping.json`, falling
 back to `<key>_playwright` automatically (via
 `get_alternative_mapping_keys`). So you can flip one platform at a time

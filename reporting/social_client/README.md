@@ -44,6 +44,16 @@ Example configuration structure:
 }
 ```
 
+## Choosing the data source
+
+Each platform config entry carries a `"source"` key (`"rapidapi"`, `"playwright"`,
+or — Substack only — `"native"`) that the client dispatches on: `"rapidapi"`
+makes the HTTP call directly, `"playwright"` delegates to the matching
+`planning.<platform>` scraper, `"native"` delegates to
+`reporting.scrape_client.<platform>_native.fetch_<data_type>`. See the root
+[`README.md`'s "Choosing the data source"](../../README.md#choosing-the-data-source-rapidapi-vs-playwright)
+for the full trade-offs and how to flip a platform.
+
 ## Usage
 
 ### Command Line Arguments
@@ -74,7 +84,7 @@ python -m reporting.social_client.social_api_client [options]
 
 3. **Process specific platform**:
    ```bash
-   python -m reporting.social_client.social_api_client --platform twitter_analytics
+   python -m reporting.social_client.social_api_client --platform twitter_posts
    ```
 
 4. **Force re-fetch all data**:
@@ -84,12 +94,12 @@ python -m reporting.social_client.social_api_client [options]
 
 5. **Debug mode with specific platform**:
    ```bash
-   python -m reporting.social_client.social_api_client --debug --platform instagram_insights
+   python -m reporting.social_client.social_api_client --debug --platform instagram_profile
    ```
 
 ## Output
 
-Results are saved in the configured results directory (default: `results/raw/`) with the following naming convention:
+Results are saved in the configured results directory (default: `reporting/results/raw/`) with the following naming convention:
 
 ```
 {platform}_{data_type}_{YYYY-MM-DD}.json
