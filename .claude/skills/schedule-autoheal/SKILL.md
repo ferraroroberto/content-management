@@ -52,11 +52,13 @@ Heal at most **one platform per invocation cycle**; re-run to pick up the next.
    there, **never re-inline launch args** — and prints ranked `role + accessible name`
    candidates.
 3. **Locate the broken selector:**
-   - LinkedIn → `planning/linkedin/linkedin_labels.py` (centralised regex registry; keep
-     the `EN | ES` alternations).
-   - Twitter / Threads / Instagram → the selector is **inline** in
-     `planning/<platform>/schedule_<platform>_posts.py`. Search for the old accessible
-     name / role call near the failing step.
+   - Every platform centralises its accessible-name labels in its own
+     `planning/<platform>/<platform>_labels.py` registry (`linkedin_labels.py`,
+     `twitter_labels.py`, `threads_labels.py`, `instagram_labels.py`) — keep the
+     `EN | ES` alternations where present. That registry is the first edit target.
+   - Fall back to `planning/<platform>/schedule_<platform>_posts.py` only for a
+     structural selector still inline there (`data-testid`, `role="dialog"`,
+     CSS/`text=` engine selectors) — those deliberately stay out of the registry.
 4. **Apply a selector-only edit.** Re-anchor the role/text selector on the new accessible
    name from the probe. Prefer role + name anchors; **never** anchor on a class (class
    names rotate — the READMEs warn). The diff MUST be a pure selector-string change — no

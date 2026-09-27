@@ -114,6 +114,6 @@ When iterating on a new scraper, the fastest loop is:
    layout A/B test).
 
 For full-pipeline validation, run `python -m reporting.process.data_processor`
-standalone — it processes every JSON file in `results/raw/`, falls back
+standalone — it processes every JSON file in `reporting/results/raw/`, falls back
 to `_playwright` mappings as needed, and emits per-DataFrame counts so
 you can spot any endpoint that produced zero records.

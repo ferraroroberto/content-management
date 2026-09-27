@@ -63,10 +63,12 @@ a Playwright `get_by_role(role, name=...)` selector needs. Class-based candidate
 are deliberately omitted: the per-platform READMEs warn class names rotate, so a
 class-anchored fix would re-break next week.
 
-Selector edit targets differ by platform: LinkedIn centralises selectors in
-`planning/linkedin/linkedin_labels.py`; Twitter / Threads / Instagram keep them
-inline in `schedule_<platform>_posts.py` (centralising those is tracked as
-follow-up work).
+Every platform now centralises selectors in its own `*_labels.py` registry —
+`planning/linkedin/linkedin_labels.py`, `planning/twitter/twitter_labels.py`,
+`planning/threads/threads_labels.py`, `planning/instagram/instagram_labels.py`
+— that registry is the first edit target for a fix. Fall back to any
+structural test-id still inline in `schedule_<platform>_posts.py` only when
+the registry has no matching entry.
 
 ## The confidence gate
 

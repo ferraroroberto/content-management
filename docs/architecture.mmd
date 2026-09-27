@@ -38,7 +38,7 @@ flowchart TB
   SC -->|"source: rapidapi"| RAPIDAPI[("RapidAPI\n(paid HTTP)")]
   SC -->|"source: playwright / native"| SCRAPE
   SCRAPE -->|"followers + note engagement\n(cookie auth, no browser)"| SBAPI[("Substack private HTTP API")]
-  SC --> RAW[["results/raw/*.json"]]
+  SC --> RAW[["reporting/results/raw/*.json"]]
   RAW --> PROC
   PROC --> SUPA[("Supabase / PostgreSQL")]
   PROC --> NOTIONMOD
@@ -50,7 +50,7 @@ flowchart TB
     IG["instagram/\nschedule_instagram_posts +\nclone_to_other_platforms"]
     TW["twitter/schedule_twitter_posts"]
     TH["threads/schedule_threads_posts"]
-    SUBSTACKDAILY["substack/\ndaily_pipeline (invoked from reporting) +\npost_substack_note (note_source: playwright | native) /\npost_substack_video_note (playwright only)"]
+    SUBSTACKDAILY["substack/\ndaily_pipeline (invoked from reporting) +\npost_substack_note (note_source: playwright | native) /\npost_substack_video_note (note_source: playwright | native)"]
     VIDEOS["videos/schedule_videos_posts\n(weekly cross-platform clip: LI+IG+TW+TH @19:00)"]
   end
   NOTION -->|"WIP-* checkboxes"| PPIPE

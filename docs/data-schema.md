@@ -7,7 +7,7 @@ README links here rather than carrying the column-level detail.
 
 ## Database architecture
 
-The system uses PostgreSQL (via Supabase) with a normalized schema that separates raw data collection from aggregated analytics. All tables use `date` as the primary key for efficient time-series queries.
+The system uses PostgreSQL (via Supabase) with a normalized schema that separates raw data collection from aggregated analytics. The two consolidated `profile` / `posts` tables use `date` as the sole primary key; the raw per-platform tables and the Notion-synced tables use their own composite keys — see each table's fields below.
 
 ## Raw data tables
 
@@ -20,8 +20,8 @@ The system creates individual tables for each platform and data type to store ra
 - **`threads_profile`**: Threads follower counts and profile data
 - **`substack_profile`**: Substack subscriber counts and profile data
 
-**Common profile fields:**
-- `date` (date, PRIMARY KEY): Date of data collection
+**Common profile fields** (composite `PRIMARY KEY (date, platform, data_type)`):
+- `date` (date): Date of data collection
 - `platform` (text): Platform identifier
 - `data_type` (text): Data type identifier ('profile')
 - `num_followers` (integer): Number of followers/subscribers
@@ -33,8 +33,8 @@ The system creates individual tables for each platform and data type to store ra
 - **`threads_posts`**: Threads post performance metrics
 - **`substack_posts`**: Substack post performance metrics
 
-**Common posts fields:**
-- `date` (date, PRIMARY KEY): Date of data collection
+**Common posts fields** (composite `PRIMARY KEY (date, platform, data_type, post_id)`):
+- `date` (date): Date of data collection
 - `platform` (text): Platform identifier
 - `data_type` (text): Data type identifier ('posts')
 - `post_id` (text): Unique post identifier
@@ -78,7 +78,7 @@ The system creates individual tables for each platform and data type to store ra
 ## Notion database integration
 
 ### Two-stage data pipeline
-- **Stage 1 (raw ingestion):** platform-specific tables store raw API responses; Notion sync uses dynamic schema detection with bidirectional sync and change tracking; complex data types are stored as JSONB.
+- **Stage 1 (raw ingestion):** platform-specific tables store raw API responses; Notion sync uses dynamic schema detection with a one-way Notion → Postgres sync and change tracking; complex data types are stored as JSONB.
 - **Stage 2 (consolidation):** SQL aggregation scripts merge platform-specific raw data into the unified `profile` / `posts` tables above, optimized for time-series analysis and cross-platform comparisons.
 
 ### Common Notion table structure

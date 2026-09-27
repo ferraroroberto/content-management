@@ -1,13 +1,12 @@
 # Substack automation
 
-Browser-driven automation that replaces two manual daily steps:
+Browser-driven automation for publishing a Substack **Note** (image or video)
+from the day's row in the Notion editorial database. (The follower count used
+to be scraped from here too; it now comes from `reporting/scrape_client` — see
+the module layout below.)
 
-1. Publish a Substack **Note** from the day's row in the Notion editorial database.
-2. Scrape the **total followers** count from the Substack stats page and write it back to the same row.
-
-Both steps use Playwright to drive **real Chrome** (`channel="chrome"`) against
-a **dedicated, project-local Chrome profile directory**. The two scripts share
-that profile so they only require one manual login per cookie lifetime.
+Note publishing uses Playwright to drive **real Chrome** (`channel="chrome"`)
+against a **dedicated, project-local Chrome profile directory**.
 
 ### Why real Chrome, and what about my normal Chrome profile?
 
@@ -131,8 +130,8 @@ manual tool, not wired into any pipeline. Both calls are idempotent.
 substack/
 ├── __init__.py
 ├── README.md                       — this file
-├── substack_session.py             — Playwright context + storage_state lifecycle
-├── bootstrap_session.py            — one-time headed login; writes storage_state.json
+├── substack_session.py             — Playwright persistent-context (dedicated Chrome profile) lifecycle
+├── bootstrap_session.py            — one-time headed login into the dedicated profile
 ├── post_substack_note.py           — publish Note
 ├── post_substack_video_note.py     — video-day branch for the weekly clip
 └── daily_pipeline.py               — orchestrator; CLI entry

@@ -8,8 +8,9 @@ REM newsletter\bootstrap_chrome.py (single source of truth) so the
 REM Streamlit app and this bat drive the exact same code.
 REM
 REM Behaviour: if :9222 is already up it reuses it (your tabs stay);
-REM otherwise it kills only the Chrome bound to the newsletter
-REM profile (if any) and relaunches with the debug port.
+REM otherwise, if a non-debug Chrome is holding the newsletter profile,
+REM it waits with exponential backoff (never kills that holder) and
+REM relaunches with the debug port once the profile is free.
 REM ============================================================
 
 setlocal
