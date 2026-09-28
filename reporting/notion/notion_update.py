@@ -1,15 +1,14 @@
-import json
 import logging
 import sys
 import argparse
 from pathlib import Path
-import os
 from datetime import datetime, timedelta
 import psycopg2
 from dotenv import load_dotenv
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from config.loader import load_full_config
 from config.logger_config import setup_logger
 from reporting.process.supabase_uploader import get_db_connection
 # init_notion_client / format_database_id / extract_property_value live in
@@ -19,6 +18,7 @@ from reporting.notion._client import (
     extract_property_value,
     format_database_id,
     init_notion_client,
+    load_notion_block,
 )
 
 # Set up logger. Module-scope default is a real (unconfigured) Logger — never
@@ -141,13 +141,9 @@ def extract_fields(page, fields_to_extract):
     
     return extracted
 
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config", "config.json")
-
 def load_notion_config():
     """Load Notion parameters from config.json."""
-    with open(CONFIG_PATH, "r") as f:
-        config = json.load(f)
-    notion_cfg = config.get("notion", {})
+    notion_cfg = load_notion_block()
     api_token = notion_cfg.get("api_token")
     databases = notion_cfg.get("databases", [])
     
@@ -158,7 +154,7 @@ def load_notion_config():
     update_field_mapping_posts = notion_cfg.get("update_field_mapping_posts", {})
     
     # Get Supabase table names
-    supabase_cfg = config.get("supabase", {})
+    supabase_cfg = load_full_config().get("supabase", {})
     posts_table = supabase_cfg.get("posts_table", "posts")
     profile_table = supabase_cfg.get("profile_table", "profile")
     

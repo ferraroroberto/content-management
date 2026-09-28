@@ -14,6 +14,7 @@ from reporting.notion._client import (
     extract_property_value,
     format_database_id,
     init_notion_client,
+    load_notion_block,
 )
 
 # Set up logger. Module-scope default is a real (unconfigured) Logger — never
@@ -182,16 +183,11 @@ def save_database_info(database_structure, database_df, output_dir=None):
     logger.info(f"💾 Saved database structure to JSON: {os.path.basename(structure_file)}")
     return structure_file
 
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config", "config.json")
 DATABASE_LIST_PATH = os.path.join(os.path.dirname(__file__), "notion_database_list.json")
 
 def load_notion_config():
     """Load Notion API token from config.json."""
-    with open(CONFIG_PATH, "r") as f:
-        config = json.load(f)
-    notion_cfg = config.get("notion", {})
-    api_token = notion_cfg.get("api_token")
-    return api_token
+    return load_notion_block().get("api_token")
 
 def load_databases_for_replication():
     """Load databases marked for replication from notion_database_list.json."""

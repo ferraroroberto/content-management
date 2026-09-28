@@ -112,6 +112,9 @@ context = launch_persistent_context_with_lock_wait(
 
 **"Single source of truth: every session module imports `launch_persistent_context_with_lock_wait` from here — never re-inline a launch-with-retry in a new module."**
 
+### 9. `supabase_client.py`
+Single-source supabase-py client builder with the `service_role_key` → `key` → `anon_key` fallback. `build_supabase_client(cfg, probe_table=..., probe_column=...)` probes each key with a one-row select and returns the first that works; falling back to `anon_key` logs a warning (issue #51). Used by `engagement/db/client.py` and `newsletter/triage/db.py` — an optional `key_ok_despite_error` predicate lets the triage store treat "table not found" as a working key. Never re-inline the key loop in a new package.
+
 ## Usage
 
 1. Copy `config_example.json` to `config.json`

@@ -292,6 +292,7 @@ never inventing people.
 - `normalize_names_words.json` — sidecar: proper-name whitelist + special
   cases + common words.
 - `normalize_url.py` — URL query-param stripper with preserve list.
+- `_normalizer_base.py` — shared query → transform → dry-run/update → stats workflow and CLI shell behind `normalize_names` and `normalize_url`.
 - `build_newsletter.py` — HTML builder + must-read line; writes the `N{NNN}.topics.json` sidecar the app's must-read picker reads.
 - `substack_draft.py` — pushes the same grouped article lists into a private Substack draft edition over the native HTTP API.
 - `triage/gmail.py` — read-only Gmail label ingestion + link extraction / redirect decoding (adapter over the vendored `gmail_readonly/`).
