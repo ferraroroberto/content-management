@@ -19,22 +19,12 @@ from typing import Any, Optional
 from notion_client import Client
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from reporting.notion import notion_update as _nu  # noqa: E402
 from reporting.notion._client import (  # noqa: E402
+    extract_property_value,
     format_database_id,
     init_notion_client,
-)
-from reporting.notion.notion_update import (  # noqa: E402
-    extract_property_value,
     prepare_notion_update,
 )
-
-# notion_update.py uses a module-level `logger` that only gets initialized when
-# its own main() runs. When we reuse its helpers from elsewhere, configure that
-# logger once on import so calls like init_notion_client / prepare_notion_update
-# don't blow up on `logger.debug(...)`.
-if _nu.logger is None:
-    _nu.configure_logger(debug_mode=False)
 
 logger = logging.getLogger("notion_editorial")
 

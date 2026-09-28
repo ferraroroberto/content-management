@@ -89,7 +89,7 @@ engagement/
 ├── reputation/
 │   └── update.py                     # rolling signals + reputation_score recomputer (Phase 3)
 ├── db/
-│   ├── client.py                     # supabase-py + notion client + CRUD helpers
+│   ├── client.py                     # supabase-py client + CRUD helpers
 │   └── schema.sql                    # one-time DDL for commenters + comments
 └── review_app.py                     # Streamlit UI
 ```
@@ -99,13 +99,6 @@ engagement/
 ```json
 "engagement": {
     "default_days": 5,
-    "phrases_path": "engagement/classify/phrases.json",
-    "platforms_enabled": ["linkedin"],
-    "linkedin": {
-        "expand_max_clicks": 30,
-        "expand_settle_ms": 1200,
-        "page_settle_ms": 2500
-    },
     "llm_fallback": {
         "enabled": true,
         "base_url": "http://127.0.0.1:8000",

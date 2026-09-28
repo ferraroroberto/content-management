@@ -35,9 +35,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-# Importing editorial configures notion_update's module-level logger on import,
-# so the reused init_notion_client / query helpers below don't blow up.
-from reporting.notion import notion_update as _nu  # noqa: E402
 from reporting.notion._client import (  # noqa: E402
     format_database_id,
     init_notion_client,
@@ -67,8 +64,8 @@ def setup_logging(debug: bool = False) -> None:
         format="%(asctime)s - %(levelname)s - %(message)s",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
-    # init_notion_client / format_database_id log via notion_update's own logger.
-    _nu.configure_logger(debug_mode=debug)
+    # init_notion_client / format_database_id log via _client's own
+    # "notion_client_helpers" logger, which self-configures on import.
 
 
 def editorial_date_range(now: Optional[datetime] = None) -> tuple[str, str]:

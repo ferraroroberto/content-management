@@ -22,8 +22,8 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.console import force_utf8_stdio  # noqa: E402
 force_utf8_stdio()
 from config.logger_config import setup_logger  # noqa: E402
-from reporting.notion import notion_update as _nu
 from reporting.notion.notion_update import (
+    configure_logger,
     find_row_for_date,
     init_notion_client,
     parse_date,
@@ -61,7 +61,7 @@ def main() -> int:
 
     global logger
     logger = setup_logger("next_relation_check", file_logging=False, level=logging.INFO)
-    _nu.configure_logger(debug_mode=False)
+    configure_logger(debug_mode=False)
 
     target_str = args.target_date or date.today().strftime("%Y%m%d")
     today_dt: datetime = parse_date(target_str)
