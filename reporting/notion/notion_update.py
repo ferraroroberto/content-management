@@ -11,14 +11,15 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.loader import load_full_config
 from config.logger_config import setup_logger
 from reporting.process.supabase_uploader import get_db_connection
-# init_notion_client / format_database_id / extract_property_value live in
-# the shared _client module; re-exported here so existing importers (e.g.
-# editorial.py) keep working.
+# init_notion_client / format_database_id / extract_property_value /
+# prepare_notion_update live in the shared _client module; re-exported here
+# so this module's own callers (and clone_to_other_platforms.py) keep working.
 from reporting.notion._client import (
     extract_property_value,
     format_database_id,
     init_notion_client,
     load_notion_block,
+    prepare_notion_update,
 )
 
 # Set up logger. Module-scope default is a real (unconfigured) Logger — never
@@ -242,59 +243,6 @@ def map_supabase_to_notion_fields(posts_data, profile_data, field_mapping):
             logger.warning(f"Invalid field mapping format: {supabase_field}")
     
     return mapped_data
-
-def prepare_notion_update(property_type, value):
-    """Prepare the update payload for a Notion property based on its type."""
-    # Checkbox must be handled before the None-skip below so that an explicit
-    # `False` (e.g. unticking "Work in Progress LI" after scheduling) is
-    # actually sent rather than dropped as a no-op.
-    if property_type == 'checkbox':
-        return {"checkbox": bool(value)}
-    if value is None:
-        return None
-    
-    # Handle datetime objects
-    if isinstance(value, datetime) or hasattr(value, 'isoformat'):
-        # Format as ISO string YYYY-MM-DD
-        try:
-            value_str = value.isoformat().split('T')[0]
-            
-            if property_type == 'date':
-                return {"date": {"start": value_str}}
-            elif property_type == 'number':
-                return {"number": None}  # Cannot convert date to number
-            else:
-                # For other types, use the string representation
-                value = value_str
-        except AttributeError:
-            logger.warning(f"⚠️ Could not format date value: {value}")
-    
-    if property_type == 'number':
-        try:
-            return {"number": float(value) if value is not None else None}
-        except (ValueError, TypeError):
-            logger.warning(f"⚠️ Could not convert value '{value}' of type {type(value).__name__} to number")
-            return {"number": None}
-    elif property_type == 'rich_text':
-        return {"rich_text": [{"text": {"content": str(value)}}] if value else []}
-    elif property_type == 'url':
-        return {"url": str(value) if value else None}
-    elif property_type == 'title':
-        return {"title": [{"text": {"content": str(value)}}] if value else []}
-    elif property_type == 'date':
-        # Handle date type properly
-        if isinstance(value, str):
-            return {"date": {"start": value}}
-        else:
-            return {"date": {"start": str(value)}}
-    elif property_type == 'relation':
-        if value in (None, ""):
-            return {"relation": []}
-        ids = value if isinstance(value, list) else [value]
-        return {"relation": [{"id": str(i)} for i in ids]}
-    else:
-        # Default to rich_text for unknown types
-        return {"rich_text": [{"text": {"content": str(value)}}] if value else []}
 
 def update_notion_page(notion, page_id, updates):
     """Update a Notion page with the provided field updates."""

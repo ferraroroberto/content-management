@@ -45,7 +45,7 @@ The pipeline **never auto-sends**. Every reply is a manual copy-paste — by des
 - comment text — `[data-testid='expandable-text-box']`
 - profile links — `<a href="https://www.linkedin.com/in/<handle>/">`
 
-Sort is switched to **Most recent** before extraction so we don't miss comments below LinkedIn's relevance threshold. "Show more replies" buttons are clicked until exhausted (capped at `expand_max_clicks` in config).
+Sort is switched to **Most recent** before extraction so we don't miss comments below LinkedIn's relevance threshold. "Show more replies" buttons are clicked until exhausted (capped at 30 clicks, hardcoded in `_expand_all_comments`).
 
 **Per-comment fields.** `commenter_url`, `display_name`, `text`, `comment_id` (LinkedIn URN), `posted_at` (reconstructed from LinkedIn's relative `2h` / `5m` / `1d` timestamps by subtracting the offset from scrape time — accurate to ~1 display unit, fine for cadence rules).
 

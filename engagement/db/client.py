@@ -1,9 +1,8 @@
-"""Shared Supabase / Notion client + config loader for the engagement pipeline.
+"""Shared Supabase client + config loader for the engagement pipeline.
 
 Centralises:
 - loading config.json
 - building the supabase-py client from config.supabase
-- building the Notion client from config.notion
 - upsert / select / update helpers for the `commenters` and `comments` tables
 
 Everything else in `engagement/` imports from here so the secrets path lives
@@ -170,28 +169,6 @@ def upsert_comments(rows: list[dict]) -> None:
     sb = supabase_client()
     sb.table("comments").upsert(rows, on_conflict="platform,comment_id").execute()
     logger.info("📥 upserted %d comments", len(rows))
-
-
-def fetch_pending_comments(platform: Optional[str] = None) -> list[dict]:
-    sb = supabase_client()
-    q = sb.table("comments").select("*").eq("status", "pending").order("scraped_at", desc=True)
-    if platform:
-        q = q.eq("platform", platform)
-    return q.execute().data or []
-
-
-def fetch_comments_by_status(status: str, platform: Optional[str] = None, limit: int = 500) -> list[dict]:
-    sb = supabase_client()
-    q = (
-        sb.table("comments")
-        .select("*")
-        .eq("status", status)
-        .order("scraped_at", desc=True)
-        .limit(limit)
-    )
-    if platform:
-        q = q.eq("platform", platform)
-    return q.execute().data or []
 
 
 def fetch_commenters_by_urls(platform: str, urls: Iterable[str]) -> dict[str, dict]:
@@ -397,30 +374,15 @@ def cascade_whitelist_pending(platform: str, account_url: str) -> int:
     return len(res.data or [])
 
 
-# ---------- Notion ----------
-
-def notion_client():
-    from notion_client import Client
-
-    cfg = load_config()
-    token = cfg.get("notion", {}).get("api_token")
-    if not token:
-        raise RuntimeError("Missing notion.api_token in config.json")
-    return Client(auth=token)
-
-
 __all__ = [
     "load_config",
     "load_engagement_config",
     "supabase_client",
-    "notion_client",
     "REQUIRED_COLUMNS",
     "SchemaDriftError",
     "verify_schema",
     "upsert_commenters",
     "upsert_comments",
-    "fetch_pending_comments",
-    "fetch_comments_by_status",
     "fetch_commenter",
     "fetch_commenters_by_urls",
     "update_comment_status",
