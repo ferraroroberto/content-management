@@ -29,6 +29,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from config.console import force_utf8_stdio  # noqa: E402
 from config.loader import load_full_config  # noqa: E402
+from config.supabase_client import build_supabase_client  # noqa: E402
 
 logger = logging.getLogger("newsletter_triage.db")
 
@@ -60,6 +61,12 @@ def _bad_key(err: Exception) -> bool:
     return "invalid api key" in msg or "jwt" in msg or "401" in msg or "unauthorized" in msg
 
 
+def _key_accepted(err: Exception) -> bool:
+    """A probe error that still proves the key works: anything but a key the API rejected,
+    and "table not found" is never a rejection (the schema is simply not applied yet)."""
+    return _table_missing(err) or not _bad_key(err)
+
+
 def client() -> Any:
     """Cached supabase-py client from ``config.supabase``. Keys are tried in priority order
     (service_role_key → key → anon_key) and each is probed against ``triage_runs``: a key rejected by the
@@ -68,29 +75,13 @@ def client() -> Any:
     global _client
     if _client is not None:
         return _client
-    from supabase import create_client  # local import — keep the dependency lazy for tests
-
-    cfg = load_full_config().get("supabase") or {}
-    url = cfg.get("url")
-    if not url:
-        raise RuntimeError("Missing supabase.url in config.json")
-    last_err: Optional[Exception] = None
-    for label in ("service_role_key", "key", "anon_key"):
-        key = cfg.get(label)
-        if not key:
-            continue
-        cand = create_client(url, key)
-        try:
-            cand.table("triage_runs").select("id").limit(1).execute()
-        except Exception as err:  # noqa: BLE001 — classify: bad key → next; missing table → key is fine
-            last_err = err
-            if _bad_key(err) and not _table_missing(err):
-                logger.debug("🔑 supabase key %s rejected, trying next: %s", label, str(err)[:120])
-                continue
-        logger.debug("🔑 supabase key: %s", label)
-        _client = cand
-        return _client
-    raise RuntimeError(f"No working supabase key in config.supabase (service_role_key / key / anon_key): {last_err}")
+    _client = build_supabase_client(
+        load_full_config().get("supabase") or {},
+        probe_table="triage_runs",
+        probe_column="id",
+        key_ok_despite_error=_key_accepted,
+    )
+    return _client
 
 
 def set_client(c: Any) -> None:

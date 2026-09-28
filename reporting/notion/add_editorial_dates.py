@@ -37,11 +37,12 @@ if str(REPO_ROOT) not in sys.path:
 
 # Importing editorial configures notion_update's module-level logger on import,
 # so the reused init_notion_client / query helpers below don't blow up.
-from config.loader import load_full_config  # noqa: E402
 from reporting.notion import notion_update as _nu  # noqa: E402
 from reporting.notion._client import (  # noqa: E402
     format_database_id,
     init_notion_client,
+    load_editorial_notion,
+    load_notion_block,
 )
 from reporting.notion.editorial import query_rows_by_filter  # noqa: E402
 
@@ -89,22 +90,8 @@ def load_config(database_id_override: Optional[str] = None) -> tuple[str, str, d
     The editorial DB is the first entry in ``notion.databases`` (matching
     ``notion_update.py``), unless ``database_id_override`` is given.
     """
-    cfg = load_full_config()
-    notion_cfg = cfg.get("notion", {})
-
-    api_token = notion_cfg.get("api_token")
-    if not api_token:
-        raise ValueError("notion.api_token missing from config.json")
-
-    if database_id_override:
-        database_id = database_id_override
-    else:
-        databases = notion_cfg.get("databases", [])
-        if not databases:
-            raise ValueError("notion.databases is empty in config.json")
-        database_id = databases[0]["id"]
-
-    columns = {**DEFAULT_COLUMNS, **notion_cfg.get("editorial_date_columns", {})}
+    api_token, database_id = load_editorial_notion(database_id_override)
+    columns = {**DEFAULT_COLUMNS, **load_notion_block().get("editorial_date_columns", {})}
     return api_token, database_id, columns
 
 

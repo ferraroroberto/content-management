@@ -21,6 +21,7 @@ from typing import Any, Iterable, Optional
 # Add the repo root to sys.path to allow importing the shared config loader.
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from config.loader import load_full_config as load_config  # noqa: E402
+from config.supabase_client import build_supabase_client  # noqa: E402
 # Leaf module (no dependency on this module) — safe to import without a cycle.
 from engagement.classify.phrases_io import pick_thanks_reply  # noqa: E402
 
@@ -46,43 +47,9 @@ def supabase_client():
     falls back to anon_key (works against RLS-disabled tables — which is our case
     while the engagement pipeline lives behind no public surface).
     """
-    from supabase import create_client  # local import — keep optional dependency lazy
-
-    cfg = load_config()["supabase"]
-    url = cfg["url"]
-    if not url:
-        raise RuntimeError("Missing supabase.url in config.json")
-
-    # Try keys in priority order; on first non-error import success, use it.
-    candidates = [
-        ("service_role_key", cfg.get("service_role_key")),
-        ("key", cfg.get("key")),
-        ("anon_key", cfg.get("anon_key")),
-    ]
-    last_err: Exception | None = None
-    for label, key in candidates:
-        if not key:
-            continue
-        try:
-            client = create_client(url, key)
-            # Cheap sanity ping — pick a table that exists, limit 1.
-            client.table("commenters").select("platform").limit(1).execute()
-            if label == "anon_key":
-                # service_role_key and key both unavailable/failed — track whether
-                # this fallback is ever actually exercised (see issue #51).
-                logger.warning("🔓 supabase_client() fell back to anon_key — service_role_key and key both unavailable")
-            logger.info("🔑 using supabase key: %s", label)
-            return client
-        except Exception as err:
-            # Trying candidates in priority order and moving on is by design, so a
-            # failed candidate is not warning-worthy — it's the expected fallback
-            # path. Keep the detail at DEBUG for when someone is actually debugging;
-            # the terminal RuntimeError below is the single loud signal when *no*
-            # key works (it carries last_err).
-            last_err = err
-            logger.debug("🔑 supabase key %s not usable, trying next: %s", label, err)
-            continue
-    raise RuntimeError(f"No working supabase key found in config.supabase (last err: {last_err})")
+    return build_supabase_client(
+        load_config()["supabase"], probe_table="commenters", probe_column="platform",
+    )
 
 
 # ---------- Schema preflight ----------

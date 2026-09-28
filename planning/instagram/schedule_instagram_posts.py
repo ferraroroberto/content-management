@@ -31,7 +31,7 @@ import logging
 import re
 import sys
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
@@ -59,17 +59,17 @@ from planning.instagram.instagram_session import (  # noqa: E402
 )
 from reporting.notion.editorial import (  # noqa: E402
     get_field,
-    init_notion_client,
-    query_rows_by_filter,
     retrieve_page,
     set_field,
 )
 from reporting.notion.notion_update import format_database_id  # noqa: E402
-from planning._dates import (  # noqa: E402
-    date_to_day_title,
-    parse_single_date,
-    parse_week_start,
+from planning._dates import date_to_day_title  # noqa: E402
+from planning._scheduler_main import (  # noqa: E402
+    drop_already_scheduled,
+    notion_or_none,
+    resolve_scope,
 )
+from planning._wip_rows import iter_wip_pages  # noqa: E402
 
 logger = logging.getLogger("instagram_schedule")
 
@@ -108,8 +108,6 @@ class PostPayload:
 def fetch_wip_ig_rows(notion, db_id: str, ed_cols: dict, days: Optional[list[date]]) -> list[ScheduleRow]:
     """Fetch WIP-IG rows. If ``days`` is None, returns every WIP-IG row
     (used by ``--all-wip`` mode); otherwise filters by title-equals per day."""
-    wip_col = ed_cols["wip_checkbox"]
-    title_col = ed_cols["title_day"]
     illust_col = ed_cols["illustration_rel"]
     text_col = ed_cols["caption_text"]
     thread_col = ed_cols["thread_checkbox"]
@@ -117,71 +115,32 @@ def fetch_wip_ig_rows(notion, db_id: str, ed_cols: dict, days: Optional[list[dat
     post_url_col = ed_cols["post_url"]
 
     rows: list[ScheduleRow] = []
-
-    def _row_day(r: dict) -> Optional[date]:
-        title_prop = r.get("properties", {}).get(title_col, {}) or {}
-        segs = title_prop.get("title", []) or []
-        text = "".join(seg.get("plain_text", "") for seg in segs).strip()
-        if not text:
-            return None
-        try:
-            return datetime.strptime(text, "%Y%m%d").date()
-        except ValueError:
-            return None
-
-    def _ingest(results, default_day: Optional[date]):
-        for r in results:
-            props = r.get("properties", {})
-            row_day = default_day or _row_day(r)
-            if row_day is None:
-                logger.warning(
-                    "⚠️  Skipping row %s: day title is empty / not YYYYMMDD. "
-                    "Likely a stale scratch/template row — consider archiving "
-                    "it in Notion (%s).",
-                    r.get("id"), r.get("url") or "(no url)",
-                )
-                continue
-            illust_rels = props.get(illust_col, {}).get("relation", []) or []
-            post_rels = props.get(post_col, {}).get("relation", []) or []
-            text_rt = props.get(text_col, {}).get("rich_text", []) or []
-            text_val = "".join(seg.get("plain_text", "") for seg in text_rt).strip()
-            thread = bool(props.get(thread_col, {}).get("checkbox", False))
-            url_obj = props.get(post_url_col, {})
-            existing_url = url_obj.get("url") if url_obj.get("type") == "url" else None
-            rows.append(
-                ScheduleRow(
-                    page_id=r["id"],
-                    day=row_day,
-                    illustration_ig_ids=[rel["id"] for rel in illust_rels],
-                    text_ig=text_val,
-                    thread_ig=thread,
-                    post_ig_ids=[rel["id"] for rel in post_rels],
-                    existing_post_url=existing_url,
-                )
+    for r, row_day in iter_wip_pages(
+        notion, db_id,
+        wip_col=ed_cols["wip_checkbox"],
+        title_col=ed_cols["title_day"],
+        days=days,
+        logger=logger,
+    ):
+        props = r.get("properties", {})
+        illust_rels = props.get(illust_col, {}).get("relation", []) or []
+        post_rels = props.get(post_col, {}).get("relation", []) or []
+        text_rt = props.get(text_col, {}).get("rich_text", []) or []
+        text_val = "".join(seg.get("plain_text", "") for seg in text_rt).strip()
+        thread = bool(props.get(thread_col, {}).get("checkbox", False))
+        url_obj = props.get(post_url_col, {})
+        existing_url = url_obj.get("url") if url_obj.get("type") == "url" else None
+        rows.append(
+            ScheduleRow(
+                page_id=r["id"],
+                day=row_day,
+                illustration_ig_ids=[rel["id"] for rel in illust_rels],
+                text_ig=text_val,
+                thread_ig=thread,
+                post_ig_ids=[rel["id"] for rel in post_rels],
+                existing_post_url=existing_url,
             )
-
-    if days is None:
-        results = query_rows_by_filter(
-            notion,
-            db_id,
-            filter_obj={"property": wip_col, "checkbox": {"equals": True}},
         )
-        _ingest(results, default_day=None)
-    else:
-        for d in days:
-            title = date_to_day_title(d)
-            results = query_rows_by_filter(
-                notion,
-                db_id,
-                filter_obj={
-                    "and": [
-                        {"property": title_col, "title": {"equals": title}},
-                        {"property": wip_col, "checkbox": {"equals": True}},
-                    ]
-                },
-            )
-            _ingest(results, default_day=d)
-
     rows.sort(key=lambda r: r.day)
     return rows
 
@@ -1235,33 +1194,14 @@ def main() -> tuple[int, list[dict]]:
     configure_logger("instagram_schedule", debug=args.debug)
     cfg = load_instagram_config()
 
-    if args.live:
-        dry_run = False
-    elif args.dry_run:
-        dry_run = True
-    else:
-        dry_run = cfg.get("dry_run_default", True)
-
-    if args.all_wip and (args.date or args.week_start):
-        logger.error("❌ --all-wip is mutually exclusive with --date / --week-start.")
+    scope = resolve_scope(args, cfg, wip_label="WIP-IG", log=logger)
+    if scope is None:
         return 2, []
+    dry_run = scope.dry_run
+    target_days = scope.target_days
 
-    if args.all_wip:
-        target_days = None
-        logger.info("🎯 All-WIP mode: ignoring date filter, scheduling every WIP-IG row.")
-    elif args.date:
-        d = parse_single_date(args.date)
-        target_days = [d]
-        logger.info("🎯 Single-day mode: %s", d.isoformat())
-    else:
-        monday = parse_week_start(args.week_start)
-        target_days = [monday + timedelta(days=i) for i in range(7)]
-        logger.info("🗓️  Target week: %s → %s",
-                    target_days[0].isoformat(), target_days[-1].isoformat())
-
-    notion = init_notion_client(load_notion_token())
+    notion = notion_or_none(load_notion_token(), log=logger)
     if notion is None:
-        logger.error("❌ Could not initialize Notion client.")
         return 3, []
 
     db_id = format_database_id(cfg["editorial_db_id"])
@@ -1275,14 +1215,7 @@ def main() -> tuple[int, list[dict]]:
         logger.info("   - %s (page=%s, thread=%s, link IG=%s)",
                     r.day_title, r.page_id, r.thread_ig, r.existing_post_url or "(empty)")
 
-    if not args.force:
-        before = len(rows)
-        rows = [r for r in rows if not r.existing_post_url]
-        if len(rows) != before:
-            logger.info(
-                "⏭️  Skipped %d row(s) whose link IG is already populated (use --force to override).",
-                before - len(rows),
-            )
+    rows = drop_already_scheduled(rows, force=args.force, link_label="IG", log=logger)
     if not rows:
         logger.info("ℹ️ Nothing left to schedule after dedup. Done.")
         return 0, []

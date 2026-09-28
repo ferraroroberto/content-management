@@ -11,7 +11,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import os
 import sys
@@ -25,37 +24,11 @@ force_utf8_stdio()
 from config.logger_config import setup_logger  # noqa: E402
 from reporting.notion import notion_update as _nu
 from reporting.notion.notion_update import (
-    format_database_id,
+    find_row_for_date,
     init_notion_client,
     parse_date,
 )
-
-CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "config.json"
-
-
-def load_editorial_db() -> tuple[str, str]:
-    """Return (api_token, editorial_database_id) from config.json."""
-    with open(CONFIG_PATH, "r") as f:
-        cfg = json.load(f)
-    notion_cfg = cfg.get("notion", {})
-    databases = notion_cfg.get("databases", [])
-    if not databases:
-        raise RuntimeError("No databases configured under notion.databases")
-    return notion_cfg["api_token"], databases[0]["id"]
-
-
-def query_row_by_date(notion, database_id: str, iso_date: str) -> Optional[dict]:
-    """Query the editorial DB for the single row matching the `date` property."""
-    resp = notion.databases.query(
-        database_id=format_database_id(database_id),
-        filter={"property": "date", "date": {"equals": iso_date}},
-    )
-    results = resp.get("results", [])
-    if not results:
-        return None
-    if len(results) > 1:
-        logger.warning(f"⚠️ Multiple rows for {iso_date}; using first")
-    return results[0]
+from reporting.notion._client import load_editorial_notion
 
 
 def extract_title(page: dict) -> str:
@@ -100,13 +73,13 @@ def main() -> int:
     logger.info(f"📅 Target (today)    : {today_iso}")
     logger.info(f"📅 Target (tomorrow) : {tomorrow_iso}")
 
-    api_token, db_id = load_editorial_db()
+    api_token, db_id = load_editorial_notion()
     notion = init_notion_client(api_token)
     if notion is None:
         return 1
 
-    today_row = query_row_by_date(notion, db_id, today_iso)
-    tomorrow_row = query_row_by_date(notion, db_id, tomorrow_iso)
+    today_row = find_row_for_date(notion, db_id, today_iso)
+    tomorrow_row = find_row_for_date(notion, db_id, tomorrow_iso)
 
     if today_row is None:
         logger.error(f"❌ No row found for today ({today_iso}). Nothing to do.")

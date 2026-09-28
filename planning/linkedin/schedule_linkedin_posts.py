@@ -41,7 +41,7 @@ import logging
 import re
 import sys
 from dataclasses import dataclass, replace
-from datetime import date, datetime, timedelta
+from datetime import date
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -102,17 +102,17 @@ from planning.linkedin.linkedin_posts_body import (  # noqa: E402
 from reporting.notion.editorial import (  # noqa: E402
     get_field,
     get_property_type,
-    init_notion_client,
-    query_rows_by_filter,
     retrieve_page,
     set_field,
 )
 from reporting.notion.notion_update import format_database_id  # noqa: E402
-from planning._dates import (  # noqa: E402
-    date_to_day_title,
-    parse_single_date,
-    parse_week_start,
+from planning._dates import date_to_day_title  # noqa: E402
+from planning._scheduler_main import (  # noqa: E402
+    drop_already_scheduled,
+    notion_or_none,
+    resolve_scope,
 )
+from planning._wip_rows import iter_wip_pages  # noqa: E402
 from planning._captions import canonical_caption_from_publish_ig  # noqa: E402
 
 Route = Literal["ILL", "POST", "CAROUSEL"]
@@ -198,8 +198,6 @@ def fetch_wip_li_rows(
     (the editorial title is a YYYYMMDD string). If ``days`` is ``None``,
     runs a single query with no date filter and returns every WIP-LI
     row — used by ``--all-wip`` mode."""
-    wip_col = editorial_columns["wip_checkbox"]
-    title_col = editorial_columns["title_day"]
     illust_col = editorial_columns["illustration_rel"]
     article_col = editorial_columns["article_rel"]
     post_url_col = editorial_columns["post_url"]
@@ -207,87 +205,52 @@ def fetch_wip_li_rows(
     newsletter_col = editorial_columns.get("newsletter_rel")
 
     rows: list[ScheduleRow] = []
-
-    def _row_day(r: dict) -> Optional[date]:
-        """Parse the YYYYMMDD title back into a date; None if unparseable."""
-        title_prop = r.get("properties", {}).get(title_col, {}) or {}
-        segs = title_prop.get("title", []) or []
-        text = "".join(seg.get("plain_text", "") for seg in segs).strip()
-        if not text:
-            return None
-        try:
-            return datetime.strptime(text, "%Y%m%d").date()
-        except ValueError:
-            return None
-
-    def _ingest(results, default_day: Optional[date]):
-        for r in results:
-            props = r.get("properties", {})
-            row_day = default_day or _row_day(r)
-            if row_day is None:
-                logger.warning("⚠️  Skipping row %s: unparseable day title.", r.get("id"))
-                continue
-            day_label = date_to_day_title(row_day)
-            illust_rels = props.get(illust_col, {}).get("relation", []) or []
-            article_rels = props.get(article_col, {}).get("relation", []) or []
-            post_rels = (
-                props.get(post_rel_col, {}).get("relation", []) or []
-                if post_rel_col else []
-            )
-            newsletter_rels = (
-                props.get(newsletter_col, {}).get("relation", []) or []
-                if newsletter_col else []
-            )
-            route = _classify_route(
-                len(illust_rels), len(article_rels), len(post_rels), len(newsletter_rels),
-            )
-            if route is None:
-                logger.info(
-                    "⏭️  %s: no matching route "
-                    "(illust=%d article=%d post=%d newsletter=%d) — skipping.",
-                    day_label, len(illust_rels), len(article_rels),
-                    len(post_rels), len(newsletter_rels),
-                )
-                continue
-            existing_url = None
-            url_prop = props.get(post_url_col, {})
-            if url_prop.get("type") == "url":
-                existing_url = url_prop.get("url")
-            rows.append(
-                ScheduleRow(
-                    page_id=r["id"],
-                    day=row_day,
-                    route=route,
-                    illustration_page_id=illust_rels[0]["id"] if illust_rels else None,
-                    post_page_id=post_rels[0]["id"] if post_rels else None,
-                    article_relation_count=len(article_rels),
-                    newsletter_relation_count=len(newsletter_rels),
-                    existing_post_url=existing_url,
-                )
-            )
-
-    if days is None:
-        results = query_rows_by_filter(
-            notion,
-            db_id,
-            filter_obj={"property": wip_col, "checkbox": {"equals": True}},
+    for r, row_day in iter_wip_pages(
+        notion, db_id,
+        wip_col=editorial_columns["wip_checkbox"],
+        title_col=editorial_columns["title_day"],
+        days=days,
+        logger=logger,
+    ):
+        props = r.get("properties", {})
+        day_label = date_to_day_title(row_day)
+        illust_rels = props.get(illust_col, {}).get("relation", []) or []
+        article_rels = props.get(article_col, {}).get("relation", []) or []
+        post_rels = (
+            props.get(post_rel_col, {}).get("relation", []) or []
+            if post_rel_col else []
         )
-        _ingest(results, default_day=None)
-    else:
-        for d in days:
-            title = date_to_day_title(d)
-            results = query_rows_by_filter(
-                notion,
-                db_id,
-                filter_obj={
-                    "and": [
-                        {"property": title_col, "title": {"equals": title}},
-                        {"property": wip_col, "checkbox": {"equals": True}},
-                    ]
-                },
+        newsletter_rels = (
+            props.get(newsletter_col, {}).get("relation", []) or []
+            if newsletter_col else []
+        )
+        route = _classify_route(
+            len(illust_rels), len(article_rels), len(post_rels), len(newsletter_rels),
+        )
+        if route is None:
+            logger.info(
+                "⏭️  %s: no matching route "
+                "(illust=%d article=%d post=%d newsletter=%d) — skipping.",
+                day_label, len(illust_rels), len(article_rels),
+                len(post_rels), len(newsletter_rels),
             )
-            _ingest(results, default_day=d)
-
+            continue
+        existing_url = None
+        url_prop = props.get(post_url_col, {})
+        if url_prop.get("type") == "url":
+            existing_url = url_prop.get("url")
+        rows.append(
+            ScheduleRow(
+                page_id=r["id"],
+                day=row_day,
+                route=route,
+                illustration_page_id=illust_rels[0]["id"] if illust_rels else None,
+                post_page_id=post_rels[0]["id"] if post_rels else None,
+                article_relation_count=len(article_rels),
+                newsletter_relation_count=len(newsletter_rels),
+                existing_post_url=existing_url,
+            )
+        )
     rows.sort(key=lambda r: r.day)
     return rows
 
@@ -1262,34 +1225,14 @@ def main() -> tuple[int, list[dict]]:
     configure_logger("linkedin_schedule", debug=args.debug)
     cfg = load_linkedin_config()
 
-    # Resolve mode (default = dry-run via config).
-    if args.live:
-        dry_run = False
-    elif args.dry_run:
-        dry_run = True
-    else:
-        dry_run = cfg.get("dry_run_default", True)
-
-    if args.all_wip and (args.date or args.week_start):
-        logger.error("❌ --all-wip is mutually exclusive with --date / --week-start.")
+    scope = resolve_scope(args, cfg, wip_label="WIP-LI", log=logger)
+    if scope is None:
         return 2, []
+    dry_run = scope.dry_run
+    target_days = scope.target_days
 
-    if args.all_wip:
-        target_days = None
-        logger.info("🎯 All-WIP mode: ignoring date filter, scheduling every WIP-LI row.")
-    elif args.date:
-        d = parse_single_date(args.date)
-        target_days = [d]
-        logger.info("🎯 Single-day mode: %s", d.isoformat())
-    else:
-        monday = parse_week_start(args.week_start)
-        target_days = [monday + timedelta(days=i) for i in range(7)]
-        logger.info("🗓️  Target week: %s → %s",
-                    target_days[0].isoformat(), target_days[-1].isoformat())
-
-    notion = init_notion_client(load_notion_token())
+    notion = notion_or_none(load_notion_token(), log=logger)
     if notion is None:
-        logger.error("❌ Could not initialize Notion client.")
         return 3, []
 
     rows = fetch_wip_li_rows(
@@ -1309,12 +1252,7 @@ def main() -> tuple[int, list[dict]]:
                     r.day_title, r.route, r.page_id, r.existing_post_url or "(empty)")
 
     # Filter on existing post_url unless --force.
-    if not args.force:
-        before = len(rows)
-        rows = [r for r in rows if not r.existing_post_url]
-        if len(rows) != before:
-            logger.info("⏭️  Skipped %d row(s) whose link LI is already populated (use --force to override).",
-                        before - len(rows))
+    rows = drop_already_scheduled(rows, force=args.force, link_label="LI", log=logger)
     if not rows:
         logger.info("ℹ️ Nothing left to schedule after dedup. Done.")
         return 0, []

@@ -75,6 +75,35 @@ def load_project_config(config_path: Optional[str] = None,
     return config
 
 
+def load_notion_block() -> dict:
+    """Return the ``notion`` block of ``config.json`` (``{}`` if absent).
+
+    Single-source read of the Notion settings through ``config.loader`` — the
+    scripts that used to open ``config.json`` by hand (``notion_update``,
+    ``notion_database_structure``, ``next_relation_check``) all go through it.
+    """
+    return load_full_config().get("notion", {})
+
+
+def load_editorial_notion(database_id_override: Optional[str] = None) -> tuple[str, str]:
+    """Return ``(api_token, editorial_database_id)`` from ``config.json``.
+
+    The editorial DB is the first entry in ``notion.databases`` (matching
+    ``notion_update.py``), unless ``database_id_override`` is given. Raises
+    ``ValueError`` when the token or the database list is missing.
+    """
+    notion_cfg = load_notion_block()
+    api_token = notion_cfg.get("api_token")
+    if not api_token:
+        raise ValueError("notion.api_token missing from config.json")
+    if database_id_override:
+        return api_token, database_id_override
+    databases = notion_cfg.get("databases", [])
+    if not databases:
+        raise ValueError("notion.databases is empty in config.json")
+    return api_token, databases[0]["id"]
+
+
 def notion_rest_headers(api_token: str) -> dict:
     """Standard Notion REST API headers for the hand-rolled ``requests``
     callers (``notion_database_list.py``, ``notion_supabase_sync.py``) that

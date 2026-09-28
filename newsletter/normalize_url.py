@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse, urlunparse
 
@@ -31,20 +30,19 @@ import requests
 
 from config.loader import load_full_config
 from config.logger_config import configure_root_logging
-from newsletter import notion_io
+from newsletter._normalizer_base import NotionArticleNormalizer, run_cli
 
 
-class NotionURLNormalizer:
+class NotionURLNormalizer(NotionArticleNormalizer):
     """Strip tracking query params + fragments from article ``link`` URLs."""
+
+    changed_log_prefix = "Cleaned: "
+    unchanged_log_text = "Already clean"
 
     def __init__(self):
         self.config = self._load_config()
-        self.notion_api_key = self.config["notion_api_key"]
-        self.database_id = self.config["database_id"]
         self.domains_preserving_params = set(self.config.get("domains_preserving_params", []))
-        if not all([self.notion_api_key, self.database_id]):
-            raise ValueError("Missing notion_api_key or articles_db_id in config")
-        self.client = notion_io.init_client(self.notion_api_key)
+        self._setup_api_credentials(self.config["notion_api_key"], self.config["database_id"])
         logging.info("✅ URL normalizer initialized")
         logging.info(f"📊 Database ID: {self.database_id}")
         logging.info(f"🛡️ Preserved domains: {sorted(self.domains_preserving_params)}")
@@ -91,24 +89,6 @@ class NotionURLNormalizer:
         except requests.RequestException as e:
             return False, f"Failed: {type(e).__name__}"
 
-    def _query_notion_database(self, days: int) -> List[Dict[str, Any]]:
-        filter_date = datetime.utcnow() - timedelta(days=days)
-        filter_date_str = filter_date.isoformat() + "Z"
-        logging.info(
-            f"🔍 Querying articles created since {filter_date_str} ({days} days back)"
-        )
-        query_filter = {"and": [{"property": "created", "created_time": {"after": filter_date_str}}]}
-        sorts = [{"property": "created", "direction": "descending"}]
-        try:
-            pages = notion_io.query_database(
-                self.client, self.database_id, query_filter=query_filter, sorts=sorts,
-            )
-        except Exception as e:
-            logging.error(f"❌ Notion API error: {e}")
-            raise
-        logging.info(f"📊 Total pages retrieved: {len(pages)}")
-        return pages
-
     @staticmethod
     def _extract_page_info(page: Dict[str, Any]) -> Optional[Tuple[str, str, str]]:
         page_id = page.get("id", "")
@@ -121,52 +101,23 @@ class NotionURLNormalizer:
             return None
         return page_id, last_edited, url_content
 
-    def _update_page_url(self, page_id: str, new_url: str) -> bool:
-        properties = {"link": {"url": new_url}}
-        try:
-            notion_io.update_page(self.client, page_id, properties)
-            return True
-        except Exception as e:
-            logging.error(f"❌ Failed to update page {page_id[:8]}…: {e}")
-            return False
+    def _transform(self, original: str) -> str:
+        return self._clean_url(original)
+
+    def _patch_properties(self, new_value: str) -> Dict[str, Any]:
+        return {"link": {"url": new_value}}
+
+    def _result_row(self, page_id: str, last_edited: str, original: str, new_value: str) -> Dict[str, Any]:
+        return {"page_id": page_id, "original_url": original, "cleaned_url": new_value}
 
     def process_database(self, days: int, dry_run: bool = False,
                          testing_mode: bool = False) -> List[Dict[str, Any]]:
-        pages = self._query_notion_database(days)
-        results: List[Dict[str, Any]] = []
-        stats = {"processed": 0, "updated": 0, "unchanged": 0, "would_update": 0}
-        if dry_run:
-            logging.info("🔍 DRY RUN MODE: no Notion writes")
-        for page in pages:
-            info = self._extract_page_info(page)
-            if not info:
-                continue
-            page_id, _, original_url = info
-            cleaned = self._clean_url(original_url)
-            validation = ""
-            if testing_mode:
-                ok, msg = self._check_url_validity(cleaned)
-                validation = f" [{'✅' if ok else '❌'} {msg}]"
-            results.append({"page_id": page_id, "original_url": original_url, "cleaned_url": cleaned})
-            stats["processed"] += 1
-            if original_url != cleaned:
-                if dry_run:
-                    stats["would_update"] += 1
-                    logging.info(f'📝 [DRY RUN] "{original_url}" → "{cleaned}"{validation}')
-                else:
-                    if self._update_page_url(page_id, cleaned):
-                        stats["updated"] += 1
-                        logging.info(f'📝 Cleaned: "{original_url}" → "{cleaned}"{validation}')
-                    else:
-                        logging.error(f'❌ Failed to update: "{original_url}"')
-            else:
-                stats["unchanged"] += 1
-                logging.info(f'✅ Already clean: "{original_url}"{validation}')
-        if dry_run:
-            logging.info(f"✅ Processed {stats['processed']} pages — would update {stats['would_update']}, unchanged {stats['unchanged']}")
-        else:
-            logging.info(f"✅ Processed {stats['processed']} pages — updated {stats['updated']}, unchanged {stats['unchanged']}")
-        return results
+        note = self._validity_note if testing_mode else None
+        return super().process_database(days, dry_run, note=note)
+
+    def _validity_note(self, url: str) -> str:
+        ok, msg = self._check_url_validity(url)
+        return f" [{'✅' if ok else '❌'} {msg}]"
 
 
 # --------------------------------------------------------------- callable entry
@@ -181,35 +132,29 @@ def run(days: int = 14, dry_run: bool = False, testing_mode: bool = False,
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--days", type=int, default=14)
-    parser.add_argument("--debug", action="store_true")
-    parser.add_argument("--test", type=str, help="Clean one URL and exit")
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--testing", action="store_true",
-                        help="HEAD/GET each cleaned URL to verify it resolves")
-    args = parser.parse_args()
-    configure_root_logging(args.debug)
-    try:
-        if args.test:
-            normaliser = NotionURLNormalizer()
-            out = normaliser._clean_url(args.test)
-            logging.info("Original: %s", args.test)
-            logging.info("Cleaned:  %s", out)
-            logging.info("Changed:  %s", "yes" if args.test != out else "no")
-            if args.testing:
-                ok, msg = normaliser._check_url_validity(out)
-                logging.info("Validation: %s %s", "✅" if ok else "❌", msg)
-            return 0
+    def _test(args: argparse.Namespace) -> None:
+        normaliser = NotionURLNormalizer()
+        out = normaliser._clean_url(args.test)
+        logging.info("Original: %s", args.test)
+        logging.info("Cleaned:  %s", out)
+        logging.info("Changed:  %s", "yes" if args.test != out else "no")
+        if args.testing:
+            ok, msg = normaliser._check_url_validity(out)
+            logging.info("Validation: %s %s", "✅" if ok else "❌", msg)
+
+    def _run(args: argparse.Namespace) -> None:
         run(days=args.days, dry_run=args.dry_run,
             testing_mode=args.testing, debug=args.debug)
-        logging.info("✅ Done")
-        return 0
-    except Exception as e:
-        logging.error(f"❌ Fatal: {e}")
-        if args.debug:
-            logging.exception("Traceback:")
-        return 1
+
+    return run_cli(
+        __doc__,
+        test_help="Clean one URL and exit",
+        on_test=_test,
+        on_run=_run,
+        extra_args=lambda p: p.add_argument(
+            "--testing", action="store_true",
+            help="HEAD/GET each cleaned URL to verify it resolves"),
+    )
 
 
 if __name__ == "__main__":

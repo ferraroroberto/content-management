@@ -26,7 +26,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 from typing import Optional
 
@@ -42,19 +42,13 @@ from planning.twitter.twitter_labels import (  # noqa: E402
     SCHEDULE_TOOLBAR_BTN_RE,
 )
 from planning.twitter.twitter_session import (  # noqa: E402
-    LoginRequiredError,
     TwitterSession,
     configure_logger,
     load_notion_token,
     load_twitter_config,
 )
-from reporting.notion.editorial import (  # noqa: E402
-    init_notion_client,
-    set_field,
-)
-from reporting.notion.notion_update import format_database_id  # noqa: E402
-from planning._dates import parse_single_date, parse_week_start  # noqa: E402
-from planning._failure import PostMayBeLiveError, attempt_row  # noqa: E402
+from planning._failure import PostMayBeLiveError  # noqa: E402
+from planning._scheduler_main import run_single_post_scheduler  # noqa: E402
 from planning._waits import (  # noqa: E402
     CLICK_TIMEOUT_MS,
     click_until_effect,
@@ -591,141 +585,24 @@ def main() -> tuple[int, list[dict]]:
     args = parse_args()
     configure_logger("twitter_schedule", debug=args.debug)
     cfg = load_twitter_config()
+    def _after_login(page: Page) -> None:
+        _dismiss_blocking_modals(page)
+        page.wait_for_timeout(400)
 
-    if args.live:
-        dry_run = False
-    elif args.dry_run:
-        dry_run = True
-    else:
-        dry_run = cfg.get("dry_run_default", True)
-
-    if args.all_wip and (args.date or args.week_start):
-        logger.error("❌ --all-wip is mutually exclusive with --date / --week-start.")
-        return 2, []
-
-    if args.all_wip:
-        target_days = None
-        logger.info("🎯 All-WIP mode: ignoring date filter, scheduling every WIP-TW row.")
-    elif args.date:
-        d = parse_single_date(args.date)
-        target_days = [d]
-        logger.info("🎯 Single-day mode: %s", d.isoformat())
-    else:
-        monday = parse_week_start(args.week_start)
-        target_days = [monday + timedelta(days=i) for i in range(7)]
-        logger.info("🗓️  Target week: %s → %s",
-                    target_days[0].isoformat(), target_days[-1].isoformat())
-
-    notion = init_notion_client(load_notion_token())
-    if notion is None:
-        logger.error("❌ Could not initialize Notion client.")
-        return 3, []
-
-    db_id = format_database_id(cfg["editorial_db_id"])
-    rows = fetch_wip_tw_rows(notion, db_id, cfg["editorial_columns"], target_days)
-    if not rows:
-        logger.warning("⚠️ No WIP-TW rows in target range. Nothing to do.")
-        return 0, []
-
-    logger.info("📋 %d in-scope row(s):", len(rows))
-    for r in rows:
-        logger.info("   - %s (page=%s, link TW=%s)",
-                    r.day_title, r.page_id, r.existing_post_url or "(empty)")
-
-    if not args.force:
-        before = len(rows)
-        rows = [r for r in rows if not r.existing_post_url]
-        if len(rows) != before:
-            logger.info(
-                "⏭️  Skipped %d row(s) whose link TW is already populated (use --force to override).",
-                before - len(rows),
-            )
-    if not rows:
-        logger.info("ℹ️ Nothing left to schedule after dedup. Done.")
-        return 0, []
-
-    # Pre-resolve payloads BEFORE launching Chrome — fail fast on missing files.
-    plans: list[tuple[ScheduleRow, PostPayload]] = []
-    results: list[dict] = []
-    for row in rows:
-        try:
-            payload = resolve_payload(notion, cfg, row)
-        except (RuntimeError, FileNotFoundError) as err:
-            logger.error("❌ %s payload resolution failed: %s", row.day_title, err)
-            results.append({"day": row.day_title, "status": "FAIL", "detail": f"payload resolution: {err}"})
-            continue
-        logger.info(
-            "🖼️ %s: image=%s, caption=%d chars",
-            row.day_title, payload.image_path.name, len(payload.caption),
-        )
-        plans.append((row, payload))
-
-    if not plans:
-        logger.warning("⚠️ All rows failed payload resolution. Nothing to do.")
-        return 11, results
-
-    statuses: list[str] = []
-    with TwitterSession(cfg) as session:
-        try:
-            session.goto_with_login_check(cfg["feed_url"])
-        except LoginRequiredError as err:
-            logger.error("❌ %s", err)
-            for row, _ in plans:
-                results.append({"day": row.day_title, "status": "LOGIN-REQUIRED", "detail": str(err)})
-            return 4, results
-        session.page.wait_for_timeout(3500)
-        _dismiss_blocking_modals(session.page)
-        session.page.wait_for_timeout(400)
-
-        for row, payload in plans:
-            return_to_home(session.page, cfg["feed_url"])
-
-            def _reset() -> None:
-                """Clean slate between attempts — a half-filled composer left
-                by the failed attempt would otherwise capture the retry."""
-                _cancel_composer(session.page)
-                return_to_home(session.page, cfg["feed_url"])
-
-            try:
-                status = attempt_row(
-                    lambda: schedule_post(session, cfg, row, payload, dry_run=dry_run),
-                    label=row.day_title,
-                    reset=_reset,
-                )
-            except (RuntimeError, PWTimeoutError) as err:
-                shot = session.screenshot_failure(f"{row.day_title}-error")
-                logger.error("❌ %s post failed: %s (screenshot %s)", row.day_title, err, shot)
-                _cancel_composer(session.page)
-                return_to_home(session.page, cfg["feed_url"])
-                statuses.append(f"{row.day_title}: post:FAIL({err})")
-                results.append({"day": row.day_title, "status": "FAIL", "detail": f"{err} (screenshot {shot})"})
-                continue
-
-            statuses.append(f"{row.day_title}: {status}")
-            if dry_run:
-                results.append({"day": row.day_title, "status": "DRY", "detail": status})
-            else:
-                results.append({"day": row.day_title, "status": "LIVE", "detail": status})
-
-            # Untick WIP TW only on a fully-successful LIVE day.
-            if not dry_run and "LIVE" in status:
-                try:
-                    set_field(
-                        notion, row.page_id, "wip_checkbox", False,
-                        cfg["editorial_columns"], "checkbox",
-                    )
-                    logger.info("☑️ %s: WIP-TW unticked in Notion", row.day_title)
-                except Exception as err:
-                    logger.warning(
-                        "⚠️ %s: scheduled OK but failed to untick WIP-TW: %s",
-                        row.day_title, err,
-                    )
-
-    logger.info("══════════ Summary ══════════")
-    for s in statuses:
-        logger.info("   %s", s)
-    failed = [r for r in results if r["status"] in ("FAIL", "LOGIN-REQUIRED")]
-    return (0 if not failed else 11), results
+    return run_single_post_scheduler(
+        args,
+        platform="TW",
+        log=logger,
+        cfg=cfg,
+        load_token=load_notion_token,
+        session_cls=TwitterSession,
+        fetch_rows=fetch_wip_tw_rows,
+        resolve_payload=resolve_payload,
+        schedule_post=schedule_post,
+        cancel_composer=_cancel_composer,
+        return_home=return_to_home,
+        after_login=_after_login,
+    )
 
 
 if __name__ == "__main__":

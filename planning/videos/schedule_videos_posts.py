@@ -34,7 +34,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date
 from pathlib import Path
 from typing import Optional
 
@@ -51,16 +51,15 @@ from planning.videos.videos_session import (  # noqa: E402
 )
 from reporting.notion.editorial import (  # noqa: E402
     get_field,
-    init_notion_client,
-    query_rows_by_filter,
     set_field,
 )
 from reporting.notion.notion_update import format_database_id  # noqa: E402
-from planning._dates import (  # noqa: E402
-    date_to_day_title,
-    parse_single_date,
-    parse_week_start,
+from planning._dates import date_to_day_title  # noqa: E402
+from planning._scheduler_main import (  # noqa: E402
+    notion_or_none,
+    resolve_scope,
 )
+from planning._wip_rows import iter_wip_pages  # noqa: E402
 
 logger = logging.getLogger("videos_schedule")
 
@@ -114,111 +113,72 @@ def fetch_wip_video_rows(notion, db_id: str, video_cols: dict,
     .mp4, etc.) are returned with ``payload=None``-style sentinels so the
     orchestrator can surface them as FAIL in the summary.
     """
-    wip_col = video_cols["wip_checkbox"]
-    title_col = video_cols["title_day"]
+    rows: list[_RowState] = []
+    for r, row_day in iter_wip_pages(
+        notion, db_id,
+        wip_col=video_cols["wip_checkbox"],
+        title_col=video_cols["title_day"],
+        days=days,
+        logger=logger,
+    ):
+        # In-scope per platform = the platform-specific clip relation is set,
+        # OR the platform is a "tag-along" (no per-platform column on the DB)
+        # and ANY other platform's clip relation is populated.
+        props = r.get("properties", {})
+        in_scope: dict[str, bool] = {}
+        any_clip_populated = False
+        for p in PLATFORMS_SCHEDULED:
+            col = video_cols.get(f"clip_rel_{p}")
+            rels = props.get(col, {}).get("relation", []) or [] if col else []
+            in_scope[p] = bool(rels)
+            if rels:
+                any_clip_populated = True
+        for p in PLATFORMS_TAG_ALONG:
+            if not in_scope.get(p):
+                in_scope[p] = any_clip_populated
 
-    def _row_day(r: dict) -> Optional[date]:
-        title_prop = r.get("properties", {}).get(title_col, {}) or {}
-        segs = title_prop.get("title", []) or []
-        text = "".join(seg.get("plain_text", "") for seg in segs).strip()
-        if not text:
-            return None
+        # Existing link <P>(v) per platform — drives idempotency.
+        link_status: dict[str, Optional[str]] = {}
+        for p in PLATFORMS_SCHEDULED + ("sb",):
+            col = video_cols.get(f"post_url_{p}")
+            if not col:
+                link_status[p] = None
+                continue
+            url_obj = props.get(col, {})
+            link_status[p] = url_obj.get("url") if url_obj.get("type") == "url" else None
+
+        # Resolve the shared clip payload via the first populated relation.
         try:
-            return datetime.strptime(text, "%Y%m%d").date()
-        except ValueError:
-            return None
-
-    def _ingest(results, default_day: Optional[date]) -> list[_RowState]:
-        rows: list[_RowState] = []
-        for r in results:
-            row_day = default_day or _row_day(r)
-            if row_day is None:
-                logger.warning(
-                    "⚠️ Skipping row %s: day title is empty / not YYYYMMDD. "
-                    "Likely a stale scratch/template row — consider archiving "
-                    "it in Notion (%s).",
-                    r.get("id"), r.get("url") or "(no url)",
-                )
-                continue
-
-            # In-scope per platform = the platform-specific clip relation is set,
-            # OR the platform is a "tag-along" (no per-platform column on the DB)
-            # and ANY other platform's clip relation is populated.
-            props = r.get("properties", {})
-            in_scope: dict[str, bool] = {}
-            any_clip_populated = False
-            for p in PLATFORMS_SCHEDULED:
-                col = video_cols.get(f"clip_rel_{p}")
-                rels = props.get(col, {}).get("relation", []) or [] if col else []
-                in_scope[p] = bool(rels)
-                if rels:
-                    any_clip_populated = True
-            for p in PLATFORMS_TAG_ALONG:
-                if not in_scope.get(p):
-                    in_scope[p] = any_clip_populated
-
-            # Existing link <P>(v) per platform — drives idempotency.
-            link_status: dict[str, Optional[str]] = {}
-            for p in PLATFORMS_SCHEDULED + ("sb",):
-                col = video_cols.get(f"post_url_{p}")
-                if not col:
-                    link_status[p] = None
-                    continue
-                url_obj = props.get(col, {})
-                link_status[p] = url_obj.get("url") if url_obj.get("type") == "url" else None
-
-            # Resolve the shared clip payload via the first populated relation.
-            try:
-                payload = load_clip_payload(notion, r, video_cols, clip_cols)
-            except (RuntimeError, FileNotFoundError) as err:
-                logger.error(
-                    "❌ %s: clip payload resolution failed: %s",
-                    date_to_day_title(row_day), err,
-                )
-                # Surface as a state with empty payload so summary shows FAIL.
-                state = _RowState(
-                    page_id=r["id"], day=row_day,
-                    payload=ClipPayload(
-                        clip_page_id="",
-                        title="(unresolved)",
-                        video_path=Path(""),
-                        thumb_path=Path(""),
-                        caption_short="",
-                        caption_long="",
-                    ),
-                    link_status=link_status,
-                    in_scope=in_scope,
-                )
-                for p in PLATFORMS_SCHEDULED:
-                    state.driver_status[p] = "FAIL"
-                    state.driver_detail[p] = f"payload resolution: {err}"
-                rows.append(state)
-                continue
-
-            rows.append(_RowState(
-                page_id=r["id"], day=row_day, payload=payload,
-                link_status=link_status, in_scope=in_scope,
-            ))
-        return rows
-
-    if days is None:
-        results = query_rows_by_filter(
-            notion, db_id,
-            filter_obj={"property": wip_col, "checkbox": {"equals": True}},
-        )
-        rows = _ingest(results, default_day=None)
-    else:
-        rows = []
-        for d in days:
-            title = date_to_day_title(d)
-            r2 = query_rows_by_filter(
-                notion, db_id,
-                filter_obj={"and": [
-                    {"property": title_col, "title": {"equals": title}},
-                    {"property": wip_col, "checkbox": {"equals": True}},
-                ]},
+            payload = load_clip_payload(notion, r, video_cols, clip_cols)
+        except (RuntimeError, FileNotFoundError) as err:
+            logger.error(
+                "❌ %s: clip payload resolution failed: %s",
+                date_to_day_title(row_day), err,
             )
-            rows.extend(_ingest(r2, default_day=d))
+            # Surface as a state with empty payload so summary shows FAIL.
+            state = _RowState(
+                page_id=r["id"], day=row_day,
+                payload=ClipPayload(
+                    clip_page_id="",
+                    title="(unresolved)",
+                    video_path=Path(""),
+                    thumb_path=Path(""),
+                    caption_short="",
+                    caption_long="",
+                ),
+                link_status=link_status,
+                in_scope=in_scope,
+            )
+            for p in PLATFORMS_SCHEDULED:
+                state.driver_status[p] = "FAIL"
+                state.driver_detail[p] = f"payload resolution: {err}"
+            rows.append(state)
+            continue
+
+        rows.append(_RowState(
+            page_id=r["id"], day=row_day, payload=payload,
+            link_status=link_status, in_scope=in_scope,
+        ))
 
     rows.sort(key=lambda r: r.day)
     return rows
@@ -461,33 +421,14 @@ def main() -> tuple[int, list[dict]]:
         configure_logger(name, debug=args.debug)
     cfg = load_videos_config()
 
-    if args.live:
-        dry_run = False
-    elif args.dry_run:
-        dry_run = True
-    else:
-        dry_run = cfg.get("dry_run_default", True)
-
-    if args.all_wip and (args.date or args.week_start):
-        logger.error("❌ --all-wip is mutually exclusive with --date / --week-start.")
+    scope = resolve_scope(args, cfg, wip_label="WIP-Video", log=logger)
+    if scope is None:
         return 2, []
+    dry_run = scope.dry_run
+    target_days = scope.target_days
 
-    if args.all_wip:
-        target_days = None
-        logger.info("🎯 All-WIP mode: scheduling every WIP-Video row.")
-    elif args.date:
-        d = parse_single_date(args.date)
-        target_days = [d]
-        logger.info("🎯 Single-day mode: %s", d.isoformat())
-    else:
-        monday = parse_week_start(args.week_start)
-        target_days = [monday + timedelta(days=i) for i in range(7)]
-        logger.info("🗓️  Target week: %s → %s",
-                    target_days[0].isoformat(), target_days[-1].isoformat())
-
-    notion = init_notion_client(load_notion_token())
+    notion = notion_or_none(load_notion_token(), log=logger)
     if notion is None:
-        logger.error("❌ Could not initialize Notion client.")
         return 3, []
 
     db_id = format_database_id(cfg["editorial_db_id"])
