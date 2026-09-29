@@ -258,7 +258,13 @@ def _aggregate_row_status(state: _RowState, dry_run: bool) -> tuple[str, str]:
     if all(s in ("SKIP", "FAIL") for s in statuses) and any(s == "FAIL" for s in statuses):
         return "FAIL", ", ".join(parts)
     if dry_run:
-        return ("DRY" if any(s == "DRY" for s in statuses) else "FAIL"), ", ".join(parts)
+        has_dry = any(s == "DRY" for s in statuses)
+        has_fail = any(s == "FAIL" for s in statuses)
+        if has_fail:
+            # A failed leg must never read as a clean DRY (issue #321): report
+            # PARTIAL when another leg still ran dry-clean, FAIL when none did.
+            return ("PARTIAL" if has_dry else "FAIL"), ", ".join(parts)
+        return "DRY", ", ".join(parts)
 
     has_live = any(s == "LIVE" for s in statuses)
     has_fail = any(s == "FAIL" for s in statuses)

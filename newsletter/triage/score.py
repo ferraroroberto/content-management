@@ -29,6 +29,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from newsletter import llm
 from newsletter.topics import TOPICS, match_topic
+from newsletter.triage.criteria import load_overrides
 
 logger = logging.getLogger("newsletter_triage.score")
 
@@ -88,9 +89,24 @@ MULTI_PICK_SENDERS = ("readwise.io", "hbr.org")   # digests where >1 pick per em
 
 
 class Priors:
-    def __init__(self, criteria: Dict[str, Any]) -> None:
+    def __init__(self, criteria: Dict[str, Any], *, live_overrides: Optional[Dict[str, Any]] = None) -> None:
         self.criteria = criteria
         self.overrides: Dict[str, Dict[str, Any]] = {k.lower(): v for k, v in criteria.get("sender_overrides", {}).items()}
+        # The baked copy above is only as fresh as the last
+        # `python -m newsletter.triage.criteria` build; nothing in the run/
+        # review flow re-runs it, so a tier the owner sets today (Apply, the
+        # tier picker, feedback.py) would silently keep being ignored until
+        # the next rebuild (issue #321). Read the live overrides.json on every
+        # run and let it win over the baked copy. ``live_overrides`` is an
+        # injection point for tests; production callers always take the
+        # default (a fresh disk read).
+        if live_overrides is None:
+            try:
+                live_overrides = load_overrides().get("senders", {})
+            except Exception as exc:
+                logger.warning("⚠️ live overrides.json unreadable (%s) — using baked criteria.json copy only", exc)
+                live_overrides = {}
+        self.overrides.update({k.lower(): v for k, v in live_overrides.items()})
         self.ranked: Dict[str, Dict[str, Any]] = {r["address"].lower(): r for r in criteria.get("sender_priors", {}).get("ranked", [])}
         self.floor: Dict[str, Dict[str, Any]] = {r["address"].lower(): r for r in criteria.get("sender_priors", {}).get("floor", [])}
         self.domains: Dict[str, Dict[str, Any]] = {d["domain"]: d for d in criteria.get("domain_priors", [])}

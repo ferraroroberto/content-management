@@ -235,8 +235,11 @@ def run_window(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[st
             raise RunExists(f"window {start} → {end} ({kind}) already stored as run {prev['id']} "
                             f"({prev.get('status')}, {str(prev.get('finished_at') or prev.get('started_at'))[:16]}) "
                             f"— re-run with --force to replace it")
-        if edition_hint is None and kind == "live":
-            edition_hint = db.next_edition_number()
+        # `db.next_edition_number()` reads `triage_editions`, a table filled once
+        # by `import-history` and never refreshed (issue #321) — every live
+        # report has shown the same stale number since. Leave `edition_hint`
+        # unset here; `_run_window_body` already falls back to the honest
+        # "next free edition" label below rather than a fabricated one.
         run_id = db.register_run(start, end, kind=kind, edition=backtest.get("edition") if backtest else None,
                                  source=source, model=model, criteria_version=str(criteria.get("version", "")))
     try:

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import re
 import sys
 from typing import Optional
 
@@ -46,14 +47,29 @@ _INTERACTIVE_ROLES = (
 _CONTEXT_ROLES = ("dialog", "heading", "alertdialog", "menu", "listbox")
 
 
-def _walk(node: dict, out: list[tuple[str, str]]) -> None:
-    """Depth-first collect ``(role, name)`` pairs from an a11y snapshot."""
-    role = (node.get("role") or "").strip()
-    name = (node.get("name") or "").strip()
-    if role and name:
-        out.append((role, name))
-    for child in node.get("children", []) or []:
-        _walk(child, out)
+# Matches a top-level node line in Playwright's ``aria_snapshot()`` YAML dump,
+# e.g. `- button "Submit"` or `- link "Home Link":`. Nested non-ARIA property
+# lines (e.g. `- /url: "#"`) start with a non-letter and don't match.
+_ARIA_NODE_RE = re.compile(r'^\s*-\s+([a-zA-Z][\w-]*)\s+"([^"]*)"')
+
+
+def _parse_aria_snapshot(snapshot: str) -> list[tuple[str, str]]:
+    """Collect ``(role, name)`` pairs from a Playwright ``aria_snapshot()`` dump.
+
+    ``aria_snapshot()`` renders the accessibility tree as indented YAML text
+    rather than the nested-dict shape the old (removed) ``page.accessibility``
+    API returned, so this parses lines instead of walking a tree. Order is
+    preserved top-to-bottom, matching the previous depth-first walk.
+    """
+    pairs: list[tuple[str, str]] = []
+    for line in snapshot.splitlines():
+        m = _ARIA_NODE_RE.match(line)
+        if not m:
+            continue
+        role, name = m.group(1).strip(), m.group(2).strip()
+        if role and name:
+            pairs.append((role, name))
+    return pairs
 
 
 def _format(url: str, title: str, pairs: list[tuple[str, str]]) -> str:
@@ -117,11 +133,9 @@ def probe(platform: str, url: Optional[str] = None, *, save_screenshot: bool = T
 
     with session_cls(cfg) as session:
         session.goto_with_login_check(target)
-        snapshot = session.page.accessibility.snapshot(interesting_only=True)
+        snapshot = session.page.locator("body").aria_snapshot()
         title = session.page.title()
-        pairs: list[tuple[str, str]] = []
-        if snapshot:
-            _walk(snapshot, pairs)
+        pairs = _parse_aria_snapshot(snapshot) if snapshot else []
         if save_screenshot:
             session.screenshot_failure(f"probe-{key}")
         return _format(target, title, pairs)

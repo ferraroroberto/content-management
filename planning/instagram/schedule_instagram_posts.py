@@ -995,10 +995,10 @@ def main() -> tuple[int, list[dict]]:
 
             all_live = all("LIVE" in s for s in day_statuses)
             any_fail = any("FAIL" in s for s in day_statuses)
-            if dry_run:
-                row_status = "DRY"
-            elif any_fail:
+            if any_fail:
                 row_status = "FAIL"
+            elif dry_run:
+                row_status = "DRY"
             elif all_live:
                 row_status = "LIVE"
             else:

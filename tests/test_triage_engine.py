@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -144,6 +145,27 @@ class PriorsTests(unittest.TestCase):
         self.assertEqual(sc.match_topic("Leadership & Management"), "leadership and management")
         self.assertEqual(sc.match_topic("Personal Development"), "personal development")
 
+    def test_live_overrides_take_precedence_over_baked_copy(self) -> None:
+        # issue #321: overrides.json is the owner's *current* tiers (Apply, the
+        # tier picker, feedback.py); the baked ``sender_overrides`` copy in
+        # criteria.json is only as fresh as the last `criteria` build, which
+        # nothing in the run/review flow re-runs — live must win.
+        pr = sc.Priors(
+            {"sender_overrides": {"stale@x.com": {"tier": "always"}}},
+            live_overrides={"stale@x.com": {"tier": "never"}, "fresh@x.com": {"tier": "usually"}},
+        )
+        self.assertEqual(pr.sender("stale@x.com")[0], 0.0)
+        self.assertEqual(pr.sender("fresh@x.com")[0], 1.25)
+
+    def test_defaults_to_reading_overrides_json_from_disk(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "overrides.json"
+            path.write_text(json.dumps({"senders": {"live@x.com": {"tier": "always"}}}), encoding="utf-8")
+            with mock.patch.object(sc, "load_overrides",
+                                   lambda: json.loads(path.read_text(encoding="utf-8"))):
+                pr = sc.Priors({"sender_overrides": {}})
+        self.assertEqual(pr.sender("live@x.com")[0], 1.5)
+
 
 class PaywallTests(unittest.TestCase):
     def test_substack_hard_wall(self) -> None:
@@ -220,19 +242,3 @@ class YouTubeUrlTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-class YouTubeUrlTests(unittest.TestCase):
-    def test_watch_slash_form_normalises(self) -> None:  # issue #224 — oembed 404s on youtube.com/watch/?v=
-        self.assertEqual(fx.youtube_watch_url("https://youtube.com/watch/?v=oCVq-wAPqSs"),
-                         "https://www.youtube.com/watch?v=oCVq-wAPqSs")
-        self.assertEqual(fx.youtube_watch_url("https://www.youtube.com/watch?t=266&v=TmNARZonhvY&feature=youtu.be"),
-                         "https://www.youtube.com/watch?v=TmNARZonhvY")
-        self.assertEqual(fx.youtube_watch_url("https://youtu.be/oCVq-wAPqSs?si=abc"),
-                         "https://www.youtube.com/watch?v=oCVq-wAPqSs")
-        self.assertEqual(fx.youtube_watch_url("https://www.youtube.com/shorts/oCVq-wAPqSs"),
-                         "https://www.youtube.com/watch?v=oCVq-wAPqSs")
-
-    def test_no_video_id_passes_through(self) -> None:
-        self.assertIsNone(fx.youtube_watch_url("https://www.youtube.com/playlist?list=PLbN57C5Zdl6j"))
-        self.assertIsNone(fx.youtube_watch_url("https://www.youtube.com/@JasonHeadley/videos"))
-        self.assertIsNone(fx.youtube_watch_url("https://example.com/watch?v=abc"))

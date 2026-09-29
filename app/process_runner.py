@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import logging
 import os
-import signal
 import subprocess
 import sys
 import threading
@@ -237,11 +236,23 @@ def stop_pipeline(name: str) -> None:
         return
     try:
         if sys.platform == "win32":
-            proc.send_signal(signal.CTRL_BREAK_EVENT)
+            # CTRL_BREAK_EVENT only reaches a child sharing our console. Every
+            # pipeline child here gets its own hidden (CREATE_NEW_PROCESS_GROUP)
+            # or visible (CREATE_NEW_CONSOLE) console, so the event never
+            # arrives and the child silently keeps running. Kill the whole
+            # process tree instead.
+            subprocess.run(
+                ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                creationflags=subprocess.CREATE_NO_WINDOW,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
         else:
             proc.terminate()
     except Exception as err:
         logger.warning("stop %s: %s", name, err)
+        _get_lines(name).append(f"[stop error] failed to stop {name}: {err}")
 
 
 def clear_log(name: str) -> None:
