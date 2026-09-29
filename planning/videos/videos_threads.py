@@ -21,20 +21,20 @@ from planning.threads.threads_session import (  # noqa: E402
     ThreadsSession,
     load_threads_config,
 )
-from planning.threads.schedule_threads_posts import (  # noqa: E402
-    _cancel_composer,
-    _click_calendar_day,
-    _click_calendar_done,
-    _click_final_schedule_action,
-    _click_schedule_menuitem,
-    _navigate_calendar_month,
-    _open_composer,
-    _open_three_dots_menu,
-    _set_calendar_time,
-    _type_caption,
-    _upload_image,
-    _wait_composer_closes,
-    return_to_profile,
+from planning.threads.schedule_threads_posts import return_to_profile  # noqa: E402
+from planning.threads.threads_composer import (  # noqa: E402
+    cancel_composer,
+    click_calendar_day,
+    click_calendar_done,
+    click_final_schedule_action,
+    click_schedule_menuitem,
+    navigate_calendar_month,
+    open_composer,
+    open_three_dots_menu,
+    set_calendar_time,
+    type_caption,
+    upload_image,
+    wait_composer_closes,
 )
 from planning.threads.threads_labels import DISCARD_BTN_RE  # noqa: E402
 from planning.videos.videos_session import (  # noqa: E402
@@ -56,16 +56,16 @@ def schedule_one_video(
     page = session.page
     label = row.day_title
 
-    _open_composer(page)
-    _type_caption(page, row.payload.caption_short)
+    open_composer(page)
+    type_caption(page, row.payload.caption_short)
     # Threads composer's fileInput accepts .mp4 directly — same helper as image.
-    _upload_image(page, row.payload.video_path)
+    upload_image(page, row.payload.video_path)
     page.wait_for_timeout(2500)
-    _open_three_dots_menu(page)
-    _click_schedule_menuitem(page)
-    _navigate_calendar_month(page, row.day)
-    _click_calendar_day(page, row.day)
-    _set_calendar_time(
+    open_three_dots_menu(page)
+    click_schedule_menuitem(page)
+    navigate_calendar_month(page, row.day)
+    click_calendar_day(page, row.day)
+    set_calendar_time(
         page, video_cfg["post_hour_local"], video_cfg["post_minute_local"],
     )
 
@@ -76,7 +76,7 @@ def schedule_one_video(
         shot = out_dir / f"{label}-th-dryrun.png"
         page.screenshot(path=str(shot), full_page=False)
         logger.info("✅ DRY-RUN %s TH: calendar populated, screenshot → %s", label, shot)
-        _cancel_composer(page)
+        cancel_composer(page)
         for _ in range(3):
             try:
                 btn = page.get_by_role("button", name=DISCARD_BTN_RE)
@@ -88,12 +88,12 @@ def schedule_one_video(
                 pass
         return "TH:DRY"
 
-    _click_calendar_done(page)
-    _click_final_schedule_action(page)
+    click_calendar_done(page)
+    click_final_schedule_action(page)
     # A large clip keeps uploading after Schedule; the New-thread dialog only
     # closes once it finalizes. Use the video budget, not the image-sized
     # default (issue #106).
-    if not _wait_composer_closes(page, timeout_ms=VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS):
+    if not wait_composer_closes(page, timeout_ms=VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS):
         shot = out_dir / f"{label}-th-FAIL.png"
         page.screenshot(path=str(shot), full_page=False)
         raise RuntimeError(f"TH composer did not close — see {shot}")
@@ -129,7 +129,7 @@ def run(rows: list[VideoRow], video_cfg: dict, *, dry_run: bool) -> list[dict]:
             except (RuntimeError, PWTimeoutError) as err:
                 shot = session.screenshot_failure(f"{row.day_title}-th-video-error")
                 logger.error("❌ TH %s failed: %s (screenshot %s)", row.day_title, err, shot)
-                _cancel_composer(session.page)
+                cancel_composer(session.page)
                 return_to_profile(session.page, th_cfg["feed_url"])
                 results.append({
                     "day": row.day_title,

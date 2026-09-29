@@ -47,9 +47,9 @@ flowchart TB
 
   subgraph planning_mod["planning/ — weekly schedulers (native UI, one Chrome profile each)"]
     LI["linkedin/\nschedule_linkedin_posts + linkedin_composer\n(ILL / POST / CAROUSEL routes)"]
-    IG["instagram/\nschedule_instagram_posts +\nclone_to_other_platforms"]
-    TW["twitter/schedule_twitter_posts"]
-    TH["threads/schedule_threads_posts"]
+    IG["instagram/\nschedule_instagram_posts + instagram_composer +\nclone_to_other_platforms"]
+    TW["twitter/schedule_twitter_posts + twitter_composer"]
+    TH["threads/schedule_threads_posts + threads_composer"]
     SUBSTACKDAILY["substack/\ndaily_pipeline (invoked from reporting) +\npost_substack_note (note_source: playwright | native) /\npost_substack_video_note (note_source: playwright | native)"]
     VIDEOS["videos/schedule_videos_posts\n(weekly cross-platform clip: LI+IG+TW+TH @19:00)"]
   end
