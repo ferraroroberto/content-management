@@ -37,12 +37,12 @@ from planning.instagram.instagram_reels import (  # noqa: E402
     _wait_reel_footer_enabled,
     _wait_reels_composer_ready,
 )
-from planning.instagram.schedule_instagram_posts import (  # noqa: E402
-    _cancel_composer,
-    _fill_post_text,
-    _open_day_schedule_menu,
+from planning.instagram.schedule_instagram_posts import return_to_planner  # noqa: E402
+from planning.instagram.instagram_composer import (  # noqa: E402
+    cancel_composer,
     dismiss_meta_verified_modal,
-    return_to_planner,
+    fill_post_text,
+    open_day_schedule_menu,
 )
 from planning.videos.videos_session import VideoRow  # noqa: E402
 
@@ -67,13 +67,13 @@ def schedule_one_video(
     # full-page wizard that accepts 9:16 and attaches one tile per file (no
     # duplicate-attach). See the Reels-composer section in
     # ``schedule_instagram_posts`` for the verified-live selectors.
-    _open_day_schedule_menu(page, row.day, "Create reel")
+    open_day_schedule_menu(page, row.day, "Create reel")
     _wait_reels_composer_ready(page)
 
     _reel_add_video(page, row.payload.video_path)
     # Caption lives on the reel-details step (fillable before the upload
     # finishes processing).
-    _fill_post_text(page, row.payload.caption_short)
+    fill_post_text(page, row.payload.caption_short)
 
     # Footer "Next" stays aria-disabled until Meta finishes processing the
     # upload (the left rail counts up to 100%). A multi-MB clip can take a
@@ -98,7 +98,7 @@ def schedule_one_video(
         shot = out_dir / f"{label}-ig-dryrun.png"
         page.screenshot(path=str(shot), full_page=False)
         logger.info("✅ DRY-RUN %s IG: reel composer ready, screenshot → %s", label, shot)
-        _cancel_composer(page)
+        cancel_composer(page)
         return "IG:DRY"
 
     # Footer flips to "Schedule" once the Schedule option is selected; it stays
@@ -147,7 +147,7 @@ def run(rows: list[VideoRow], video_cfg: dict, *, dry_run: bool) -> list[dict]:
             except (RuntimeError, PWTimeoutError) as err:
                 shot = session.screenshot_failure(f"{row.day_title}-ig-video-error")
                 logger.error("❌ IG %s failed: %s (screenshot %s)", row.day_title, err, shot)
-                _cancel_composer(session.page)
+                cancel_composer(session.page)
                 return_to_planner(session.page, ig_cfg["feed_url"])
                 results.append({
                     "day": row.day_title,

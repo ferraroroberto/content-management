@@ -21,7 +21,8 @@ Two rules the callers depend on:
 * **Deadlines come off the page clock** (``Date.now()`` in the page context),
   not ``time.monotonic()``, so the fake-page harness in ``tests/`` can drive a
   full timeout in zero real seconds — the same trick
-  ``_wait_composer_clears`` and ``_wait_for_pdf_upload`` already rely on.
+  ``twitter_composer.wait_composer_clears`` and ``_wait_for_pdf_upload``
+  already rely on.
 * **Failures are self-describing.** Every raise ends with a live probe of each
   candidate's ``count()``, so the log alone says whether the selector matched
   nothing (drift) or matched something that never became visible (a race) —

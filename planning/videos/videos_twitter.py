@@ -22,18 +22,18 @@ from planning.twitter.twitter_session import (  # noqa: E402
     TwitterSession,
     load_twitter_config,
 )
-from planning.twitter.schedule_twitter_posts import (  # noqa: E402
-    _cancel_composer,
-    _click_compose_area,
-    _click_confirm_in_modal,
-    _click_final_schedule_action,
-    _click_schedule_toolbar,
-    _dismiss_blocking_modals,
-    _set_schedule_modal,
-    _type_caption,
-    _upload_image,
-    _wait_composer_clears,
-    return_to_home,
+from planning.twitter.schedule_twitter_posts import return_to_home  # noqa: E402
+from planning.twitter.twitter_composer import (  # noqa: E402
+    cancel_composer,
+    click_compose_area,
+    click_confirm_in_modal,
+    click_final_schedule_action,
+    click_schedule_toolbar,
+    dismiss_blocking_modals,
+    set_schedule_modal,
+    type_caption,
+    upload_image,
+    wait_composer_clears,
 )
 from planning.twitter.twitter_labels import CANCEL_CLOSE_BTN_RES  # noqa: E402
 from planning.videos.videos_session import (  # noqa: E402
@@ -91,7 +91,7 @@ def _video_upload_in_progress(page) -> bool:
 def _wait_for_video_upload_ready(page, timeout_ms: int) -> None:
     """Block until X finishes uploading / processing the clip, BEFORE scheduling.
 
-    ``_upload_image`` only waits for the preview thumbnail to render — X keeps
+    ``upload_image`` only waits for the preview thumbnail to render — X keeps
     uploading the full clip in the background. Opening the schedule modal and
     confirming *during* that window stalls finalization: the final Schedule
     button then never enables, even for a small, platform-safe clip (issue #107,
@@ -137,7 +137,7 @@ def _wait_tweet_button_enabled(page, timeout_ms: int) -> None:
 
     Safety net after Confirm in the schedule modal — by this point the upload
     has already settled (see ``_wait_for_video_upload_ready``), so this normally
-    returns immediately. ``_click_final_schedule_action`` uses a JS-click
+    returns immediately. ``click_final_schedule_action`` uses a JS-click
     fallback that *bypasses* the disabled state, so clicking while still disabled
     is a silent no-op — the schedule never submits and the composer never clears
     (issue #106). Raises ``RuntimeError`` if it never enables.
@@ -173,17 +173,17 @@ def schedule_one_video(
     page = session.page
     label = row.day_title
 
-    _click_compose_area(page)
-    _type_caption(page, row.payload.caption_short)
+    click_compose_area(page)
+    type_caption(page, row.payload.caption_short)
     # X's fileInput accepts .mp4 directly — same helper as image upload.
-    _upload_image(page, row.payload.video_path)
+    upload_image(page, row.payload.video_path)
     page.wait_for_timeout(2500)
     # Wait for X to finish uploading/processing the clip BEFORE opening the
     # schedule modal — confirming a schedule mid-upload stalls finalization and
     # the final Schedule button then never enables (issue #107).
     _wait_for_video_upload_ready(page, VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS)
-    _click_schedule_toolbar(page)
-    _set_schedule_modal(
+    click_schedule_toolbar(page)
+    set_schedule_modal(
         page, row.day,
         video_cfg["post_hour_local"], video_cfg["post_minute_local"],
     )
@@ -204,18 +204,18 @@ def schedule_one_video(
                     break
             except Exception:
                 pass
-        _cancel_composer(page)
+        cancel_composer(page)
         return "TW:DRY"
 
-    _click_confirm_in_modal(page)
+    click_confirm_in_modal(page)
     # X keeps the final Schedule button disabled until the video finishes
     # processing; clicking before then is a silent no-op (issue #106).
     _wait_tweet_button_enabled(page, VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS)
-    _click_final_schedule_action(page)
+    click_final_schedule_action(page)
     # A large clip is still committing server-side after Schedule; the inline
     # composer only reverts once that finishes. Use the video budget, not the
     # image-sized default (issue #106).
-    if not _wait_composer_clears(page, timeout_ms=VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS):
+    if not wait_composer_clears(page, timeout_ms=VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS):
         shot = out_dir / f"{label}-tw-FAIL.png"
         page.screenshot(path=str(shot), full_page=False)
         raise RuntimeError(f"TW composer did not clear — see {shot}")
@@ -238,7 +238,7 @@ def run(rows: list[VideoRow], video_cfg: dict, *, dry_run: bool) -> list[dict]:
                 results.append({"day": row.day_title, "status": "LOGIN-REQUIRED", "detail": str(err)})
             return results
         session.page.wait_for_timeout(3500)
-        _dismiss_blocking_modals(session.page)
+        dismiss_blocking_modals(session.page)
         session.page.wait_for_timeout(400)
 
         for row in rows:
@@ -253,7 +253,7 @@ def run(rows: list[VideoRow], video_cfg: dict, *, dry_run: bool) -> list[dict]:
             except (RuntimeError, PWTimeoutError) as err:
                 shot = session.screenshot_failure(f"{row.day_title}-tw-video-error")
                 logger.error("❌ TW %s failed: %s (screenshot %s)", row.day_title, err, shot)
-                _cancel_composer(session.page)
+                cancel_composer(session.page)
                 return_to_home(session.page, tw_cfg["feed_url"])
                 results.append({
                     "day": row.day_title,
