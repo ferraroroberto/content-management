@@ -214,6 +214,31 @@ def _fmt_duration(seconds: float) -> str:
     return f"{minutes}m{secs:02d}s" if minutes else f"{secs}s"
 
 
+_FAILED_ROW_STATUSES = ("FAIL", "LOGIN-REQUIRED", "PARTIAL")
+
+
+def _platform_failed(r: PlatformResult) -> bool:
+    """Whether a single platform result counts as a failure.
+
+    A skipped platform never fails. Otherwise a failure is a platform-level
+    error, a non-zero exit code (each scheduler's own verdict, e.g. Videos'
+    ``PARTIAL`` row aggregation — issue #321), or any row landing in
+    ``_FAILED_ROW_STATUSES``. Computed once so the exit code, the JSON
+    verdict, and the markdown verdict never drift from each other.
+    """
+    if r.skipped:
+        return False
+    return bool(
+        r.error
+        or r.exit_code != 0
+        or any(row["status"] in _FAILED_ROW_STATUSES for row in r.rows)
+    )
+
+
+def _any_platform_failed(results: list[PlatformResult]) -> bool:
+    return any(_platform_failed(r) for r in results)
+
+
 def _build_summary_md(args: argparse.Namespace,
                       results: list[PlatformResult],
                       started_at: datetime,
@@ -268,10 +293,7 @@ def _build_summary_md(args: argparse.Namespace,
             lines.append(f"> Platform-level error: `{r.error}`")
             lines.append("")
 
-    any_fail = any(
-        not r.skipped and (r.error or any(row["status"] in ("FAIL", "LOGIN-REQUIRED") for row in r.rows))
-        for r in results
-    )
+    any_fail = _any_platform_failed(results)
     any_scheduled = any(
         not r.skipped and any(row["status"] == "LIVE" for row in r.rows)
         for r in results
@@ -399,10 +421,7 @@ def main() -> int:
     print()
     print(md)
 
-    any_fail = any(
-        not r.skipped and (r.error or any(row["status"] in ("FAIL", "LOGIN-REQUIRED") for row in r.rows))
-        for r in results
-    )
+    any_fail = _any_platform_failed(results)
     exit_code = 0 if not any_fail else 11
 
     result = _build_result_json(args, results, started_at, finished_at, exit_code, out_path)
