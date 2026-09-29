@@ -40,13 +40,10 @@ Usage::
         --reason "the post no longer exists"
     python -m check_ip.screen stats
 
-**An honest "could not tell" no longer re-queues a row forever** (issue #305).
-A condition now holds four states: met, violated, *assessed but not
-establishable*, and never assessed. The third used to be stored as the fourth,
-so a worker that opened a post and could not establish (say) non-commercial use
-left the row looking untouched — and ``--unassessed`` served it again, and
-again. Two live batches were handed the identical ten rows. ``--credit`` and
-friends take ``unknown`` for the third; **omitting** the flag is the fourth.
+**An honest "could not tell" no longer re-queues a row forever** (issue #305;
+rationale: ``db.CONDITION_COLUMNS``, `check_ip/README.md`). ``--credit`` and
+friends take ``unknown`` for that third state; **omitting** the flag is the
+fourth, never assessed.
 
 The licence is **CC BY-NC-ND 4.0**: credit, non-commercial use and no
 derivatives must *all* hold, and each is recorded separately. Neither a
@@ -145,10 +142,9 @@ def next_batch(
     predicate, so a re-check competes with every unscreened row under the same
     ranking — with 7k pending rows behind them, the backlog #295 created is
     never reached that way. ``unassessed`` serves that backlog and nothing
-    else: screened, at least one licence condition never looked at (still
-    null — an ``unknown`` answer is a ``2`` and does not qualify, which is what
-    makes the queue drain, issue #305), and not permanently unassessable. It is
-    the same set ``stats()`` counts as
+    else: screened, at least one licence condition still null (an ``unknown``
+    answer is a ``2`` and does not qualify — issue #305), and not permanently
+    unassessable. It is the same set ``stats()`` counts as
     ``not_fully_assessed`` — deliberately rendered from the same
     ``db.assessed_sql`` / ``db.permanent_sql`` helpers so the number the tab
     reports and the rows the queue serves cannot drift apart. Dropping the

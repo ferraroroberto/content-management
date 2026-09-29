@@ -294,8 +294,7 @@ def fully_assessed(credit_ok: object = None, noncommercial_ok: object = None,
     "Looked at" is the test, not "settled": an indeterminate ``2`` counts here,
     because a worker did open the post and answer. That is what lets the
     re-screen queue drain (issue #305) — the queue asks *has anyone looked*,
-    while ``all_conditions_met()`` below asks *did it pass*, and conflating the
-    two is what served the same ten rows twice.
+    while ``all_conditions_met()`` below asks *did it pass*.
     """
     return all(condition_state(value) is not None
                for value in (credit_ok, noncommercial_ok, unmodified_ok))
@@ -336,12 +335,11 @@ def indeterminate(credit_ok: object = None, noncommercial_ok: object = None,
                   unmodified_ok: object = None) -> bool:
     """Whether every condition was answered and at least one came back ``2``.
 
-    The state issue #305 created, and it needs its own counter because it calls
-    for a different action from the one NULL calls for: a NULL wants another
-    screening pass, while this row has had its screening pass and what is left
-    is the owner's own judgement, or nothing at all. Deliberately false while
-    any condition is still NULL — such a row belongs in the re-screen queue and
-    is counted there, not here, so the two counters never double-count a row.
+    Its own counter (issue #305) because it wants a different action from a
+    NULL: NULL wants another screening pass, while this row's screening pass is
+    done and what is left is the owner's own judgement, or nothing. Deliberately
+    false while any condition is still NULL, so the two counters never
+    double-count a row.
     """
     conditions = (credit_ok, noncommercial_ok, unmodified_ok)
     return (fully_assessed(*conditions)
@@ -367,9 +365,8 @@ def verdict_for(credit_ok: object = None, noncommercial_ok: object = None,
 
     A row whose conditions were all answered but where one came back
     indeterminate stays ``unclear`` too (issue #305): nothing was found wrong,
-    and nothing was established either. It leaves the re-screen queue — another
-    automated look would return the same answer — without ever claiming to be
-    compliant.
+    and nothing was established either, so it leaves the re-screen queue
+    without ever claiming to be compliant.
     """
     conditions = (credit_ok, noncommercial_ok, unmodified_ok)
     if severity(*conditions):
