@@ -273,11 +273,16 @@ def save_clips(ep: Episode, clips: list[dict]) -> None:
     (ep.package / CLIPS_FILE).write_text(json.dumps(clips, indent=1, ensure_ascii=False), encoding="utf-8")
 
 
+def clip_length(clip: dict) -> float:
+    """Seconds of the published clip: the jump-cut length once edited, else the source span."""
+    return (clip.get("edit") or {}).get("cut_s") or clip["end"] - clip["start"]
+
+
 def write_clips_md(ep: Episode, clips: list[dict]) -> Path:
     parts = [f"# Clips - {ep.base_name}\n"]
     for c in clips:
         parts.append(f"## {c['number']}. {c['title']}  ({fmt_ts(c['start'])}-{fmt_ts(c['end'])}, "
-                     f"{c['end'] - c['start']:.0f} s)\n")
+                     f"{clip_length(c):.0f} s)\n")
         if c.get("why"):
             parts.append(f"_Why:_ {c['why']}\n")
         parts.append(f"**Instagram:** {c.get('instagram', '')}\n")

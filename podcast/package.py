@@ -17,7 +17,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from podcast.clips import load_clips
+from podcast.clips import clip_length, load_clips
 from podcast.episode import Episode, work_dir
 from podcast.hub import ask, ask_json
 from podcast.metrics import StageRecord
@@ -312,7 +312,7 @@ def build_docx(ep: Episode, copy: dict, clips: list[dict], path: Path) -> Path:
     for c in clips:
         doc.add_heading(f"{c['number']}. {c['title']}", 2)
         files = c.get("file", "")
-        doc.add_paragraph(f"{fmt_ts(c['start'])}-{fmt_ts(c['end'])} ({c['end'] - c['start']:.0f} s) · "
+        doc.add_paragraph(f"{fmt_ts(c['start'])}-{fmt_ts(c['end'])} ({clip_length(c):.0f} s) · "
                           f"clips/1x1/{files}.mp4 · clips/9x16/{files}.mp4 · clips/covers/{files}.png")
         doc.add_paragraph().add_run("Instagram").bold = True
         doc.add_paragraph(c.get("instagram", ""))
