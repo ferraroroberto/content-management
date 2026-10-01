@@ -11,6 +11,8 @@
 * ``start_s`` / ``end_s`` — the usable window (pre-show chat trimmed).
 * ``adjective``, ``date``, ``card_label``, ``card_when``, ``guest_headshot``,
   ``youtube_url``, ``website_slug`` — copy and cover inputs, all optional.
+* ``links`` — ``[{"label", "url"}]`` for the website page's "Where to find"
+  list (kept in ``Episode.extra``); a LinkedIn placeholder until filled.
 """
 
 from __future__ import annotations

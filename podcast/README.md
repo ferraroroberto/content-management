@@ -47,7 +47,8 @@ The episode facts are private, so they live next to the recording in an
   "host_is_interviewee": false,
   "start_s": 196,
   "adjective": "brilliant", "date": "2024-03-28",
-  "website_slug": "full-name", "youtube_url": ""
+  "website_slug": "full-name", "youtube_url": "",
+  "links": [{"label": "LinkedIn", "url": "https://..."}]
 }
 ```
 
@@ -91,11 +92,15 @@ Large intermediates (WAVs, frames, caption files) go to `podcast.work_dir`
 - **render**: 1:1 is the dominant speaker full frame; 9:16 stacks the owner
   on top of the guest. Captions are burned in (ASS): Sora ExtraBold, white
   with a black outline, one keyword per chunk in `#FDEC01`. 24 fps, H.264,
-  loudness-normalised.
+  loudness-normalised. Caption words come from a whisper pass over each
+  clip's own mixed audio (`transcript/clip_words.json`): where both people
+  talk at once the per-track pass can lose a sentence and stretch the next
+  words over the gap, which put captions seconds behind the speech.
 - **score**: per clip, 1 to 5 on the rubric: hook in the first 3 s and
-  self-contained idea (hub, text), caption accuracy (word error rate against
-  a fresh whisper pass of the rendered audio), and framing of both crops (hub,
-  one frame each).
+  self-contained idea (hub, text), a caption check (word error rate between
+  the caption pass and the episode's independent per-track pass, so a low
+  score flags captions to watch, not a measured error), and framing of both
+  crops (hub, one frame each).
 
 ## Config (`config.json` → `podcast`)
 

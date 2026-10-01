@@ -226,6 +226,15 @@ class CleanTests(unittest.TestCase):
         self.assertIn(">Habit: go to bed early</p>", out)
         self.assertEqual(out.count("<strong>Guest</strong>"), 1)  # one name paragraph per turn
         self.assertEqual(out.count("BLOCK 1 START"), 1)
+        self.assertIn("<strong>Where to find Guest and their work</strong></h4>", out)
+
+    def test_website_links_come_from_episode_json(self) -> None:
+        ep = _episode(Path("."))
+        ep.extra = {"links": [{"label": "Guest’s book", "url": "https://example.com/?a=1&b=2"}]}
+        copy = {"website_title": "T", "website_intro": "Intro.", "insights": []}
+        out = package.website_html(ep, copy, [])
+        self.assertIn('<a href="https://example.com/?a=1&amp;b=2" target="_blank">Guest’s book</a>', out)
+        self.assertNotIn("#guest-linkedin", out.split("Where to find")[1])
 
 
 class ResumeTests(unittest.TestCase):
@@ -248,6 +257,42 @@ class ResumeTests(unittest.TestCase):
             (ep.package).mkdir(parents=True)
             (ep.package / clips.CLIPS_FILE).write_text(json.dumps([{"number": 1, "title": "a"}]), encoding="utf-8")
             self.assertFalse(podcast_pipeline.STAGES["render"][1](ep))
+
+
+class CaptionSourceTests(unittest.TestCase):
+    """Captions come from the clip's own decode, which is complete and in sync
+    where the per-track pass lost speech under cross-talk (#333, pilot clip 6)."""
+
+    EPISODE = [_w("say,", 105.3, "host"), _w("okay,", 106.6, "host")]  # stretched over a lost sentence
+
+    def _render(self, segments: list[dict]) -> list[dict]:
+        from unittest import mock
+        from podcast import render
+        with tempfile.TemporaryDirectory() as tmp:
+            ep = _episode(Path(tmp))
+            clips.save_clips(ep, [{"number": 1, "title": "a", "start": 100.0, "end": 110.0, "speaker": "host"}])
+            used: list[list[dict]] = []
+            cfg = {"whisper_url": "http://whisper", "fonts": {"caption": __file__}}
+            with mock.patch.object(render, "load_words", return_value=self.EPISODE), \
+                    mock.patch.object(render, "work_dir", return_value=Path(tmp)), \
+                    mock.patch.object(render, "extract_mix_wav"), \
+                    mock.patch.object(render, "whisper_segments", return_value=segments), \
+                    mock.patch.object(render, "render_clip", side_effect=lambda *a: used.append(a[3])):
+                render.run(ep, cfg, metrics.StageRecord("render"))
+            self.assertEqual(len(used), 2)  # both crops
+            self.assertEqual(used[0], used[1])
+            self.assertEqual(render.load_clip_words(ep)["1"], used[0])
+            return used[0]
+
+    def test_captions_use_the_clip_decode_at_episode_times(self) -> None:
+        seg = {"words": [{"word": " And", "start": 0.2, "end": 0.4}, {"word": " then", "start": 0.4, "end": 0.6}]}
+        words = self._render([seg])
+        self.assertEqual([(w["w"], w["s"]) for w in words], [("And", 100.2), ("then", 100.4)])
+
+    def test_a_looping_clip_decode_falls_back_to_the_episode_words(self) -> None:
+        loop = [{"word": f" {t}", "start": i * 0.2, "end": i * 0.2 + 0.1}
+                for i, t in enumerate("so I will concede on this ".split() * 8)]
+        self.assertEqual(self._render([{"words": loop}]), self.EPISODE)
 
 
 if __name__ == "__main__":

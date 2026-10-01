@@ -38,12 +38,15 @@ def stage_table(rows: list[dict]) -> str:
 
 
 def score_table(scores: list[dict]) -> str:
-    head = "| # | title | hook ≤3 s | self-contained | caption accuracy | framing 1:1 | framing 9:16 | mean |"
+    head = "| # | title | hook ≤3 s | self-contained | caption check | framing 1:1 | framing 9:16 | mean |"
     lines = [head, "|---:|---|---:|---:|---:|---:|---:|---:|"]
     for s in scores:
         lines.append(f"| {s['number']} | {s['title']} | {s.get('hook', 'n/a')} | {s.get('self_contained', 'n/a')} | "
                      f"{s.get('caption_accuracy', 'n/a')} ({s.get('caption_wer_pct', 'n/a')}% WER) | "
                      f"{s.get('framing_1x1', 'n/a')} | {s.get('framing_9x16', 'n/a')} | {s.get('mean', 'n/a')} |")
+    lines.append("\nCaption check: WER between the captions (a whisper pass over the clip's mixed audio) and the "
+                 "episode's independent per-track pass. Neither is ground truth, so a low score means "
+                 "\"watch this clip's captions\".")
     return "\n".join(lines)
 
 

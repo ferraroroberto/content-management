@@ -225,6 +225,12 @@ def website_html(ep: Episode, copy: dict, transcript: list[dict]) -> str:
         if p["speaker"]:
             block2.append(_p(f"<strong>{e(p['speaker'])}</strong>"))
         block2.append(_p(e(p["text"])))
+    # episode.json "links": [{"label", "url"}]; until filled, a LinkedIn placeholder
+    links = ep.extra.get("links") or [{"label": "LinkedIn", "url": "#guest-linkedin"}]
+    block2.append(f"<h4{_PRE}><strong>Where to find {e(ep.guest_first)} and "
+                  f"{e(ep.guest_pronoun_possessive)} work</strong></h4>")
+    anchors = (f'<a href="{e(link["url"])}" target="_blank">{e(link["label"])}</a>' for link in links)
+    block2.append(f'<ul data-rte-list="default">{"".join(f"<li>{_p(a)}</li>" for a in anchors)}</ul>')
 
     one, two = "\n".join(block1), "\n".join(block2)
     return f"""<!doctype html>

@@ -89,13 +89,18 @@ def _pair(canvas: Image.Image, guest_photo: Image.Image, host_photo: Image.Image
           centers: tuple[int, int], bulb: Image.Image, hand: str) -> None:
     """Two round photos with names above and the bulb between (shared by both cards)."""
     draw = ImageDraw.Draw(canvas)
-    font = _font(hand, 100)
+    b = bulb.convert("RGBA")
+    b.thumbnail((250, 250), Image.LANCZOS)
+    # a name line is centred on its photo, so it must stay inside the half-gap
+    # beside the bulb: long surnames shrink the font instead of running into it
+    max_w = centers[1] - centers[0] - b.width - 40
     for photo, name, cx in zip((guest_photo, host_photo), names, centers):
         canvas.alpha_composite(circle_photo(photo), (cx - CIRCLE // 2, 535 - CIRCLE // 2))
         lines = _name_lines(name)
-        _centered_lines(draw, lines, font, cx, 236 - 80 * len(lines), 80, YELLOW, HAND_WEIGHT, YELLOW)
-    b = bulb.convert("RGBA")
-    b.thumbnail((250, 250), Image.LANCZOS)
+        size = 100
+        while size > 60 and max(_font(hand, size).getlength(line) for line in lines) + 2 * HAND_WEIGHT > max_w:
+            size -= 4
+        _centered_lines(draw, lines, _font(hand, size), cx, 236 - 80 * len(lines), 80, YELLOW, HAND_WEIGHT, YELLOW)
     mid = (centers[0] + centers[1]) // 2
     canvas.alpha_composite(b, (mid - b.width // 2, 260 - b.height // 2))
 

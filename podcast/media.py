@@ -67,6 +67,16 @@ def extract_wav(src: Path, dst: Path, *, start: Optional[float] = None,
     return dst
 
 
+def extract_mix_wav(sources: list[Path], dst: Path, *, start: float, duration: float) -> Path:
+    """16 kHz mono PCM WAV of several tracks mixed, over one window."""
+    args: list[str] = []
+    for src in sources:
+        args += ["-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(src)]
+    run_ffmpeg([*args, "-filter_complex", f"amix=inputs={len(sources)}:normalize=0",
+                "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(dst)])
+    return dst
+
+
 def read_wav(path: Path) -> tuple[np.ndarray, int]:
     """Mono int16 samples and the sample rate."""
     with wave.open(str(path), "rb") as w:
