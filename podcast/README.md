@@ -10,12 +10,13 @@ flowchart LR
     T[transcribe<br/>whisper :8090] --> C[clean<br/>hub]
     T --> S[select<br/>hub]
     S --> P[copy<br/>hub]
-    P --> R[render<br/>ffmpeg 1:1 + 9:16]
+    P --> D[edit<br/>whisper + hub]
+    D --> R[render<br/>ffmpeg 1:1 + 9:16]
     C --> E[episode copy<br/>hub]
     E --> V[covers<br/>Pillow]
     R --> V
     E --> K[package<br/>.docx + website HTML]
-    R --> Q[score<br/>whisper + hub]
+    R --> Q[score<br/>hub]
 ```
 
 ## Run
@@ -63,8 +64,9 @@ cleaned transcript also starts there). The other keys are documented in
 | Path in `podcast package/` | What |
 |---|---|
 | `transcript/words.json`, `turns.json`, `raw transcript.md` | word-timed transcript, both speakers |
+| `transcript/clip_words.json` | each clip's caption words, review fixes applied |
 | `<guest> - <host> - transcript.md` / `.txt` | the cleaned reading transcript |
-| `clips.json`, `clips.md` | the 15 clips: times, title, Instagram caption, LinkedIn post, score |
+| `clips.json`, `clips.md` | the 15 clips: times, title, Instagram caption, LinkedIn post, score, the edit (kept spans, 1:1 shots) and the caption review (scores, fixes, doubts) |
 | `clips/1x1/`, `clips/9x16/`, `clips/covers/` | the rendered clips and their cover images |
 | `episode_copy.json` | YouTube, website and thumbnail copy |
 | `<guest> - <host>.docx` | the episode document (YouTube, clips, thumbnails, website text, links, thank-you note) |
@@ -89,23 +91,39 @@ Large intermediates (WAVs, frames, caption files) go to `podcast.work_dir`
   short, too long or overlapping are dropped in rank order.
 - **copy**: title (lowercase, at most 5 words), LinkedIn hook + body + the
   fixed credit line and footer, and the templated Instagram caption.
-- **render**: 1:1 is the dominant speaker full frame; 9:16 stacks the owner
-  on top of the guest. Captions are burned in (ASS): Sora ExtraBold, white
-  with a black outline, one keyword per chunk in `#FDEC01`. 24 fps, H.264,
-  loudness-normalised. Caption words come from a whisper pass over each
-  clip's own mixed audio (`transcript/clip_words.json`): where both people
-  talk at once the per-track pass can lose a sentence and stretch the next
-  words over the gap, which put captions seconds behind the speech.
-- **score**: per clip, 1 to 5 on the rubric: hook in the first 3 s and
-  self-contained idea (hub, text), a caption check (word error rate between
-  the caption pass and the episode's independent per-track pass, so a low
-  score flags captions to watch, not a measured error), and framing of both
-  crops (hub, one frame each).
+- **edit**: per clip, the edit decisions. Caption words come from a whisper
+  pass over the clip's own mixed audio (where both people talk at once the
+  per-track pass can lose a sentence and drift seconds behind). An LLM then
+  reviews every caption word in context (the minutes around the clip, the
+  episode topic) and corrects what was misheard ("aim for hate" → "eight"
+  in a talk about sleep); only fixes it is sure of are applied, guesses are
+  listed as doubts. Jump cuts: silences are found on the audio, a pause over
+  0.4 s shrinks to 0.24 s, a leading "And…/So, yeah…/But then…" is cut, and
+  a short sound between two silences is cut as a filler when its words are
+  fillers or when, carrying no word, an isolated decode hears only a filler
+  (whisper writes almost no "um", and most such sounds turned out to be
+  real words). The 1:1 camera plan follows whoever speaks (the louder
+  track, for a turn of 1.5+ s of speech) and changes framing (punch in/out) at a jump cut or
+  after 6 s on one framing.
+- **render**: plays each clip's kept spans back to back, every audio span
+  with a 10 ms fade in and out so cuts don't click, cut on the same 24 fps
+  frames as the picture. 1:1 is each shot's speaker full frame at its
+  framing; 9:16 stacks the owner on top of the guest. Captions are burned
+  in (ASS), karaoke style: Sora ExtraBold, white with a black outline, a
+  few words on screen and each word turning `#FDEC01` as it is said. H.264,
+  loudness-normalised.
+- **score**: per clip, 1 to 5 on the rubric: hook in the first 3 s of the
+  cut clip and self-contained idea (hub, text), caption accuracy (the
+  review's score after its fixes; the word error rate against the
+  independent per-track pass is kept as a hint), and framing of both crops
+  (hub, one frame each; captions on the 9:16 seam are the house style and
+  are not judged).
 
 ## Config (`config.json` → `podcast`)
 
 `episodes_root`, `whisper_url`, `llm_hub_base_url`, `models` (hub alias per
-role), `llm_rates_usd_per_mtok` (list prices for the cost table: the hub runs
+role: `clean`, `select`, `copy`, `caption_review`, `episode_copy`, `score`),
+`llm_rates_usd_per_mtok` (list prices for the cost table: the hub runs
 on the subscription, so the cost is a metered-API equivalent),
 `clips_per_episode`, `clip_min_s` / `clip_max_s`, `video_encoder`, `fonts`,
 `host` (name, headshot, brand mark), `linkedin_footer`, and

@@ -172,9 +172,13 @@ proposal, decide, Apply"| CIREVIEW
   subgraph podcast_mod["podcast/ — episode package (local outputs only)"]
     PTRANS["transcribe.py
 bleed gate + loop repair + turns"]
-    PCLIPS["clips.py + captions.py + render.py
-sentence-bounded selection, copy,
-ASS captions, 1:1 + 9:16 ffmpeg"]
+    PCLIPS["clips.py
+sentence-bounded selection, copy"]
+    PEDIT["edit.py + review.py
+clip decode, LLM caption review,
+jump cuts, 1:1 speaker shots"]
+    PRENDER["captions.py + render.py
+karaoke ASS, 1:1 + 9:16 ffmpeg"]
     PPACK["package.py + covers.py
 clean transcript, episode copy,
 .docx + website HTML, Pillow covers"]
@@ -183,11 +187,12 @@ clip rubric, stage cost ledger"]
   end
   APP -->|"🎙️ podcast tab: run (slot 'podcast'),
 review clips, cost, files"| PODPIPE
-  PODPIPE --> PTRANS --> PCLIPS --> PPACK --> PSCORE
+  PODPIPE --> PTRANS --> PCLIPS --> PEDIT --> PRENDER --> PPACK --> PSCORE
   PTRANS -->|"per-track WAV"| WHISPER[("whisper-server
 127.0.0.1:8090")]
-  PSCORE -->|"caption WER pass"| WHISPER
+  PEDIT -->|"clip decode + filler check"| WHISPER
   PCLIPS -->|"select + copy"| LLMHUB
+  PEDIT -->|"caption review"| LLMHUB
   PPACK -->|"clean + episode copy"| LLMHUB
   PSCORE -->|"hook / self-contained / framing"| LLMHUB
   PCLIPS -.->|"past titles + intros (read-only)"| NOTION

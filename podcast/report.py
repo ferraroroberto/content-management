@@ -38,15 +38,19 @@ def stage_table(rows: list[dict]) -> str:
 
 
 def score_table(scores: list[dict]) -> str:
-    head = "| # | title | hook ≤3 s | self-contained | caption check | framing 1:1 | framing 9:16 | mean |"
-    lines = [head, "|---:|---|---:|---:|---:|---:|---:|---:|"]
+    head = ("| # | title | length (s) | hook ≤3 s | self-contained | captions (review) | framing 1:1 | "
+            "framing 9:16 | mean |")
+    lines = [head, "|---:|---|---:|---:|---:|---:|---:|---:|---:|"]
     for s in scores:
-        lines.append(f"| {s['number']} | {s['title']} | {s.get('hook', 'n/a')} | {s.get('self_contained', 'n/a')} | "
-                     f"{s.get('caption_accuracy', 'n/a')} ({s.get('caption_wer_pct', 'n/a')}% WER) | "
-                     f"{s.get('framing_1x1', 'n/a')} | {s.get('framing_9x16', 'n/a')} | {s.get('mean', 'n/a')} |")
-    lines.append("\nCaption check: WER between the captions (a whisper pass over the clip's mixed audio) and the "
-                 "episode's independent per-track pass. Neither is ground truth, so a low score means "
-                 "\"watch this clip's captions\".")
+        length = f"{_fmt(s.get('source_s'))} → {_fmt(s.get('cut_s'))}" if s.get("cut_s") else _fmt(s.get("source_s"))
+        captions = (f"{s.get('caption_review_raw', 'n/a')} → {s.get('caption_accuracy', 'n/a')} "
+                    f"({s.get('caption_fixes', 0)} fixes, {s.get('caption_wer_pct', 'n/a')}% WER)")
+        lines.append(f"| {s['number']} | {s['title']} | {length} | {s.get('hook', 'n/a')} | "
+                     f"{s.get('self_contained', 'n/a')} | {captions} | {s.get('framing_1x1', 'n/a')} | "
+                     f"{s.get('framing_9x16', 'n/a')} | {s.get('mean', 'n/a')} |")
+    lines.append("\nLength: the selected window → the cut clip (pauses and fillers removed). Captions: the "
+                 "review's score of the raw decode → after its corrections; WER against the episode's "
+                 "independent per-track pass is a hint, neither is ground truth.")
     return "\n".join(lines)
 
 

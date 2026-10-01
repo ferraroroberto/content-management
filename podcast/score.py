@@ -2,12 +2,15 @@
 
 * **hook** — does the first 3 s grab? (LLM, text of the first 3 s)
 * **self_contained** — one idea a stranger can follow? (LLM, clip text)
-* **caption_accuracy** — agreement of the burned caption words (a whisper
-  pass over the clip's mixed audio) with the episode's independent
-  per-track pass over the same window, as word error rate. Neither is
-  ground truth: a low score marks a clip whose captions deserve a look.
+* **caption_accuracy** — the caption review's score of the burned
+  captions after its corrections (``edit`` stage, LLM in context); the word
+  error rate against the episode's independent per-track pass is kept
+  alongside as ``caption_wer_pct``, a hint, not ground truth.
 * **framing_1x1 / framing_9x16** — one frame of each render judged by a
-  vision call (face in frame, headroom, captions clear of the face)
+  vision call (face in frame, headroom). Captions on the 9:16 seam are the
+  house style and are not judged.
+
+The hook is judged on the first 3 s of the cut clip, as the viewer hears it.
 """
 
 from __future__ import annotations
@@ -22,12 +25,12 @@ from PIL import Image
 
 from podcast.captions import caption_text
 from podcast.clips import load_clips, save_clips, write_clips_md
+from podcast.edit import load_clip_words, output_words
 from podcast.episode import Episode, work_dir
 from podcast.hub import ask_json
 from podcast.media import frame_at
 from podcast.metrics import StageRecord
 from podcast.report import SCORES_FILE
-from podcast.render import load_clip_words
 from podcast.transcribe import load_words
 
 logger = logging.getLogger("podcast.score")
@@ -44,7 +47,8 @@ Be strict; 3 is average. Reply with JSON only: a list of {{"number", "hook", "se
 
 FRAMING_PROMPT = ("These are two frames of the same social video clip: first the 1:1 crop, then the 9:16 "
                   "stacked crop. Score the framing of each, 1 (poor) to 5 (excellent): faces fully in frame "
-                  "and not cut, sensible headroom, nobody pushed to the edge, captions not covering a face. "
+                  "and not cut, sensible headroom, nobody pushed to the edge. The 9:16 captions sit on the "
+                  "seam between the two people on purpose (house style): do not judge the captions. "
                   'Reply with JSON only: {"framing_1x1": n, "framing_9x16": n, "note": "<max 12 words>"}')
 
 
@@ -65,13 +69,6 @@ def word_error_rate(reference: list[str], hypothesis: list[str]) -> float:
     return prev[-1] / len(reference)
 
 
-def wer_to_score(wer: float) -> int:
-    for limit, score in ((0.05, 5), (0.10, 4), (0.20, 3), (0.35, 2)):
-        if wer <= limit:
-            return score
-    return 1
-
-
 def _image_block(path) -> dict:
     img = Image.open(path).convert("RGB")
     img.thumbnail((540, 540))
@@ -89,15 +86,18 @@ def run(ep: Episode, cfg: dict, rec: StageRecord) -> list[dict]:
 
     payload = []
     for c in clips:
-        heard = clip_words.get(str(c["number"])) or words
-        first3 = " ".join(w["w"] for w in heard if c["start"] <= w["s"] < c["start"] + 3.0)
+        heard = output_words(c, clip_words.get(str(c["number"])) or words)
+        first3 = " ".join(w["w"] for w in heard if w["s"] < 3.0)
         payload.append({"number": c["number"], "first_3_seconds": first3, "full_text": c["text"]})
     text_scores = {int(s["number"]): s for s in ask_json(
         cfg, rec, "score", TEXT_PROMPT.format(clips=json.dumps(payload, ensure_ascii=False, indent=1)))}
 
     results: list[dict] = []
     for c in clips:
-        row = {"number": c["number"], "title": c["title"]}
+        review = c.get("caption_review") or {}
+        row = {"number": c["number"], "title": c["title"], "source_s": round(c["end"] - c["start"], 1),
+               "cut_s": (c.get("edit") or {}).get("cut_s"), "caption_review_raw": review.get("raw_score"),
+               "caption_fixes": len(review.get("corrections") or [])}
         ts = text_scores.get(c["number"], {})
         row.update(hook=ts.get("hook"), self_contained=ts.get("self_contained"), note=ts.get("note", ""))
 
@@ -105,9 +105,12 @@ def run(ep: Episode, cfg: dict, rec: StageRecord) -> list[dict]:
         if shown:
             wer = word_error_rate(tokens(caption_text(words, c["start"], c["end"])),
                                   tokens(caption_text(shown, c["start"], c["end"])))
-            row.update(caption_wer_pct=round(100 * wer, 1), caption_accuracy=wer_to_score(wer))
+            row["caption_wer_pct"] = round(100 * wer, 1)
         else:
             logger.warning("⚠️ clip %d has no caption words on disk: caption check not run", c["number"])
+        row["caption_accuracy"] = review.get("final_score")
+        if row["caption_accuracy"] is None:
+            logger.warning("⚠️ clip %d has no caption review score: run the edit stage", c["number"])
 
         frames = [frame_at(ep.package / c["videos"][name], 1.5, scratch / f"score_{name}.png")
                   for name in ("1x1", "9x16")]

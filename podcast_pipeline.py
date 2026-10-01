@@ -48,6 +48,11 @@ def _copy(ep, cfg, rec, force):
     clips.run_copy(ep, cfg, rec)
 
 
+def _edit(ep, cfg, rec, force):
+    from podcast import edit  # noqa: PLC0415
+    edit.run(ep, cfg, rec)
+
+
 def _render(ep, cfg, rec, force):
     from podcast import render  # noqa: PLC0415
     render.run(ep, cfg, rec, force=force)
@@ -89,12 +94,19 @@ def _every_clip_has(kind: str) -> Callable[[Episode], bool]:
     return done
 
 
+def _every_clip_edited(ep: Episode) -> bool:
+    from podcast.clips import load_clips  # noqa: PLC0415
+    clips = load_clips(ep)
+    return bool(clips) and all("keep" in c and "caption_review" in c for c in clips)
+
+
 # stage name → (runner, "is the output already there?")
 STAGES: dict[str, tuple[Callable, Callable[[Episode], bool]]] = {
     "transcribe": (_transcribe, _exists("transcript/turns.json")),
     "clean": (_clean, _exists("{base} - transcript.md")),
     "select": (_select, _exists("clips.json")),
     "copy": (_copy, _exists("clips.md")),
+    "edit": (_edit, _every_clip_edited),
     "render": (_render, _every_clip_has("videos")),
     "episode": (_episode, _exists("episode_copy.json")),
     "covers": (_covers, lambda ep: _exists("{base} (1920x1080)_text.png")(ep)

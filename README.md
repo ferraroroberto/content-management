@@ -82,7 +82,9 @@ Six surfaces, one repo:
 - **Podcast** (`podcast/`, `podcast_pipeline.py`) — turns a raw two-track
   interview recording into the episode package, locally: a cleaned
   transcript (whisper per track, with a mic-bleed gate and loop repair),
-  15 clips in 1:1 and 9:16 with burned-in captions in the house style,
+  15 clips in 1:1 and 9:16 with word-timed captions in the house style
+  (LLM-reviewed in context), jump cuts over pauses and fillers and a 1:1
+  crop that follows the speaker,
   a title, LinkedIn post and Instagram caption per clip, covers, the
   episode document and the website page. Each stage resumes from what is
   on disk, and a cost table plus a per-clip quality score come with every
