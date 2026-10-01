@@ -25,7 +25,7 @@ from podcast.report import SCORES_FILE
 from podcast.transcribe import fmt_ts
 
 PIPELINE_NAME = "podcast"
-STAGES = ["transcribe", "clean", "select", "copy", "render", "episode", "covers", "package", "score"]
+STAGES = ["transcribe", "clean", "select", "copy", "edit", "render", "episode", "covers", "package", "score"]
 
 
 def _run_controls(folder: Path) -> None:
@@ -77,7 +77,8 @@ def _clips(package: Path, clips: list[dict]) -> None:
     scores = {s["number"]: s for s in json.loads(scores_path.read_text(encoding="utf-8"))} \
         if scores_path.exists() else {}
     table = [{"#": c["number"], "title": c["title"], "from": fmt_ts(c["start"]),
-              "length (s)": round(c["end"] - c["start"]), "rendered": bool(c.get("videos")),
+              "length (s)": round(c["end"] - c["start"]),
+              "cut (s)": round((c.get("edit") or {}).get("cut_s") or 0) or None, "rendered": bool(c.get("videos")),
               "score": scores.get(c["number"], {}).get("mean")} for c in clips]
     st.dataframe(table, hide_index=True, width="stretch", key="podcast-clips-table")
 
@@ -102,8 +103,12 @@ def _clips(package: Path, clips: list[dict]) -> None:
             s = scores[number]
             st.markdown(f"**score {s.get('mean')}** · hook {s.get('hook')} · self-contained "
                         f"{s.get('self_contained')} · captions {s.get('caption_accuracy')} "
-                        f"({s.get('caption_wer_pct')}% WER) · framing {s.get('framing_1x1')}/{s.get('framing_9x16')}")
+                        f"({s.get('caption_fixes', 0)} fixes) · framing {s.get('framing_1x1')}/{s.get('framing_9x16')}")
             st.caption(f"{s.get('note', '')} {s.get('framing_note', '')}")
+        review = clip.get("caption_review") or {}
+        if review.get("corrections") or review.get("doubts"):
+            fixes = ", ".join(f"{f['from']} → {f['to'] or '(dropped)'}" for f in review.get("corrections", []))
+            st.caption(f"caption fixes: {fixes or 'none'}; doubts: {review.get('doubts') or 'none'}")
     copy_cols = st.columns(2)
     with copy_cols[0]:
         st.text_area("Instagram", clip.get("instagram", ""), height=120, disabled=True,

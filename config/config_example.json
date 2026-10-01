@@ -360,6 +360,7 @@
             "select": "claude_opus",
             "copy": "claude_opus",
             "episode_copy": "claude_opus",
+            "caption_review": "claude_opus",
             "score": "claude_sonnet"
         },
         "llm_rates_usd_per_mtok": {

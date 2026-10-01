@@ -14,7 +14,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import podcast_pipeline  # noqa: E402
-from podcast import captions, clips, metrics, package, score, transcribe  # noqa: E402
+from podcast import captions, clips, edit, metrics, package, review, score, transcribe  # noqa: E402
 from podcast.episode import Episode  # noqa: E402
 
 
@@ -124,11 +124,14 @@ class CaptionTests(unittest.TestCase):
         self.assertEqual([[w["w"] for w in c] for c in chunks],
                          [["one", "two", "three", "four"], ["five", "six."], ["seven"], ["eight"]])
 
-    def test_ass_highlights_one_keyword_in_yellow(self) -> None:
+    def test_each_word_is_highlighted_in_turn_while_the_chunk_shows(self) -> None:
         ass = captions.build_ass(_words("we value sleep", start=1.0), 0.0, 5.0, captions.LAYOUTS["1x1"])
-        dialogue = [line for line in ass.splitlines() if line.startswith("Dialogue:")]
-        self.assertEqual(len(dialogue), 1)
-        self.assertIn("{\\c&H0001ECFD&}value{\\c&H00FFFFFF&}", dialogue[0])
+        rows = [line.split(",", 9) for line in ass.splitlines() if line.startswith("Dialogue:")]
+        yellow = "{\\c&H0001ECFD&}"
+        self.assertEqual([(r[1], r[2]) for r in rows],
+                         [("0:00:01.00", "0:00:01.40"), ("0:00:01.40", "0:00:01.80"), ("0:00:01.80", "0:00:02.50")])
+        self.assertEqual([re.sub(r"\{[^}]*\}", "", r[9]) for r in rows], ["we value sleep"] * 3)
+        self.assertEqual([r[9].split(yellow)[1].split("{")[0] for r in rows], ["we", "value", "sleep"])
         self.assertIn("Sora ExtraBold", ass)
 
     def test_commas_do_not_end_a_chunk(self) -> None:
@@ -148,7 +151,7 @@ class CaptionTests(unittest.TestCase):
     def test_two_line_chunk_is_two_layered_events_a_pitch_apart(self) -> None:
         layout = captions.LAYOUTS["9x16"]
         ass = captions.build_ass(_words("routes, out of Helsinki, follow"), 0.0, 3.0, layout)
-        rows = [line.split(",", 9) for line in ass.splitlines() if line.startswith("Dialogue:")]
+        rows = [line.split(",", 9) for line in ass.splitlines() if line.startswith("Dialogue:")][:2]  # first word
         self.assertEqual([re.sub(r"\{[^}]*\}", "", r[9]) for r in rows], ["routes, out of", "Helsinki, follow"])
         # separate layers, or libass's collision handling moves the lines
         self.assertEqual([r[0] for r in rows], ["Dialogue: 0", "Dialogue: 1"])
@@ -158,8 +161,6 @@ class CaptionTests(unittest.TestCase):
 class ScoreTests(unittest.TestCase):
     def test_word_error_rate(self) -> None:
         self.assertEqual(score.word_error_rate(["a", "b", "c", "d"], ["a", "x", "c", "d"]), 0.25)
-        self.assertEqual(score.wer_to_score(0.04), 5)
-        self.assertEqual(score.wer_to_score(0.5), 1)
         self.assertEqual(score.tokens("Don’t STOP, now."), ["don't", "stop", "now"])
 
 
@@ -264,35 +265,158 @@ class CaptionSourceTests(unittest.TestCase):
     where the per-track pass lost speech under cross-talk (#333, pilot clip 6)."""
 
     EPISODE = [_w("say,", 105.3, "host"), _w("okay,", 106.6, "host")]  # stretched over a lost sentence
+    CLIP = {"number": 1, "start": 100.0, "end": 110.0}
 
-    def _render(self, segments: list[dict]) -> list[dict]:
+    def _decode(self, segments: list[dict]) -> list[dict]:
         from unittest import mock
-        from podcast import render
-        with tempfile.TemporaryDirectory() as tmp:
-            ep = _episode(Path(tmp))
-            clips.save_clips(ep, [{"number": 1, "title": "a", "start": 100.0, "end": 110.0, "speaker": "host"}])
-            used: list[list[dict]] = []
-            cfg = {"whisper_url": "http://whisper", "fonts": {"caption": __file__}}
-            with mock.patch.object(render, "load_words", return_value=self.EPISODE), \
-                    mock.patch.object(render, "work_dir", return_value=Path(tmp)), \
-                    mock.patch.object(render, "extract_mix_wav"), \
-                    mock.patch.object(render, "whisper_segments", return_value=segments), \
-                    mock.patch.object(render, "render_clip", side_effect=lambda *a: used.append(a[3])):
-                render.run(ep, cfg, metrics.StageRecord("render"))
-            self.assertEqual(len(used), 2)  # both crops
-            self.assertEqual(used[0], used[1])
-            self.assertEqual(render.load_clip_words(ep)["1"], used[0])
-            return used[0]
+        with mock.patch.object(edit, "whisper_segments", return_value=segments):
+            return edit.decode_clip({"whisper_url": "http://whisper"}, self.CLIP, Path("x.wav"), self.EPISODE,
+                                    metrics.StageRecord("edit"))
 
     def test_captions_use_the_clip_decode_at_episode_times(self) -> None:
         seg = {"words": [{"word": " And", "start": 0.2, "end": 0.4}, {"word": " then", "start": 0.4, "end": 0.6}]}
-        words = self._render([seg])
-        self.assertEqual([(w["w"], w["s"]) for w in words], [("And", 100.2), ("then", 100.4)])
+        self.assertEqual([(w["w"], w["s"]) for w in self._decode([seg])], [("And", 100.2), ("then", 100.4)])
 
     def test_a_looping_clip_decode_falls_back_to_the_episode_words(self) -> None:
         loop = [{"word": f" {t}", "start": i * 0.2, "end": i * 0.2 + 0.1}
                 for i, t in enumerate("so I will concede on this ".split() * 8)]
-        self.assertEqual(self._render([{"words": loop}]), self.EPISODE)
+        self.assertEqual(self._decode([{"words": loop}]), self.EPISODE)
+
+
+class CutListTests(unittest.TestCase):
+    """Jump cuts (#335): long pauses shrink, filler islands go, every cut lands in silence."""
+
+    def test_long_pause_is_shortened_and_a_short_one_kept(self) -> None:
+        keep = edit.cut_list(100.0, 110.0, [(103.0, 104.0), (106.0, 106.3)], [])
+        half = edit.KEEP_PAUSE_S / 2
+        self.assertEqual(len(keep), 2)  # one cut, the 0.3 s pause stays
+        self.assertAlmostEqual(keep[0][1], 103.0 + half, delta=1 / edit.FPS)
+        self.assertAlmostEqual(keep[1][0], 104.0 - half, delta=1 / edit.FPS)
+        self.assertAlmostEqual(edit.kept_seconds(keep), 10.0 - (1.0 - edit.KEEP_PAUSE_S), delta=2 / edit.FPS)
+
+    def test_filler_island_goes_with_the_silences_around_it(self) -> None:
+        # pause 0.2 s, "um" 0.3 s, pause 0.2 s: each pause alone is kept, the island is not
+        keep = edit.cut_list(100.0, 110.0, [(104.0, 104.2), (104.5, 104.7)], [(104.2, 104.5)])
+        self.assertEqual(len(keep), 2)
+        self.assertLessEqual(keep[0][1], 104.2)
+        self.assertGreaterEqual(keep[1][0], 104.5)
+
+    def test_edges_keep_a_little_air_and_cuts_sit_on_the_frame_grid(self) -> None:
+        keep = edit.cut_list(100.0, 110.0, [(100.0, 101.0), (109.0, 110.0)], [])
+        self.assertAlmostEqual(keep[0][0], 101.0 - edit.LEAD_S, delta=1 / edit.FPS)
+        self.assertAlmostEqual(keep[-1][1], 109.0 + edit.TAIL_S, delta=1 / edit.FPS)
+        for a, b in keep:
+            for t in (a, b):
+                frames = (t - 100.0) * edit.FPS
+                self.assertAlmostEqual(frames, round(frames), places=2)
+
+    def test_silences_are_found_on_the_audio(self) -> None:
+        import numpy as np
+        rate = 16000
+        tone = (8000 * np.sin(np.arange(rate) * 2 * np.pi * 220 / rate)).astype(np.int16)
+        audio = np.concatenate([tone, np.zeros(rate // 2, dtype=np.int16), tone])
+        self.assertEqual(edit.silences(audio, rate, offset=10.0), [(11.0, 11.5)])
+
+    def test_islands_need_fillers_or_a_listen(self) -> None:
+        isl = [(1.0, 1.3), (2.0, 2.4), (3.0, 3.3), (4.0, 4.5)]
+        words = [_w("um,", 1.05, dur=0.2), _w("sleep", 2.05, dur=0.3), _w("you", 4.0, dur=0.2),
+                 _w("know,", 4.2, dur=0.2)]
+        fillers, unknown = edit.classify_islands(isl, words)
+        self.assertEqual(fillers, [(1.0, 1.3), (4.0, 4.5)])
+        self.assertEqual(unknown, [(3.0, 3.3)])
+        self.assertTrue(edit.heard_as_filler("Uh,"))
+        self.assertTrue(edit.heard_as_filler(""))
+        self.assertFalse(edit.heard_as_filler("And,"))  # the pilot: most islands were real words
+
+
+class WordTimingTests(unittest.TestCase):
+    KEEP = [(100.0, 103.0), (104.0, 110.0)]  # one second cut at 103-104
+
+    def test_remap_shifts_words_after_a_cut_and_clamps_inside_it(self) -> None:
+        self.assertEqual(edit.remap(101.0, self.KEEP), 1.0)
+        self.assertEqual(edit.remap(103.5, self.KEEP), 3.0)  # inside the cut: start of the next span
+        self.assertEqual(edit.remap(105.0, self.KEEP), 4.0)
+
+    def test_caption_words_follow_the_cut_and_drop_fillers(self) -> None:
+        words = [_w("we", 102.0), _w("um", 103.2), _w("sleep", 104.5), _w("late", 111.0)]
+        out = edit.cut_words(words, self.KEEP)
+        self.assertEqual([(w["w"], w["s"], w["e"]) for w in out], [("we", 2.0, 2.3), ("sleep", 3.5, 3.8)])
+
+    def test_render_graph_trims_the_same_spans_for_picture_and_sound(self) -> None:
+        from podcast import render
+        clip = {"start": 100.0, "end": 110.0, "speaker": "guest", "keep": [list(s) for s in self.KEEP],
+                "shots": [{"a": 100.0, "b": 103.0, "spk": "guest", "zoom": 1.0},
+                          {"a": 104.0, "b": 107.0, "spk": "host", "zoom": 1.0},
+                          {"a": 107.0, "b": 110.0, "spk": "host", "zoom": 1.18}]}
+        square = render.filter_graph(captions.LAYOUTS["1x1"], clip, "c.ass")
+        self.assertIn("[0:v]fps=24,split=1", square)
+        self.assertIn("[1:v]fps=24,split=2", square)
+        self.assertIn("concat=n=3:v=1:a=0", square)
+        self.assertEqual(square.count("afade=t=in"), 2)
+        self.assertIn("atrim=start=4.0000:end=10.0000", square)
+        tall = render.filter_graph(captions.LAYOUTS["9x16"], clip, "c.ass")
+        self.assertIn("trim=start=4.0000:end=10.0000,setpts", tall)
+        self.assertIn("concat=n=2:v=1:a=0", tall)
+
+
+class CameraTests(unittest.TestCase):
+    def test_camera_follows_the_speaker_and_ignores_short_turns(self) -> None:
+        words = (_words("so how did you start doing this", "host", start=100.0)
+                 + _words("I started with eight hours in bed", "guest", start=104.0)
+                 + _words("but what about kids", "host", start=107.0, step=0.3)  # 1.2 s: too short to cut to
+                 + _words("and then it slowly improved over the months", "guest", start=108.5))
+        switches = edit.speaker_switches(words, 100.0, 112.0, "guest")
+        self.assertEqual([spk for _, spk in switches], ["host", "guest"])
+        self.assertAlmostEqual(switches[1][0], 103.85, places=2)
+
+    def test_long_stretch_gets_punch_ins_and_jump_cuts_reframe(self) -> None:
+        words = _words(" ".join(["word"] * 40), start=100.0, step=0.5)  # 20 s of one speaker
+        keep = [(100.0, 110.0), (110.5, 120.0)]
+        plan = edit.shots(keep, [(100.0, "guest")], words)
+        self.assertTrue(all(s["b"] - s["a"] <= edit.MAX_SHOT_S + 1e-6 for s in plan))
+        self.assertGreater(len({s["zoom"] for s in plan}), 1)
+        self.assertNotEqual(plan[0]["zoom"], plan[1]["zoom"])
+        self.assertAlmostEqual(sum(s["b"] - s["a"] for s in plan), edit.kept_seconds(keep), places=3)
+
+
+class CaptionReviewTests(unittest.TestCase):
+    WORDS = [_w(t, i * 0.4) for i, t in enumerate("We aim for hate. I don't hate you.".split())]
+
+    def test_corrections_apply_by_index_and_keep_punctuation(self) -> None:
+        fixed, applied = review.apply_corrections(self.WORDS, [{"i": 3, "from": "hate", "to": "eight"}])
+        self.assertEqual(" ".join(w["w"] for w in fixed), "We aim for eight. I don't hate you.")
+        self.assertEqual(applied, [{"i": 3, "from": "hate.", "to": "eight."}])
+        self.assertEqual(fixed[3]["s"], self.WORDS[3]["s"])  # timing kept
+
+    def test_a_correction_quoting_another_word_is_skipped(self) -> None:
+        fixed, applied = review.apply_corrections(self.WORDS, [{"i": 5, "from": "hate", "to": "eight"},
+                                                               {"i": 99, "from": "x", "to": "y"},
+                                                               {"from": "no index"}])
+        self.assertEqual([w["w"] for w in fixed], [w["w"] for w in self.WORDS])
+        self.assertEqual(applied, [])
+
+    def test_capital_is_kept_and_an_empty_fix_drops_the_word(self) -> None:
+        fixed, _ = review.apply_corrections(self.WORDS, [{"i": 0, "from": "we", "to": "wee"},
+                                                         {"i": 2, "from": "for", "to": ""}])
+        self.assertEqual([w["w"] for w in fixed][:3], ["Wee", "aim", "hate."])
+
+
+class OpenerTests(unittest.TestCase):
+    def test_leading_conjunctions_are_trimmed(self) -> None:
+        words = _words("But then I see that it improved so much in the first months", start=10.0)
+        clip = clips.trim_opener({"start": 9.85, "end": 40.0, "title": "t"}, words, min_s=25)
+        self.assertEqual(clip["start"], round(10.8 - clips.START_PAD_S, 2))
+        self.assertEqual(clip["trimmed_opener"], "But then")
+
+    def test_a_clip_that_opens_on_its_hook_is_unchanged(self) -> None:
+        words = _words("Sleep is not a waste of time", start=10.0)
+        clip = {"start": 9.85, "end": 40.0}
+        self.assertIs(clips.trim_opener(clip, words, min_s=25), clip)
+
+    def test_no_trim_below_the_minimum_length(self) -> None:
+        words = _words("And sleep matters", start=10.0)
+        clip = {"start": 9.85, "end": 35.0}
+        self.assertIs(clips.trim_opener(clip, words, min_s=25.2), clip)
 
 
 if __name__ == "__main__":

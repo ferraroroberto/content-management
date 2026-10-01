@@ -1,5 +1,6 @@
 """Burned-in caption files (ASS) in the owner's caption style: Sora ExtraBold,
-white with a thick black outline, one keyword per chunk in yellow ``#FDEC01``.
+white with a thick black outline, word-timed karaoke: a chunk of a few words
+shows while it is spoken and each word turns yellow ``#FDEC01`` as it is said.
 
 1:1 clips get one short line in the lower third; 9:16 stacked clips get up
 to two lines sitting on the seam between the two speakers.
@@ -15,17 +16,6 @@ from podcast.transcribe import drop_backchannel
 HIGHLIGHT_BGR = "&H0001ECFD&"   # #FDEC01 in ASS (&HAABBGGRR)
 WHITE_BGR = "&H00FFFFFF&"
 
-STOPWORDS = frozenset("""
-a about after again all also an and any are as at be because been before being but by can
-could did do does doing don't down during each even every for from had has have having he her
-here hers him his how i i'm if in into is isn't it it's its just let's like make many me more
-most much my no not now of off on once one only or other our out over really right said same
-say see she should so some something still such than that that's the their them then there
-these they thing things think this those through to too um uh up us very was we we're well
-were what when where which while who why will with would yeah yes you you're your
-""".split())
-
-_STRIP = re.compile(r"[^\w'-]")
 _ASS_UNSAFE = re.compile(r"[{}\\]")
 
 
@@ -90,16 +80,6 @@ def chunk_words(words: list[dict], *, max_words: int, line_chars: int, lines: in
     return chunks
 
 
-def pick_keyword(chunk: list[dict]) -> int:
-    """Index of the chunk's most salient word (longest non-stopword, ≥5 letters), or -1."""
-    best, best_len = -1, 4
-    for i, w in enumerate(chunk):
-        core = _STRIP.sub("", w["w"]).lower()
-        if core not in STOPWORDS and len(core) > best_len:
-            best, best_len = i, len(core)
-    return best
-
-
 def _ass_time(t: float) -> str:
     t = max(0.0, t)
     h, rem = divmod(t, 3600)
@@ -107,11 +87,11 @@ def _ass_time(t: float) -> str:
     return f"{int(h)}:{int(m):02d}:{s:05.2f}"
 
 
-def _chunk_lines(chunk: list[dict], keyword: int, layout: Layout) -> list[str]:
+def _chunk_lines(chunk: list[dict], highlight: int, layout: Layout) -> list[str]:
     parts = []
     for i, w in enumerate(chunk):
         word = _ASS_UNSAFE.sub("", w["w"])
-        parts.append(f"{{\\c{HIGHLIGHT_BGR}}}{word}{{\\c{WHITE_BGR}}}" if i == keyword else word)
+        parts.append(f"{{\\c{HIGHLIGHT_BGR}}}{word}{{\\c{WHITE_BGR}}}" if i == highlight else word)
     if layout.lines > 1 and _line_count(chunk, layout.line_chars) > 1:
         # the break with the shortest longer line: balanced like the reference
         # captions, and never wider than the greedy fill the chunker checked
@@ -124,23 +104,30 @@ def _chunk_lines(chunk: list[dict], keyword: int, layout: Layout) -> list[str]:
 
 def build_ass(words: list[dict], clip_start: float, clip_end: float, layout: Layout,
               font_name: str = "Sora ExtraBold") -> str:
-    """ASS document for the words inside ``[clip_start, clip_end)``, times relative to the clip."""
+    """ASS document for the words inside ``[clip_start, clip_end)``, times relative to the clip.
+
+    Karaoke: the chunk stays on screen while each of its words is
+    highlighted in turn, from the word's start until the next one starts."""
     inside = [w for w in drop_backchannel(words) if clip_start <= w["s"] < clip_end]
     chunks = chunk_words(inside, max_words=layout.max_words, line_chars=layout.line_chars, lines=layout.lines)
     duration = clip_end - clip_start
     events = []
     for i, chunk in enumerate(chunks):
-        start = chunk[0]["s"] - clip_start
         nxt = chunks[i + 1][0]["s"] - clip_start if i + 1 < len(chunks) else duration
-        end = min(nxt, chunk[-1]["e"] - clip_start + 0.4) if nxt - (chunk[-1]["e"] - clip_start) > 0.6 else nxt
-        lines = _chunk_lines(chunk, pick_keyword(chunk), layout)
-        # one event per line, bottom line on the style's margin: libass's own
-        # line height for \N is far looser than the reference captions. Own layer
-        # per row, or libass's collision handling shoves the lines apart.
-        for row, text in enumerate(lines):
-            margin = layout.margin_v + layout.line_pitch * (len(lines) - 1 - row)
-            events.append(f"Dialogue: {row},{_ass_time(start)},{_ass_time(min(end, duration))},"
-                          f"Cap,,0,0,{margin},,{text}")
+        last = chunk[-1]["e"] - clip_start
+        end = min(nxt, last + 0.4, duration) if nxt - last > 0.6 else min(nxt, duration)
+        starts = [w["s"] - clip_start for w in chunk] + [end]
+        for k in range(len(chunk)):
+            a, b = starts[k], max(starts[k], min(starts[k + 1], end))
+            if b - a < 0.01:
+                continue
+            # one event per line, bottom line on the style's margin: libass's own
+            # line height for \N is far looser than the reference captions. Own layer
+            # per row, or libass's collision handling shoves the lines apart.
+            lines = _chunk_lines(chunk, k, layout)
+            for row, text in enumerate(lines):
+                margin = layout.margin_v + layout.line_pitch * (len(lines) - 1 - row)
+                events.append(f"Dialogue: {row},{_ass_time(a)},{_ass_time(b)},Cap,,0,0,{margin},,{text}")
     return "\n".join([
         "[Script Info]",
         "ScriptType: v4.00+",
