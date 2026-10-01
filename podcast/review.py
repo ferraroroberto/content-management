@@ -2,9 +2,10 @@
 words around the clip and the episode's topic) and corrects what was
 misheard — in a conversation about sleep, "aim for hate" is "aim for eight".
 
-The model answers with word-index corrections; ``apply_corrections`` takes
-one only when the word at that index still reads as the model quoted it, so
-a miscounted index cannot overwrite the wrong word.
+The model answers with word-index corrections, each marked sure or not. Only
+sure ones are applied (the rest are reported as doubts), and
+``apply_corrections`` takes one only when the word at that index still reads
+as the model quoted it, so a miscounted index cannot overwrite the wrong word.
 """
 
 from __future__ import annotations
@@ -32,7 +33,9 @@ They come from machine transcription, which mishears words that sound alike. Rea
 and correct every word that was clearly misheard: one that makes no sense here but a similar-sounding
 word does (in a conversation about sleep, "we aim for hate" is "we aim for eight"). A word that makes
 sense stays, even if informal or ungrammatical ("I don't hate you" stays). Names: use the spelling
-in the speaker list.
+in the speaker list. The correction must sound like the shown word; when the independent transcript
+has the same word, both decoders heard it, so be extra careful. Mark a correction "sure": false when
+you are guessing: it is then not applied, and it is shown to the owner as a doubt.
 
 Speakers: {speakers}
 {topic}
@@ -46,7 +49,7 @@ Captions:
 {captions}
 
 Reply with JSON only:
-{{"corrections": [{{"i": <word number>, "from": "<the word as shown>", "to": "<the corrected word or words>"}}],
+{{"corrections": [{{"i": <word number>, "from": "<the word as shown>", "to": "<the corrected word or words>", "sure": true}}],
  "raw_score": <1-5, accuracy of the captions as shown: 5 = no misheard word, 3 = a few, 1 = hard to follow>,
  "final_score": <1-5, the same after your corrections>,
  "doubts": "<at most 15 words: anything you could not resolve, or empty>"}}
@@ -119,9 +122,13 @@ def review_clip(ep: Episode, cfg: dict, rec: StageRecord, clip: dict, words: lis
         logger.error("❌ clip %d: caption review failed, captions unreviewed: %s", clip["number"], exc)
         return words, {"raw_score": None, "final_score": None, "corrections": [], "doubts": "review failed"}
     reply = reply if isinstance(reply, dict) else {}
-    fixed, applied = apply_corrections(words, reply.get("corrections") or [])
+    proposed = [f for f in reply.get("corrections") or [] if isinstance(f, dict)]
+    unsure = [f for f in proposed if f.get("sure") is not True]
+    fixed, applied = apply_corrections(words, [f for f in proposed if f.get("sure") is True])
+    notes = [str(reply["doubts"])] if reply.get("doubts") else []
+    notes += [f"{f.get('from')} → {f.get('to')}?" for f in unsure]
     record = {"raw_score": reply.get("raw_score"), "final_score": reply.get("final_score"),
-              "corrections": applied, "doubts": str(reply.get("doubts") or "")}
+              "corrections": applied, "doubts": "; ".join(notes)}
     logger.info("ℹ️ clip %d: caption review %s → %s, %d fix(es)%s", clip["number"], record["raw_score"],
                 record["final_score"], len(applied), f" · doubts: {record['doubts']}" if record["doubts"] else "")
     return fixed, record

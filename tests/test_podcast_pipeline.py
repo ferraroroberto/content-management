@@ -362,6 +362,7 @@ class WordTimingTests(unittest.TestCase):
 class CameraTests(unittest.TestCase):
     def test_camera_follows_the_speaker_and_ignores_short_turns(self) -> None:
         words = (_words("so how did you start doing this", "host", start=100.0)
+                 + [_w("hmm", 101.1, "guest", dur=3.0)]  # whisper stretched a lone "hmm"
                  + _words("I started with eight hours in bed", "guest", start=104.0)
                  + _words("but what about kids", "host", start=107.0, step=0.3)  # 1.2 s: too short to cut to
                  + _words("and then it slowly improved over the months", "guest", start=108.5))
@@ -395,6 +396,20 @@ class CaptionReviewTests(unittest.TestCase):
         self.assertEqual([w["w"] for w in fixed], [w["w"] for w in self.WORDS])
         self.assertEqual(applied, [])
 
+    def test_only_sure_fixes_are_applied_and_guesses_become_doubts(self) -> None:
+        from unittest import mock
+        reply = {"corrections": [{"i": 3, "from": "hate.", "to": "eight.", "sure": True},
+                                 {"i": 6, "from": "hate", "to": "love", "sure": False}],
+                 "raw_score": 3, "final_score": 5, "doubts": ""}
+        ep = _episode(Path(tempfile.gettempdir()))
+        with mock.patch.object(review, "ask_json", return_value=reply):
+            fixed, record = review.review_clip(ep, {}, None, {"number": 1, "start": 0.0, "end": 5.0},
+                                               self.WORDS, [])
+        self.assertEqual(" ".join(w["w"] for w in fixed), "We aim for eight. I don't hate you.")
+        self.assertEqual(record["corrections"], [{"i": 3, "from": "hate.", "to": "eight."}])
+        self.assertEqual(record["doubts"], "hate → love?")
+        self.assertEqual((record["raw_score"], record["final_score"]), (3, 5))
+
     def test_capital_is_kept_and_an_empty_fix_drops_the_word(self) -> None:
         fixed, _ = review.apply_corrections(self.WORDS, [{"i": 0, "from": "we", "to": "wee"},
                                                          {"i": 2, "from": "for", "to": ""}])
@@ -402,21 +417,25 @@ class CaptionReviewTests(unittest.TestCase):
 
 
 class OpenerTests(unittest.TestCase):
-    def test_leading_conjunctions_are_trimmed(self) -> None:
-        words = _words("But then I see that it improved so much in the first months", start=10.0)
-        clip = clips.trim_opener({"start": 9.85, "end": 40.0, "title": "t"}, words, min_s=25)
-        self.assertEqual(clip["start"], round(10.8 - clips.START_PAD_S, 2))
-        self.assertEqual(clip["trimmed_opener"], "But then")
+    """Clips open on their hook, not on "And…/So…/Yeah…" (#335)."""
 
-    def test_a_clip_that_opens_on_its_hook_is_unchanged(self) -> None:
-        words = _words("Sleep is not a waste of time", start=10.0)
-        clip = {"start": 9.85, "end": 40.0}
-        self.assertIs(clips.trim_opener(clip, words, min_s=25), clip)
+    def test_leading_conjunctions_and_then_are_openers(self) -> None:
+        self.assertEqual(edit.opener_count(_words("But then I see that it improved")), 2)
+        self.assertEqual(edit.opener_count(_words("Absolutely. Yeah. And now that you said that")), 3)
+        self.assertEqual(edit.opener_count(_words("Sleep is not a waste of time")), 0)
+        self.assertEqual(edit.opener_count(_words("then I changed")), 0)  # "then" only after and/but
 
-    def test_no_trim_below_the_minimum_length(self) -> None:
-        words = _words("And sleep matters", start=10.0)
-        clip = {"start": 9.85, "end": 35.0}
-        self.assertIs(clips.trim_opener(clip, words, min_s=25.2), clip)
+    def test_opener_is_cut_up_to_the_silence_before_the_hook(self) -> None:
+        words = [_w("And", 100.2, dur=0.2), _w("sleep", 100.9), _w("matters", 101.3)]
+        region = edit.opener_cut(words, 1, [(100.0, 100.15), (100.45, 100.85)], 100.0)
+        self.assertEqual(region, (100.0, 100.45))
+        keep = edit.cut_list(100.0, 110.0, [(100.0, 100.15), (100.45, 100.85)], [region])
+        self.assertAlmostEqual(keep[0][0], 100.85 - edit.LEAD_S, delta=1 / edit.FPS)
+
+    def test_without_a_silence_the_cut_sits_on_the_word_boundary(self) -> None:
+        words = [_w("So", 100.0, dur=0.2), _w("sleep", 100.3)]
+        keep = edit.cut_list(100.0, 110.0, [], [edit.opener_cut(words, 1, [], 100.0)])
+        self.assertAlmostEqual(keep[0][0], 100.25, delta=1 / edit.FPS)
 
 
 if __name__ == "__main__":

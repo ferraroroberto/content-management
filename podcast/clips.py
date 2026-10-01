@@ -16,7 +16,7 @@ from pathlib import Path
 from podcast.episode import Episode, work_dir
 from podcast.hub import ask_json
 from podcast.metrics import StageRecord
-from podcast.transcribe import _norm, build_turns, drop_backchannel, fmt_ts, load_words, sentences
+from podcast.transcribe import fmt_ts, load_words, sentences
 
 logger = logging.getLogger("podcast.clips")
 
@@ -140,31 +140,6 @@ def resolve_candidates(raw: list[dict], sents: list[dict], *, n: int, min_s: flo
     return picked
 
 
-OPENERS = frozenset({"and", "so", "but", "yeah", "yes", "well", "absolutely", "exactly", "okay", "ok",
-                     "right", "oh", "um", "uh"})
-MAX_OPENER_WORDS = 4
-
-
-def trim_opener(clip: dict, words: list[dict], *, min_s: float) -> dict:
-    """Start the clip after a leading "And…/So…/Yeah…" (and a "then" after
-    "and"/"but"), so it opens on its hook. A trim that would leave the clip
-    shorter than ``min_s`` is not made."""
-    inside = [w for w in drop_backchannel(words) if clip["start"] <= w["s"] < clip["end"]]
-    k = 0
-    while k < min(MAX_OPENER_WORDS, len(inside) - 1):
-        core = _norm(inside[k]["w"])
-        after_conj = k and _norm(inside[k - 1]["w"]) in ("and", "but")
-        if core not in OPENERS and not (core == "then" and after_conj):
-            break
-        k += 1
-    start = round(inside[k]["s"] - START_PAD_S, 2) if k else clip["start"]
-    if k and clip["end"] - start >= min_s:
-        logger.info("ℹ️ clip '%s': trimmed opener %r", clip.get("title", ""),
-                    " ".join(w["w"] for w in inside[:k]))
-        clip = {**clip, "start": start, "trimmed_opener": " ".join(w["w"] for w in inside[:k])}
-    return clip
-
-
 def _as_list(reply) -> list[dict]:
     """The model sometimes wraps the list in an object (``{"clips": [...]}``)."""
     if isinstance(reply, dict):
@@ -190,7 +165,6 @@ def run_select(ep: Episode, cfg: dict, rec: StageRecord) -> list[dict]:
             taken=taken, missing=n - len(clips) + 4, min_s=cfg["clip_min_s"], max_s=cfg["clip_max_s"]),
             system=SELECT_SYSTEM, max_tokens=4000)
         clips = resolve_candidates(_as_list(raw) + _as_list(extra), sents, **limits)
-    clips = [trim_opener(c, words, min_s=cfg["clip_min_s"]) for c in clips]
     clips.sort(key=lambda c: c["start"])
     for i, clip in enumerate(clips, 1):
         clip["number"] = i
@@ -213,10 +187,15 @@ def dominant_speaker(words: list[dict], start: float, end: float) -> str:
 
 
 def clip_text(ep: Episode, words: list[dict], start: float, end: float) -> str:
-    """The clip's words as speaker turns; word-based, so a clip that starts
-    mid-sentence (a trimmed opener) keeps the rest of that sentence."""
-    inside = [w for w in words if start - 0.01 <= w["s"] < end + 0.01]
-    return "\n".join(f"{ep.label(t['speaker'])}: {t['text']}" for t in build_turns(inside))
+    """The clip as speaker turns (consecutive sentences of one speaker joined)."""
+    turns: list[list] = []
+    for s in sentences(words):
+        if s["start"] >= start - 0.01 and s["end"] <= end + 0.01:
+            if turns and turns[-1][0] == s["speaker"]:
+                turns[-1][1].append(s["text"])
+            else:
+                turns.append([s["speaker"], [s["text"]]])
+    return "\n".join(f"{ep.label(spk)}: {' '.join(texts)}" for spk, texts in turns)
 
 
 # ── copy ────────────────────────────────────────────────────────────────

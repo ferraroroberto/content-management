@@ -12,6 +12,9 @@ jump-cut list and the 1:1 camera plan (issue #335).
   isolated decode of it hears nothing but a filler: whisper writes almost no
   "um"/"uh", and in the pilot most untranscribed islands were real words
   with misplaced times, so they are only cut once that decode says filler.
+* **Opener.** A leading "And…/So, yeah…/But then…" is cut so the clip
+  opens on its hook. It is read from this decode, not at selection: the
+  per-track pass's bleed gate often drops exactly those short first words.
 * **Camera plan (1:1).** The crop follows whoever is speaking (per-track
   words, so the speaker is known) and changes framing on a jump cut or
   after ``MAX_SHOT_S`` of one speaker, the way the owner's published
@@ -55,9 +58,13 @@ TAIL_S = 0.3            # and after the last
 MAX_ISLAND_S = 1.0
 
 FILLERS = frozenset({"um", "umm", "uh", "uhh", "uhm", "er", "erm", "ah", "hmm", "mm", "mhm"})
+OPENERS = FILLERS | {"and", "so", "but", "yeah", "yes", "well", "absolutely", "exactly", "okay", "ok",
+                     "right", "oh"}
+MAX_OPENER_WORDS = 4
 _CORE = re.compile(r"[^\w']+")
 
 MIN_TURN_S = 1.5        # a shorter turn of the other speaker does not move the camera
+MIN_TURN_WORDS = 4
 MIN_SHOT_S = 2.0        # a jump cut changes framing only after this long on one shot
 MAX_SHOT_S = 6.0        # one framing at most this long
 ZOOMS = (1.0, 1.18, 1.08)
@@ -123,6 +130,32 @@ def classify_islands(isl: list[tuple[float, float]], words: list[dict]) -> tuple
 def heard_as_filler(text: str) -> bool:
     """An isolated decode of an island: nothing, or only filler sounds."""
     return all(core(t) in FILLERS for t in text.split() if core(t))
+
+
+def opener_count(words: list[dict]) -> int:
+    """How many leading words are an opener ("And…", "So, yeah…", "But then…")."""
+    k = 0
+    while k < min(MAX_OPENER_WORDS, len(words) - 1):
+        word = core(words[k]["w"])
+        if word not in OPENERS and not (word == "then" and k and core(words[k - 1]["w"]) in ("and", "but")):
+            break
+        k += 1
+    return k
+
+
+def opener_cut(words: list[dict], k: int, sil: list[tuple[float, float]],
+               start: float) -> Optional[tuple[float, float]]:
+    """The region to remove for ``k`` opener words: up to the silence before
+    the first kept word when there is one, else up to the word boundary
+    (padded by ``LEAD_S``, which the edge rule of ``cut_list`` gives back)."""
+    if not k:
+        return None
+    last, first = words[k - 1], words[k]
+    gaps = [s for s in sil if last["s"] <= s[1] and s[0] <= first["s"] + 0.2]
+    gap = max(gaps, default=None)
+    if gap and gap[0] > start:
+        return start, gap[0]
+    return start, (last["e"] + first["s"]) / 2 + LEAD_S
 
 
 # ── cut list and time remap ─────────────────────────────────────────────
@@ -196,10 +229,12 @@ def kept_seconds(keep: list[tuple[float, float]]) -> float:
 
 def speaker_switches(words: list[dict], start: float, end: float, first: str) -> list[tuple[float, str]]:
     """``(time, speaker)`` from which the camera shows that speaker; turns
-    shorter than ``MIN_TURN_S`` don't move it. ``first`` is the fallback for
-    a clip with no turn that long."""
-    inside = [w for w in drop_backchannel(words) if start <= w["s"] < end]
-    turns = [r for r in _runs(inside, gap_s=1e9) if r[-1]["e"] - r[0]["s"] >= MIN_TURN_S]
+    shorter than ``MIN_TURN_S`` or ``MIN_TURN_WORDS`` don't move it (whisper
+    can stretch a lone "hmm" over seconds). ``first`` is the fallback for a
+    clip with no turn that long."""
+    inside = drop_backchannel([w for w in words if start <= w["s"] < end and not is_filler(w)])
+    turns = [r for r in _runs(inside, gap_s=1e9)
+             if len(r) >= MIN_TURN_WORDS and r[-1]["e"] - r[0]["s"] >= MIN_TURN_S]
     switches = [(start, turns[0][0]["spk"] if turns else first)]
     for run in turns[1:]:
         if run[0]["spk"] != switches[-1][1]:
@@ -292,22 +327,25 @@ def edit_clip(cfg: dict, clip: dict, tracks: list[Path], episode_words: list[dic
     words = decode_clip(cfg, clip, wav, episode_words, rec)
     samples, rate = read_wav(wav)
     sil = silences(samples, rate, offset=clip["start"])
+    k = opener_count(words)
+    opener = opener_cut(words, k, sil, clip["start"])
+    opener_text, words = " ".join(w["w"] for w in words[:k]), words[k:]
     fillers, unknown = classify_islands(islands(sil), words)
     for a, b in unknown:
         heard = _listen(cfg, samples, rate, a - clip["start"], b - clip["start"], scratch, rec)
         if heard_as_filler(heard):
             fillers.append((a, b))
         logger.debug("island %.2f-%.2f heard as %r", a, b, heard)
-    keep = cut_list(clip["start"], clip["end"], sil, fillers)
-    switches = speaker_switches(episode_words, clip["start"], clip["end"], clip["speaker"])
+    keep = cut_list(clip["start"], clip["end"], sil, fillers + ([opener] if opener else []))
+    switches = speaker_switches(episode_words, keep[0][0], clip["end"], clip["speaker"])
     clip["keep"] = [list(span) for span in keep]
     clip["shots"] = shots(keep, switches, [w for w in words if not is_filler(w)])
     clip["edit"] = {"source_s": round(clip["end"] - clip["start"], 2), "cut_s": kept_seconds(keep),
-                    "pauses_cut": len(keep) - 1, "fillers_cut": len(fillers),
+                    "jump_cuts": len(keep) - 1, "fillers_cut": len(fillers), "opener_cut": opener_text,
                     "speaker_switches": len(switches) - 1}
-    logger.info("ℹ️ clip %d: %.1fs → %.1fs, %d jump cuts, %d filler(s), %d shots",
+    logger.info("ℹ️ clip %d: %.1fs → %.1fs, %d jump cuts, %d filler(s), opener %r, %d shots",
                 clip["number"], clip["edit"]["source_s"], clip["edit"]["cut_s"], len(keep) - 1,
-                len(fillers), len(clip["shots"]))
+                len(fillers), opener_text, len(clip["shots"]))
     return words
 
 
