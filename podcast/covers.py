@@ -160,6 +160,17 @@ def _guest_photo(ep: Episode, scratch: Path) -> Image.Image:
     return Image.open(grab)
 
 
+def cover_moment(clip: dict) -> tuple[str, float]:
+    """Track and episode time for a clip's cover frame: inside the first kept shot of
+    the clip's speaker, so a cut opener or a shot of the other person never becomes
+    the cover. An unedited clip falls back to 1.5 s into its source span."""
+    shots = clip.get("shots") or []
+    shot = next((s for s in shots if s["spk"] == clip["speaker"]), shots[0] if shots else None)
+    if shot is None:
+        return clip["speaker"], clip["start"] + 1.5
+    return shot["spk"], shot["a"] + min(1.5, (shot["b"] - shot["a"]) / 2)
+
+
 def run(ep: Episode, cfg: dict, rec: StageRecord, *, force: bool = False) -> None:
     """Episode thumbnail + text card, then one cover per clip (kept on disk unless ``force``)."""
     fonts, host = cfg["fonts"], cfg["host"]
@@ -178,7 +189,8 @@ def run(ep: Episode, cfg: dict, rec: StageRecord, *, force: bool = False) -> Non
         if out.exists() and not force:
             continue
         out.parent.mkdir(parents=True, exist_ok=True)
-        # Source-track frame (no burned captions), same speaker as the 1:1 clip.
-        frame = frame_at(ep.tracks[clip["speaker"]], clip["start"] + 1.5, scratch / "cover_frame.png")
+        # Source-track frame (no burned captions), a moment the 1:1 clip actually shows.
+        spk, at = cover_moment(clip)
+        frame = frame_at(ep.tracks[spk], at, scratch / "cover_frame.png")
         clip_cover(Image.open(frame), clip["title"], fonts["cover"]).save(out)
     logger.info("✅ covers: thumbnail, text card, %d clip covers", len(clips))

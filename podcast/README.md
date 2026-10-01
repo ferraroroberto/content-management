@@ -112,6 +112,10 @@ Large intermediates (WAVs, frames, caption files) go to `podcast.work_dir`
   in (ASS), karaoke style: Sora ExtraBold, white with a black outline, a
   few words on screen and each word turning `#FDEC01` as it is said. H.264,
   loudness-normalised.
+- **covers**: the episode thumbnail and text card, then one cover per clip:
+  a frame from the first kept shot of the clip's speaker, so a cut opener
+  never becomes the cover. The `.docx` and `clips.md` give each clip's cut
+  length once it is edited.
 - **score**: per clip, 1 to 5 on the rubric: hook in the first 3 s of the
   cut clip and self-contained idea (hub, text), caption accuracy (the
   review's score after its fixes; the word error rate against the

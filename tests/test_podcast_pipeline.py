@@ -14,7 +14,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import podcast_pipeline  # noqa: E402
-from podcast import captions, clips, edit, metrics, package, review, score, transcribe  # noqa: E402
+from podcast import captions, clips, covers, edit, metrics, package, review, score, transcribe  # noqa: E402
 from podcast.episode import Episode  # noqa: E402
 
 
@@ -455,6 +455,38 @@ class OpenerTests(unittest.TestCase):
         words = [_w("So", 100.0, dur=0.2), _w("sleep", 100.3)]
         keep = edit.cut_list(100.0, 110.0, [], [edit.opener_cut(words, 1, [], 100.0)])
         self.assertAlmostEqual(keep[0][0], 100.25, delta=1 / edit.FPS)
+
+
+class CutOutputTests(unittest.TestCase):
+    """Package outputs follow the edited cut, not the source span (#338)."""
+
+    CLIP = {"number": 1, "title": "a title", "file": "a title", "speaker": "host", "text": "x",
+            "start": 100.0, "end": 140.0, "edit": {"source_s": 40.0, "cut_s": 33.4},
+            "shots": [{"a": 103.1, "b": 103.6, "spk": "guest", "zoom": 1.0},
+                      {"a": 103.6, "b": 110.0, "spk": "host", "zoom": 1.0}]}
+    COPY = {"youtube_title": "t", "youtube_hook": "h", "youtube_intro": "i", "thumbnail_title": "t",
+            "website_title": "w", "website_intro": "w"}
+
+    def test_docx_and_clips_md_give_the_cut_length(self) -> None:
+        from docx import Document  # noqa: PLC0415
+        with tempfile.TemporaryDirectory() as d:
+            ep = _episode(Path(d))
+            ep.package.mkdir(parents=True)
+            path = package.build_docx(ep, self.COPY, [self.CLIP], Path(d) / "ep.docx")
+            text = "\n".join(p.text for p in Document(str(path)).paragraphs)
+            md = clips.write_clips_md(ep, [self.CLIP]).read_text(encoding="utf-8")
+        self.assertIn("01:40-02:20 (33 s)", text)
+        self.assertIn("02:20, 33 s)", md)
+
+    def test_unedited_clip_keeps_the_source_length(self) -> None:
+        self.assertEqual(clips.clip_length({"start": 100.0, "end": 140.0}), 40.0)
+
+    def test_cover_frame_sits_in_the_first_kept_shot_of_the_speaker(self) -> None:
+        # The 3 s opener (100-103.1) is cut, so start + 1.5 would show cut footage.
+        self.assertEqual(covers.cover_moment(self.CLIP), ("host", 105.1))
+        short = dict(self.CLIP, shots=[{"a": 103.6, "b": 104.0, "spk": "host", "zoom": 1.0}])
+        self.assertAlmostEqual(covers.cover_moment(short)[1], 103.8)
+        self.assertEqual(covers.cover_moment({"speaker": "guest", "start": 50.0}), ("guest", 51.5))
 
 
 if __name__ == "__main__":
