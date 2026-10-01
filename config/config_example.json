@@ -408,7 +408,13 @@
             "host": "127.0.0.1",
             "port": 8470,
             "public_url": "https://your-public-https-url",
-            "staging_dir": ""
+            "staging_dir": "",
+            "stun_urls": ["stun:stun.l.google.com:19302"],
+            "turn": {
+                "urls": ["turn:your-turn-host:443?transport=tcp"],
+                "username": "set RECORDER_TURN_USERNAME in .env",
+                "credential": "set RECORDER_TURN_CREDENTIAL in .env"
+            }
         }
     }
 }

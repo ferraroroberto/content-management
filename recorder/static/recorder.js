@@ -1,6 +1,9 @@
 // Podcast recorder page (issue #341): record this side's camera and mic at full
 // resolution, keep every chunk in IndexedDB until the server has it, upload
 // while recording, resume after a dropped connection or a reload.
+// The call (#342): the same camera stream also feeds a peer-to-peer WebRTC
+// call, downscaled; while recording, the other side's voice as received is
+// recorded too, at low quality, as the sync reference (#343).
 "use strict";
 
 const TOKEN = location.pathname.split("/").filter(Boolean).pop();
@@ -23,6 +26,10 @@ const MIMES = [
 ];
 const TIMESLICE_MS = 1000;
 const MAX_BACKOFF_MS = 5000;
+const CALL_HEIGHT = 720;           // the call's picture; the recording keeps full resolution
+const CALL_BPS = 1_500_000;
+const REF_MIME = "audio/webm;codecs=opus";
+const REF_BPS = 32_000;
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const mb = (bytes) => `${(bytes / 1e6).toFixed(1)} MB`;
@@ -116,7 +123,7 @@ async function retrying(rec, fn) {
 async function finish(rec) {
   const out = await call(`/rec/${rec.rid}/finish`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ total: rec.total, ext: rec.ext }),
+    body: JSON.stringify({ total: rec.total, ext: rec.ext, kind: rec.kind || "main" }),
   });
   if (out.conflict) {
     const missing = out.conflict.missing || [];
@@ -163,8 +170,9 @@ async function kick() {
 
 // ── capture ──────────────────────────────────────────────────────────────
 let stream = null;
-let recorder = null;
+let recorder = null;   // this side's camera + mic
 let current = null;
+let refRecorder = null; // the other side's voice, while recording
 let wakeLock = null;
 
 const resolution = () => document.querySelector("input[name=res]:checked").value;
@@ -185,6 +193,7 @@ async function openStream() {
   $("settings").textContent = `Camera gives ${v.width}×${v.height} at ${Math.round(v.frameRate || 0)} fps · `
     + `${mime || "no supported recording format"}`;
   $("start").disabled = !mime;
+  attachToCall();
 }
 
 async function listDevices() {
@@ -204,27 +213,35 @@ function pickMime() {
   return MIMES.find(([m]) => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || [];
 }
 
-async function start() {
-  const [mime, ext] = pickMime();
-  const p = PROFILES[resolution()];
-  const rec = { rid: crypto.randomUUID(), token: TOKEN, mime, ext, started: Date.now(), recorded: 0,
+// One recording of ``source`` into IndexedDB chunks; ``onDone`` runs once it is stopped and queued.
+async function record(source, kind, mime, ext, options, onDone) {
+  const rec = { rid: crypto.randomUUID(), token: TOKEN, kind, mime, ext, started: Date.now(), recorded: 0,
                 total: 0, stopped: false, result: null, error: null };
   await putRec(rec);
-  current = rec;
   let chain = Promise.resolve();
-  recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: p.bps, audioBitsPerSecond: 192000 });
-  recorder.ondataavailable = (e) => {
+  const mr = new MediaRecorder(source, { mimeType: mime, ...options });
+  mr.ondataavailable = (e) => {
     if (!e.data.size) return;
     const seq = rec.total++;
     rec.recorded += e.data.size;
     // Chained, so chunk writes and the final "stopped" land in order.
     chain = chain.then(async () => { await putChunk(rec.rid, seq, e.data); await putRec(rec); kick(); });
   };
-  recorder.onstop = () => {
-    chain = chain.then(async () => { rec.stopped = true; await putRec(rec); current = null; kick(); });
-    releaseWakeLock();
-    setControls();
+  mr.onstop = () => {
+    chain = chain.then(async () => { rec.stopped = true; await putRec(rec); kick(); });
+    onDone();
   };
+  mr.start(TIMESLICE_MS);
+  return [mr, rec];
+}
+
+async function start() {
+  const [mime, ext] = pickMime();
+  const p = PROFILES[resolution()];
+  const [mr, rec] = await record(stream, "main", mime, ext, { videoBitsPerSecond: p.bps, audioBitsPerSecond: 192000 },
+    () => { current = null; stopRef(); releaseWakeLock(); setControls(); });
+  recorder = mr;
+  current = rec;
   recorder.onerror = (e) => warn(`recording error: ${e.error ? e.error.name : "unknown"}; what was recorded is kept`);
   // A device that disconnects ends its track, and the recorder stops with it: say so.
   for (const track of stream.getTracks()) {
@@ -233,13 +250,167 @@ async function start() {
         + "taken by another app); the recording ended there and is being uploaded");
     });
   }
-  recorder.start(TIMESLICE_MS);
+  startRef();
   try { wakeLock = await navigator.wakeLock.request("screen"); } catch { wakeLock = null; }
   setControls();
 }
 
 function stop() {
   if (recorder && recorder.state !== "inactive") recorder.stop();
+}
+
+// The other side's voice as received, while this side records. A call that
+// drops ends the remote track and with it this recording; the next one starts
+// when the call comes back, so a session can hold several reference files.
+async function startRef() {
+  const track = remote && remote.getAudioTracks().find((t) => t.readyState === "live");
+  if (!current || refRecorder || !track || !MediaRecorder.isTypeSupported(REF_MIME)) return;
+  refRecorder = "starting";
+  const [mr] = await record(new MediaStream([track]), "ref", REF_MIME, "webm", { audioBitsPerSecond: REF_BPS },
+    () => { refRecorder = null; });
+  refRecorder = mr;
+}
+
+function stopRef() {
+  if (refRecorder && refRecorder !== "starting" && refRecorder.state !== "inactive") refRecorder.stop();
+}
+
+// ── call: peer to peer, signalling over the server's WebSocket ─────────────
+let pc = null;
+let ws = null;
+let iceServers = [];
+let remote = null;
+let polite = false;      // perfect negotiation: the guest yields on an offer collision
+let makingOffer = false;
+let ignoreOffer = false;
+let callState = "connecting";
+let wsAlive = true;
+let peerId = null;                     // the other page, as the server names it
+const PAGE_ID = crypto.randomUUID();   // this page load
+
+function send(message) {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
+}
+
+async function connectSignalling() {
+  try {
+    ({ iceServers } = await call("/ice"));
+  } catch {
+    setTimeout(connectSignalling, 3000);
+    return;
+  }
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(`${proto}://${location.host}/ws/${TOKEN}?peer=${PAGE_ID}`);
+  ws.onmessage = (e) => onSignal(JSON.parse(e.data)).catch((err) => console.warn("[recorder] signal", err));
+  ws.onclose = (e) => {
+    if (e.code === 4001) { callState = "open in another tab"; wsAlive = false; return; }
+    if (e.code === 4404) { callState = "link not valid"; wsAlive = false; return; }
+    if (!pc || pc.connectionState !== "connected") callState = "reconnecting";
+    setTimeout(connectSignalling, 2000);
+  };
+}
+
+function startPeer() {
+  pc = new RTCPeerConnection({ iceServers });
+  pc.onicecandidate = ({ candidate }) => { if (candidate) send({ type: "candidate", candidate }); };
+  pc.onnegotiationneeded = async () => {
+    try {
+      makingOffer = true;
+      await pc.setLocalDescription();
+      send({ type: pc.localDescription.type, sdp: pc.localDescription.sdp });
+    } catch (err) {
+      console.warn("[recorder] negotiation", err);
+    } finally {
+      makingOffer = false;
+    }
+  };
+  pc.ontrack = ({ track, streams }) => {
+    remote = streams[0] || new MediaStream([track]);
+    $("remote").srcObject = remote;
+    $("remote").play().catch(() => { $("hear").hidden = false; });
+    if (track.kind === "audio") startRef();
+  };
+  pc.onconnectionstatechange = () => {
+    callState = pc.connectionState;
+    if (pc.connectionState === "failed") pc.restartIce();
+  };
+  attachToCall();
+}
+
+function closePeer() {
+  if (pc) pc.close();
+  pc = null;
+  remote = null;
+  $("remote").srcObject = null;
+  stopRef();
+}
+
+// Send this side's camera and mic: the same tracks the recorder uses, the
+// picture scaled down to CALL_HEIGHT for the call only.
+function attachToCall() {
+  if (!pc || !stream) return;
+  for (const track of stream.getTracks()) {
+    const sender = pc.getSenders().find((s) => s.track && s.track.kind === track.kind);
+    if (sender) {
+      sender.replaceTrack(track).then(() => track.kind === "video" && capVideo(sender));
+    } else if (track.kind === "video") {
+      pc.addTransceiver(track, { direction: "sendrecv", streams: [stream], sendEncodings: [videoEncoding(track)] });
+    } else {
+      pc.addTrack(track, stream);
+    }
+  }
+}
+
+function videoEncoding(track) {
+  const height = track.getSettings().height || CALL_HEIGHT;
+  return { scaleResolutionDownBy: Math.max(1, height / CALL_HEIGHT), maxBitrate: CALL_BPS };
+}
+
+async function capVideo(sender) {
+  const params = sender.getParameters();
+  if (!params.encodings || !params.encodings.length) return;
+  Object.assign(params.encodings[0], videoEncoding(sender.track));
+  await sender.setParameters(params).catch((err) => console.warn("[recorder] call cap", err));
+}
+
+async function onSignal(message) {
+  if (message.type === "peer") {
+    if (message.present && message.peer !== peerId) {
+      // A new page on the other side (first join, reload, crash): start the call afresh.
+      closePeer();
+      peerId = message.peer;
+      startPeer();
+    } else if (!message.present) {
+      // Its signalling dropped; a call whose media still flows carries on.
+      if (!pc || pc.connectionState !== "connected") {
+        closePeer();
+        peerId = null;
+        callState = "waiting for the other side";
+      }
+    }
+    return;
+  }
+  if (!pc) startPeer();
+  if (message.type === "offer" || message.type === "answer") {
+    const collision = message.type === "offer" && (makingOffer || pc.signalingState !== "stable");
+    ignoreOffer = !polite && collision;
+    if (ignoreOffer) return;
+    await pc.setRemoteDescription({ type: message.type, sdp: message.sdp });
+    if (message.type === "offer") {
+      await pc.setLocalDescription();
+      send({ type: pc.localDescription.type, sdp: pc.localDescription.sdp });
+    }
+  } else if (message.type === "candidate") {
+    try {
+      await pc.addIceCandidate(message.candidate);
+    } catch (err) {
+      if (!ignoreOffer) console.warn("[recorder] candidate", err);
+    }
+  } else if (message.type === "bye") {
+    closePeer();
+    peerId = null;
+    callState = "waiting for the other side";
+  }
 }
 
 function warn(message) {
@@ -278,7 +449,7 @@ async function render() {
   const lines = [], done = [];
   for (const rec of recs) {
     if (rec.result) {
-      if (rec.started > Date.now() - 7 * 864e5) {
+      if (rec.kind !== "ref" && rec.started > Date.now() - 7 * 864e5) {
         done.push(`✅ ${new Date(rec.started).toLocaleString()}: uploaded, ${Math.round(rec.result.duration_s / 60)} min`);
       }
       continue;
@@ -298,7 +469,13 @@ async function render() {
   $("done").textContent = done.join(" · ");
   $("net").textContent = online ? "" : `connection lost, retrying (${lastError})`;
   $("net").className = online ? "meta" : "meta err";
-  window.__recorder = { recording: !!recording, recorded, pending, results: recs.filter((r) => r.result).map((r) => r.result),
+  const live = callState === "connected";
+  $("call").textContent = live ? "● connected" : callState;
+  $("call").className = `badge ${live ? "ok" : wsAlive ? "warn" : ""}`;
+  const finished = recs.filter((r) => r.result);
+  window.__recorder = { recording: !!recording, recorded, pending, call: callState,
+                        results: finished.filter((r) => r.kind !== "ref").map((r) => r.result),
+                        refs: finished.filter((r) => r.kind === "ref").map((r) => r.result),
                         errors: recs.filter((r) => r.error).map((r) => r.error) };
 }
 
@@ -306,6 +483,7 @@ async function main() {
   db = await openDb();
   try {
     const { side } = await call("");
+    polite = side === "guest";
     $("intro").textContent = `You are recording the ${side} side. Pick your camera and microphone, `
       + "then start when the conversation starts. Your recording stays on this computer until it is uploaded.";
   } catch (err) {
@@ -324,9 +502,12 @@ async function main() {
     (err) => { $("settings").textContent = `Camera or microphone not available: ${err.message}`; }));
   $("start").addEventListener("click", start);
   $("stop").addEventListener("click", stop);
+  $("hear").addEventListener("click", () => { $("remote").play(); $("hear").hidden = true; });
+  connectSignalling();
   window.addEventListener("online", kick);
   window.addEventListener("beforeunload", (e) => {
     if ((recorder && recorder.state === "recording") || $("state").textContent === "uploading") e.preventDefault();
+    send({ type: "bye" });
   });
   await adoptOrphans();
   setControls();

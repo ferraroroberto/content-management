@@ -57,6 +57,16 @@
   <p class="muted" id="intro">Loading…</p>
 
   <section class="card">
+    <div class="row" style="justify-content:space-between">
+      <strong>Call</strong><span class="badge" id="call">connecting</span>
+    </div>
+    <video id="remote" autoplay playsinline style="margin-top:8px"></video>
+    <button id="hear" hidden>Play the other side's sound</button>
+    <p class="meta">You see and hear the other side here. The call is only for talking: each side's own
+      recording is made on its own computer, in full quality.</p>
+  </section>
+
+  <section class="card">
     <video id="preview" autoplay muted playsinline></video>
     <div class="row" style="margin-top:12px">
       <label for="camera">Camera</label><select id="camera"></select>

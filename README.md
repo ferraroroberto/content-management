@@ -93,9 +93,9 @@ Six surfaces, one repo:
   applies and re-renders; covers and the package wait for that review.
   It never publishes and only reads Notion. See
   [`podcast/README.md`](podcast/README.md). The recorder (`recorder/`,
-  `recorder_server.py`) records each side of an interview in the browser
-  and uploads it into the episode folder, replacing Riverside for that job:
-  [`recorder/README.md`](recorder/README.md).
+  `recorder_server.py`) holds the interview's peer-to-peer video call and
+  records each side in the browser, uploading into the episode folder,
+  replacing Riverside for that job: [`recorder/README.md`](recorder/README.md).
 
 The four content pipelines read from the same Notion editorial database;
 check IP is independent of Notion and keeps its own local store. Each per-folder
