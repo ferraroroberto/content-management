@@ -1,12 +1,15 @@
 #!/usr/bin/env python
 """Podcast episode pipeline (issue #333).
 
-    python podcast_pipeline.py "<episode folder>" [--stages transcribe,clean,...] [--force]
+    python podcast_pipeline.py "<episode folder>" [--stages transcribe,clean,...] [--force] [--unreviewed]
 
 Stages run in order and each one writes its output into
 ``<episode folder>/<podcast.package_dirname>/``. A stage whose output already
 exists is skipped unless ``--force`` is given, so a run resumes where the
 last one stopped. Nothing is published, posted or written to Notion.
+
+``covers`` and ``package`` wait for the owner's clip review (issue #339):
+they run once every clip is approved or dropped, or with ``--unreviewed``.
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ force_utf8_stdio()
 from config.logger_config import setup_logger  # noqa: E402
 from podcast.episode import Episode, load_episode, load_podcast_config  # noqa: E402
 from podcast.metrics import stage_timer  # noqa: E402
+from podcast.review_state import kept_clips, load_review, review_done, summary, to_revise  # noqa: E402
 
 logger: logging.Logger = logging.getLogger("podcast")
 
@@ -58,6 +62,11 @@ def _render(ep, cfg, rec, force):
     render.run(ep, cfg, rec, force=force)
 
 
+def _revise(ep, cfg, rec, force):
+    from podcast import revise  # noqa: PLC0415
+    revise.run(ep, cfg, rec)
+
+
 def _episode(ep, cfg, rec, force):
     from podcast import package  # noqa: PLC0415
     package.run_episode_copy(ep, cfg, rec)
@@ -88,7 +97,7 @@ def _every_clip_has(kind: str) -> Callable[[Episode], bool]:
     def done(ep: Episode) -> bool:
         from podcast.clips import load_clips  # noqa: PLC0415
         from podcast.render import clip_outputs  # noqa: PLC0415
-        clips = load_clips(ep)
+        clips = kept_clips(load_clips(ep), load_review(ep))  # a dropped clip needs no files
         return bool(clips) and all(
             c.get("file") and all(path.exists() for path in clip_outputs(ep, c, kind)) for c in clips)
     return done
@@ -100,6 +109,11 @@ def _every_clip_edited(ep: Episode) -> bool:
     return bool(clips) and all("keep" in c and "caption_review" in c for c in clips)
 
 
+def _no_open_feedback(ep: Episode) -> bool:
+    from podcast.clips import load_clips  # noqa: PLC0415
+    return not to_revise(load_clips(ep), load_review(ep))
+
+
 # stage name → (runner, "is the output already there?")
 STAGES: dict[str, tuple[Callable, Callable[[Episode], bool]]] = {
     "transcribe": (_transcribe, _exists("transcript/turns.json")),
@@ -108,12 +122,14 @@ STAGES: dict[str, tuple[Callable, Callable[[Episode], bool]]] = {
     "copy": (_copy, _exists("clips.md")),
     "edit": (_edit, _every_clip_edited),
     "render": (_render, _every_clip_has("videos")),
+    "revise": (_revise, _no_open_feedback),
     "episode": (_episode, _exists("episode_copy.json")),
     "covers": (_covers, lambda ep: _exists("{base} (1920x1080)_text.png")(ep)
                and _every_clip_has("covers")(ep)),
     "package": (_package, _exists("{base}.docx")),
     "score": (_score, _exists("scores.json")),
 }
+REVIEW_GATED = ("covers", "package")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -122,6 +138,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("episode", help="episode folder containing episode.json")
     parser.add_argument("--stages", default=",".join(STAGES), help="comma-separated subset, in pipeline order")
     parser.add_argument("--force", action="store_true", help="re-run stages whose output exists")
+    parser.add_argument("--unreviewed", action="store_true",
+                        help="run covers and package before every clip is approved or dropped")
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args(argv)
     logger = setup_logger("podcast", file_logging=False,
@@ -145,6 +163,13 @@ def main(argv: list[str] | None = None) -> int:
         if is_done(ep) and not args.force:
             logger.info("ℹ️ %s: output exists, skipping (use --force to redo)", name)
             continue
+        if name in REVIEW_GATED and not args.unreviewed:
+            from podcast.clips import load_clips  # noqa: PLC0415
+            clips, review = load_clips(ep), load_review(ep)
+            if not review_done(clips, review):
+                logger.warning("⚠️ %s: waiting for review (%s); use --unreviewed to run it anyway",
+                               name, summary(clips, review))
+                continue
         logger.info("▶ %s", name)
         try:
             with stage_timer(ep.package, name) as rec:

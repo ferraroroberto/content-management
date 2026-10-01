@@ -24,6 +24,7 @@ from podcast.media import frame_at
 from podcast.metrics import StageRecord
 from podcast.package import load_episode_copy
 from podcast.render import clip_outputs
+from podcast.review_state import kept_clips, load_review
 
 logger = logging.getLogger("podcast.covers")
 
@@ -183,7 +184,7 @@ def run(ep: Episode, cfg: dict, rec: StageRecord, *, force: bool = False) -> Non
         ep.package / f"{ep.base_name} (1920x1080)_thumbnail.png")
     text_card(guest_photo, host_photo, names, ep.card_label, ep.card_when, copy["card_blurb"], bulb,
               fonts["handwriting"]).save(ep.package / f"{ep.base_name} (1920x1080)_text.png")
-    clips = load_clips(ep)
+    clips = kept_clips(load_clips(ep), load_review(ep))
     for clip in clips:
         out = clip_outputs(ep, clip, "covers")[0]
         if out.exists() and not force:

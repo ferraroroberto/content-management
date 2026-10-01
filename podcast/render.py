@@ -119,14 +119,19 @@ def render_clip(ep: Episode, clip: dict, layout: Layout, words: list[dict], scra
     ], cwd=scratch)
 
 
+def prepare_fonts(cfg: dict, scratch: Path) -> None:
+    """Copy the caption font where the ASS subtitles filter looks for it (``fonts/`` in the scratch dir)."""
+    fonts = scratch / "fonts"
+    fonts.mkdir(exist_ok=True)
+    shutil.copy2(cfg["fonts"]["caption"], fonts / Path(cfg["fonts"]["caption"]).name)
+
+
 def run(ep: Episode, cfg: dict, rec: StageRecord, *, force: bool = False) -> list[dict]:
     """Render every clip; a clip already on disk is kept unless ``force``."""
     clips = load_clips(ep)
     clip_words = load_clip_words(ep)
     scratch = work_dir(cfg, ep)
-    fonts = scratch / "fonts"
-    fonts.mkdir(exist_ok=True)
-    shutil.copy2(cfg["fonts"]["caption"], fonts / Path(cfg["fonts"]["caption"]).name)
+    prepare_fonts(cfg, scratch)
     encoder = cfg.get("video_encoder", "libx264")
     taken: set[str] = set()
     for clip in clips:

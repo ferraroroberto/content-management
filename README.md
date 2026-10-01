@@ -88,7 +88,9 @@ Six surfaces, one repo:
   a title, LinkedIn post and Instagram caption per clip, covers, the
   episode document and the website page. Each stage resumes from what is
   on disk, and a cost table plus a per-clip quality score come with every
-  run. The control panel's 🎙️ podcast tab runs it and reviews the clips.
+  run. The control panel's 🎙️ podcast tab runs it and holds the owner's
+  per-clip review: approve, drop, or send feedback that the `revise` stage
+  applies and re-renders; covers and the package wait for that review.
   It never publishes and only reads Notion. See
   [`podcast/README.md`](podcast/README.md).
 
