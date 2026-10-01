@@ -102,8 +102,8 @@ Large intermediates (WAVs, frames, caption files) go to `podcast.work_dir`
   a short sound between two silences is cut as a filler when its words are
   fillers or when, carrying no word, an isolated decode hears only a filler
   (whisper writes almost no "um", and most such sounds turned out to be
-  real words). The 1:1 camera plan follows whoever speaks (a turn of 4+
-  words and 1.5+ s) and changes framing (punch in/out) at a jump cut or
+  real words). The 1:1 camera plan follows whoever speaks (the louder
+  track, for a turn of 1.5+ s of speech) and changes framing (punch in/out) at a jump cut or
   after 6 s on one framing.
 - **render**: plays each clip's kept spans back to back, every audio span
   with a 10 ms fade in and out so cuts don't click, cut on the same 24 fps

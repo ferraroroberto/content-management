@@ -15,10 +15,10 @@ jump-cut list and the 1:1 camera plan (issue #335).
 * **Opener.** A leading "And…/So, yeah…/But then…" is cut so the clip
   opens on its hook. It is read from this decode, not at selection: the
   per-track pass's bleed gate often drops exactly those short first words.
-* **Camera plan (1:1).** The crop follows whoever is speaking (per-track
-  words, so the speaker is known) and changes framing on a jump cut or
-  after ``MAX_SHOT_S`` of one speaker, the way the owner's published
-  episodes punch in and out.
+* **Camera plan (1:1).** The crop follows whoever is speaking (the louder
+  of the two tracks, as the bleed gate reads them) and changes framing on a
+  jump cut or after ``MAX_SHOT_S`` on one framing, the way the owner's
+  published episodes punch in and out.
 
 Times in ``keep`` and the shots are episode seconds on a 1/``FPS`` grid
 from the clip start, so the video and audio trims cut on the same frames.
@@ -37,10 +37,10 @@ import numpy as np
 
 from podcast.clips import load_clips, save_clips
 from podcast.episode import Episode, work_dir
-from podcast.media import extract_mix_wav, read_wav, write_wav
+from podcast.media import extract_mix_wav, extract_wav, read_wav, write_wav
 from podcast.metrics import StageRecord
 from podcast.review import review_clip
-from podcast.transcribe import (_runs, drop_backchannel, find_loops, load_words, segment_words,
+from podcast.transcribe import (BLEED_RATIO, FRAME_MS, find_loops, frame_rms, load_words, segment_words,
                                 whisper_segments, words_between)
 
 logger = logging.getLogger("podcast.edit")
@@ -63,8 +63,7 @@ OPENERS = FILLERS | {"and", "so", "but", "yeah", "yes", "well", "absolutely", "e
 MAX_OPENER_WORDS = 4
 _CORE = re.compile(r"[^\w']+")
 
-MIN_TURN_S = 1.5        # a shorter turn of the other speaker does not move the camera
-MIN_TURN_WORDS = 4
+MIN_TURN_S = 1.0        # a shorter turn of the other speaker ("yeah", a laugh) does not move the camera
 MIN_SHOT_S = 2.0        # a jump cut changes framing only after this long on one shot
 MAX_SHOT_S = 6.0        # one framing at most this long
 ZOOMS = (1.0, 1.18, 1.08)
@@ -221,24 +220,53 @@ def cut_words(words: list[dict], keep: list[tuple[float, float]]) -> list[dict]:
     return out
 
 
+def snap_to_speech(words: list[dict], sil: list[tuple[float, float]]) -> list[dict]:
+    """Move a word start that sits in a silence to the silence's end: whisper
+    starts a word where the previous one ended, so after a pause the karaoke
+    highlight would come early."""
+    out = []
+    for w in words:
+        gap = next((b for a, b in sil if a - 0.15 <= w["s"] < b < w["e"]), None)
+        out.append({**w, "s": round(gap, 2)} if gap is not None else w)
+    return out
+
+
 def kept_seconds(keep: list[tuple[float, float]]) -> float:
     return round(sum(b - a for a, b in keep), 2)
 
 
 # ── 1:1 camera plan ─────────────────────────────────────────────────────
 
-def speaker_switches(words: list[dict], start: float, end: float, first: str) -> list[tuple[float, str]]:
-    """``(time, speaker)`` from which the camera shows that speaker; turns
-    shorter than ``MIN_TURN_S`` or ``MIN_TURN_WORDS`` don't move it (whisper
-    can stretch a lone "hmm" over seconds). ``first`` is the fallback for a
-    clip with no turn that long."""
-    inside = drop_backchannel([w for w in words if start <= w["s"] < end and not is_filler(w)])
-    turns = [r for r in _runs(inside, gap_s=1e9)
-             if len(r) >= MIN_TURN_WORDS and r[-1]["e"] - r[0]["s"] >= MIN_TURN_S]
-    switches = [(start, turns[0][0]["spk"] if turns else first)]
-    for run in turns[1:]:
-        if run[0]["spk"] != switches[-1][1]:
-            switches.append((max(start, run[0]["s"] - 0.15), run[0]["spk"]))
+def speaker_switches(rms: dict[str, np.ndarray], start: float, first: str) -> list[tuple[float, str]]:
+    """``(time, speaker)`` from which the camera shows that speaker.
+
+    Read from the two tracks' loudness (``FRAME_MS`` frames from ``start``),
+    not from word times, which drift a second or more under cross-talk: a
+    frame belongs to the speaker whose track is in speech (within ~30 dB of
+    its own loud frames) and ``BLEED_RATIO`` louder than the other's bleed.
+    A turn runs until the other speaker takes a frame; one spanning less
+    than ``MIN_TURN_S`` ("yeah", a laugh) doesn't move the camera. ``first``
+    is the fallback for a clip with no turn that long."""
+    n = min(len(rms["guest"]), len(rms["host"]))
+    if not n:
+        return [(start, first)]
+    g, h = rms["guest"][:n], rms["host"][:n]
+    speaking_g, speaking_h = g > np.percentile(g, 95) / 30, h > np.percentile(h, 95) / 30
+    label = np.where((g > BLEED_RATIO * h) & speaking_g, 1, np.where((h > BLEED_RATIO * g) & speaking_h, 2, 0))
+    runs: list[list[int]] = []  # [speaker code, first frame, last frame]
+    for i in np.flatnonzero(label):
+        if runs and runs[-1][0] == label[i]:
+            runs[-1][2] = int(i)
+        else:
+            runs.append([int(label[i]), int(i), int(i)])
+    frame_s = FRAME_MS / 1000
+    names = {1: "guest", 2: "host"}
+    turns = [(start + max(0, a - 2) * frame_s, names[code]) for code, a, b in runs
+             if (b - a + 1) * frame_s >= MIN_TURN_S]
+    switches = [(start, turns[0][1] if turns else first)]
+    for at, spk in turns[1:]:
+        if spk != switches[-1][1]:
+            switches.append((round(at, 3), spk))
     return switches
 
 
@@ -319,17 +347,27 @@ def _listen(cfg: dict, samples: np.ndarray, rate: int, a: float, b: float, scrat
     return " ".join(seg.get("text", "") for seg in whisper_segments(cfg["whisper_url"], wav, rec)).strip()
 
 
-def edit_clip(cfg: dict, clip: dict, tracks: list[Path], episode_words: list[dict], scratch: Path,
+def track_rms(tracks: dict[str, Path], clip: dict, scratch: Path) -> dict[str, np.ndarray]:
+    """Per-track loudness over the clip window, ``FRAME_MS`` frames."""
+    out = {}
+    for spk, src in tracks.items():
+        wav = extract_wav(src, scratch / f"spk_{spk}.wav", start=clip["start"],
+                          duration=clip["end"] - clip["start"])
+        out[spk] = frame_rms(*read_wav(wav))
+    return out
+
+
+def edit_clip(cfg: dict, clip: dict, tracks: dict[str, Path], episode_words: list[dict], scratch: Path,
               rec: StageRecord) -> list[dict]:
     """Decode the clip, find its cuts and camera plan; returns the caption words."""
-    wav = extract_mix_wav(tracks, scratch / f"cap_{clip['number']:02d}.wav",
+    wav = extract_mix_wav(list(tracks.values()), scratch / f"cap_{clip['number']:02d}.wav",
                           start=clip["start"], duration=clip["end"] - clip["start"])
     words = decode_clip(cfg, clip, wav, episode_words, rec)
     samples, rate = read_wav(wav)
     sil = silences(samples, rate, offset=clip["start"])
     k = opener_count(words)
     opener = opener_cut(words, k, sil, clip["start"])
-    opener_text, words = " ".join(w["w"] for w in words[:k]), words[k:]
+    opener_text, words = " ".join(w["w"] for w in words[:k]), snap_to_speech(words[k:], sil)
     fillers, unknown = classify_islands(islands(sil), words)
     for a, b in unknown:
         heard = _listen(cfg, samples, rate, a - clip["start"], b - clip["start"], scratch, rec)
@@ -337,7 +375,8 @@ def edit_clip(cfg: dict, clip: dict, tracks: list[Path], episode_words: list[dic
             fillers.append((a, b))
         logger.debug("island %.2f-%.2f heard as %r", a, b, heard)
     keep = cut_list(clip["start"], clip["end"], sil, fillers + ([opener] if opener else []))
-    switches = speaker_switches(episode_words, keep[0][0], clip["end"], clip["speaker"])
+    switches = [(max(t, keep[0][0]), spk) for t, spk in
+                speaker_switches(track_rms(tracks, clip, scratch), clip["start"], clip["speaker"])]
     clip["keep"] = [list(span) for span in keep]
     clip["shots"] = shots(keep, switches, [w for w in words if not is_filler(w)])
     clip["edit"] = {"source_s": round(clip["end"] - clip["start"], 2), "cut_s": kept_seconds(keep),
@@ -354,7 +393,7 @@ def run(ep: Episode, cfg: dict, rec: StageRecord) -> list[dict]:
     clips = load_clips(ep)
     episode_words = load_words(ep)
     scratch = work_dir(cfg, ep)
-    tracks = [ep.tracks["guest"], ep.tracks["host"]]
+    tracks = {"guest": ep.tracks["guest"], "host": ep.tracks["host"]}
     decoded = {str(c["number"]): edit_clip(cfg, c, tracks, episode_words, scratch, rec) for c in clips}
     with ThreadPoolExecutor(max_workers=3) as pool:
         reviews = list(pool.map(lambda c: review_clip(ep, cfg, rec, c, decoded[str(c["number"])],

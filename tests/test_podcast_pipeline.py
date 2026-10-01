@@ -346,6 +346,11 @@ class WordTimingTests(unittest.TestCase):
         self.assertEqual(edit.remap(103.5, self.KEEP), 3.0)  # inside the cut: start of the next span
         self.assertEqual(edit.remap(105.0, self.KEEP), 4.0)
 
+    def test_a_word_start_in_a_silence_moves_to_the_speech(self) -> None:
+        words = [_w("day.", 100.0, dur=0.4), {"w": "Why", "s": 100.4, "e": 101.5, "spk": "mix"}]
+        snapped = edit.snap_to_speech(words, [(100.45, 101.2)])
+        self.assertEqual([(w["s"], w["e"]) for w in snapped], [(100.0, 100.4), (101.2, 101.5)])
+
     def test_caption_words_follow_the_cut_and_drop_fillers(self) -> None:
         words = [_w("we", 102.0), _w("um", 103.2), _w("sleep", 104.5), _w("late", 111.0)]
         out = edit.cut_words(words, self.KEEP)
@@ -369,15 +374,20 @@ class WordTimingTests(unittest.TestCase):
 
 
 class CameraTests(unittest.TestCase):
-    def test_camera_follows_the_speaker_and_ignores_short_turns(self) -> None:
-        words = (_words("so how did you start doing this", "host", start=100.0)
-                 + [_w("hmm", 101.1, "guest", dur=3.0)]  # whisper stretched a lone "hmm"
-                 + _words("I started with eight hours in bed", "guest", start=104.0)
-                 + _words("but what about kids", "host", start=107.0, step=0.3)  # 1.2 s: too short to cut to
-                 + _words("and then it slowly improved over the months", "guest", start=108.5))
-        switches = edit.speaker_switches(words, 100.0, 112.0, "guest")
-        self.assertEqual([spk for _, spk in switches], ["host", "guest"])
-        self.assertAlmostEqual(switches[1][0], 103.85, places=2)
+    def test_camera_follows_the_louder_track_and_ignores_short_turns(self) -> None:
+        import numpy as np
+        frame = transcribe.FRAME_MS / 1000
+
+        def track(*spans: tuple[float, float]) -> np.ndarray:
+            out = np.full(int(12 / frame), 50.0)  # bleed / room
+            for a, b in spans:
+                out[int(a / frame):int(b / frame)] = 1000.0
+            return out
+        # host asks (0-3 s), guest answers (4-8 s) with a 0.6 s host "yeah" inside, host again (9-12 s)
+        rms = {"guest": track((4.0, 6.0), (6.6, 8.0)), "host": track((0.0, 3.0), (6.0, 6.6), (9.0, 12.0))}
+        switches = edit.speaker_switches(rms, 100.0, "guest")
+        self.assertEqual([spk for _, spk in switches], ["host", "guest", "host"])
+        self.assertAlmostEqual(switches[1][0], 103.9, places=2)
 
     def test_long_stretch_gets_punch_ins_and_jump_cuts_reframe(self) -> None:
         words = _words(" ".join(["word"] * 40), start=100.0, step=0.5)  # 20 s of one speaker
