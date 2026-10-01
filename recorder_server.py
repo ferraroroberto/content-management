@@ -22,10 +22,11 @@ from config.console import force_utf8_stdio  # noqa: E402
 
 force_utf8_stdio()
 import uvicorn  # noqa: E402
+from dotenv import load_dotenv  # noqa: E402
 
 from config.logger_config import setup_logger  # noqa: E402
 from podcast.episode import load_podcast_config  # noqa: E402
-from recorder.server import create_app, ensure_links  # noqa: E402
+from recorder.server import create_app, ensure_links, ice_servers  # noqa: E402
 from recorder.store import ChunkStore  # noqa: E402
 
 DEFAULT_PORT = 8470
@@ -39,6 +40,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     logger = setup_logger("recorder", file_logging=False, level=logging.INFO)
 
+    load_dotenv(Path(__file__).parent / ".env")  # the TURN credential lives there
     cfg = load_podcast_config()
     rcfg = cfg.get("recorder") or {}
     folder = Path(args.episode)
@@ -54,7 +56,10 @@ def main(argv: list[str] | None = None) -> int:
     for token, side in sorted(links.items(), key=lambda kv: kv[1]):
         logger.info("🔗 %s link: %s/r/%s", side, base, token)
     logger.info("ℹ️ recordings go to %s; chunks are staged in %s", folder / "video editing", staging)
-    uvicorn.run(create_app(folder, ChunkStore(staging), links), host=host, port=port, log_level="warning")
+    ice = ice_servers(rcfg)
+    logger.info("ℹ️ call relay: %s", "STUN + TURN" if len(ice) > 1 else "STUN only (no TURN configured: strict "
+                "networks may not connect)")
+    uvicorn.run(create_app(folder, ChunkStore(staging), links, ice), host=host, port=port, log_level="warning")
     return 0
 
 

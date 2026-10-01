@@ -17,6 +17,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from starlette.testclient import TestClient  # noqa: E402
+from starlette.websockets import WebSocketDisconnect  # noqa: E402
 
 from recorder import server, store  # noqa: E402
 from recorder.store import ChunkStore, MissingChunks  # noqa: E402
@@ -156,6 +157,84 @@ class ServerTests(unittest.TestCase):
         api = f"/api/{self.token['host']}/rec"
         self.assertEqual(self.client.put(f"{api}/not-a-uuid/chunk/0", content=b"x").status_code, 400)
         self.assertEqual(self.client.post(f"{api}/{_rid()}/finish", json={}).status_code, 400)
+        rid = _rid()
+        self.client.put(f"{api}/{rid}/chunk/0", content=b"A")
+        bad_kind = self.client.post(f"{api}/{rid}/finish", json={"total": 1, "ext": "webm", "kind": "x"})
+        self.assertEqual(bad_kind.status_code, 400)
+
+    def test_the_remote_voice_reference_gets_its_own_name(self) -> None:
+        api, rid = f"/api/{self.token['guest']}/rec", _rid()
+        self.client.put(f"{api}/{rid}/chunk/0", content=b"A")
+        with mock.patch.object(store, "remux", side_effect=_fake_remux), \
+                mock.patch.object(store, "probe_duration", return_value=1.0):
+            done = self.client.post(f"{api}/{rid}/finish", json={"total": 1, "ext": "webm", "kind": "ref"}).json()
+        self.assertTrue(done["file"].startswith("recorder - guest remote-ref - "))
+
+
+class SignallingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        episode = Path(self.tmp.name) / "Some Episode"
+        episode.mkdir()
+        links = server.ensure_links(episode)
+        self.token = {side: tok for tok, side in links.items()}
+        ice = [{"urls": ["stun:stun.example:3478"]}]
+        self.client = TestClient(server.create_app(episode, ChunkStore(Path(self.tmp.name) / "s"), links, ice))
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def _ws(self, side: str, peer: str):
+        return self.client.websocket_connect(f"/ws/{self.token[side]}?peer={peer}")
+
+    def test_a_bad_link_or_peer_id_is_refused(self) -> None:
+        with self.assertRaises(WebSocketDisconnect) as bad_link:
+            with self.client.websocket_connect("/ws/nope?peer=aaaaaaaa"):
+                pass
+        self.assertEqual(bad_link.exception.code, server.UNKNOWN_LINK)
+        with self.assertRaises(WebSocketDisconnect):
+            with self._ws("host", "../x"):
+                pass
+
+    def test_presence_and_relay_between_the_two_sides(self) -> None:
+        with self._ws("host", "aaaaaaaa") as host:
+            self.assertEqual(host.receive_json(), {"type": "peer", "present": False, "peer": None})
+            with self._ws("guest", "bbbbbbbb") as guest:
+                self.assertEqual(host.receive_json(), {"type": "peer", "present": True, "peer": "bbbbbbbb"})
+                self.assertEqual(guest.receive_json(), {"type": "peer", "present": True, "peer": "aaaaaaaa"})
+                host.send_json({"type": "something else"})  # not a signal: dropped
+                host.send_json({"type": "offer", "sdp": "v=0"})
+                self.assertEqual(guest.receive_json(), {"type": "offer", "sdp": "v=0", "from": "host"})
+                guest.send_json({"type": "candidate", "candidate": {"candidate": "c"}})
+                self.assertEqual(host.receive_json()["from"], "guest")
+            self.assertEqual(host.receive_json(), {"type": "peer", "present": False, "peer": None})
+
+    def test_one_socket_per_side_and_a_reconnect_replaces_the_stale_one(self) -> None:
+        with self._ws("guest", "bbbbbbbb") as guest:
+            guest.receive_json()
+            with self._ws("host", "aaaaaaaa") as first:
+                first.receive_json()
+                guest.receive_json()
+                with self._ws("host", "cccccccc") as second:
+                    with self.assertRaises(WebSocketDisconnect) as replaced:
+                        while True:
+                            first.receive_json()
+                    self.assertEqual(replaced.exception.code, server.REPLACED)
+                    second.receive_json()
+                    self.assertEqual(guest.receive_json(), {"type": "peer", "present": True, "peer": "cccccccc"})
+                    guest.send_json({"type": "answer", "sdp": "x"})
+                    self.assertEqual(second.receive_json()["type"], "answer")
+
+    def test_ice_config(self) -> None:
+        self.assertEqual(self.client.get(f"/api/{self.token['host']}/ice").json(),
+                         {"iceServers": [{"urls": ["stun:stun.example:3478"]}]})
+        self.assertEqual(self.client.get("/api/nope/ice").status_code, 404)
+        self.assertEqual(server.ice_servers({}), [{"urls": server.DEFAULT_STUN}])
+        cfg = {"turn": {"urls": ["turn:relay.example:443?transport=tcp"], "username": "u", "credential": "c"}}
+        with mock.patch.dict("os.environ", {"RECORDER_TURN_CREDENTIAL": "from-env"}):
+            turn = server.ice_servers(cfg)[1]
+        self.assertEqual(turn, {"urls": ["turn:relay.example:443?transport=tcp"], "username": "u",
+                                "credential": "from-env"})
 
 
 if __name__ == "__main__":
