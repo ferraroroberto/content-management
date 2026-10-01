@@ -29,7 +29,7 @@ from podcast.revise import list_versions
 from podcast.transcribe import fmt_ts
 
 PIPELINE_NAME = "podcast"
-STAGES = ["transcribe", "clean", "select", "copy", "edit", "render", "revise", "episode", "covers", "package",
+STAGES = ["sync", "transcribe", "clean", "select", "copy", "edit", "render", "revise", "episode", "covers", "package",
           "score"]
 STATUS_ICON = {"pending": "⏳ pending", "approved": "✅ approved", "changes": "✏️ changes", "dropped": "🗑️ dropped"}
 

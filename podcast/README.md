@@ -7,6 +7,7 @@ table for past titles and LinkedIn intros (style examples).
 
 ```mermaid
 flowchart LR
+    Y[sync<br/>recorder sessions only] --> T
     T[transcribe<br/>whisper :8090] --> C[clean<br/>hub]
     T --> S[select<br/>hub]
     S --> P[copy<br/>hub]
@@ -86,6 +87,7 @@ cleaned transcript also starts there). The other keys are documented in
 | `<guest> - <host> (1920x1080)_thumbnail.png`, `_text.png` | the episode covers |
 | `metrics.json`, `metrics.md`, `scores.json` | per-stage cost table and per-clip quality scores |
 | `clips/versions/<NN>/v<N>/` | a revised clip's earlier version: both crops, the cover and its `clip.json` |
+| `sync.json` | recorder sessions only: the guest → host offset, drift, how they were found, and the aligned tracks the episode now reads |
 
 The review itself is `<episode folder>/review.json`, beside `episode.json`:
 per clip its status (`pending`, `approved`, `changes`, `dropped`), version,
@@ -96,6 +98,19 @@ Large intermediates (WAVs, frames, caption files) go to `podcast.work_dir`
 
 ## Stages
 
+- **sync** (recorder sessions only): the two sides of a `recorder/` session
+  were recorded on two computers' clocks, so they start at different moments
+  and drift apart. Each side's reference of the other voice (heard over the
+  call) is cross-correlated (GCC-PHAT, 8 kHz, telephone band) against that
+  voice's own full-quality track, near the start and near the end; with
+  both references the call latency cancels (NTP-style), and the change
+  between start and end is the clock drift. The guest track is re-timed once
+  into `video editing/synced - guest.mp4` (shifted, stretched by the drift;
+  the host track is the time base) and `sync.json` points the episode at it;
+  `episode.json` is not rewritten. A window counts only when its peak clears
+  8× the median correlation; when none does, the stage stops and names the
+  ratios it got (a spoken clap at the start is the manual fallback). A
+  session without reference files (Riverside) is taken as aligned.
 - **transcribe**: each track goes to the whisper server on its own. Each
   microphone also hears the other speaker, so frames where the other track
   is much louder are muted first (the bleed gate). Whisper segments sitting on

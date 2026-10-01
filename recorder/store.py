@@ -86,10 +86,13 @@ class ChunkStore:
         folder = self._dir(side, rid)
         return self._meta(folder).get("result") if folder.is_dir() else None
 
-    def finish(self, side: str, rid: str, total: int, ext: str, dst_dir: Path, *, label: str) -> dict:
+    def finish(self, side: str, rid: str, total: int, ext: str, dst_dir: Path, *, label: str,
+               sidecar: Optional[dict] = None) -> dict:
         """Join chunks ``0..total-1`` in order, remux into ``dst_dir`` and
         return ``{"file", "duration_s", "bytes"}``. Idempotent: a second call
-        returns the first result."""
+        returns the first result. ``sidecar`` (what the sync stage needs to pair
+        a reference with its main recording) is written beside the file as
+        ``<file>.json``."""
         folder = self._dir(side, rid)
         meta = self._meta(folder)
         if meta.get("result"):
@@ -110,6 +113,9 @@ class ChunkStore:
         dst = dst_dir / f"recorder - {label} - {started}.mp4"
         remux(joined, dst)
         result = {"file": dst.name, "duration_s": probe_duration(dst), "bytes": dst.stat().st_size}
+        dst.with_suffix(".json").write_text(json.dumps({**(sidecar or {}), "side": side, "rid": rid, "file": dst.name,
+                                                        "duration_s": result["duration_s"]}, indent=1),
+                                            encoding="utf-8")
         meta["result"] = result
         self._save_meta(folder, meta)
         for path in folder.glob("*.part"):

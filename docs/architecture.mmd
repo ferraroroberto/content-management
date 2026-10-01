@@ -170,6 +170,9 @@ never the owner's ok/person/chat/report/fixed"| CIDB
 proposal, decide, Apply"| CIREVIEW
 
   subgraph podcast_mod["podcast/ — episode package (local outputs only)"]
+    PSYNC["sync.py
+recorder sessions: align the two
+clocks (GCC-PHAT on call references)"]
     PTRANS["transcribe.py
 bleed gate + loop repair + turns"]
     PCLIPS["clips.py
@@ -197,7 +200,7 @@ chunk upload, join + remux"]
   APP -->|"🎙️ podcast tab: run (slot 'podcast'),
 review clips, cost, files"| PODPIPE
   APP -->|"approve / drop / feedback"| PREVISE
-  PODPIPE --> PTRANS --> PCLIPS --> PEDIT --> PRENDER --> PREVISE --> PPACK --> PSCORE
+  PODPIPE --> PSYNC --> PTRANS --> PCLIPS --> PEDIT --> PRENDER --> PREVISE --> PPACK --> PSCORE
   PTRANS -->|"per-track WAV"| WHISPER[("whisper-server
 127.0.0.1:8090")]
   PEDIT -->|"clip decode + filler check"| WHISPER
