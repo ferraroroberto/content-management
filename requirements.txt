@@ -38,6 +38,10 @@ en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_
 supabase==2.10.0
 # Streamlit review UI for the engagement pipeline.
 streamlit
+# Podcast recorder server (recorder/): HTTP now, WebSocket signalling next.
+# Both already come with Streamlit; listed because recorder/ imports them.
+starlette
+uvicorn
 # Local sklearn classifier (Phase 2a) trained on accumulated whitelist/blacklist
 # labels; runs as a layered pass after rules.py on rows the rules left as 'unknown'.
 # Pinned to one minor line because the trained pipeline is persisted as a pickle

@@ -188,6 +188,11 @@ clean transcript, episode copy,
     PSCORE["score.py + metrics.py + report.py
 clip rubric, stage cost ledger"]
   end
+  RECSRV["recorder_server.py + recorder/
+browser page (MediaRecorder, IndexedDB),
+chunk upload, join + remux"]
+  RECSRV -->|"host + guest tracks"| EPVID[["<episode>/video editing/"]]
+  EPVID --> PODPIPE
   APP -->|"🎙️ podcast tab: run (slot 'podcast'),
 review clips, cost, files"| PODPIPE
   APP -->|"approve / drop / feedback"| PREVISE

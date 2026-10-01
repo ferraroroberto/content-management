@@ -92,7 +92,10 @@ Six surfaces, one repo:
   per-clip review: approve, drop, or send feedback that the `revise` stage
   applies and re-renders; covers and the package wait for that review.
   It never publishes and only reads Notion. See
-  [`podcast/README.md`](podcast/README.md).
+  [`podcast/README.md`](podcast/README.md). The recorder (`recorder/`,
+  `recorder_server.py`) records each side of an interview in the browser
+  and uploads it into the episode folder, replacing Riverside for that job:
+  [`recorder/README.md`](recorder/README.md).
 
 The four content pipelines read from the same Notion editorial database;
 check IP is independent of Notion and keeps its own local store. Each per-folder
@@ -161,6 +164,7 @@ content-management/                   # repo root
 │   └── db/                           # Supabase schema (commenters + comments tables)
 ├── check_ip/                         # illustration copyright check (Google Lens → SQLite → triage tab)
 ├── podcast/                          # episode package: transcript → clips (1:1 + 9:16) → copy, covers, docx, website HTML
+├── recorder/                         # self-hosted two-side recorder: page + chunk upload into the episode folder
 ├── app/                              # Streamlit control panel (tabs: reporting/editorial/planning/newsletter/triage/engagement/check-IP/podcast)
 ├── config/                           # config.json, mapping.json, logger_config, chrome_launch, console
 │   └── doc_capture/                  # deterministic control-panel screenshot engine (README tour)
@@ -175,6 +179,7 @@ content-management/                   # repo root
 ├── reporting_pipeline.py             # orchestrator: APIs → Supabase → Notion → Substack
 ├── newsletter_pipeline.py            # orchestrator: schedule/bootstrap/archive/normalize/build subcommands
 ├── podcast_pipeline.py               # orchestrator: one episode folder → its podcast package (resumable stages)
+├── recorder_server.py                # serves the recorder for one episode (host + guest links)
 ├── launch_app.bat                    # Streamlit control panel launcher (Windows CMD)
 ├── launch_planning.bat               # planning launcher (Windows CMD)
 ├── launch_reporting.bat              # reporting launcher (Windows CMD)
