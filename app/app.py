@@ -1,7 +1,7 @@
 r"""Unified control-panel Streamlit app.
 
 Sections: 📊 Reporting · 📅 Editorial · 📅 Planning · 📰 Newsletter · 🛡️ Engagement ·
-⚖️ Check IP.
+⚖️ Check IP · 🎙️ Podcast.
 Routed via st.segmented_control rather than st.tabs() (issue #157 — st.tabs()
 loses the active tab on any widget rerun). Each section owns its own module
 (`app.tab_*`) per the project's per-tab convention (see pdf-to-markdown
@@ -135,6 +135,7 @@ PIPELINES = [
     ("newsletter",         "📰 newsletter"),
     ("triage",             "🧭 triage"),
     ("check-ip",           "⚖️ check IP"),
+    ("podcast",            "🎙️ podcast"),
     ("engagement-scrape",  "🛡️ engagement (scrape)"),
     ("engagement-classify","🛡️ engagement (classify)"),
 ]
@@ -171,7 +172,7 @@ with st.sidebar:
 # real widget — its selection is ordinary widget state, so it survives any
 # rerun the way st.tabs()'s internal state does not.
 SECTIONS = ["📊 reporting", "📅 editorial", "📅 planning", "📰 newsletter", "🧭 triage",
-            "🛡️ engagement", "⚖️ check IP"]
+            "🛡️ engagement", "⚖️ check IP", "🎙️ podcast"]
 
 # nav-bar and the routed section content must share one containing block
 # (this outer container) for position: sticky to have room to stick —
@@ -233,3 +234,6 @@ with st.container():
     elif section == "⚖️ check IP":
         from app import tab_check_ip  # noqa: PLC0415
         tab_check_ip.run()
+    elif section == "🎙️ podcast":
+        from app import tab_podcast  # noqa: PLC0415
+        tab_podcast.run()

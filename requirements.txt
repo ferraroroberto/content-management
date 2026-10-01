@@ -57,3 +57,8 @@ anthropic
 google-api-python-client>=2.100
 google-auth-httplib2>=0.2
 google-auth-oauthlib>=1.2
+# Podcast episode pipeline (podcast/): numpy for the per-track bleed gate,
+# Pillow for the covers, python-docx for the episode document.
+numpy
+Pillow
+python-docx
