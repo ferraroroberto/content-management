@@ -32,6 +32,11 @@ from podcast.review_state import kept_clips, load_review, review_done, summary, 
 logger: logging.Logger = logging.getLogger("podcast")
 
 
+def _sync(ep, cfg, rec, force):
+    from podcast import sync  # noqa: PLC0415
+    sync.run(ep, cfg, rec)
+
+
 def _transcribe(ep, cfg, rec, force):
     from podcast import transcribe  # noqa: PLC0415
     transcribe.run(ep, cfg, rec)
@@ -116,6 +121,7 @@ def _no_open_feedback(ep: Episode) -> bool:
 
 # stage name → (runner, "is the output already there?")
 STAGES: dict[str, tuple[Callable, Callable[[Episode], bool]]] = {
+    "sync": (_sync, _exists("sync.json")),
     "transcribe": (_transcribe, _exists("transcript/turns.json")),
     "clean": (_clean, _exists("{base} - transcript.md")),
     "select": (_select, _exists("clips.json")),
@@ -178,6 +184,8 @@ def main(argv: list[str] | None = None) -> int:
             logger.exception("❌ stage %s failed", name)
             return 1
         logger.info("✅ %s done in %.0fs", name, rec.wall_s)
+        if name == "sync":
+            ep = load_episode(Path(args.episode), cfg)  # the later stages read the aligned tracks
     from podcast.report import write_report  # noqa: PLC0415
     path = write_report(ep, cfg)
     logger.info("✅ metrics: %s", path)

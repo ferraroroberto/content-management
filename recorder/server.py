@@ -48,7 +48,7 @@ from starlette.routing import Mount, Route, WebSocketRoute
 from starlette.staticfiles import StaticFiles
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
-from recorder.store import ChunkStore, MissingChunks
+from recorder.store import RECORDING_ID, ChunkStore, MissingChunks
 
 logger = logging.getLogger("recorder.server")
 
@@ -64,6 +64,18 @@ DEFAULT_STUN = ["stun:stun.l.google.com:19302"]
 UNKNOWN_LINK = 4404  # WebSocket close code for a bad token
 PEER_ID = re.compile(r"^[0-9a-f-]{8,64}$")
 REPLACED = 4001      # ... for a socket its side opened again
+
+
+def reference_of(payload: dict) -> dict:
+    """For a ``ref`` recording: which main recording of this side it ran
+    beside, and where in that recording it starts (seconds, measured on the
+    page's own clock). The sync stage needs both to place the reference."""
+    if payload.get("main") is None:
+        return {}
+    main, offset = str(payload["main"]), float(payload["offset_s"])
+    if not RECORDING_ID.match(main) or not -60.0 <= offset <= 86400.0:
+        raise ValueError("bad main/offset_s")
+    return {"main": main, "offset_in_main_s": round(offset, 4)}
 
 
 def ice_servers(rcfg: dict) -> list[dict]:
@@ -217,13 +229,15 @@ def create_app(episode: Path, store: ChunkStore, links: dict[str, str],
     async def finish(request: Request, side: str) -> Response:
         payload = await request.json()
         try:
-            total, ext = int(payload["total"]), str(payload["ext"])
-            label = KINDS[payload.get("kind", "main")].format(side=side)
+            total, ext, kind = int(payload["total"]), str(payload["ext"]), payload.get("kind", "main")
+            label = KINDS[kind].format(side=side)
+            sidecar = {"kind": kind, **reference_of(payload)}
         except (KeyError, TypeError, ValueError):
-            return _bad(400, "finish needs total, ext and a known kind")
+            return _bad(400, "finish needs total, ext, a known kind and a valid main/offset_s")
         rid = request.path_params["rid"]
         try:
-            result = await run_in_threadpool(store.finish, side, rid, total, ext, out_dir, label=label)
+            result = await run_in_threadpool(store.finish, side, rid, total, ext, out_dir, label=label,
+                                              sidecar=sidecar)
         except MissingChunks as exc:
             return JSONResponse({"error": str(exc), "missing": exc.missing[:1000]}, status_code=409)
         return JSONResponse(result)

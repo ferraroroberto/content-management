@@ -13,6 +13,10 @@
   ``youtube_url``, ``website_slug`` — copy and cover inputs, all optional.
 * ``links`` — ``[{"label", "url"}]`` for the website page's "Where to find"
   list (kept in ``Episode.extra``); a LinkedIn placeholder until filled.
+
+When the ``sync`` stage has aligned a recorder session, ``<package>/sync.json``
+names the aligned tracks and they replace ``tracks`` (``episode.json`` itself
+is never rewritten).
 """
 
 from __future__ import annotations
@@ -26,6 +30,7 @@ from typing import Optional
 from config.loader import load_block
 
 SPEAKERS = ("guest", "host")
+SYNC_FILE = "sync.json"
 
 
 def load_podcast_config() -> dict:
@@ -81,6 +86,9 @@ def load_episode(folder: Path, cfg: Optional[dict] = None) -> Episode:
         raise FileNotFoundError(f"No episode.json in {folder}")
     spec = json.loads(spec_path.read_text(encoding="utf-8"))
     tracks = {k: folder / v for k, v in spec["tracks"].items()}
+    synced = folder / cfg.get("package_dirname", "podcast package") / SYNC_FILE
+    if synced.exists():
+        tracks.update({k: folder / v for k, v in json.loads(synced.read_text(encoding="utf-8"))["tracks"].items()})
     missing = [k for k in SPEAKERS if k not in tracks]
     if missing:
         raise ValueError(f"episode.json tracks missing {missing}")

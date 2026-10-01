@@ -123,7 +123,8 @@ async function retrying(rec, fn) {
 async function finish(rec) {
   const out = await call(`/rec/${rec.rid}/finish`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ total: rec.total, ext: rec.ext, kind: rec.kind || "main" }),
+    body: JSON.stringify({ total: rec.total, ext: rec.ext, kind: rec.kind || "main", main: rec.main,
+                           offset_s: rec.offset_s }),
   });
   if (out.conflict) {
     const missing = out.conflict.missing || [];
@@ -213,11 +214,12 @@ function pickMime() {
   return MIMES.find(([m]) => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || [];
 }
 
-// One recording of ``source`` into IndexedDB chunks; ``onDone`` runs once it is stopped and queued.
-async function record(source, kind, mime, ext, options, onDone) {
+// One recording of ``source`` into IndexedDB chunks; ``onDone`` runs once it is
+// stopped and queued. ``main`` (a main recording of this page) makes this a
+// reference: it records where in that main recording it starts.
+async function record(source, kind, mime, ext, options, onDone, main = null) {
   const rec = { rid: crypto.randomUUID(), token: TOKEN, kind, mime, ext, started: Date.now(), recorded: 0,
                 total: 0, stopped: false, result: null, error: null };
-  await putRec(rec);
   let chain = Promise.resolve();
   const mr = new MediaRecorder(source, { mimeType: mime, ...options });
   mr.ondataavailable = (e) => {
@@ -231,7 +233,12 @@ async function record(source, kind, mime, ext, options, onDone) {
     chain = chain.then(async () => { rec.stopped = true; await putRec(rec); kick(); });
     onDone();
   };
+  // Both recorders of this page are started the same way, so their start
+  // times on one clock place the reference inside the main recording (#343).
+  rec.t0 = performance.now();
+  if (main) Object.assign(rec, { main: main.rid, offset_s: (rec.t0 - main.t0) / 1000 });
   mr.start(TIMESLICE_MS);
+  await putRec(rec);
   return [mr, rec];
 }
 
@@ -267,7 +274,7 @@ async function startRef() {
   if (!current || refRecorder || !track || !MediaRecorder.isTypeSupported(REF_MIME)) return;
   refRecorder = "starting";
   const [mr] = await record(new MediaStream([track]), "ref", REF_MIME, "webm", { audioBitsPerSecond: REF_BPS },
-    () => { refRecorder = null; });
+    () => { refRecorder = null; }, current);
   refRecorder = mr;
 }
 

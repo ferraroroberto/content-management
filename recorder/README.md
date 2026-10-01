@@ -6,7 +6,8 @@ full resolution**, uploading in chunks while it runs. The finished files land
 in the episode's `video editing/` folder, which is where `podcast_pipeline.py`
 reads its tracks from. This replaces the one job Riverside did for the
 podcast. The design and the probes behind it are in #336. Build steps: the
-recorder (#341), the call (#342), and the track sync (#343) next.
+recorder (#341), the call (#342), and the track sync (#343, the pipeline's
+`sync` stage, see `podcast/README.md`).
 
 ## Run
 
@@ -32,6 +33,10 @@ how much is uploaded. The files, per side:
   while this side records. It is the reference the sync stage (#343)
   aligns the two full-quality tracks against. A call that drops and comes
   back while recording gives a second reference file.
+- Beside each file, a `.json` sidecar: its recording id, and for a
+  reference, which main recording of that side it ran beside and where in
+  it the reference starts (`offset_in_main_s`, measured on the page's own
+  clock). The sync stage pairs files by these, never by name.
 
 ## Reaching it from outside this machine
 
