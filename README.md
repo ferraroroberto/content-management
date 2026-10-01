@@ -1,6 +1,6 @@
 # Social Media Automation Suite
 
-Five surfaces, one repo:
+Six surfaces, one repo:
 
 - **Reporting** (`reporting/`, `reporting_pipeline.py`) — pulls daily
   metrics from social media APIs, processes through Supabase, syncs to
@@ -79,6 +79,17 @@ Five surfaces, one repo:
   never files a report, and cannot write the verdict. See
   [`check_ip/README.md`](check_ip/README.md).
 
+- **Podcast** (`podcast/`, `podcast_pipeline.py`) — turns a raw two-track
+  interview recording into the episode package, locally: a cleaned
+  transcript (whisper per track, with a mic-bleed gate and loop repair),
+  15 clips in 1:1 and 9:16 with burned-in captions in the house style,
+  a title, LinkedIn post and Instagram caption per clip, covers, the
+  episode document and the website page. Each stage resumes from what is
+  on disk, and a cost table plus a per-clip quality score come with every
+  run. The control panel's 🎙️ podcast tab runs it and reviews the clips.
+  It never publishes and only reads Notion. See
+  [`podcast/README.md`](podcast/README.md).
+
 The four content pipelines read from the same Notion editorial database;
 check IP is independent of Notion and keeps its own local store. Each per-folder
 README has its own mermaid flowchart, CLI table, gotchas, and validated
@@ -145,7 +156,8 @@ content-management/                   # repo root
 │   ├── reputation/                   # per-commenter reputation feedback loop
 │   └── db/                           # Supabase schema (commenters + comments tables)
 ├── check_ip/                         # illustration copyright check (Google Lens → SQLite → triage tab)
-├── app/                              # Streamlit control panel (tabs: reporting/editorial/planning/newsletter/triage/engagement/check-IP)
+├── podcast/                          # episode package: transcript → clips (1:1 + 9:16) → copy, covers, docx, website HTML
+├── app/                              # Streamlit control panel (tabs: reporting/editorial/planning/newsletter/triage/engagement/check-IP/podcast)
 ├── config/                           # config.json, mapping.json, logger_config, chrome_launch, console
 │   └── doc_capture/                  # deterministic control-panel screenshot engine (README tour)
 ├── gmail_readonly/                   # portable, read-only Gmail OAuth + search component (vendored)
@@ -158,6 +170,7 @@ content-management/                   # repo root
 ├── planning_pipeline.py              # orchestrator: LI → IG → TW → TH (--all-wip)
 ├── reporting_pipeline.py             # orchestrator: APIs → Supabase → Notion → Substack
 ├── newsletter_pipeline.py            # orchestrator: schedule/bootstrap/archive/normalize/build subcommands
+├── podcast_pipeline.py               # orchestrator: one episode folder → its podcast package (resumable stages)
 ├── launch_app.bat                    # Streamlit control panel launcher (Windows CMD)
 ├── launch_planning.bat               # planning launcher (Windows CMD)
 ├── launch_reporting.bat              # reporting launcher (Windows CMD)
@@ -188,6 +201,8 @@ gotchas, files.
   [`engagement/README.md`](engagement/README.md)
 - **Check IP** —
   [`check_ip/README.md`](check_ip/README.md)
+- **Podcast** —
+  [`podcast/README.md`](podcast/README.md)
 - **Shared** — [`config/README.md`](config/README.md)
 
 ## The launchers

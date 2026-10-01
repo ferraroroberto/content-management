@@ -19,8 +19,12 @@ flowchart TB
   RPIPE["reporting_pipeline.py"]
   PPIPE["planning_pipeline.py --all-wip"]
   NPIPE["newsletter_pipeline.py\nschedule / bootstrap / archive / normalize / build /\nsubstack-draft"]
-  APP["app/app.py — Streamlit control panel\ntab_reporting · tab_planning · tab_newsletter ·\ntab_triage · tab_editorial · tab_engagement · tab_check_ip"]
+  APP["app/app.py — Streamlit control panel\ntab_reporting · tab_planning · tab_newsletter ·\ntab_triage · tab_editorial · tab_engagement · tab_check_ip ·
+tab_podcast"]
   AUTOHEAL["app/autoheal_console.py"]
+  PODPIPE["podcast_pipeline.py
+transcribe / clean / select / copy / render /
+episode / covers / package / score"]
 
   LREPORT --> RPIPE
   LPLAN --> PPIPE
@@ -165,6 +169,31 @@ never the owner's ok/person/chat/report/fixed"| CIDB
   APP -->|"⚖️ check IP tab: filter, read the
 proposal, decide, Apply"| CIREVIEW
 
+  subgraph podcast_mod["podcast/ — episode package (local outputs only)"]
+    PTRANS["transcribe.py
+bleed gate + loop repair + turns"]
+    PCLIPS["clips.py + captions.py + render.py
+sentence-bounded selection, copy,
+ASS captions, 1:1 + 9:16 ffmpeg"]
+    PPACK["package.py + covers.py
+clean transcript, episode copy,
+.docx + website HTML, Pillow covers"]
+    PSCORE["score.py + metrics.py + report.py
+clip rubric, stage cost ledger"]
+  end
+  APP -->|"🎙️ podcast tab: run (slot 'podcast'),
+review clips, cost, files"| PODPIPE
+  PODPIPE --> PTRANS --> PCLIPS --> PPACK --> PSCORE
+  PTRANS -->|"per-track WAV"| WHISPER[("whisper-server
+127.0.0.1:8090")]
+  PSCORE -->|"caption WER pass"| WHISPER
+  PCLIPS -->|"select + copy"| LLMHUB
+  PPACK -->|"clean + episode copy"| LLMHUB
+  PSCORE -->|"hook / self-contained / framing"| LLMHUB
+  PCLIPS -.->|"past titles + intros (read-only)"| NOTION
+  PPACK --> EPPKG[["<episode>/podcast package/
+(OneDrive, private)"]]
+
   subgraph shared["config/ — shared by every pipeline + app"]
     CFGLOADER["loader.py\nconfig.json + mapping.json"]
     CHROMELAUNCH["chrome_launch.py +\nchrome_profile_lock.py"]
@@ -178,6 +207,7 @@ proposal, decide, Apply"| CIREVIEW
   newsletter_mod -.-> shared
   engagement_mod -.-> shared
   checkip_mod -.-> shared
+  podcast_mod -.-> shared
   APP -.-> shared
 
   AUTOHEALSKILL["schedule-autoheal skill\n(.claude/skills/, .agents/skills/)\nprobe live DOM -> selector-only fix ->\ndry-run revalidate -> issue + PR"]
