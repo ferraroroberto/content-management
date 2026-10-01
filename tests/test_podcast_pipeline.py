@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import tempfile
 import unittest
@@ -117,18 +118,41 @@ class SelectionTests(unittest.TestCase):
 
 
 class CaptionTests(unittest.TestCase):
-    def test_chunks_break_on_punctuation_speaker_and_size(self) -> None:
+    def test_chunks_break_on_sentence_end_speaker_and_size(self) -> None:
         words = _words("one two three four five six. seven", "guest") + _words("eight", "host", start=5.0)
-        chunks = captions.chunk_words(words, max_words=4, max_chars=40)
+        chunks = captions.chunk_words(words, max_words=4, line_chars=40)
         self.assertEqual([[w["w"] for w in c] for c in chunks],
                          [["one", "two", "three", "four"], ["five", "six."], ["seven"], ["eight"]])
 
     def test_ass_highlights_one_keyword_in_yellow(self) -> None:
-        ass = captions.build_ass(_words("we value deep sleep", start=1.0), 0.0, 5.0, captions.LAYOUTS["1x1"])
+        ass = captions.build_ass(_words("we value sleep", start=1.0), 0.0, 5.0, captions.LAYOUTS["1x1"])
         dialogue = [line for line in ass.splitlines() if line.startswith("Dialogue:")]
         self.assertEqual(len(dialogue), 1)
         self.assertIn("{\\c&H0001ECFD&}value{\\c&H00FFFFFF&}", dialogue[0])
         self.assertIn("Sora ExtraBold", ass)
+
+    def test_commas_do_not_end_a_chunk(self) -> None:
+        # the owner's captions run across commas ("routes, out of / Helsinki, follow")
+        chunks = captions.chunk_words(_words("routes, out of Helsinki, follow"), max_words=7, line_chars=16, lines=2)
+        self.assertEqual(len(chunks), 1)
+
+    def test_no_caption_line_is_wider_than_the_layout_allows(self) -> None:
+        # a few long words used to stay on one line and run off the 9:16 frame
+        text = "more productive, whatever, systematically, you're notice what happens extraordinarily"
+        for layout in captions.LAYOUTS.values():
+            ass = captions.build_ass(_words(text), 0.0, 10.0, layout)
+            for line in (ln for ln in ass.splitlines() if ln.startswith("Dialogue:")):
+                visible = re.sub(r"\{[^}]*\}", "", line.split(",", 9)[9])
+                self.assertLessEqual(len(visible), layout.line_chars, (layout.name, visible))
+
+    def test_two_line_chunk_is_two_layered_events_a_pitch_apart(self) -> None:
+        layout = captions.LAYOUTS["9x16"]
+        ass = captions.build_ass(_words("routes, out of Helsinki, follow"), 0.0, 3.0, layout)
+        rows = [line.split(",", 9) for line in ass.splitlines() if line.startswith("Dialogue:")]
+        self.assertEqual([re.sub(r"\{[^}]*\}", "", r[9]) for r in rows], ["routes, out of", "Helsinki, follow"])
+        # separate layers, or libass's collision handling moves the lines
+        self.assertEqual([r[0] for r in rows], ["Dialogue: 0", "Dialogue: 1"])
+        self.assertEqual([int(r[7]) for r in rows], [layout.margin_v + layout.line_pitch, layout.margin_v])
 
 
 class ScoreTests(unittest.TestCase):
