@@ -21,7 +21,6 @@ from podcast.transcribe import sentences
 
 logger = logging.getLogger("podcast.review")
 
-REVIEW_FILE = "caption_review.json"
 CONTEXT_S = 60.0
 _EDGE = re.compile(r"^(\W*)(.*?)(\W*)$", re.DOTALL)
 

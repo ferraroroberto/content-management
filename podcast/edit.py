@@ -39,7 +39,7 @@ from podcast.clips import load_clips, save_clips
 from podcast.episode import Episode, work_dir
 from podcast.media import extract_mix_wav, read_wav, write_wav
 from podcast.metrics import StageRecord
-from podcast.review import REVIEW_FILE, review_clip
+from podcast.review import review_clip
 from podcast.transcribe import (_runs, drop_backchannel, find_loops, load_words, segment_words,
                                 whisper_segments, words_between)
 
@@ -365,8 +365,6 @@ def run(ep: Episode, cfg: dict, rec: StageRecord) -> list[dict]:
         clip["caption_review"] = review
     (ep.package / CLIP_WORDS_FILE).parent.mkdir(parents=True, exist_ok=True)
     (ep.package / CLIP_WORDS_FILE).write_text(json.dumps(clip_words, ensure_ascii=False), encoding="utf-8")
-    (ep.package / REVIEW_FILE).write_text(json.dumps({c["number"]: c["caption_review"] for c in clips},
-                                                     indent=1, ensure_ascii=False), encoding="utf-8")
     save_clips(ep, clips)
     logger.info("✅ edit decisions and caption review for %d clips", len(clips))
     return clips

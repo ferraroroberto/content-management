@@ -252,6 +252,15 @@ class ResumeTests(unittest.TestCase):
                 (ep.package / "clips" / crop / "b.mp4").write_bytes(b"x")
             self.assertTrue(is_done(ep))
 
+    def test_edit_is_not_done_until_every_clip_has_its_cuts_and_review(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ep = _episode(Path(tmp))
+            done = {"keep": [[0, 1]], "caption_review": {}}
+            clips.save_clips(ep, [{"number": 1, **done}, {"number": 2}])
+            self.assertFalse(podcast_pipeline.STAGES["edit"][1](ep))
+            clips.save_clips(ep, [{"number": 1, **done}, {"number": 2, **done}])
+            self.assertTrue(podcast_pipeline.STAGES["edit"][1](ep))
+
     def test_clip_without_a_file_name_is_not_rendered(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             ep = _episode(Path(tmp))
