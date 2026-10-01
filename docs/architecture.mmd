@@ -179,6 +179,9 @@ clip decode, LLM caption review,
 jump cuts, 1:1 speaker shots"]
     PRENDER["captions.py + render.py
 karaoke ASS, 1:1 + 9:16 ffmpeg"]
+    PREVISE["revise.py + review_state.py
+owner review (review.json), feedback
+to edits, re-render, clip versions"]
     PPACK["package.py + covers.py
 clean transcript, episode copy,
 .docx + website HTML, Pillow covers"]
@@ -187,12 +190,14 @@ clip rubric, stage cost ledger"]
   end
   APP -->|"🎙️ podcast tab: run (slot 'podcast'),
 review clips, cost, files"| PODPIPE
-  PODPIPE --> PTRANS --> PCLIPS --> PEDIT --> PRENDER --> PPACK --> PSCORE
+  APP -->|"approve / drop / feedback"| PREVISE
+  PODPIPE --> PTRANS --> PCLIPS --> PEDIT --> PRENDER --> PREVISE --> PPACK --> PSCORE
   PTRANS -->|"per-track WAV"| WHISPER[("whisper-server
 127.0.0.1:8090")]
   PEDIT -->|"clip decode + filler check"| WHISPER
   PCLIPS -->|"select + copy"| LLMHUB
   PEDIT -->|"caption review"| LLMHUB
+  PREVISE -->|"feedback to edits"| LLMHUB
   PPACK -->|"clean + episode copy"| LLMHUB
   PSCORE -->|"hook / self-contained / framing"| LLMHUB
   PCLIPS -.->|"past titles + intros (read-only)"| NOTION

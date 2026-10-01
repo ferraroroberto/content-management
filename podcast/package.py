@@ -21,6 +21,7 @@ from podcast.clips import clip_length, load_clips
 from podcast.episode import Episode, work_dir
 from podcast.hub import ask, ask_json
 from podcast.metrics import StageRecord
+from podcast.review_state import kept_clips, load_review
 from podcast.transcribe import fmt_ts, load_turns
 
 logger = logging.getLogger("podcast.package")
@@ -357,7 +358,7 @@ def build_docx(ep: Episode, copy: dict, clips: list[dict], path: Path) -> Path:
 
 def run_package(ep: Episode, cfg: dict, rec: StageRecord) -> Path:
     copy = load_episode_copy(ep)
-    clips = load_clips(ep)
+    clips = kept_clips(load_clips(ep), load_review(ep))
     html_path = ep.package / f"{ep.base_name} - website.html"
     html_path.write_text(website_html(ep, copy, load_clean(ep)), encoding="utf-8")
     path = build_docx(ep, copy, clips, ep.package / f"{ep.base_name}.docx")

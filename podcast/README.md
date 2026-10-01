@@ -12,10 +12,14 @@ flowchart LR
     S --> P[copy<br/>hub]
     P --> D[edit<br/>whisper + hub]
     D --> R[render<br/>ffmpeg 1:1 + 9:16]
+    R --> W{{owner review<br/>podcast tab}}
+    W -->|feedback| X[revise<br/>hub + ffmpeg]
+    X --> W
     C --> E[episode copy<br/>hub]
     E --> V[covers<br/>Pillow]
-    R --> V
+    W -->|all approved or dropped| V
     E --> K[package<br/>.docx + website HTML]
+    W -->|all approved or dropped| K
     R --> Q[score<br/>hub]
 ```
 
@@ -29,6 +33,14 @@ flowchart LR
 Or from the control panel's 🎙️ podcast tab: pick the episode, run, then review
 each clip (both crops, the cover, the copy and its score), the cost table and
 the package files.
+
+**Review loop.** In the tab, each clip is approved, dropped, or sent back with
+free-text feedback ("at 0:12 'happy' should be 'crappy'", "start at 'sleep'",
+"no punch-ins", "title: why eight hours"). `▶ apply feedback` runs the
+`revise` stage, which re-renders only those clips as a new version (the old one
+stays viewable) and puts them back up for review. `covers` and `package` wait
+until every clip is approved or dropped, and leave dropped clips out;
+`--unreviewed` runs them anyway.
 
 Each stage writes into `<episode folder>/podcast package/` and is skipped when
 its output already exists, so a run that dies resumes where it stopped.
@@ -73,6 +85,11 @@ cleaned transcript also starts there). The other keys are documented in
 | `<guest> - <host> - website.html` | the "Inspiring conversations" page, paste-ready for the site's text block |
 | `<guest> - <host> (1920x1080)_thumbnail.png`, `_text.png` | the episode covers |
 | `metrics.json`, `metrics.md`, `scores.json` | per-stage cost table and per-clip quality scores |
+| `clips/versions/<NN>/v<N>/` | a revised clip's earlier version: both crops, the cover and its `clip.json` |
+
+The review itself is `<episode folder>/review.json`, beside `episode.json`:
+per clip its status (`pending`, `approved`, `changes`, `dropped`), version,
+and every feedback round with the edits proposed, applied and left unhandled.
 
 Large intermediates (WAVs, frames, caption files) go to `podcast.work_dir`
 (default: the system temp folder), not to OneDrive.
@@ -112,6 +129,14 @@ Large intermediates (WAVs, frames, caption files) go to `podcast.work_dir`
   in (ASS), karaoke style: Sora ExtraBold, white with a black outline, a
   few words on screen and each word turning `#FDEC01` as it is said. H.264,
   loudness-normalised.
+- **revise**: per clip with open feedback, the hub (`models.revise`) maps the
+  notes onto a fixed set of edits: caption fixes, a new start or end word,
+  cuts, extending the source span, shot speaker or framing, a new title, the
+  Instagram caption, the LinkedIn hook or body. Every word or shot it names is
+  checked against the clip first, and anything it cannot map is shown back as
+  "not applied". Extending re-runs that clip's `edit` (decode and caption
+  review); a new title renames the clip's files. Only the revised clips are
+  re-rendered, and their cover waits for `covers`.
 - **covers**: the episode thumbnail and text card, then one cover per clip:
   a frame from the first kept shot of the clip's speaker, so a cut opener
   never becomes the cover. The `.docx` and `clips.md` give each clip's cut
@@ -126,7 +151,7 @@ Large intermediates (WAVs, frames, caption files) go to `podcast.work_dir`
 ## Config (`config.json` → `podcast`)
 
 `episodes_root`, `whisper_url`, `llm_hub_base_url`, `models` (hub alias per
-role: `clean`, `select`, `copy`, `caption_review`, `episode_copy`, `score`),
+role: `clean`, `select`, `copy`, `caption_review`, `revise`, `episode_copy`, `score`),
 `llm_rates_usd_per_mtok` (list prices for the cost table: the hub runs
 on the subscription, so the cost is a metered-API equivalent),
 `clips_per_episode`, `clip_min_s` / `clip_max_s`, `video_encoder`, `fonts`,
