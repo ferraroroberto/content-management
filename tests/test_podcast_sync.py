@@ -14,6 +14,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
@@ -177,6 +178,29 @@ class StageTests(unittest.TestCase):
         ep = _episode(self.folder)
         self.assertIsNone(sync.run(ep, {"work_dir": str(self.folder / "work")}, None))
         self.assertFalse((ep.package / sync.SYNC_FILE).exists())
+
+    def test_a_trial_folder_never_writes_beside_the_source_tracks(self) -> None:
+        # A trial episode (issue #350) reads another folder's tracks by absolute path:
+        # the re-timed guest track must land in the trial folder, not beside the source.
+        source = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, source)
+        (source / "video editing").mkdir()
+        host, guest = source / "video editing" / "h.mp4", source / "video editing" / "g.mp4"
+        (self.folder / "episode.json").write_text(json.dumps({
+            "guest": "Guest Person", "tracks": {"host": host.as_posix(), "guest": guest.as_posix()}}),
+            encoding="utf-8")
+        cfg = {"package_dirname": "podcast package", "work_dir": str(self.folder / "work")}
+        ep = load_episode(self.folder, cfg)
+        written = []
+        with mock.patch.object(sync, "references", return_value={"host": object()}), \
+                mock.patch.object(sync, "measure", return_value={"offset_s": 1.0, "drift_ppm": 0.0,
+                                                                 "method": "both references"}), \
+                mock.patch.object(sync, "retime", side_effect=lambda src, dst, *a: written.append(dst)):
+            sync.run(ep, cfg, None)
+        self.assertEqual(written, [self.folder / "video editing" / sync.OUTPUT])
+        self.assertEqual(sorted(p.name for p in (source / "video editing").iterdir()), [])
+        reread = load_episode(self.folder, cfg)
+        self.assertEqual(reread.tracks, {"host": host, "guest": self.folder / "video editing" / sync.OUTPUT})
 
     def test_the_episode_reads_the_synced_tracks(self) -> None:
         (self.folder / "episode.json").write_text(json.dumps({

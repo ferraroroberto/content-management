@@ -15,7 +15,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from podcast import init_episode  # noqa: E402
-from podcast.episode import load_episode  # noqa: E402
+from podcast.episode import list_episodes, load_episode  # noqa: E402
 
 CFG = {"host": {"first": "Sam", "name": "Sam Host"}}
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
@@ -90,6 +90,67 @@ class RecorderLayoutTests(unittest.TestCase):
                                  cfg=CFG)
         self.assertEqual(code, 0)
 
+
+
+def _listing(folder: Path) -> list[tuple[str, int]]:
+    return sorted((p.relative_to(folder).as_posix(), p.stat().st_size) for p in folder.rglob("*"))
+
+
+class TrialTests(unittest.TestCase):
+    """--from: a separate trial episode that reads another folder's tracks (issue #350)."""
+
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root)
+        self.source = self.root / "Alex Rivera"
+        video = self.source / "video editing"
+        video.mkdir(parents=True)
+        _recorder_file(video, "host", "2026-09-30 101500", seconds=1205.0)
+        _recorder_file(video, "guest", "2026-09-30 101507", seconds=1200.0)
+        (self.source / "podcast package").mkdir()
+        (self.source / "podcast package" / "hand-made.docx").write_bytes(b"the owner's package")
+        self.trial = self.root / "trials" / "Alex Rivera (trial)"
+
+    def test_discovers_the_source_tracks_and_writes_only_into_the_trial(self) -> None:
+        before = _listing(self.source)
+        self.assertEqual(init_episode.main([str(self.trial), "--from", str(self.source), "--guest", "Alex Rivera"],
+                                           cfg=CFG), 0)
+        self.assertEqual(_listing(self.source), before)
+        spec = json.loads((self.trial / "episode.json").read_text(encoding="utf-8"))
+        self.assertEqual(Path(spec["tracks"]["host"]),
+                         (self.source / "video editing" / "recorder - host - 2026-09-30 101500.mp4").resolve())
+        ep = load_episode(self.trial, {**CFG, "package_dirname": "podcast package"})
+        self.assertEqual(ep.package, self.trial / "podcast package")
+        self.assertTrue(ep.tracks["guest"].is_file())
+
+    def test_copies_the_source_episode_json_with_absolute_tracks(self) -> None:
+        (self.source / "episode.json").write_text(json.dumps({
+            "guest": "Alex Rivera", "adjective": "brilliant", "start_s": 196,
+            "tracks": {"host": "video editing/recorder - host - 2026-09-30 101500.mp4",
+                       "guest": "video editing/recorder - guest - 2026-09-30 101507.mp4"}}), encoding="utf-8")
+        before = _listing(self.source)
+        self.assertEqual(init_episode.main([str(self.trial), "--from", str(self.source)], cfg=CFG), 0)
+        self.assertEqual(_listing(self.source), before)
+        ep = load_episode(self.trial, CFG)
+        self.assertEqual((ep.adjective, ep.start_s), ("brilliant", 196.0))
+        self.assertTrue(ep.tracks["host"].is_file())
+        self.assertEqual(ep.tracks["host"].parent, (self.source / "video editing").resolve())
+
+    def test_trials_root_folders_are_listed_after_the_episodes(self) -> None:
+        self.assertEqual(init_episode.main([str(self.trial), "--from", str(self.source)], cfg=CFG), 0)
+        (self.source / "episode.json").write_text(json.dumps({"guest": "Alex Rivera", "tracks": {}}),
+                                                  encoding="utf-8")
+        cfg = {"episodes_root": str(self.root), "trials_root": str(self.trial.parent)}
+        self.assertEqual(list_episodes(cfg), [self.source, self.trial])
+        self.assertEqual(list_episodes({"episodes_root": str(self.root)}), [self.source])
+
+    def test_refuses_a_trial_inside_the_source_or_named_like_it(self) -> None:
+        inside = self.source / "trial"
+        same_name = self.root / "elsewhere" / self.source.name
+        for trial in (inside, same_name, self.source):
+            self.assertEqual(init_episode.main([str(trial), "--from", str(self.source)], cfg=CFG), 2, trial)
+        self.assertFalse(inside.exists())
+        self.assertFalse(same_name.exists())
 
 @unittest.skipUnless(HAS_FFMPEG, "ffmpeg/ffprobe not on PATH")
 class RiversideLayoutTests(unittest.TestCase):

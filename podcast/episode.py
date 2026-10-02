@@ -31,6 +31,7 @@ from config.loader import load_block
 
 SPEAKERS = ("guest", "host")
 SYNC_FILE = "sync.json"
+VIDEO_DIR = "video editing"
 
 
 def load_podcast_config() -> dict:
@@ -119,6 +120,15 @@ def load_episode(folder: Path, cfg: Optional[dict] = None) -> Episode:
     )
 
 
+def episode_path(folder: Path, path: Path) -> str:
+    """``path`` as ``episode.json`` / ``sync.json`` store it: relative to the
+    episode folder when inside it, else absolute (a trial episode's tracks)."""
+    try:
+        return Path(path).relative_to(folder).as_posix()
+    except ValueError:
+        return Path(path).as_posix()
+
+
 def work_dir(cfg: dict, episode: Episode) -> Path:
     """Scratch dir for large intermediates (WAVs, frames) — kept off OneDrive."""
     root = Path(cfg["work_dir"]) if cfg.get("work_dir") else Path(tempfile.gettempdir()) / "cm-podcast"
@@ -128,9 +138,13 @@ def work_dir(cfg: dict, episode: Episode) -> Path:
 
 
 def list_episodes(cfg: Optional[dict] = None) -> list[Path]:
-    """Episode folders under ``episodes_root`` that carry an ``episode.json``."""
+    """Episode folders that carry an ``episode.json``: those under
+    ``episodes_root``, then the trial episodes under the optional
+    ``trials_root`` (``podcast.init_episode --from``, issue #350)."""
     cfg = cfg if cfg is not None else load_podcast_config()
-    root = Path(cfg["episodes_root"])
-    if not root.is_dir():
-        return []
-    return sorted(p for p in root.iterdir() if (p / "episode.json").exists())
+    found: list[Path] = []
+    for key in ("episodes_root", "trials_root"):
+        root = Path(cfg[key]) if cfg.get(key) else None
+        if root and root.is_dir():
+            found += sorted(p for p in root.iterdir() if (p / "episode.json").exists())
+    return found

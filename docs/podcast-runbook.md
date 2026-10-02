@@ -3,7 +3,9 @@
 The ordered procedure for one episode, start to finish. The module reference
 (stages, outputs, config) is [`podcast/README.md`](../podcast/README.md); the
 recorder's is [`recorder/README.md`](../recorder/README.md). This page only
-says what to do, in which order, and who does it.
+says what to do, in which order, and who does it. The `/podcast` skill
+(`.claude/skills/podcast/SKILL.md`) drives these same steps with the owner in
+a Claude Code session.
 
 Each step is tagged:
 
@@ -123,7 +125,9 @@ From the 🎙️ podcast tab (pick the episode, keep all stages selected,
 
 Stages run in order. Each one is skipped when its output exists, so a run
 that dies (crash, power cut, a hub timeout) resumes where it stopped: run the
-same command again. `--stages a,b --force` redoes chosen stages. `covers` and
+same command again. `--status` runs and writes nothing: it lists the tracks,
+each stage as done / to run / waiting for review, the review summary and the
+next stage (exit 2 when a track is missing). `--stages a,b --force` redoes chosen stages. `covers` and
 `package` wait for the review (step 5), so the first run stops before them
 with a "waiting for review" warning; that is expected.
 
@@ -168,6 +172,15 @@ the caption fixes and doubts, and the score. Then one of:
 
   Keep a caption-only note caption-only: the revise step changes only what the
   note names.
+
+Outside the app, the same review is recorded from a terminal (it writes the
+same `review.json`):
+
+```powershell
+& .\.venv\Scripts\python.exe -m podcast.review_cli "<episode folder>" show
+& .\.venv\Scripts\python.exe -m podcast.review_cli "<episode folder>" approve 3 5
+& .\.venv\Scripts\python.exe -m podcast.review_cli "<episode folder>" feedback 4 "at 0:12 'happy' should be 'crappy'"
+```
 
 **[LLM: `revise`] + [code]** **▶ apply feedback (N clips)** (or
 `--stages revise`) maps each note onto edits, re-renders only those clips as
@@ -227,6 +240,27 @@ The pipeline stops here. Everything below is the owner's, by hand:
 - [ ] **Notion:** add the episode row and the clip rows (the pipeline only
   reads the clips table, for past titles and intros as style examples).
 - [ ] **Guest:** send the thank-you note from the `.docx` with the links.
+
+## Re-run an episode already edited by hand (trial)
+
+To compare the pipeline's result with a package made by hand, run it in a
+**separate trial folder**, so the existing package is never touched:
+
+```powershell
+& .\.venv\Scripts\python.exe -m podcast.init_episode "<trials root>\<episode name> (trial)" --from "<episode folder>"
+```
+
+**[code]** The trial folder gets its own `episode.json` that reads the source's
+tracks by absolute path (the source's `episode.json` facts are copied when it
+has one, else its tracks are discovered and the flags of step 3 apply).
+Everything the pipeline writes then lands in the trial folder: the package,
+`review.json`, the synced guest track and its own scratch folder (the scratch
+is keyed by folder name, so the trial must be named differently). Nothing is
+written beside the source. Set `podcast.trials_root` in `config.json` to the
+trials' parent folder (outside OneDrive, the renders are large) and the
+Podcast tab lists the trials after the episodes, so the review works there as
+usual. Then follow steps 4–7 on the trial folder, or run `/podcast "<episode
+folder>" --trial`.
 
 ## Troubleshooting
 

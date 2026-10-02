@@ -35,7 +35,13 @@ flowchart LR
 ```powershell
 & .\.venv\Scripts\python.exe podcast_pipeline.py "<episode folder>"
 & .\.venv\Scripts\python.exe podcast_pipeline.py "<episode folder>" --stages render,covers --force
+& .\.venv\Scripts\python.exe podcast_pipeline.py "<episode folder>" --status
 ```
+
+`--status` runs and writes nothing: tracks found, each stage done / to run /
+waiting for review, the review summary and the next stage (exit 2 when a
+track is missing). The `/podcast` skill drives a whole episode with the owner
+in a Claude Code session, following the runbook.
 
 Or from the control panel's 🎙️ podcast tab: pick the episode, run, then review
 each clip (both crops, the cover, the copy and its score), the cost table and
@@ -43,7 +49,9 @@ the package files.
 
 **Review loop.** In the tab, each clip is approved, dropped, or sent back with
 free-text feedback ("at 0:12 'happy' should be 'crappy'", "start at 'sleep'",
-"no punch-ins", "title: why eight hours"). `▶ apply feedback` runs the
+"no punch-ins", "title: why eight hours"). The same review can be recorded
+from a terminal with `python -m podcast.review_cli "<episode folder>" show |
+approve N… | drop N… | pending N… | feedback N "<note>"`. `▶ apply feedback` runs the
 `revise` stage, which re-renders only those clips as a new version (the old one
 stays viewable) and puts them back up for review. `covers` and `package` wait
 until every clip is approved or dropped, and leave dropped clips out;
@@ -75,7 +83,12 @@ pronoun and `links` come from flags or stay `TODO` placeholders, listed at the
 end of the run. Two takes of one side (a stopped and restarted recording)
 stop it with the candidates named: pick one with `--host-track` /
 `--guest-track`. It never overwrites an existing `episode.json` without
-`--force`. The result looks like this:
+`--force`. With `--from "<episode folder>"` the folder given first becomes a
+separate **trial** episode that reads that folder's tracks by absolute path
+(copying its `episode.json` facts when it has one), so a re-run of an episode
+edited by hand writes its package, review and synced track into the trial
+folder and never beside the original; see the runbook. The result looks like
+this:
 
 ```json
 {
@@ -189,7 +202,8 @@ Large intermediates (WAVs, frames, caption files) go to `podcast.work_dir`
 
 ## Config (`config.json` → `podcast`)
 
-`episodes_root`, `whisper_url`, `llm_hub_base_url`, `models` (hub alias per
+`episodes_root`, `trials_root` (optional: trial folders the tab lists after
+the episodes), `whisper_url`, `llm_hub_base_url`, `models` (hub alias per
 role: `clean`, `select`, `copy`, `caption_review`, `revise`, `episode_copy`, `score`),
 `llm_rates_usd_per_mtok` (list prices for the cost table: the hub runs
 on the subscription, so the cost is a metered-API equivalent),

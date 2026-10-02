@@ -18,6 +18,14 @@ date), ``start_s`` / ``end_s`` (0 to the shorter track), ``website_slug`` (from
 the guest's name), ``host_is_interviewee: false``. What only the owner knows
 comes from flags or is left as a ``TODO`` placeholder, listed at the end.
 An existing ``episode.json`` is never overwritten without ``--force``.
+
+**A trial run** (``--from "<source episode folder>"``, issue #350): the folder
+given first becomes a separate trial episode that reads the source's tracks by
+absolute path, so every output (package, review, synced track, scratch) lands
+in the trial folder and an existing package beside the source is never
+touched. The source's own ``episode.json`` is copied when there is one (its
+facts, the tracks made absolute), else its tracks are discovered as above.
+Nothing is written into the source folder.
 """
 
 from __future__ import annotations
@@ -33,11 +41,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from podcast.episode import SPEAKERS, load_podcast_config
+from podcast.episode import SPEAKERS, VIDEO_DIR, episode_path, load_podcast_config
 
 logger = logging.getLogger("podcast.init")
 
-VIDEO_DIR = "video editing"
 TODO = "TODO"
 RECORDER_MAIN = re.compile(r"^recorder - (host|guest) - (\d{4}-\d{2}-\d{2}) \d{6}\.mp4$")
 VIDEO_EXT = {".mp4", ".mov", ".mkv", ".webm"}
@@ -165,12 +172,14 @@ def parse_links(values: list[str]) -> list[dict]:
 
 def build_spec(folder: Path, cfg: dict, *, guest: Optional[str] = None, guest_display: Optional[str] = None,
                pronoun: Optional[str] = None, adjective: Optional[str] = None, links: Optional[list[dict]] = None,
-               host_track: Optional[str] = None, guest_track: Optional[str] = None) -> tuple[dict, list[str]]:
-    """The ``episode.json`` content and the fields left as placeholders."""
+               host_track: Optional[str] = None, guest_track: Optional[str] = None,
+               source: Optional[Path] = None) -> tuple[dict, list[str]]:
+    """The ``episode.json`` content and the fields left as placeholders.
+    With ``source``, the tracks are found there and stored as absolute paths."""
     host_first = (cfg.get("host") or {}).get("first")
     if not host_first:
         raise InitError("podcast.host.first is not set in config.json (it tells the host's track apart)")
-    layout, tracks = discover(folder, host_first, {"host": host_track, "guest": guest_track})
+    layout, tracks = discover(source or folder, host_first, {"host": host_track, "guest": guest_track})
     lengths = {side: duration(path) for side, path in tracks.items()}
     todo = []
     if not guest:
@@ -190,7 +199,7 @@ def build_spec(folder: Path, cfg: dict, *, guest: Optional[str] = None, guest_di
         "guest_display": guest_display or guest,
         "guest_first": guest.split()[0],
         "guest_pronoun_possessive": pronoun or "their",
-        "tracks": {side: tracks[side].relative_to(folder).as_posix() for side in SPEAKERS},
+        "tracks": {side: episode_path(folder, tracks[side]) for side in SPEAKERS},
         "host_is_interviewee": False,
         "start_s": 0,
         "end_s": round(min(lengths.values()), 1),
@@ -205,8 +214,32 @@ def build_spec(folder: Path, cfg: dict, *, guest: Optional[str] = None, guest_di
     return spec, todo
 
 
+def check_trial(trial: Path, source: Path) -> None:
+    """A trial folder must be its own place: not the source, not inside it, and
+    not named like it (the pipeline's scratch folder is keyed by folder name)."""
+    trial, source = trial.resolve(), source.resolve()
+    if not source.is_dir():
+        raise InitError(f"source episode folder not found: {source}")
+    if trial == source or source in trial.parents:
+        raise InitError("the trial folder must be outside the source episode folder")
+    if trial.name == source.name:
+        raise InitError("give the trial folder a different name from the source (e.g. add ' (trial)'): "
+                        "the pipeline's scratch folder is keyed by folder name")
+
+
+def trial_spec(trial: Path, source: Path) -> Optional[dict]:
+    """The source's own ``episode.json`` with its tracks made absolute, or None."""
+    path = source / "episode.json"
+    if not path.exists():
+        return None
+    spec = json.loads(path.read_text(encoding="utf-8"))
+    spec["tracks"] = {side: episode_path(trial, (source / rel).resolve()) for side, rel in spec["tracks"].items()}
+    return spec
+
+
 def write_episode(folder: Path, spec: dict, *, force: bool = False) -> Path:
     path = folder / "episode.json"
+    folder.mkdir(parents=True, exist_ok=True)
     if path.exists() and not force:
         raise FileExistsError(f"{path} already exists; pass --force to overwrite it")
     path.write_text(json.dumps(spec, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -215,7 +248,10 @@ def write_episode(folder: Path, spec: dict, *, force: bool = False) -> Path:
 
 def main(argv: Optional[list[str]] = None, cfg: Optional[dict] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("episode", help="episode folder, with the tracks in 'video editing/'")
+    parser.add_argument("episode", help="episode folder, with the tracks in 'video editing/' (with --from: "
+                                        "the trial folder to create)")
+    parser.add_argument("--from", dest="source", metavar="SOURCE",
+                        help="build a separate trial episode reading this episode folder's tracks")
     parser.add_argument("--guest", help="the guest's full name, as used in file names")
     parser.add_argument("--guest-display", help="the name used in copy, e.g. with a title (default: --guest)")
     parser.add_argument("--pronoun", help="the guest's possessive pronoun (default: their)")
@@ -230,9 +266,17 @@ def main(argv: Optional[list[str]] = None, cfg: Optional[dict] = None) -> int:
     folder = Path(args.episode)
     try:
         cfg = cfg if cfg is not None else load_podcast_config()
-        spec, todo = build_spec(folder, cfg, guest=args.guest, guest_display=args.guest_display,
-                                pronoun=args.pronoun, adjective=args.adjective, links=parse_links(args.link),
-                                host_track=args.host_track, guest_track=args.guest_track)
+        source = Path(args.source) if args.source else None
+        spec, todo = None, []
+        if source:
+            check_trial(folder, source)
+            spec = trial_spec(folder, source)
+            if spec:
+                logger.info("ℹ️ trial of %s: its episode.json copied, tracks read from there", source.name)
+        if spec is None:
+            spec, todo = build_spec(folder, cfg, guest=args.guest, guest_display=args.guest_display,
+                                    pronoun=args.pronoun, adjective=args.adjective, links=parse_links(args.link),
+                                    host_track=args.host_track, guest_track=args.guest_track, source=source)
         path = write_episode(folder, spec, force=args.force)
     except FileExistsError as exc:
         logger.error("❌ %s", exc)

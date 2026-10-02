@@ -352,6 +352,7 @@
     "podcast": {
         "episodes_root": "C:/path/to/podcast/interviews archive",
         "package_dirname": "podcast package",
+        "trials_root": "",
         "work_dir": "",
         "whisper_url": "http://127.0.0.1:8090/v1/audio/transcriptions",
         "llm_hub_base_url": "http://127.0.0.1:8000",

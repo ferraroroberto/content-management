@@ -190,13 +190,28 @@ clean transcript, episode copy,
 .docx + website HTML, Pillow covers"]
     PSCORE["score.py + metrics.py + report.py
 clip rubric, stage cost ledger"]
+    PINIT["init_episode.py
+episode.json from recorder / Riverside
+tracks; --from = a separate trial folder"]
+    PREVCLI["review_cli.py
+the clip review from a terminal"]
   end
   RECSRV["recorder_server.py + recorder/
 browser page (MediaRecorder, IndexedDB),
 P2P call + WebSocket signalling,
 chunk upload, join + remux"]
   RECSRV -->|"host + guest tracks"| EPVID[["<episode>/video editing/"]]
+  EPVID --> PINIT
+  PINIT -->|"episode.json"| PODPIPE
   EPVID --> PODPIPE
+  PODSKILL["podcast skill (.claude/skills/)
+preflight -> episode.json -> stages ->
+review loop with the owner -> package;
+stops at a manual publishing checklist"]
+  PODSKILL --> PINIT
+  PODSKILL -->|"stages, --status"| PODPIPE
+  PODSKILL -->|"approve / drop / feedback"| PREVCLI
+  PREVCLI --> PREVISE
   APP -->|"🎙️ podcast tab: run (slot 'podcast'),
 review clips, cost, files"| PODPIPE
   APP -->|"approve / drop / feedback"| PREVISE
@@ -211,7 +226,8 @@ review clips, cost, files"| PODPIPE
   PSCORE -->|"hook / self-contained / framing"| LLMHUB
   PCLIPS -.->|"past titles + intros (read-only)"| NOTION
   PPACK --> EPPKG[["<episode>/podcast package/
-(OneDrive, private)"]]
+(OneDrive, private; a trial folder
+under podcast.trials_root for a re-run)"]]
 
   subgraph shared["config/ — shared by every pipeline + app"]
     CFGLOADER["loader.py\nconfig.json + mapping.json"]

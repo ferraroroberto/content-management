@@ -2,6 +2,7 @@
 """Podcast episode pipeline (issue #333).
 
     python podcast_pipeline.py "<episode folder>" [--stages transcribe,clean,...] [--force] [--unreviewed]
+    python podcast_pipeline.py "<episode folder>" --status
 
 Stages run in order and each one writes its output into
 ``<episode folder>/<podcast.package_dirname>/``. A stage whose output already
@@ -10,6 +11,10 @@ last one stopped. Nothing is published, posted or written to Notion.
 
 ``covers`` and ``package`` wait for the owner's clip review (issue #339):
 they run once every clip is approved or dropped, or with ``--unreviewed``.
+
+``--status`` runs nothing and writes nothing: it says where the episode stands
+(tracks found, each stage done / to run / waiting for review, the review
+summary, the next stage), and exits 2 when a track is missing (issue #350).
 """
 
 from __future__ import annotations
@@ -138,6 +143,37 @@ STAGES: dict[str, tuple[Callable, Callable[[Episode], bool]]] = {
 REVIEW_GATED = ("covers", "package")
 
 
+def status(ep: Episode) -> int:
+    """Log where the episode stands; read-only. 2 when a track is missing."""
+    from podcast.clips import load_clips  # noqa: PLC0415
+    logger.info("ℹ️ episode: %s → %s", ep.folder, ep.package)
+    missing = [side for side, path in ep.tracks.items() if not path.is_file()]
+    for side, path in ep.tracks.items():
+        logger.info("ℹ️ %s track: %s%s", side, path, "" if path.is_file() else " (missing)")
+    clips, review = load_clips(ep), load_review(ep)
+    pending = []
+    from podcast.sync import references  # noqa: PLC0415
+    for name, (_, is_done) in STAGES.items():
+        if is_done(ep):
+            state = "done"
+        elif name == "sync" and not references(ep):
+            state = "not needed (no recorder references)"
+        elif name in REVIEW_GATED and not review_done(clips, review):
+            state = "waiting for review"
+        else:
+            state = "to run"
+            pending.append(name)
+        logger.info("ℹ️ %s: %s", name, state)
+    if clips:
+        open_feedback = to_revise(clips, review)
+        logger.info("ℹ️ review: %s%s", summary(clips, review),
+                    f"; open feedback on clips {open_feedback}" if open_feedback else "")
+    logger.info("ℹ️ next: %s", pending[0] if pending else "nothing to run")
+    for side in missing:
+        logger.error("❌ %s track missing: %s", side, ep.tracks[side])
+    return 2 if missing else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     global logger
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -146,6 +182,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--force", action="store_true", help="re-run stages whose output exists")
     parser.add_argument("--unreviewed", action="store_true",
                         help="run covers and package before every clip is approved or dropped")
+    parser.add_argument("--status", action="store_true", help="say where the episode stands; run and write nothing")
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args(argv)
     logger = setup_logger("podcast", file_logging=False,
@@ -159,6 +196,8 @@ def main(argv: list[str] | None = None) -> int:
 
     cfg = load_podcast_config()
     ep = load_episode(Path(args.episode), cfg)
+    if args.status:
+        return status(ep)
     ep.package.mkdir(parents=True, exist_ok=True)
     logger.info("ℹ️ episode: %s → %s", ep.folder.name, ep.package)
 
