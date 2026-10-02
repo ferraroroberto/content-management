@@ -91,7 +91,10 @@ Six surfaces, one repo:
   run. The control panel's 🎙️ podcast tab runs it and holds the owner's
   per-clip review: approve, drop, or send feedback that the `revise` stage
   applies and re-renders; covers and the package wait for that review.
-  It never publishes and only reads Notion. Start to finish, one episode:
+  It never publishes and only reads Notion. The `/podcast` skill drives one
+  episode with the owner, review included, and stops at a manual publishing
+  checklist; it can re-run an episode edited by hand in a separate trial
+  folder. Start to finish, one episode:
   [`docs/podcast-runbook.md`](docs/podcast-runbook.md); module reference:
   [`podcast/README.md`](podcast/README.md). The recorder (`recorder/`,
   `recorder_server.py`) holds the interview's peer-to-peer video call and
