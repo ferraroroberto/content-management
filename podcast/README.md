@@ -5,6 +5,12 @@ into the full episode package, locally. Nothing is published, posted,
 scheduled or written to Notion. The only Notion access is a read of the Clips
 table for past titles and LinkedIn intros (style examples).
 
+This page is the module reference. **To take an episode from recording to
+published, follow [`docs/podcast-runbook.md`](../docs/podcast-runbook.md)**:
+the ordered steps, who does each (code, LLM or owner), times and costs, the
+publishing checklist and troubleshooting. The Podcast tab shows the same
+runbook in its collapsed "How the podcast pipeline works" card.
+
 ```mermaid
 flowchart LR
     Y[sync<br/>recorder sessions only] --> T

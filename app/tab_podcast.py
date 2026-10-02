@@ -29,9 +29,21 @@ from podcast.revise import list_versions
 from podcast.transcribe import fmt_ts
 
 PIPELINE_NAME = "podcast"
+RUNBOOK = Path(__file__).resolve().parent.parent / "docs" / "podcast-runbook.md"
+RUNBOOK_LABEL = "📖 How the podcast pipeline works"
 STAGES = ["sync", "transcribe", "clean", "select", "copy", "edit", "render", "revise", "episode", "covers", "package",
           "score"]
 STATUS_ICON = {"pending": "⏳ pending", "approved": "✅ approved", "changes": "✏️ changes", "dropped": "🗑️ dropped"}
+
+
+def render_runbook() -> None:
+    """The start-to-finish runbook, read from disk on every render so the card
+    never drifts from ``docs/podcast-runbook.md``."""
+    with st.expander(RUNBOOK_LABEL, expanded=False):
+        try:
+            st.markdown(RUNBOOK.read_text(encoding="utf-8"))
+        except OSError as exc:
+            st.warning(f"runbook not readable: {exc}")
 
 
 def _run_controls(folder: Path) -> None:
@@ -207,6 +219,7 @@ def run() -> None:
     st.subheader("🎙️ podcast — episode package")
     st.caption("Two-track recording → cleaned transcript, 15 clips in 1:1 and 9:16 with captions and copy, "
                "covers, episode document and website page. Local only: nothing is published.")
+    render_runbook()
     try:
         cfg = load_podcast_config()
     except RuntimeError as exc:
