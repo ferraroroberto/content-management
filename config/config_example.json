@@ -386,6 +386,7 @@
             }
         },
         "clips_per_episode": 15,
+        "style_episodes": 3,
         "clip_min_s": 25,
         "clip_max_s": 90,
         "video_encoder": "libx264",

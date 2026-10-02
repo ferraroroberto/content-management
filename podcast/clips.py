@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import logging
-import random
 from pathlib import Path
 from podcast.episode import Episode, work_dir
 from podcast.hub import ask_json
@@ -28,36 +27,70 @@ MAX_OVERLAP = 0.3
 
 # ── style examples (Notion, read-only) ──────────────────────────────────
 
+STYLE_EPISODES = 3
+MAX_STYLE_TITLES = 40
+MAX_STYLE_INTROS = 6
+INTRO_MARK = "A clip from my conversation"
+
+
+def pick_style_examples(episodes: list[dict], clip_rows: list[dict], n: int) -> dict:
+    """Titles and LinkedIn intros of the clips of the newest ``n`` dated
+    episodes that have clips, newest episode first, then by clip number
+    (issue #354). The style improved over time, so older episodes are left out.
+    ``episodes`` / ``clip_rows`` are Notion rows of the Episodes / Clips tables."""
+    from reporting.notion._client import extract_property_value  # noqa: PLC0415
+
+    def prop(row: dict, name: str):
+        props = row.get("properties", {})
+        return extract_property_value(props[name]) if name in props else None
+
+    by_id = {row["id"]: row for row in clip_rows}
+    dated = sorted((e for e in episodes if prop(e, "Date")), key=lambda e: prop(e, "Date"), reverse=True)
+    picked: dict = {"titles": [], "linkedin": [], "episodes": 0}
+    for episode in dated:
+        if picked["episodes"] >= n:
+            break
+        rows = [by_id[r["id"]] for r in episode["properties"].get("clips", {}).get("relation", []) if r["id"] in by_id]
+        if not rows:
+            continue
+        picked["episodes"] += 1
+        for row in sorted(rows, key=lambda r: prop(r, "number") or 0):
+            title = prop(row, "clip")
+            if title:
+                picked["titles"].append(str(title).strip())
+            li = prop(row, "TextLI")
+            if li and INTRO_MARK in li:
+                picked["linkedin"].append(li.split(INTRO_MARK)[0].strip())
+    picked["titles"] = picked["titles"][:MAX_STYLE_TITLES]
+    picked["linkedin"] = picked["linkedin"][:MAX_STYLE_INTROS]
+    return picked
+
+
 def style_examples(cfg: dict, ep: Episode) -> dict:
-    """Past clip titles and LinkedIn intros from the Notion Clips table, cached locally."""
-    cache = work_dir(cfg, ep) / "style_examples.json"
+    """Past clip titles and LinkedIn intros from the newest ``podcast.style_episodes``
+    episodes in Notion (read-only), cached locally per N."""
+    n = int(cfg.get("style_episodes", STYLE_EPISODES))
+    cache = work_dir(cfg, ep) / f"style_examples_last{n}.json"
     if cache.exists():
         return json.loads(cache.read_text(encoding="utf-8"))
     examples: dict = {"titles": [], "linkedin": []}
-    db_id = (cfg.get("notion") or {}).get("clips_db_id")
-    if not db_id:
-        logger.warning("⚠️ podcast.notion.clips_db_id not set — selecting without style examples")
+    notion_cfg = cfg.get("notion") or {}
+    db_id, episodes_db_id = notion_cfg.get("clips_db_id"), notion_cfg.get("episodes_db_id")
+    if not db_id or not episodes_db_id:
+        logger.warning("⚠️ podcast.notion.clips_db_id / episodes_db_id not set — selecting without style examples")
         return examples
     from config.loader import load_full_config  # noqa: PLC0415
-    from reporting.notion._client import extract_property_value, init_notion_client  # noqa: PLC0415
+    from reporting.notion._client import init_notion_client  # noqa: PLC0415
     from reporting.notion.editorial import query_rows_by_filter  # noqa: PLC0415
 
     notion = init_notion_client(load_full_config()["notion"]["api_token"])
+    episodes = query_rows_by_filter(notion, episodes_db_id, {"property": "Date", "date": {"is_not_empty": True}})
     rows = query_rows_by_filter(notion, db_id, {"property": "clip", "title": {"is_not_empty": True}})
-    for row in rows:
-        props = row.get("properties", {})
-        title = extract_property_value(props["clip"]) if "clip" in props else None
-        if title:
-            examples["titles"].append(str(title).strip())
-        li = extract_property_value(props["TextLI"]) if "TextLI" in props else None
-        if li and "A clip from my conversation" in li:
-            examples["linkedin"].append(li.split("A clip from my conversation")[0].strip())
-    rng = random.Random(333)
-    examples["titles"] = rng.sample(examples["titles"], min(40, len(examples["titles"])))
-    examples["linkedin"] = examples["linkedin"][:6]
+    picked = pick_style_examples(episodes, rows, n)
+    examples = {"titles": picked["titles"], "linkedin": picked["linkedin"]}
     cache.write_text(json.dumps(examples, indent=1, ensure_ascii=False), encoding="utf-8")
-    logger.info("ℹ️ style examples: %d titles, %d LinkedIn intros (Notion, read-only)",
-                len(examples["titles"]), len(examples["linkedin"]))
+    logger.info("ℹ️ style examples: %d titles, %d LinkedIn intros from the newest %d episode(s) (Notion, read-only)",
+                len(examples["titles"]), len(examples["linkedin"]), picked["episodes"])
     return examples
 
 
