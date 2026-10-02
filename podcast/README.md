@@ -207,6 +207,9 @@ the episodes), `whisper_url`, `llm_hub_base_url`, `models` (hub alias per
 role: `clean`, `select`, `copy`, `caption_review`, `revise`, `episode_copy`, `score`),
 `llm_rates_usd_per_mtok` (list prices for the cost table: the hub runs
 on the subscription, so the cost is a metered-API equivalent),
-`clips_per_episode`, `clip_min_s` / `clip_max_s`, `video_encoder`, `fonts`,
+`clips_per_episode`, `clip_min_s` / `clip_max_s`, `style_episodes` (default 3: the
+style examples come only from the newest N episodes, newest first), `video_encoder`, `fonts`,
 `host` (name, headshot, brand mark), `linkedin_footer`, and
-`notion.clips_db_id` for the style examples. See `config/config_example.json`.
+`notion.clips_db_id` + `notion.episodes_db_id` for the style examples (the
+Clips rows of the newest `style_episodes` dated episodes: the style improved
+over time, so older episodes are left out). See `config/config_example.json`.
