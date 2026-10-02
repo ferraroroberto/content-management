@@ -91,7 +91,8 @@ Six surfaces, one repo:
   run. The control panel's 🎙️ podcast tab runs it and holds the owner's
   per-clip review: approve, drop, or send feedback that the `revise` stage
   applies and re-renders; covers and the package wait for that review.
-  It never publishes and only reads Notion. See
+  It never publishes and only reads Notion. Start to finish, one episode:
+  [`docs/podcast-runbook.md`](docs/podcast-runbook.md); module reference:
   [`podcast/README.md`](podcast/README.md). The recorder (`recorder/`,
   `recorder_server.py`) holds the interview's peer-to-peer video call and
   records each side in the browser, uploading into the episode folder,
@@ -211,7 +212,9 @@ gotchas, files.
 - **Check IP** —
   [`check_ip/README.md`](check_ip/README.md)
 - **Podcast** —
-  [`podcast/README.md`](podcast/README.md)
+  [`docs/podcast-runbook.md`](docs/podcast-runbook.md) ·
+  [`podcast/README.md`](podcast/README.md) ·
+  [`recorder/README.md`](recorder/README.md)
 - **Shared** — [`config/README.md`](config/README.md)
 
 ## The launchers
