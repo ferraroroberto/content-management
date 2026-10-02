@@ -57,7 +57,25 @@ keep the clips already on disk. `--force` redoes the selected stages.
 ## The episode folder
 
 The episode facts are private, so they live next to the recording in an
-`episode.json`, never in this repo:
+`episode.json`, never in this repo. Generate it from the tracks in `video editing/`, then fill in what it
+leaves as `TODO`:
+
+```powershell
+& .\.venv\Scripts\python.exe -m podcast.init_episode "<episode folder>" --guest "Full Name" --adjective brilliant --link "LinkedIn=https://..."
+```
+
+It finds a recorder session (`recorder - <side> - <date time>.mp4`, the
+`remote-ref` files are left to `sync`) or Riverside per-speaker downloads
+(`riverside_<speaker>_raw-synced-video…` and the like; the speaker whose first
+name is `podcast.host.first` is the host). It fills the tracks, `date` (the
+recorder's file name, else the container's creation time, else the file
+date), `start_s` 0 and `end_s` at the shorter track, `website_slug` from the
+guest's name and `host_is_interviewee: false`; the guest's name, `adjective`,
+pronoun and `links` come from flags or stay `TODO` placeholders, listed at the
+end of the run. Two takes of one side (a stopped and restarted recording)
+stop it with the candidates named: pick one with `--host-track` /
+`--guest-track`. It never overwrites an existing `episode.json` without
+`--force`. The result looks like this:
 
 ```json
 {

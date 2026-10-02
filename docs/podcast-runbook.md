@@ -23,7 +23,7 @@ pipeline itself never publishes, posts, schedules, emails or writes to Notion.
 |---:|---|---|---|
 | 1 | Prerequisites: config, hub, whisper | code + human | 1 min |
 | 2 | Record (recorder) or import (Riverside) | human | the interview |
-| 3 | Write `episode.json` | human | 5 min |
+| 3 | Generate `episode.json`, fill the rest | code + human | 5 min |
 | 4 | Run the stages, sync → render, episode, score | code + LLM | ~22 min |
 | 5 | Review the clips, apply feedback, repeat | human + LLM | owner's pace |
 | 6 | Covers and package | code | ~5 s |
@@ -82,21 +82,32 @@ aligned, so the `sync` stage passes through.
 
 ## 3. Write `episode.json`
 
-**[human]** Create `<episode folder>/episode.json`. The schema is in
-[`podcast/README.md`](../podcast/README.md#the-episode-folder); the facts it
-needs only the owner knows:
+1. **[code]** Generate it from the tracks:
 
-- `tracks.guest` / `tracks.host`: paths relative to the episode folder.
-  `host` is always the owner's own track, whoever asks the questions.
-- `guest`, `guest_display`, `guest_first`, `guest_pronoun_possessive`.
-- `host_is_interviewee: true` when the guest interviews the owner (the copy
-  switches to first person).
-- `start_s` / `end_s`: cut the pre-show and post-show chat. Find them by
-  scrubbing the host track; the clips and the cleaned transcript only use
-  this window.
-- `adjective`, `date` (`YYYY-MM-DD`), `website_slug`, `youtube_url` (empty
-  until the episode is on YouTube), `links` (the "where to find" list on the
-  website page).
+   ```powershell
+   & .\.venv\Scripts\python.exe -m podcast.init_episode "<episode folder>" --guest "Full Name" --adjective brilliant --link "LinkedIn=https://..."
+   ```
+
+   It finds the recorder's main recordings or the Riverside per-speaker
+   downloads in `video editing/` (the host's is the one named with
+   `podcast.host.first`), and fills `tracks`, `date`, `start_s` 0, `end_s` at
+   the shorter track, `website_slug` and `host_is_interviewee: false`. Two
+   takes of one side stop it with the candidates named: pick with
+   `--host-track` / `--guest-track`. It never overwrites an existing
+   `episode.json` without `--force`. Seconds; no model.
+2. **[human]** Fill what it leaves as `TODO` (listed at the end of its run),
+   and check the rest. The schema is in
+   [`podcast/README.md`](../podcast/README.md#the-episode-folder); the facts
+   only the owner knows:
+   - `guest`, `guest_display` (e.g. with a title), `guest_first`,
+     `guest_pronoun_possessive` (`--pronoun`, default `their`).
+   - `host_is_interviewee: true` when the guest interviews the owner (the copy
+     switches to first person).
+   - `start_s` / `end_s`: cut the pre-show and post-show chat. Find them by
+     scrubbing the host track; the clips and the cleaned transcript only use
+     this window.
+   - `adjective`, `links` (the "where to find" list on the website page),
+     `youtube_url` (empty until the episode is on YouTube).
 
 The episode is private: `episode.json` lives next to the recording, never in
 this repo.
