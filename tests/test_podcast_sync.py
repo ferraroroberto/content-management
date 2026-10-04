@@ -110,6 +110,19 @@ class EstimateTests(unittest.TestCase):
             est = report["offset_s"] + rho * t
             self.assertAlmostEqual(est, -12.5 + 500e-6 * t, delta=FRAME, msg=f"at {t} s")
 
+    def test_fifty_ppm_over_an_hour_lands_within_a_frame_at_both_ends(self) -> None:
+        # The slow rate a real pair of clocks has: below a tenth of the case
+        # above, so a drift floor set too high would hide it, and an hour long,
+        # so the start and end windows come from capped EDGE_S spans. ~30 s.
+        refs, own, r = session(self.scratch, d0=21.3, rho=50e-6, l_to_host=0.1, l_to_guest=0.1,
+                               r_host=1.1, r_guest=0.7, seconds=3600)
+        report = sync.estimate(refs, own, r)
+        self.assertAlmostEqual(report["drift_ppm"], 50.0, delta=5.0)
+        rho = report["drift_ppm"] / 1e6
+        for t in (0.0, 3600.0):
+            est = report["offset_s"] + rho * t
+            self.assertAlmostEqual(est, 21.3 + 50e-6 * t, delta=FRAME, msg=f"at {t} s")
+
     def test_one_reference_is_enough_but_says_so(self) -> None:
         refs, own, r = session(self.scratch, d0=5.0, rho=0.0, l_to_host=0.1, l_to_guest=0.1,
                                r_host=0.5, r_guest=0.5, seconds=200)
