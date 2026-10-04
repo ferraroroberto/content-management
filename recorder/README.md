@@ -69,9 +69,12 @@ server says so at start, and some guests may not connect.
 - **Call:** the page signals over a WebSocket on the same server (`/ws/<token>`),
   which only relays offers, answers and ICE candidates between the two sides
   (one socket per side; a reconnecting page replaces its stale socket). The
-  media is peer to peer. The negotiation is "perfect negotiation" (the guest
-  yields on a collision), and each page load names itself, so a reloaded peer
-  restarts the call while a signalling blip leaves a working call alone. The
+  media is peer to peer. The host always opens the call; the guest answers
+  with its own tracks on the transceivers the host's offer made, so a join
+  never has two offers crossing. Later renegotiation uses "perfect
+  negotiation" (the guest yields on a collision). Each page load names itself,
+  so a reloaded peer restarts the call while a signalling blip leaves a
+  working call alone. The
   same camera stream feeds the recorder at full resolution and the call
   sender, scaled down to 720p at 1.5 Mbps.
 - **Capture:** `getUserMedia` at the chosen resolution (30 fps), recorded with
@@ -128,6 +131,15 @@ server says so at start, and some guests may not connect.
   arbitrary bytes and rejoined to their duration), the server (token refusal,
   upload/resume/finish, the reference file's name) and the signalling (bad
   link or peer id refused, presence, relay, one socket per side, ICE config).
+- `tests/test_recorder_call_browser.py` runs the call end to end against a
+  local server: two pages in Playwright's Chromium with a fake camera and mic
+  connect, the call sender carries the 720p / 1.5 Mbps cap while each side
+  records 1080p, and both sides upload a main recording plus a reference that
+  points at it. It skips without ffmpeg or Playwright's Chromium
+  (`playwright install chromium`). This test found the guest's own offer
+  colliding with the host's on join, which stuck about one call in three
+  before ICE. Since then the host alone opens the call, and the guest answers
+  with its tracks.
 - The browser side was proven in real Chrome 154 with the real webcam (#341),
   driven by Playwright on this PC:
   - 60-minute 1080p soak with a 60 s network cut at minute 20: 3600.2 s of

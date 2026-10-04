@@ -287,7 +287,7 @@ let pc = null;
 let ws = null;
 let iceServers = [];
 let remote = null;
-let polite = false;      // perfect negotiation: the guest yields on an offer collision
+let polite = false;      // the guest: answers the host's offer, yields on a later collision
 let makingOffer = false;
 let ignoreOffer = false;
 let callState = "connecting";
@@ -319,6 +319,7 @@ async function connectSignalling() {
 
 function startPeer() {
   pc = new RTCPeerConnection({ iceServers });
+  callState = "connecting";
   pc.onicecandidate = ({ candidate }) => { if (candidate) send({ type: "candidate", candidate }); };
   pc.onnegotiationneeded = async () => {
     try {
@@ -341,6 +342,8 @@ function startPeer() {
     callState = pc.connectionState;
     if (pc.connectionState === "failed") pc.restartIce();
   };
+  // The host opens the call, with or without a camera of its own.
+  if (!polite && !stream) for (const kind of ["audio", "video"]) pc.addTransceiver(kind, { direction: "recvonly" });
   attachToCall();
 }
 
@@ -353,13 +356,18 @@ function closePeer() {
 }
 
 // Send this side's camera and mic: the same tracks the recorder uses, the
-// picture scaled down to CALL_HEIGHT for the call only.
+// picture scaled down to CALL_HEIGHT for the call only. The guest waits for
+// the host's offer and puts its tracks on the transceivers that offer made, so
+// its answer carries them. Both sides offering at once on every join left the
+// call stuck before ICE in about one join in three (#342).
 function attachToCall() {
-  if (!pc || !stream) return;
+  if (!pc || !stream || (polite && !pc.remoteDescription)) return;
   for (const track of stream.getTracks()) {
-    const sender = pc.getSenders().find((s) => s.track && s.track.kind === track.kind);
-    if (sender) {
-      sender.replaceTrack(track).then(() => track.kind === "video" && capVideo(sender));
+    const t = pc.getTransceivers().find((x) => !x.stopped && x.receiver.track.kind === track.kind);
+    if (t) {
+      if (!t.sender.track) t.sender.setStreams(stream);
+      t.direction = "sendrecv";
+      t.sender.replaceTrack(track).then(() => track.kind === "video" && capVideo(t.sender));
     } else if (track.kind === "video") {
       pc.addTransceiver(track, { direction: "sendrecv", streams: [stream], sendEncodings: [videoEncoding(track)] });
     } else {
@@ -404,6 +412,7 @@ async function onSignal(message) {
     if (ignoreOffer) return;
     await pc.setRemoteDescription({ type: message.type, sdp: message.sdp });
     if (message.type === "offer") {
+      attachToCall();
       await pc.setLocalDescription();
       send({ type: pc.localDescription.type, sdp: pc.localDescription.sdp });
     }
