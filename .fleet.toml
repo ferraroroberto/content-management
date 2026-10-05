@@ -4,5 +4,5 @@
 # description, exposed services). Schema: fleet-config/architecture/README.md.
 layer       = "working-pipe"
 icon        = "📝"
-description = "Six content surfaces: reporting, planning, newsletter, engagement, check-IP, podcast (with its own two-side recorder)."
+description = "Content surfaces: reporting, planning, newsletter, podcast and more."
 tag         = ["→", "Notion"]
