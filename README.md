@@ -101,6 +101,13 @@ Six surfaces, one repo:
   records each side in the browser, uploading into the episode folder,
   replacing Riverside for that job: [`recorder/README.md`](recorder/README.md).
 
+- **Demo videos** (`demo_video/`, `demo_video_pipeline.py`) — turns screen
+  recordings of an app plus music into an animated product demo video
+  (16:9, 1:1 or 4:5) from one `demo.json` storyboard, rendered through a
+  data-driven Remotion template: a new video is new data, not new code.
+  It never publishes. Module reference:
+  [`demo_video/README.md`](demo_video/README.md).
+
 The four content pipelines read from the same Notion editorial database;
 check IP is independent of Notion and keeps its own local store. Each per-folder
 README has its own mermaid flowchart, CLI table, gotchas, and validated
@@ -168,6 +175,7 @@ content-management/                   # repo root
 │   └── db/                           # Supabase schema (commenters + comments tables)
 ├── check_ip/                         # illustration copyright check (Google Lens → SQLite → triage tab)
 ├── podcast/                          # episode package: transcript → clips (1:1 + 9:16) → copy, covers, docx, website HTML
+├── demo_video/                       # demo videos: demo.json storyboard → Remotion template (remotion/) → MP4 per cut
 ├── recorder/                         # self-hosted two-side recorder: page + chunk upload into the episode folder
 ├── app/                              # Streamlit control panel (tabs: reporting/editorial/planning/newsletter/triage/engagement/check-IP/podcast)
 ├── config/                           # config.json, mapping.json, logger_config, chrome_launch, console
@@ -183,6 +191,7 @@ content-management/                   # repo root
 ├── reporting_pipeline.py             # orchestrator: APIs → Supabase → Notion → Substack
 ├── newsletter_pipeline.py            # orchestrator: schedule/bootstrap/archive/normalize/build subcommands
 ├── podcast_pipeline.py               # orchestrator: one episode folder → its podcast package (resumable stages)
+├── demo_video_pipeline.py            # orchestrator: one demo folder → its cuts (render; --preview, --status)
 ├── recorder_server.py                # serves the recorder for one episode (host + guest links)
 ├── launch_app.bat                    # Streamlit control panel launcher (Windows CMD)
 ├── launch_planning.bat               # planning launcher (Windows CMD)
@@ -218,6 +227,8 @@ gotchas, files.
   [`docs/podcast-runbook.md`](docs/podcast-runbook.md) ·
   [`podcast/README.md`](podcast/README.md) ·
   [`recorder/README.md`](recorder/README.md)
+- **Demo videos** —
+  [`demo_video/README.md`](demo_video/README.md)
 - **Shared** — [`config/README.md`](config/README.md)
 
 ## The launchers

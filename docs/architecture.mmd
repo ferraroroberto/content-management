@@ -230,6 +230,22 @@ review clips, cost, files"| PODPIPE
 (OneDrive, private; a trial folder
 under podcast.trials_root for a re-run)"]]
 
+  DEMOPIPE["demo_video_pipeline.py
+render (--preview, --status)"]
+  subgraph demo_mod["demo_video/ — demo videos (local outputs only)"]
+    DSTORY["storyboard.py
+demo.json schema, validate,
+resolve_cut -> props per cut"]
+    DRENDER["render.py
+Remotion CLI via node"]
+    DREMOTION["remotion/ (TypeScript)
+scene catalogue + components,
+16:9 / 1:1 / 4:5"]
+  end
+  DEMOPIPE --> DSTORY --> DRENDER --> DREMOTION
+  DREMOTION --> DEMOOUT[["<demo folder>/out/<cut>.mp4
+(outside the repo)"]]
+
   subgraph shared["config/ — shared by every pipeline + app"]
     CFGLOADER["loader.py\nconfig.json + mapping.json"]
     CHROMELAUNCH["chrome_launch.py +\nchrome_profile_lock.py"]
@@ -244,6 +260,7 @@ under podcast.trials_root for a re-run)"]]
   engagement_mod -.-> shared
   checkip_mod -.-> shared
   podcast_mod -.-> shared
+  demo_mod -.-> shared
   APP -.-> shared
 
   AUTOHEALSKILL["schedule-autoheal skill\n(.claude/skills/, .agents/skills/)\nprobe live DOM -> selector-only fix ->\ndry-run revalidate -> issue + PR"]

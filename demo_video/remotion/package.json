@@ -1,0 +1,20 @@
+{
+  "name": "content-management-demo-video",
+  "private": true,
+  "description": "Remotion template for demo_video: renders a resolved demo.json (see demo_video/README.md).",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.532",
+    "@remotion/google-fonts": "4.0.532",
+    "remotion": "4.0.532",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.0",
+    "typescript": "5.8.3"
+  }
+}
