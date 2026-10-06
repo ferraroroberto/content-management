@@ -2,7 +2,8 @@
 
     python -m newsletter.triage.run [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--days 7]
                                     [--source gmail|cache] [--no-llm] [--no-fetch] [--top-k 90]
-                                    [--model claude_haiku] [--out DIR] [--debug]
+                                    [--model claude_haiku] [--stage-a-engine legacy|jev|both]
+                                    [--out DIR] [--debug]
     python -m newsletter.triage.run --backtest N226[,N227,…]   # offline, from the history cache
 
 Cadence (owner rule): a run covers the window from the last watermark (or
@@ -15,6 +16,12 @@ already-in-Notion → sender/domain priors (criteria.json + overrides.json) →
 stage-A metadata scoring (batched LLM) → fetch + stage-B content scoring for
 the top-K → vetoes (never-tier, paywalled, promo) → caps → shortlist →
 ``results/newsletter/triage/triage-<start>_<end>.md``.
+
+Stage A engine (``newsletter_triage.stage_a_engine`` / ``--stage-a-engine``, #285):
+``legacy`` (default) scores with the hub model alias; ``jev`` scores with TypeSafe
+Jev through the hub's ``/v1/systemone``; ``both`` lets legacy decide every verdict
+while Jev scores the same links in the background (bounded by ``jev_budget_s``) and
+its answers are written beside the report as ``<report>.jev-shadow.json``.
 """
 
 from __future__ import annotations
@@ -44,6 +51,7 @@ from newsletter.cache import canonicalize_url  # noqa: E402
 from newsletter.triage import db  # noqa: E402
 from newsletter.triage import fetch as fx  # noqa: E402
 from newsletter.triage import gmail as gm  # noqa: E402
+from newsletter.triage import jev as jx  # noqa: E402
 from newsletter.triage import rank as rk  # noqa: E402
 from newsletter.triage import report as rp  # noqa: E402
 from newsletter.triage import score as sc  # noqa: E402
@@ -224,7 +232,8 @@ def build_candidates(records: Sequence[gm.EmailRecord], priors: sc.Priors, notio
 def run_window(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[str, Any], source: str,
                use_llm: bool, use_fetch: bool, top_k: int, model: str, out_dir: Path,
                edition_hint: Optional[str] = None, backtest: Optional[Dict[str, Any]] = None,
-               limit_links: Optional[int] = None, force: bool = False) -> Tuple[Path, rk.Selection, Dict[str, Any]]:
+               limit_links: Optional[int] = None, force: bool = False,
+               engine: str = jx.DEFAULT_ENGINE) -> Tuple[Path, rk.Selection, Dict[str, Any]]:
     """One window → report + stored run. Refuses to replace a stored (window, kind) unless ``force``
     (:class:`RunExists`). Store failures after registration mark the run ``failed`` and re-raise."""
     kind = "backtest" if backtest is not None else "live"
@@ -246,7 +255,7 @@ def run_window(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[st
         path, sel, stats, cands, emails_view = _run_window_body(
             start, end, cfg=cfg, criteria=criteria, source=source, use_llm=use_llm, use_fetch=use_fetch,
             top_k=top_k, model=model, out_dir=out_dir, edition_hint=edition_hint or "next free edition",
-            backtest=backtest, limit_links=limit_links)
+            backtest=backtest, limit_links=limit_links, engine=engine)
     except Exception as err:
         if run_id is not None:
             db.mark_run(run_id, status="failed", stats={"error": str(err)[:500]})
@@ -262,6 +271,46 @@ def run_window(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[st
     db.mark_run(run_id, status="done", stats=stats, report_path=str(path))
     logger.info("🗄️ stored run %s: %d emails, %d candidates", run_id, n_e, n_c)
     return path, sel, stats
+
+
+def _start_shadow(items: List[Dict[str, str]], criteria: Dict[str, Any], *, base_url: str,
+                  cfg: Dict[str, Any]) -> Optional[jx.Shadow]:
+    try:
+        return jx.Shadow(items, criteria, base_url=base_url, model=cfg.get("jev_model", jx.DEFAULT_MODEL),
+                         workers=int(cfg.get("jev_workers", jx.DEFAULT_WORKERS)),
+                         budget_s=float(cfg.get("jev_budget_s", jx.DEFAULT_BUDGET_S)))
+    except Exception as err:  # noqa: BLE001 — the shadow must never fail the legacy run
+        logger.warning("⚠️ jev shadow not started: %s", type(err).__name__)
+        return None
+
+
+def _collect_shadow(shadow: Optional[jx.Shadow], cids: List[str], stats: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Shadow answers as rows; a shadow that never started → every item ``not evaluated``."""
+    scores = [jx.JevMetaScore(error="shadow not started") for _ in cids]
+    model = jx.DEFAULT_MODEL
+    if shadow is not None:
+        try:
+            scores, model = shadow.collect(), shadow.model
+        except Exception as err:  # noqa: BLE001
+            logger.warning("⚠️ jev shadow not collected: %s", type(err).__name__)
+    rows = jx.shadow_rows(cids, scores, model=model)
+    stats["jev_evaluated"] = sum(1 for r in rows if r["status"] == "ok")
+    stats["jev_not_evaluated"] = len(rows) - stats["jev_evaluated"]
+    return rows
+
+
+def _write_shadow(report: Path, rows: List[Dict[str, Any]], *, start: date, end: date,
+                  stats: Dict[str, Any]) -> None:
+    """``both``: Jev's answers beside the report — never in ``triage_candidates``. A failure is logged and
+    recorded in ``stats``, never raised."""
+    path = jx.shadow_path(report)
+    try:
+        jx.write_shadow(path, rows, window=(start.isoformat(), end.isoformat()))
+        stats["jev_shadow"] = path.name
+        logger.info("🧪 jev shadow: %d answers (%d not evaluated) → %s", len(rows), stats["jev_not_evaluated"], path)
+    except Exception as err:  # noqa: BLE001
+        stats["jev_shadow"] = f"failed: {type(err).__name__}"
+        logger.warning("⚠️ jev shadow not written: %s", err)
 
 
 def _truth_decisions(cands: List[rk.Candidate], sel: rk.Selection, bt: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -289,7 +338,8 @@ def _truth_decisions(cands: List[rk.Candidate], sel: rk.Selection, bt: Dict[str,
 def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[str, Any], source: str,
                      use_llm: bool, use_fetch: bool, top_k: int, model: str, out_dir: Path,
                      edition_hint: str, backtest: Optional[Dict[str, Any]],
-                     limit_links: Optional[int]) -> Tuple[Path, rk.Selection, Dict[str, Any], List[rk.Candidate], List[Dict[str, Any]]]:
+                     limit_links: Optional[int], engine: str = jx.DEFAULT_ENGINE,
+                     ) -> Tuple[Path, rk.Selection, Dict[str, Any], List[rk.Candidate], List[Dict[str, Any]]]:
     t0 = time.monotonic()
     base_url = cfg.get("llm_hub_base_url") or load_full_config().get("newsletter_archive", {}).get("llm_hub_base_url", "http://127.0.0.1:8000")
     priors = sc.Priors(criteria)
@@ -313,12 +363,23 @@ def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: D
         if not llm.health_check(base_url=base_url, model=model):
             logger.error("❌ LLM hub unreachable at %s — producing a rule-only report", base_url)
             use_llm = False
+    shadow_rows: Optional[List[Dict[str, Any]]] = None
     if use_llm and stage_a:
         items = [{"sender": c.sender_name, "label": c.label or c.url, "domain": c.domain,
                   "path": urlsplit(c.url).path} for c in stage_a]
-        metas = sc.score_metadata(items, criteria, base_url=base_url, model=model,
-                                  workers=int(cfg.get("llm_workers", 3)) + 1, cache=llm_cache)
-        llm_calls += (llm_cache.misses + 24) // 25
+        if engine == "jev":
+            metas = jx.score_metadata_jev(items, criteria, base_url=base_url,
+                                          model=cfg.get("jev_model", jx.DEFAULT_MODEL),
+                                          workers=int(cfg.get("jev_workers", jx.DEFAULT_WORKERS)))
+            stats["stage_a_engine"], stats["jev_calls"] = engine, len(items)
+        else:
+            shadow = _start_shadow(items, criteria, base_url=base_url, cfg=cfg) if engine == "both" else None
+            metas = sc.score_metadata(items, criteria, base_url=base_url, model=model,
+                                      workers=int(cfg.get("llm_workers", 3)) + 1, cache=llm_cache)
+            llm_calls += (llm_cache.misses + 24) // 25
+            if engine == "both":
+                stats["stage_a_engine"] = engine
+                shadow_rows = _collect_shadow(shadow, [c.cid for c in stage_a], stats)
         for c, m in zip(stage_a, metas):
             c.meta = m
             c.score = sc.combine(sender_weight=c.sender_weight, domain_bonus=c.domain_bonus, meta=m, content=None)
@@ -413,6 +474,8 @@ def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: D
     name = f"triage-{start}_{end}" + (f"-backtest-{backtest['edition']}" if backtest else "") + ".md"
     path = out_dir / name
     path.write_text(md, encoding="utf-8")
+    if shadow_rows is not None:
+        _write_shadow(path, shadow_rows, start=start, end=end, stats=stats)
     logger.info("📝 report: %s — %d picks (%s) in %.0fs", path, stats["selected"],
                 ", ".join(f"{t[:6]} {len(sel.picks[t])}" for t in rk.TOPICS), stats["elapsed_s"])
     return path, sel, stats, cands, emails_view
@@ -487,7 +550,7 @@ def _backtest_metrics(sel: rk.Selection, cands: List[rk.Candidate], bt: Dict[str
 
 def backtest_edition(number: str, *, cfg: Dict[str, Any], criteria: Dict[str, Any], use_llm: bool, use_fetch: bool,
                      top_k: int, model: str, out_dir: Path, window_days: int = 14, offset_days: int = 7,
-                     force: bool = False) -> Dict[str, Any]:
+                     force: bool = False, engine: str = jx.DEFAULT_ENGINE) -> Dict[str, Any]:
     editions = [json.loads(l) for l in (HISTORY_DIR / "editions.jsonl").open(encoding="utf-8") if l.strip()]
     ed = next((e for e in editions if e["number"] == number), None)
     if not ed or not ed.get("date"):
@@ -516,7 +579,7 @@ def backtest_edition(number: str, *, cfg: Dict[str, Any], criteria: Dict[str, An
                 len({cn for _m, cn in truth_msg_canon}))
     path, sel, stats = run_window(start, end, cfg=cfg, criteria=criteria, source="cache", use_llm=use_llm,
                                   use_fetch=use_fetch, top_k=top_k, model=model, out_dir=out_dir,
-                                  edition_hint=number, backtest=bt, force=force)
+                                  edition_hint=number, backtest=bt, force=force, engine=engine)
     return {k: v for k, v in bt.items() if not k.startswith("_")} | {"report": str(path), "stats": stats}
 
 
@@ -547,6 +610,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--no-fetch", action="store_true")
     ap.add_argument("--top-k", type=int, default=None)
     ap.add_argument("--model", default=None)
+    ap.add_argument("--stage-a-engine", choices=jx.ENGINES, default=None,
+                    help="stage A scorer; default = config newsletter_triage.stage_a_engine, else legacy")
     ap.add_argument("--limit-links", type=int, default=None)
     ap.add_argument("--out", default=str(TRIAGE_DIR))
     ap.add_argument("--backtest", help="comma-separated edition numbers, e.g. N226,N227")
@@ -564,9 +629,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     model = args.model or cfg.get("llm_model", DEFAULT_MODEL)
     top_k = args.top_k or int(cfg.get("stage_b_top_k", 90))
     out_dir = Path(args.out)
+    engine = args.stage_a_engine or cfg.get("stage_a_engine") or jx.DEFAULT_ENGINE
+    if engine not in jx.ENGINES:
+        logger.error("❌ newsletter_triage.stage_a_engine = %r — expected one of %s", engine, ", ".join(jx.ENGINES))
+        return 2
+    if engine != jx.DEFAULT_ENGINE:
+        logger.info("🧪 stage A engine: %s", engine)
 
     try:
-        return _main_runs(args, cfg=cfg, criteria=criteria, model=model, top_k=top_k, out_dir=out_dir)
+        return _main_runs(args, cfg=cfg, criteria=criteria, model=model, top_k=top_k, out_dir=out_dir, engine=engine)
     except RunExists as err:
         logger.warning("⚠️ %s", err)
         print(f"⚠️ {err}")
@@ -574,13 +645,13 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 
 def _main_runs(args: argparse.Namespace, *, cfg: Dict[str, Any], criteria: Dict[str, Any], model: str,
-               top_k: int, out_dir: Path) -> int:
+               top_k: int, out_dir: Path, engine: str = jx.DEFAULT_ENGINE) -> int:
     if args.backtest:
         results = []
         for num in [n.strip() for n in args.backtest.split(",") if n.strip()]:
             results.append(backtest_edition(num, cfg=cfg, criteria=criteria, use_llm=not args.no_llm,
                                             use_fetch=not args.no_fetch, top_k=top_k, model=model, out_dir=out_dir,
-                                            force=args.force))
+                                            force=args.force, engine=engine))
         print("\n=== backtest summary ===")
         for r in results:
             print(f"{r['edition']}: precision {r['precision']:.0%} ({r['hits']}/{r['shortlist']}) · "
@@ -603,7 +674,7 @@ def _main_runs(args: argparse.Namespace, *, cfg: Dict[str, Any], criteria: Dict[
     for a, b in windows:
         path, sel, stats = run_window(a, b, cfg=cfg, criteria=criteria, source=args.source, use_llm=not args.no_llm,
                                       use_fetch=not args.no_fetch, top_k=top_k, model=model, out_dir=out_dir,
-                                      limit_links=args.limit_links, force=args.force)
+                                      limit_links=args.limit_links, force=args.force, engine=engine)
         reports.append({"window": [a.isoformat(), b.isoformat()], "report": str(path), "selected": stats["selected"]})
     state.setdefault("runs", []).append({"at": datetime.now(timezone.utc).isoformat(), "windows": reports})
     state["last_window_end"] = end.isoformat()

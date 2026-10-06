@@ -98,6 +98,7 @@ episode / covers / package / score"]
   NTRIAGERUN --> GMAILAPI
   NTRIAGERUN -->|"dedupe: article URLs (read-only)"| NOTION
   NTRIAGERUN -->|"stage A/B scoring\n(claude_haiku alias)"| LLMHUB
+  NTRIAGERUN -.->|"stage A engine jev / both\n(/v1/systemone → TypeSafe Jev)"| LLMHUB
   NTRIAGERUN --> TRIAGEREPORT[["results/newsletter/triage/\ntriage-<window>.md (rendered in the tab)"]]
   NTRIAGERUN -->|"triage_runs / emails / candidates\n+ backtest truth decisions"| SUPA
   NTRIAGEREVIEW -->|"triage_decisions / reviews /\nlessons / editions / picks"| SUPA
