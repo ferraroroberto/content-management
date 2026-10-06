@@ -303,6 +303,10 @@
         "fetch_timeout_s": 15,
         "llm_workers": 3,
         "lessons_model": "claude_sonnet",
+        "stage_a_engine": "legacy",
+        "jev_model": "jev-latest",
+        "jev_workers": 6,
+        "jev_budget_s": 300,
         "notion_task_page_id": "your_notion_task_page_id_here"
     },
     "engagement": {
