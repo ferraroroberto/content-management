@@ -1,0 +1,448 @@
+{
+  "version": 1,
+  "title": "facilitation-suite demo (synthetic, English)",
+  "fps": 30,
+  "product": {
+    "name": "facilitation-suite",
+    "icon_paths": [
+      "M2 3h20",
+      "M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3",
+      "m7 21 5-5 5 5"
+    ],
+    "colors": [
+      "#e53935",
+      "#8e24aa"
+    ]
+  },
+  "media_dir": "media",
+  "marks": "marks.json",
+  "clips": {
+    "stage": {
+      "file": "{lang}/stage.mp4"
+    },
+    "presenter": {
+      "file": "{lang}/presenter.mp4"
+    },
+    "plan": {
+      "file": "{lang}/plan.mp4"
+    },
+    "results": {
+      "file": "{lang}/results.mp4"
+    }
+  },
+  "copy": {
+    "en": {
+      "hook": "What if your Zoom chat\nlit up the room?",
+      "problemKicker": "Online workshops",
+      "problem": "Everyone on camera.\nAnd they join in\nthrough the chat.",
+      "answerKicker": "And nothing else",
+      "answer": "No other app.\nNo links.\nNo bots.",
+      "brandSub": "Your PowerPoint + the Zoom chat = a room that takes part",
+      "steps": [
+        {
+          "title": "Import your PowerPoint",
+          "sub": "Every slide comes in as it is, with its notes"
+        },
+        {
+          "title": "Plan every moment",
+          "sub": "Activities, timers, music and camera layout per slide"
+        },
+        {
+          "title": "Groups with no repeats",
+          "sub": "Pairs, then two rounds of four"
+        }
+      ],
+      "liveKicker": "Live",
+      "liveTitle": "People type in the chat… and the screen comes alive",
+      "zoomLabel": "What Zoom sees",
+      "presenterLabel": "Your presenter screen",
+      "chatTitle": "Reads the Zoom chat on your own PC",
+      "chatSub": "No bot joins the meeting.\nNothing leaves your computer.",
+      "groupsKicker": "Activities",
+      "groupsTitle": "Pairs, groups\nand timers",
+      "timerStates": [
+        "Ready",
+        "Running",
+        "Paused",
+        "Time's up!"
+      ],
+      "cloudsKicker": "Cards & idea feed",
+      "cloudsTitle": "What the group thinks, live",
+      "resultsKicker": "Afterwards",
+      "resultsTitle": "Every result,\nready to share",
+      "resultsSub": "A session PDF and an Excel report, each capture exactly as the room saw it.",
+      "tagline": "Your PowerPoint. Their chat.\nA room that takes part.",
+      "footer": "Built by a facilitator, for live online workshops",
+      "tiles": [
+        "Maya Collins",
+        "Leo Fischer",
+        "Priya Nair",
+        "Tom Becker",
+        "Ana Ruiz",
+        "Kenji Sato",
+        "Chloe Martin",
+        "Omar Haddad",
+        "Grace Wilson",
+        "Lukas Novak",
+        "Zoe Dubois",
+        "Sam Okafor"
+      ],
+      "tileChats": [
+        "Hi! 👋",
+        "London",
+        "4 ☀️",
+        "trust",
+        "Count me in!",
+        "fun"
+      ],
+      "hookMessages": [
+        "London, UK",
+        "Berlin",
+        "Madrid, Spain",
+        "New York",
+        "Toronto, Canada",
+        "São Paulo, Brazil",
+        "Paris",
+        "Amsterdam",
+        "Lisbon, Portugal",
+        "Mumbai, India"
+      ],
+      "people": [
+        "Maya Collins",
+        "Leo Fischer",
+        "Priya Nair",
+        "Tom Becker",
+        "Ana Ruiz",
+        "Kenji Sato",
+        "Chloe Martin",
+        "Omar Haddad",
+        "Grace Wilson",
+        "Lukas Novak",
+        "Zoe Dubois",
+        "Sam Okafor",
+        "Nina Rossi",
+        "Ben Carter",
+        "Ines Costa",
+        "Hannah Weber",
+        "Diego Alves",
+        "Freya Lund"
+      ]
+    }
+  },
+  "cuts": [
+    {
+      "id": "en-linkedin",
+      "lang": "en",
+      "aspect": "16:9",
+      "public": true,
+      "soundtrack": [
+        {
+          "file": "music/en.mp3",
+          "licence": "free",
+          "fade_in_s": 0.5,
+          "fade_out_s": 2.5
+        }
+      ]
+    },
+    {
+      "id": "en-square",
+      "lang": "en",
+      "aspect": "1:1",
+      "public": true,
+      "soundtrack": [
+        {
+          "file": "music/en.mp3",
+          "licence": "free",
+          "fade_in_s": 0.5,
+          "fade_out_s": 2.5
+        }
+      ]
+    },
+    {
+      "id": "en-portrait",
+      "lang": "en",
+      "aspect": "4:5",
+      "public": true,
+      "soundtrack": [
+        {
+          "file": "music/en.mp3",
+          "licence": "free",
+          "fade_in_s": 0.5,
+          "fade_out_s": 2.5
+        }
+      ]
+    }
+  ],
+  "scenes": [
+    {
+      "id": "hook",
+      "type": "full_bleed",
+      "seconds": 7,
+      "fade_s": 0.2,
+      "clip": {
+        "video": "stage",
+        "offset": 1.9999999999999998,
+        "rate": 1.45,
+        "beat": "map"
+      },
+      "caption": {
+        "title": "@hook",
+        "size": 92,
+        "width": 1300
+      },
+      "chat": {
+        "messages": "@hookMessages",
+        "senders": "@people",
+        "every_s": 0.4,
+        "start_s": 0.13,
+        "max": 4
+      }
+    },
+    {
+      "id": "problem",
+      "type": "tiles_statement",
+      "seconds": 6,
+      "tiles": "@tiles",
+      "chats": "@tileChats",
+      "talkers": [
+        1,
+        6,
+        3,
+        10,
+        4,
+        9
+      ],
+      "swap_s": 2.9,
+      "before": {
+        "kicker": "@problemKicker",
+        "title": "@problem",
+        "size": 70,
+        "color": "blue"
+      },
+      "after": {
+        "kicker": "@answerKicker",
+        "title": "@answer",
+        "size": 76,
+        "color": "green"
+      }
+    },
+    {
+      "id": "brand",
+      "type": "brand",
+      "seconds": 4,
+      "sub": "@brandSub"
+    },
+    {
+      "id": "prepare",
+      "type": "steps_device",
+      "seconds": 14,
+      "steps": "@steps",
+      "device": "laptop",
+      "clip": {
+        "video": "plan",
+        "offset": 0.3,
+        "rate": 1.6
+      },
+      "step_at": [
+        {
+          "video": "plan",
+          "offset": 1.5,
+          "rate": 1.0,
+          "beat": "plan"
+        },
+        {
+          "video": "plan",
+          "offset": 0.0,
+          "rate": 1.0,
+          "beat": "groups"
+        }
+      ]
+    },
+    {
+      "id": "split",
+      "type": "split_window_monitor",
+      "seconds": 7,
+      "caption": {
+        "kicker": "@liveKicker",
+        "title": "@liveTitle",
+        "size": 54,
+        "width": 1780
+      },
+      "window": {
+        "label": "@zoomLabel",
+        "clip": {
+          "video": "stage",
+          "offset": 1.6,
+          "rate": 1.3,
+          "beat": "scale"
+        }
+      },
+      "monitor": {
+        "label": "@presenterLabel",
+        "clip": {
+          "video": "presenter",
+          "offset": 1.6,
+          "rate": 1.3,
+          "beat": "scale"
+        }
+      }
+    },
+    {
+      "id": "chat",
+      "type": "crop_zoom",
+      "seconds": 7,
+      "caption": {
+        "title": "@chatTitle",
+        "sub": "@chatSub",
+        "size": 56,
+        "width": 600
+      },
+      "panel": {
+        "video": "presenter",
+        "offset": 2.3,
+        "rate": 1.9,
+        "beat": "cloud_kryptonite",
+        "crop": {
+          "x": 1536,
+          "y": 406,
+          "w": 374,
+          "h": 526
+        }
+      },
+      "window": {
+        "video": "stage",
+        "offset": 2.3,
+        "rate": 1.9,
+        "beat": "cloud_kryptonite"
+      }
+    },
+    {
+      "id": "groups",
+      "type": "window_states",
+      "seconds": 11,
+      "caption": {
+        "kicker": "@groupsKicker",
+        "title": "@groupsTitle",
+        "size": 54,
+        "width": 560,
+        "color": "purple"
+      },
+      "segments": [
+        {
+          "clip": {
+            "video": "stage",
+            "offset": 0.8,
+            "rate": 1.0,
+            "beat": "pairs"
+          },
+          "seconds": 3.5
+        },
+        {
+          "clip": {
+            "video": "stage",
+            "offset": 1.6,
+            "rate": 2.6,
+            "beat": "breakout"
+          }
+        }
+      ],
+      "legend": {
+        "labels": "@timerStates",
+        "colors": [
+          "#1f1f1f",
+          "green",
+          "yellow",
+          "#c40c0c"
+        ],
+        "segment": 1,
+        "anchor": {
+          "video": "stage",
+          "offset": 0.0,
+          "rate": 1.0,
+          "beat": "breakout"
+        },
+        "changes": [
+          [
+            0,
+            0
+          ],
+          [
+            3.2,
+            1
+          ],
+          [
+            8.5,
+            2
+          ],
+          [
+            11.7,
+            1
+          ],
+          [
+            20.5,
+            3
+          ]
+        ]
+      }
+    },
+    {
+      "id": "clouds",
+      "type": "side_by_side",
+      "seconds": 8,
+      "stagger_s": 0.67,
+      "caption": {
+        "kicker": "@cloudsKicker",
+        "title": "@cloudsTitle",
+        "size": 54,
+        "width": 1780,
+        "color": "blue"
+      },
+      "windows": [
+        {
+          "video": "stage",
+          "offset": 2.3,
+          "rate": 1.0,
+          "beat": "cards"
+        },
+        {
+          "video": "stage",
+          "offset": 2.3,
+          "rate": 1.0,
+          "beat": "feed"
+        }
+      ]
+    },
+    {
+      "id": "results",
+      "type": "device_caption",
+      "seconds": 9,
+      "device": "laptop",
+      "caption": {
+        "kicker": "@resultsKicker",
+        "title": "@resultsTitle",
+        "sub": "@resultsSub",
+        "size": 58,
+        "width": 560,
+        "color": "green"
+      },
+      "clip": {
+        "video": "results",
+        "offset": 0.5,
+        "rate": 1.05
+      }
+    },
+    {
+      "id": "outro",
+      "type": "outro",
+      "seconds": 10,
+      "clip": {
+        "video": "stage",
+        "offset": 7.3,
+        "rate": 0.6,
+        "beat": "cloud_takeaway"
+      },
+      "tagline": "@tagline",
+      "footer": "@footer"
+    }
+  ]
+}

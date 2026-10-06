@@ -422,5 +422,8 @@
                 "credential": "set RECORDER_TURN_CREDENTIAL in .env"
             }
         }
+    },
+    "demo_video": {
+        "node_root": ""
     }
 }
