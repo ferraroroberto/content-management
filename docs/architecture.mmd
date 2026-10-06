@@ -20,7 +20,7 @@ flowchart TB
   PPIPE["planning_pipeline.py --all-wip"]
   NPIPE["newsletter_pipeline.py\nschedule / bootstrap / archive / normalize / build /\nsubstack-draft"]
   APP["app/app.py — Streamlit control panel\ntab_reporting · tab_planning · tab_newsletter ·\ntab_triage · tab_editorial · tab_engagement · tab_check_ip ·
-tab_podcast"]
+tab_podcast · tab_demo_video"]
   AUTOHEAL["app/autoheal_console.py"]
   PODPIPE["podcast_pipeline.py
 transcribe / clean / select / copy / render /
@@ -251,6 +251,12 @@ Remotion CLI via node"]
 scene catalogue + components,
 16:9 / 1:1 / 4:5"]
   end
+  DEMOSKILL["demo-video skill (.claude/skills/)
+message brief -> demo.json + driver ->
+record -> checks -> preview loop -> MP4s"]
+  DEMOSKILL -->|"stages, --status"| DEMOPIPE
+  APP -->|"🎬 demo video tab: runbook,
+prep / check / preview / render / status"| DEMOPIPE
   DEMOPIPE --> DRECORD --> DPREP --> DSTORY --> DCHECK --> DRENDER --> DREMOTION
   DPREP -.->|"ffmpeg helpers"| podcast_mod
   DREMOTION --> DEMOOUT[["<demo folder>/out/<cut>.mp4
