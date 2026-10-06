@@ -172,7 +172,7 @@ with st.sidebar:
 # real widget — its selection is ordinary widget state, so it survives any
 # rerun the way st.tabs()'s internal state does not.
 SECTIONS = ["📊 reporting", "📅 editorial", "📅 planning", "📰 newsletter", "🧭 triage",
-            "🛡️ engagement", "⚖️ check IP", "🎙️ podcast"]
+            "🛡️ engagement", "⚖️ check IP", "🎙️ podcast", "🎬 demo video"]
 
 # nav-bar and the routed section content must share one containing block
 # (this outer container) for position: sticky to have room to stick —
@@ -237,3 +237,6 @@ with st.container():
     elif section == "🎙️ podcast":
         from app import tab_podcast  # noqa: PLC0415
         tab_podcast.run()
+    elif section == "🎬 demo video":
+        from app import tab_demo_video  # noqa: PLC0415
+        tab_demo_video.run()

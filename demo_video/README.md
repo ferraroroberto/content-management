@@ -2,7 +2,7 @@
 
 Turns screen recordings of an app plus music into a finished, animated demo video (16:9, 1:1 or 4:5), from one `demo.json` storyboard. The renderer is a [Remotion](https://www.remotion.dev/) template driven entirely by data: a new video is a new `demo.json`, not new code. Nothing is published, posted or uploaded.
 
-Built in steps: the renderer (#359), media prep and hard-stop checks (#360), the recorder (#361), and the `/demo-video` skill with its runbook and control-panel tab (#362).
+To make a demo, run the **`/demo-video` skill** in Claude Code from this repo. It follows [`docs/demo-video-runbook.md`](../docs/demo-video-runbook.md) with you, from the message brief to the MP4s. The control panel's 🎬 demo video section shows the same runbook and runs the deterministic stages. This page is the module reference. Built in four steps: #359 renderer, #360 prep and checks, #361 recorder, #362 skill, runbook and tab.
 
 ```mermaid
 flowchart LR
