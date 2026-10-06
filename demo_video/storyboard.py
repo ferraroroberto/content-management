@@ -24,7 +24,7 @@ import re
 from pathlib import Path
 from typing import Annotated, Any, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 ASPECTS: dict[str, tuple[int, int]] = {"16:9": (1920, 1080), "1:1": (1080, 1080), "4:5": (1080, 1350)}
 DEMO_FILE = "demo.json"
@@ -230,6 +230,77 @@ class Privacy(_Model):
     allow: list[str] = Field(default_factory=list)  # name tokens the owner accepted (e.g. a common first name)
 
 
+STEP_KINDS = ("act", "wait", "chat", "click", "wait_for", "wheel", "mouse")
+
+
+class Step(_Model):
+    """One scripted step of a beat. Exactly one of the kinds in ``STEP_KINDS``.
+
+    ``act``/``arg``: a driver action (e.g. ``goto`` 5). ``wait``: seconds (the
+    driver's ``tick`` keeps running). ``chat``: messages (a list or an ``@copy``
+    key) posted one by one, ``every_s`` apart (a number or ``[min, max]``,
+    seeded by the beat name). ``click`` (a selector, optionally the row with
+    ``text``), ``wait_for`` (a selector), ``wheel`` ``[dx, dy]`` ``times``
+    times, ``mouse`` ``[x, y]``: browser steps on ``page``.
+    """
+
+    act: Optional[str] = None
+    arg: Optional[Union[int, str]] = None
+    wait: Optional[float] = Field(None, ge=0)
+    chat: Optional[Text] = None
+    every_s: Union[float, tuple[float, float]] = (0.35, 0.85)
+    page: Optional[str] = None
+    click: Optional[str] = None
+    text: Optional[str] = None
+    wait_for: Optional[str] = None
+    wheel: Optional[tuple[float, float]] = None
+    times: int = Field(1, ge=1)
+    mouse: Optional[tuple[float, float]] = None
+
+    @model_validator(mode="after")
+    def _one_kind(self) -> "Step":
+        kinds = [k for k in STEP_KINDS if getattr(self, k) is not None]
+        if len(kinds) != 1:
+            raise ValueError(f"a step has exactly one of {', '.join(STEP_KINDS)} (got {kinds or 'none'})")
+        if kinds[0] in ("click", "wait_for", "wheel", "mouse") and not self.page:
+            raise ValueError(f"a {kinds[0]} step needs `page`")
+        return self
+
+
+class Beat(_Model):
+    name: str = Field(pattern=r"^[A-Za-z0-9_-]+$")
+    steps: list[Step] = Field(default_factory=list)
+
+
+class PageSpec(_Model):
+    url: str  # relative to the driver's base_url; {name} placeholders filled from boot()'s values
+    init_script: Optional[str] = None  # run before the page's scripts, same placeholders
+    wait_for: Optional[str] = None  # a selector to wait for after loading
+
+
+class Take(_Model):
+    """Pages recorded together, each in its own context (one video file per page)."""
+    id: str
+    pages: dict[str, PageSpec] = Field(min_length=1)
+    setup: list[Step] = Field(default_factory=list)  # before the first beat; not marked
+    beats: list[Beat] = Field(min_length=1)
+
+
+class Viewport(_Model):
+    width: int = 1920
+    height: int = 1080
+
+
+class Recording(_Model):
+    driver: str  # a throwaway driver file in the demo folder (see docs/demo-video-driver-playbook.md)
+    driver_args: dict[str, Any] = Field(default_factory=dict)
+    viewport: Viewport = Field(default_factory=Viewport)
+    senders: Text = "@people"  # who posts the chat messages
+    sender_step: int = 7  # the n-th message overall comes from senders[(n × step) % len]
+    headless: bool = True
+    takes: list[Take] = Field(min_length=1)
+
+
 class Product(_Model):
     name: str
     icon_paths: list[str] = Field(default_factory=list)  # 24×24 SVG path data, Lucide-style strokes
@@ -248,6 +319,7 @@ class Demo(_Model):
     cuts: list[Cut] = Field(min_length=1)
     scenes: list[Scene] = Field(min_length=1)
     privacy: Privacy = Field(default_factory=Privacy)
+    recording: Optional[Recording] = None
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 

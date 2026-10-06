@@ -6,7 +6,10 @@ Built in steps: the renderer (#359), media prep and hard-stop checks (#360), the
 
 ```mermaid
 flowchart LR
-    W[recordings .webm] --> P[prep<br/>transcode · measure states ·<br/>read music · contact sheets]
+    A[app, disposable instance<br/>via the demo's driver] --> RC[record<br/>takes · beats · chat]
+    RC --> W[rec/&lt;lang&gt;/*.webm]
+    RC --> M
+    W --> P[prep<br/>transcode · measure states ·<br/>read music · contact sheets]
     P --> D
     P --> M
     J[demo.json<br/>cuts · copy · scenes · soundtrack] --> V{validate<br/>copy keys · clips · beats}
@@ -24,7 +27,7 @@ flowchart LR
 
 ```powershell
 & .\.venv\Scripts\python.exe demo_video_pipeline.py "<demo folder>" --status
-& .\.venv\Scripts\python.exe demo_video_pipeline.py "<demo folder>" --stages prep,check
+& .\.venv\Scripts\python.exe demo_video_pipeline.py "<demo folder>" --stages record,prep,check
 & .\.venv\Scripts\python.exe demo_video_pipeline.py "<demo folder>" --cut en-linkedin --preview
 & .\.venv\Scripts\python.exe demo_video_pipeline.py "<demo folder>"              # every cut, final 1080p
 & .\.venv\Scripts\python.exe demo_video_pipeline.py "<demo folder>" --force      # redo existing outputs
@@ -35,11 +38,17 @@ flowchart LR
 | `--status` | Validates the storyboard, lists missing media, says which cuts are rendered. Writes nothing; exits 2 on an invalid storyboard or missing media. |
 | `--cut <id>` | Only that cut. |
 | `--preview` | Half scale, to `out/<cut>.preview.mp4`. About 1¾ min for 83 s. Review with this, not with single stills (Remotion bundles per still, about 40 s each). |
-| `--stages` | Any of `prep`, `check`, `render`, in that order (default `render`). |
+| `--stages` | Any of `record`, `prep`, `check`, `render`, in that order (default `render`). |
 | `--force` | Redo outputs that exist: transcodes in `prep`, renders in `render`. |
 
 **Stages:**
 
+- **`record`:**
+  - loads the demo's throwaway driver (`recording.driver`, a file in the demo folder) and boots a **disposable** instance of the app;
+  - runs every take in real Chrome at 1920×1080, one browser context per page;
+  - writes `rec/<lang>/<page>.webm` and the marks file, for each language the selected cuts use. Old measured states are dropped, and `prep` measures them again.
+
+  How to write a driver for a new app: [`docs/demo-video-driver-playbook.md`](../docs/demo-video-driver-playbook.md).
 - **`prep`:**
   - transcodes each clip's raw `source` recording to CFR H.264 (when the clip is missing or older);
   - measures every `legend.measure` state timeline into the marks file (`_states`);
@@ -76,7 +85,11 @@ A final 1080p render takes about 2½–3 min per 83 s cut on this PC.
   out/                      renders, plus out/.props/<cut>.json (the resolved props)
 ```
 
-The worked example is [`examples/facilitation-suite/`](examples/facilitation-suite/): a synthetic English demo of `facilitation-suite`, 10 scenes, 83 s, three cuts (16:9, 1:1, 4:5). Its media is not in the repo; copy `demo.json` + `marks.json` into a folder next to a `media/` with `en/{stage,presenter,plan,results}.mp4` and `music/en.mp3`.
+The worked example is [`examples/facilitation-suite/`](examples/facilitation-suite/): a synthetic English demo of `facilitation-suite`, 10 scenes, 83 s, three cuts (16:9, 1:1, 4:5). To make it from scratch:
+1. Copy the folder somewhere.
+2. Point `recording.driver_args.repo` at a facilitation-suite checkout.
+3. Put a track at `media/music/en.mp3`.
+4. Run `--stages record,prep,check,render`.
 
 ## demo.json
 
@@ -87,6 +100,7 @@ The worked example is [`examples/facilitation-suite/`](examples/facilitation-sui
 | `media_dir`, `marks` | The media folder and marks file, relative to the demo folder; `{lang}` is the cut's language. |
 | `clips` | Clip id → `{file, marks?, source?}`: the file (relative to `media_dir`, `{lang}` allowed), its key in the marks file (default: the clip id), and the raw recording `prep` transcodes into it (relative to the demo folder). |
 | `privacy` | Roster, blocklist, extra files to scan, accepted tokens (see **Checks**). |
+| `recording` | `driver`, `driver_args`, `viewport`, `senders` (+ `sender_step`), `headless`, and `takes` (see **recording** below). |
 | `copy` | Language → key → string or list. Every `"@key"` in a scene is replaced by `copy[<cut language>][key]`. |
 | `cuts` | `{id, lang, aspect: 16:9 \| 1:1 \| 4:5, public, soundtrack}`. One render per cut. |
 | `scenes` | In order; each `{id, type, seconds, fade_s?}` plus its type's fields (below). |
@@ -105,6 +119,32 @@ The worked example is [`examples/facilitation-suite/`](examples/facilitation-sui
 
 - `align_end_tail_s` trims the track's start so it ends that many seconds before its own end, exactly when its window ends. This is how a second track takes the climax to the video's end.
 - `licence` is read by the licence check (#360): a `public` cut must not use a `private-only` track.
+
+### recording
+
+```json
+"recording": {
+  "driver": "driver.py", "driver_args": {"repo": "…"},
+  "senders": "@people", "sender_step": 7,
+  "takes": [
+    {"id": "live",
+     "pages": {"presenter": {"url": "/presenter?session={session}", "wait_for": ".p-thumb"},
+               "stage": {"url": "/stage"}},
+     "setup": [{"act": "clock_start"}, {"wait": 2}],
+     "beats": [{"name": "map", "steps": [{"act": "goto", "arg": 2}, {"wait": 1.5}, {"act": "capture_toggle"},
+                                         {"chat": "@mapAnswers"}, {"wait": 3}, {"act": "capture_toggle"}]}]}
+  ]
+}
+```
+
+- **A take** is a set of pages recorded together. Each page becomes one video, and its role should match a clip id with `source: "rec/{lang}/<role>.webm"`.
+- **`setup` steps** run before the first beat and are not marked.
+- **A step** is exactly one of:
+  - `act` (+ `arg`): a driver action;
+  - `wait` (seconds);
+  - `chat`: a list or `@copy` key, posted `every_s` apart (a number, or `[min, max]` seeded by the beat name). The n-th message overall comes from `senders[(n × sender_step) % len]`;
+  - `click` (a selector, optionally the row with `text`), `wait_for`, `wheel` `[dx, dy]` × `times`, or `mouse` `[x, y]`, each on a named `page`.
+- **Placeholders:** `{name}` in a page `url` or `init_script` is filled from the values the driver's `boot()` returns.
 
 ### Scene catalogue
 
@@ -147,9 +187,10 @@ A `caption` is `{kicker?, title, sub?, color?, size?, width?}`. Colours are a pa
 | `render.py` | Writes `out/.props/<cut>.json` and runs the Remotion CLI with node (no `npx.cmd` shell) |
 | `prep.py` | The prep stage: transcode sources, measure states, read the music, recording contact sheets |
 | `checks.py` | `overrun`, `state_timeline`, `privacy`, `licence`, `run_checks` |
+| `record.py` | The record stage: `load_driver`, the beat `Runner`, `record_take`, `run_recording`, `beats_in_order` |
 | `media.py` | `Result` (pass / fail / unknown), `transcode`, `loudness_envelope`, `suggest_swaps`, `contact_sheet`, `verify_output`. Every ffmpeg call goes through `podcast/media.py`. |
 | `remotion/src/ui.tsx` | Components: `Clip`, `ZoomWindow`, `Monitor`, `Laptop`, `Caption`, `ChatStream`, `Label`, `Logo`, `SceneFade`, `Backdrop`, `Pop` |
 | `remotion/src/scenes.tsx` | One component per scene type, landscape and stacked layouts |
 | `remotion/src/Demo.tsx`, `Root.tsx` | The scene sequence and soundtrack; one `Demo` composition sized from the props |
-| `examples/facilitation-suite/` | The worked example (`demo.json`, `marks.json` with measured states, a synthetic `roster.txt`) |
+| `examples/facilitation-suite/` | The worked example: `demo.json` (with its `recording`), `marks.json`, a synthetic `roster.txt`, and `driver.py`, the reference throwaway driver |
 | `../demo_video_pipeline.py` | The CLI |

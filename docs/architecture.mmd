@@ -231,11 +231,14 @@ review clips, cost, files"| PODPIPE
 under podcast.trials_root for a re-run)"]]
 
   DEMOPIPE["demo_video_pipeline.py
-prep / check / render (--preview, --status)"]
+record / prep / check / render (--preview, --status)"]
   subgraph demo_mod["demo_video/ — demo videos (local outputs only)"]
     DSTORY["storyboard.py
 demo.json schema, validate,
 resolve_cut -> props per cut"]
+    DRECORD["record.py
+throwaway driver -> disposable app;
+Playwright takes + beats -> .webm + marks"]
     DPREP["prep.py + media.py
 transcode, measured states,
 music envelope, contact sheets"]
@@ -248,7 +251,7 @@ Remotion CLI via node"]
 scene catalogue + components,
 16:9 / 1:1 / 4:5"]
   end
-  DEMOPIPE --> DPREP --> DSTORY --> DCHECK --> DRENDER --> DREMOTION
+  DEMOPIPE --> DRECORD --> DPREP --> DSTORY --> DCHECK --> DRENDER --> DREMOTION
   DPREP -.->|"ffmpeg helpers"| podcast_mod
   DREMOTION --> DEMOOUT[["<demo folder>/out/<cut>.mp4
 (outside the repo)"]]

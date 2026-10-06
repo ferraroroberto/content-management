@@ -18,16 +18,20 @@
   "marks": "marks.json",
   "clips": {
     "stage": {
-      "file": "{lang}/stage.mp4"
+      "file": "{lang}/stage.mp4",
+      "source": "rec/{lang}/stage.webm"
     },
     "presenter": {
-      "file": "{lang}/presenter.mp4"
+      "file": "{lang}/presenter.mp4",
+      "source": "rec/{lang}/presenter.webm"
     },
     "plan": {
-      "file": "{lang}/plan.mp4"
+      "file": "{lang}/plan.mp4",
+      "source": "rec/{lang}/plan.webm"
     },
     "results": {
-      "file": "{lang}/results.mp4"
+      "file": "{lang}/results.mp4",
+      "source": "rec/{lang}/results.webm"
     }
   },
   "copy": {
@@ -126,6 +130,90 @@
         "Hannah Weber",
         "Diego Alves",
         "Freya Lund"
+      ],
+      "mapAnswers": [
+        "London, UK",
+        "Berlin",
+        "Madrid, Spain",
+        "New York",
+        "Toronto, Canada",
+        "São Paulo, Brazil",
+        "Paris",
+        "Amsterdam",
+        "Lisbon, Portugal",
+        "Mumbai, India",
+        "Tokyo",
+        "Sydney, Australia",
+        "Cape Town",
+        "Stockholm",
+        "Mexico City",
+        "Dublin"
+      ],
+      "scaleAnswers": [
+        "4",
+        "sunny spells",
+        "3",
+        "5 sun!",
+        "4",
+        "2 rain",
+        "4",
+        "sun",
+        "3",
+        "4",
+        "cloudy",
+        "5",
+        "4"
+      ],
+      "kryptoniteAnswers": [
+        "meetings",
+        "comparison",
+        "fear of failing",
+        "perfectionism",
+        "fear of failing",
+        "perfectionism",
+        "no time",
+        "no time",
+        "no time",
+        "not asking for help",
+        "rushing",
+        "rushing",
+        "not asking for help",
+        "perfectionism"
+      ],
+      "cardsAnswers": [
+        "Endless meetings",
+        "Silos between teams",
+        "Unclear priorities",
+        "Too many tools",
+        "Endless meetings",
+        "Unclear priorities",
+        "Last-minute changes",
+        "Silos between teams"
+      ],
+      "feedAnswers": [
+        "Trust each other's calls",
+        "One shared priority list",
+        "A weekly 15-min sync, cameras on",
+        "Say no to meetings without an agenda",
+        "Celebrate small wins",
+        "Ask for help early"
+      ],
+      "takeawayAnswers": [
+        "trust",
+        "fun",
+        "trust",
+        "energy",
+        "connection",
+        "trust",
+        "new colleagues",
+        "energy",
+        "pizza 🍕",
+        "connection",
+        "clarity",
+        "fun",
+        "new colleagues",
+        "connection",
+        "connection"
       ]
     }
   },
@@ -442,6 +530,457 @@
     "roster": "roster.txt",
     "blocklist": [
       "Example Client Ltd"
+    ]
+  },
+  "recording": {
+    "driver": "driver.py",
+    "driver_args": {
+      "repo": "<path to a facilitation-suite checkout>",
+      "include_all": true,
+      "shuffle_seed": 7,
+      "timers": {
+        "11": {
+          "seconds": 14,
+          "end": "keep",
+          "start": "manual"
+        }
+      }
+    },
+    "senders": "@people",
+    "sender_step": 7,
+    "takes": [
+      {
+        "id": "app-tour",
+        "pages": {
+          "plan": {
+            "url": "/",
+            "init_script": "localStorage.setItem('facilitation-suite.session', '{session}')",
+            "wait_for": "#tabPlan"
+          }
+        },
+        "beats": [
+          {
+            "name": "sessions",
+            "steps": [
+              {
+                "wait": 3
+              }
+            ]
+          },
+          {
+            "name": "plan",
+            "steps": [
+              {
+                "page": "plan",
+                "click": "#tabPlan"
+              },
+              {
+                "page": "plan",
+                "wait_for": ".item-row"
+              },
+              {
+                "wait": 2.5
+              },
+              {
+                "page": "plan",
+                "mouse": [
+                  700,
+                  600
+                ]
+              },
+              {
+                "page": "plan",
+                "wheel": [
+                  0,
+                  160
+                ],
+                "times": 8,
+                "every_s": 0.25
+              },
+              {
+                "wait": 1
+              },
+              {
+                "page": "plan",
+                "click": ".item-row",
+                "text": "What do you take away today?"
+              },
+              {
+                "wait": 4
+              },
+              {
+                "page": "plan",
+                "mouse": [
+                  1400,
+                  600
+                ]
+              },
+              {
+                "page": "plan",
+                "wheel": [
+                  0,
+                  180
+                ],
+                "times": 6,
+                "every_s": 0.3
+              },
+              {
+                "wait": 2
+              }
+            ]
+          },
+          {
+            "name": "groups",
+            "steps": [
+              {
+                "page": "plan",
+                "click": "#tabGroups"
+              },
+              {
+                "wait": 4
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "live",
+        "pages": {
+          "presenter": {
+            "url": "/presenter?session={session}",
+            "wait_for": ".p-thumb"
+          },
+          "stage": {
+            "url": "/stage"
+          }
+        },
+        "setup": [
+          {
+            "act": "clock_start"
+          },
+          {
+            "wait": 2
+          }
+        ],
+        "beats": [
+          {
+            "name": "cover",
+            "steps": [
+              {
+                "act": "goto",
+                "arg": 1
+              },
+              {
+                "wait": 1.5
+              },
+              {
+                "wait": 3
+              }
+            ]
+          },
+          {
+            "name": "map",
+            "steps": [
+              {
+                "act": "goto",
+                "arg": 2
+              },
+              {
+                "wait": 1.5
+              },
+              {
+                "act": "capture_toggle"
+              },
+              {
+                "wait": 0.8
+              },
+              {
+                "chat": "@mapAnswers"
+              },
+              {
+                "wait": 3
+              },
+              {
+                "act": "capture_toggle"
+              },
+              {
+                "wait": 1.5
+              }
+            ]
+          },
+          {
+            "name": "scale",
+            "steps": [
+              {
+                "act": "goto",
+                "arg": 4
+              },
+              {
+                "wait": 1.5
+              },
+              {
+                "act": "capture_toggle"
+              },
+              {
+                "wait": 0.8
+              },
+              {
+                "chat": "@scaleAnswers"
+              },
+              {
+                "wait": 3
+              },
+              {
+                "act": "capture_toggle"
+              },
+              {
+                "wait": 1.5
+              }
+            ]
+          },
+          {
+            "name": "slides",
+            "steps": [
+              {
+                "act": "goto",
+                "arg": 5
+              },
+              {
+                "wait": 1.5
+              },
+              {
+                "wait": 2.5
+              },
+              {
+                "act": "next"
+              },
+              {
+                "wait": 2.5
+              },
+              {
+                "act": "next"
+              },
+              {
+                "wait": 2.5
+              }
+            ]
+          },
+          {
+            "name": "pairs",
+            "steps": [
+              {
+                "act": "goto",
+                "arg": 8
+              },
+              {
+                "wait": 1.5
+              },
+              {
+                "wait": 4.5
+              }
+            ]
+          },
+          {
+            "name": "cloud_kryptonite",
+            "steps": [
+              {
+                "act": "goto",
+                "arg": 9
+              },
+              {
+                "wait": 1.5
+              },
+              {
+                "act": "capture_toggle"
+              },
+              {
+                "wait": 0.8
+              },
+              {
+                "chat": "@kryptoniteAnswers"
+              },
+              {
+                "wait": 3
+              },
+              {
+                "act": "capture_toggle"
+              },
+              {
+                "wait": 1.5
+              }
+            ]
+          },
+          {
+            "name": "breakout",
+            "steps": [
+              {
+                "act": "goto",
+                "arg": 11
+              },
+              {
+                "wait": 1.5
+              },
+              {
+                "wait": 2
+              },
+              {
+                "act": "timer_toggle"
+              },
+              {
+                "wait": 5
+              },
+              {
+                "act": "timer_toggle"
+              },
+              {
+                "wait": 3
+              },
+              {
+                "act": "timer_toggle"
+              },
+              {
+                "wait": 10.5
+              },
+              {
+                "wait": 3
+              }
+            ]
+          },
+          {
+            "name": "cards",
+            "steps": [
+              {
+                "act": "goto",
+                "arg": 14
+              },
+              {
+                "wait": 1.5
+              },
+              {
+                "act": "capture_toggle"
+              },
+              {
+                "wait": 0.8
+              },
+              {
+                "chat": "@cardsAnswers"
+              },
+              {
+                "wait": 3
+              },
+              {
+                "act": "capture_toggle"
+              },
+              {
+                "wait": 1.5
+              }
+            ]
+          },
+          {
+            "name": "feed",
+            "steps": [
+              {
+                "act": "goto",
+                "arg": 16
+              },
+              {
+                "wait": 1.5
+              },
+              {
+                "act": "capture_toggle"
+              },
+              {
+                "wait": 0.8
+              },
+              {
+                "chat": "@feedAnswers"
+              },
+              {
+                "wait": 3
+              },
+              {
+                "act": "capture_toggle"
+              },
+              {
+                "wait": 1.5
+              }
+            ]
+          },
+          {
+            "name": "cloud_takeaway",
+            "steps": [
+              {
+                "act": "goto",
+                "arg": 17
+              },
+              {
+                "wait": 1.5
+              },
+              {
+                "act": "capture_toggle"
+              },
+              {
+                "wait": 0.8
+              },
+              {
+                "chat": "@takeawayAnswers"
+              },
+              {
+                "wait": 3
+              },
+              {
+                "act": "capture_toggle"
+              },
+              {
+                "wait": 1.5
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "results",
+        "pages": {
+          "results": {
+            "url": "/",
+            "init_script": "localStorage.setItem('facilitation-suite.session', '{session}')",
+            "wait_for": "#tabResults"
+          }
+        },
+        "beats": [
+          {
+            "name": "results",
+            "steps": [
+              {
+                "page": "results",
+                "click": "#tabResults"
+              },
+              {
+                "wait": 3
+              },
+              {
+                "page": "results",
+                "mouse": [
+                  900,
+                  600
+                ]
+              },
+              {
+                "page": "results",
+                "wheel": [
+                  0,
+                  200
+                ],
+                "times": 14,
+                "every_s": 0.35
+              },
+              {
+                "wait": 2
+              }
+            ]
+          }
+        ]
+      }
     ]
   }
 }

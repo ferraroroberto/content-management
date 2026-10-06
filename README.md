@@ -191,7 +191,7 @@ content-management/                   # repo root
 ├── reporting_pipeline.py             # orchestrator: APIs → Supabase → Notion → Substack
 ├── newsletter_pipeline.py            # orchestrator: schedule/bootstrap/archive/normalize/build subcommands
 ├── podcast_pipeline.py               # orchestrator: one episode folder → its podcast package (resumable stages)
-├── demo_video_pipeline.py            # orchestrator: one demo folder → its cuts (prep, check, render; --preview, --status)
+├── demo_video_pipeline.py            # orchestrator: one demo folder → its cuts (record, prep, check, render; --preview, --status)
 ├── recorder_server.py                # serves the recorder for one episode (host + guest links)
 ├── launch_app.bat                    # Streamlit control panel launcher (Windows CMD)
 ├── launch_planning.bat               # planning launcher (Windows CMD)
@@ -228,7 +228,8 @@ gotchas, files.
   [`podcast/README.md`](podcast/README.md) ·
   [`recorder/README.md`](recorder/README.md)
 - **Demo videos** —
-  [`demo_video/README.md`](demo_video/README.md)
+  [`demo_video/README.md`](demo_video/README.md) ·
+  [`docs/demo-video-driver-playbook.md`](docs/demo-video-driver-playbook.md)
 - **Shared** — [`config/README.md`](config/README.md)
 
 ## The launchers
