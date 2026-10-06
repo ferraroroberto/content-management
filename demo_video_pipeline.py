@@ -1,13 +1,17 @@
 #!/usr/bin/env python
-"""Demo-video pipeline (issues #359, #360).
+"""Demo-video pipeline (issues #359, #360, #361).
 
-    python demo_video_pipeline.py "<demo folder>" [--stages prep,check,render] [--cut <id>] [--preview] [--force]
+    python demo_video_pipeline.py "<demo folder>" [--stages record,prep,check,render] [--cut <id>] [--preview] [--force]
     python demo_video_pipeline.py "<demo folder>" --status
 
 A demo folder holds ``demo.json`` (the storyboard: cuts, copy per language,
 scenes, soundtrack), its marks file, a media folder with the clips and music,
 and ``out/``. Stages, in order:
 
+- ``record``: boot the app through the demo's throwaway driver (a disposable
+  instance, never the live app), run the ``recording`` takes and beats in a
+  real browser, and write ``rec/<lang>/<page>.webm`` plus the marks file, for
+  every language the selected cuts use.
 - ``prep``: transcode each clip's raw ``source`` recording to CFR H.264,
   measure ``legend.measure`` state timelines into the marks file, read the
   music (loudness envelopes, best scenes to bring a closing track in) and
@@ -47,12 +51,13 @@ from config.logger_config import setup_logger  # noqa: E402
 from demo_video.checks import run_checks, write_report  # noqa: E402
 from demo_video.media import contact_sheet, verify_output  # noqa: E402
 from demo_video.prep import run_prep  # noqa: E402
+from demo_video.record import run_recording  # noqa: E402
 from demo_video.render import load_config, output_path, render_cut  # noqa: E402
 from demo_video.storyboard import ASPECTS, Cut, Demo, load_demo, missing_media, scene_frames, total_frames, validate  # noqa: E402
 
 logger: logging.Logger = logging.getLogger("demo_video")
 
-STAGES = ("prep", "check", "render")
+STAGES = ("record", "prep", "check", "render")
 CHECKS_FAILED = 3
 
 
@@ -129,6 +134,17 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("❌ %s", exc.args[0])
         return 2
 
+    if "record" in wanted:
+        if demo.recording is None:
+            logger.error("❌ demo.json has no `recording` block")
+            return 2
+        for lang in sorted({c.lang for c in cuts}):
+            logger.info("▶ record %s", lang)
+            try:
+                run_recording(demo, folder, lang)
+            except Exception:
+                logger.exception("❌ record %s failed", lang)
+                return 1
     if "prep" in wanted:
         logger.info("▶ prep")
         try:

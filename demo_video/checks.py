@@ -193,6 +193,8 @@ def privacy(demo: Demo, folder: Path, *, roster: Optional[list[str]] = None) -> 
         roster = read_roster(path)
     all_text = list(_strings(demo.copy_)) + list(_strings([s.model_dump(mode="json") for s in demo.scenes]))
     all_text += list(_strings(demo.product.model_dump(mode="json")))
+    if demo.recording:
+        all_text += list(_strings(demo.recording.model_dump(mode="json")))
     for extra in cfg.scan:
         p = folder / extra
         if not p.is_file():
