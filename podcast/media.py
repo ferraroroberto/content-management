@@ -54,6 +54,15 @@ def run_ffmpeg(args: list[str], *, cwd: Optional[Path] = None, timeout: int = 36
         raise RuntimeError(f"ffmpeg failed ({proc.returncode}): {proc.stderr[-1500:]}")
 
 
+def ffmpeg_pipe(args: list[str], *, timeout: int = 600) -> bytes:
+    """Run ffmpeg writing to stdout (``-f rawvideo … -``); return the bytes, raise with the stderr tail."""
+    cmd = [_tool("ffmpeg"), "-hide_banner", "-v", "error", *args]
+    proc = subprocess.run(cmd, capture_output=True, timeout=timeout, creationflags=NO_WINDOW)
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg failed ({proc.returncode}): {proc.stderr.decode('utf-8', 'replace')[-1500:]}")
+    return proc.stdout
+
+
 def extract_wav(src: Path, dst: Path, *, start: Optional[float] = None,
                 duration: Optional[float] = None) -> Path:
     """16 kHz mono PCM WAV of ``src`` (optionally a window of it)."""

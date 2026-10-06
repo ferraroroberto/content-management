@@ -1,0 +1,5 @@
+# Synthetic stand-in for a real participant list (the privacy check compares the copy against it).
+# A real roster never goes in the repo: it stays in the demo folder.
+Rowan Ellery
+Priscilla Quinlan
+Teodor Vasko
