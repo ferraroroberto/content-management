@@ -2,22 +2,29 @@
 
 Turns screen recordings of an app plus music into a finished, animated demo video (16:9, 1:1 or 4:5), from one `demo.json` storyboard. The renderer is a [Remotion](https://www.remotion.dev/) template driven entirely by data: a new video is a new `demo.json`, not new code. Nothing is published, posted or uploaded.
 
-This is Step 1/4 of the demo-video pipeline (#359). Media prep and hard-stop checks (#360), the recorder (#361) and the `/demo-video` skill with its runbook and control-panel tab (#362) build on it.
+Built in steps: the renderer (#359), media prep and hard-stop checks (#360), the recorder (#361), and the `/demo-video` skill with its runbook and control-panel tab (#362).
 
 ```mermaid
 flowchart LR
+    W[recordings .webm] --> P[prep<br/>transcode · measure states ·<br/>read music · contact sheets]
+    P --> D
+    P --> M
     J[demo.json<br/>cuts · copy · scenes · soundtrack] --> V{validate<br/>copy keys · clips · beats}
-    M[marks.json<br/>beat start/end per video] --> V
-    V --> R[resolve_cut<br/>props per cut]
+    M[marks.json<br/>beats + measured states] --> V
+    V --> C{check<br/>overrun · privacy · licence}
+    C -->|all pass| R[resolve_cut<br/>props per cut]
+    C -->|fail / unknown| S[stop: nothing renders]
     R --> X[Remotion template<br/>demo_video/remotion]
     D[media/<br/>clips + music] --> X
     X --> O[out/&lt;cut&gt;.mp4<br/>or .preview.mp4]
+    O --> Q[verify + contact sheet]
 ```
 
 ## Run
 
 ```powershell
 & .\.venv\Scripts\python.exe demo_video_pipeline.py "<demo folder>" --status
+& .\.venv\Scripts\python.exe demo_video_pipeline.py "<demo folder>" --stages prep,check
 & .\.venv\Scripts\python.exe demo_video_pipeline.py "<demo folder>" --cut en-linkedin --preview
 & .\.venv\Scripts\python.exe demo_video_pipeline.py "<demo folder>"              # every cut, final 1080p
 & .\.venv\Scripts\python.exe demo_video_pipeline.py "<demo folder>" --force      # redo existing outputs
@@ -28,7 +35,32 @@ flowchart LR
 | `--status` | Validates the storyboard, lists missing media, says which cuts are rendered. Writes nothing; exits 2 on an invalid storyboard or missing media. |
 | `--cut <id>` | Only that cut. |
 | `--preview` | Half scale, to `out/<cut>.preview.mp4`. About 1¾ min for 83 s. Review with this, not with single stills (Remotion bundles per still, about 40 s each). |
-| `--force` | Re-render a cut whose output exists. |
+| `--stages` | Any of `prep`, `check`, `render`, in that order (default `render`). |
+| `--force` | Redo outputs that exist: transcodes in `prep`, renders in `render`. |
+
+**Stages:**
+
+- **`prep`:**
+  - transcodes each clip's raw `source` recording to CFR H.264 (when the clip is missing or older);
+  - measures every `legend.measure` state timeline into the marks file (`_states`);
+  - reads the music into `out/prep/music-<cut>.json`: a per-second loudness envelope, plus the scenes where a closing track (`align_end_tail_s`) builds best;
+  - writes a contact sheet per recording (`out/prep/<lang>-<clip>.png`, one frame at the middle of each beat).
+- **`check`** runs the hard-stop checks (below) and writes `out/prep/checks.json`. **`render` always runs them first**, so a demo that fails a check never renders (exit 3).
+- **`render`:**
+  - renders, then writes `out/<cut>.sheet.png` (a frame from the middle of each scene);
+  - for a final render, also verifies the file: size, frame rate, length ±1 s, an audio track, and the last second at least 6 dB quieter than the body (the fade).
+
+**Checks:** each one is `pass`, `fail` or `unknown`, and only `pass` lets the run go on.
+
+| Check | Fails when | Why it exists |
+|---|---|---|
+| `overrun` | A played clip's `offset + seconds × rate` runs past its beat's end. A clip without a beat is checked against its file's length (`unknown` if the file can't be read). | Sped-up clips ran past their beat into the next app screen in the reference video. This check later found two more overruns in it. |
+| `privacy` | A roster name, or any of its tokens over 3 letters (accents and case folded), appears in the copy, scenes, product or `privacy.scan` files. A `privacy.blocklist` term appears in the copy of a public cut's language or in the scenes. | Made-up names shared surnames and first names with real participants. |
+| `licence` | A `public` cut uses a `private-only` track. | Copyrighted music is fine in a private client cut, never in a public one. |
+
+`privacy`: `{"roster": "<file in the demo folder>", "blocklist": [...], "scan": [...], "allow": [...]}`.
+- **Roster:** a `.txt` or `.csv` (first column, `#` comments) or an `.xlsx` with a `name` column. A real roster stays in the demo folder, never in the repo.
+- **`allow`:** lists name tokens the owner deliberately accepts, e.g. a common first name.
 
 A final 1080p render takes about 2½–3 min per 83 s cut on this PC.
 
@@ -39,7 +71,7 @@ A final 1080p render takes about 2½–3 min per 83 s cut on this PC.
 ```
 <demo folder>/              (outside the repo — OneDrive is fine for this part)
   demo.json                 the storyboard
-  marks.json                {video: {beat: [start_s, end_s]}} — written by the recorder (#361)
+  marks.json                {video: {beat: [start_s, end_s]}, "_states": {...}} — beats from the recorder (#361), states from prep
   media/                    clips (CFR H.264 .mp4) and music; the `media_dir` field renames it
   out/                      renders, plus out/.props/<cut>.json (the resolved props)
 ```
@@ -53,7 +85,8 @@ The worked example is [`examples/facilitation-suite/`](examples/facilitation-sui
 | `title`, `fps` | Name and frame rate (30). |
 | `product` | `name`, `icon_paths` (24×24 SVG path data, Lucide-style strokes) and two gradient `colors` for the logo tile. |
 | `media_dir`, `marks` | The media folder and marks file, relative to the demo folder; `{lang}` is the cut's language. |
-| `clips` | Clip id → `{file, marks?}`: the file (relative to `media_dir`, `{lang}` allowed) and its key in the marks file (default: the clip id). |
+| `clips` | Clip id → `{file, marks?, source?}`: the file (relative to `media_dir`, `{lang}` allowed), its key in the marks file (default: the clip id), and the raw recording `prep` transcodes into it (relative to the demo folder). |
+| `privacy` | Roster, blocklist, extra files to scan, accepted tokens (see **Checks**). |
 | `copy` | Language → key → string or list. Every `"@key"` in a scene is replaced by `copy[<cut language>][key]`. |
 | `cuts` | `{id, lang, aspect: 16:9 \| 1:1 \| 4:5, public, soundtrack}`. One render per cut. |
 | `scenes` | In order; each `{id, type, seconds, fade_s?}` plus its type's fields (below). |
@@ -91,8 +124,10 @@ Every scene keeps the reference layout in 16:9. In 1:1 and 4:5 the caption goes 
 | `crop_zoom` | A cropped close-up panel of one screen next to a meeting window | `caption`, `panel` (clip ref with `crop`), `window` |
 | `side_by_side` | Two or more meeting windows, staggered in | `caption`, `windows`, `stagger_s` |
 | `device_caption` | A caption next to a device playing a clip | `caption`, `device` (`laptop` \| `monitor` \| `window`), `clip` |
-| `window_states` | A meeting window playing clip segments, with a state legend lit from measured times (e.g. a timer's colours) and a "⏩ ×rate" chip on a sped-up segment | `caption`, `segments [{clip, seconds?}]`, `legend {labels, colors, segment, anchor, changes [[t, state]]}`, `speed_chip` |
+| `window_states` | A meeting window playing clip segments, with a state legend (e.g. a timer's colours) and a "⏩ ×rate" chip on a sped-up segment | `caption`, `segments [{clip, seconds?}]`, `legend {labels, colors, segment, anchor, changes? \| measure?}`, `speed_chip` |
 | `outro` | A blurred clip behind the logo, tagline, product name and footer; fades to black | `clip`, `tagline`, `footer` |
+
+A legend's state change times are either typed (`changes: [[seconds after the anchor beat's start, state], …]`) or **measured**: `measure: {box: {x, y, w, h}, palette: ["#rrggbb", …], step_s}`. `prep` then samples the anchor beat every `step_s`. It classifies the box by the palette colour most of its non-background pixels are nearest to, one colour per state in legend order. Use the colours as they appear on screen, e.g. a paused yellow that the app darkens. On the example, the measured times land within 0.3 s of the ones typed by hand.
 
 A `caption` is `{kicker?, title, sub?, color?, size?, width?}`. Colours are a palette name (`red`, `green`, `yellow`, `blue`, `purple`, `slate`) or any CSS colour; `size` and `width` are 1920×1080 design px. `\n` breaks a line.
 
@@ -110,8 +145,11 @@ A `caption` is `{kicker?, title, sub?, color?, size?, width?}`. Colours are a pa
 |---|---|
 | `storyboard.py` | `demo.json` schema (Pydantic), `validate` (copy keys, clips, beats, anchors), `resolve_cut` (props), `missing_media` |
 | `render.py` | Writes `out/.props/<cut>.json` and runs the Remotion CLI with node (no `npx.cmd` shell) |
+| `prep.py` | The prep stage: transcode sources, measure states, read the music, recording contact sheets |
+| `checks.py` | `overrun`, `state_timeline`, `privacy`, `licence`, `run_checks` |
+| `media.py` | `Result` (pass / fail / unknown), `transcode`, `loudness_envelope`, `suggest_swaps`, `contact_sheet`, `verify_output`. Every ffmpeg call goes through `podcast/media.py`. |
 | `remotion/src/ui.tsx` | Components: `Clip`, `ZoomWindow`, `Monitor`, `Laptop`, `Caption`, `ChatStream`, `Label`, `Logo`, `SceneFade`, `Backdrop`, `Pop` |
 | `remotion/src/scenes.tsx` | One component per scene type, landscape and stacked layouts |
 | `remotion/src/Demo.tsx`, `Root.tsx` | The scene sequence and soundtrack; one `Demo` composition sized from the props |
-| `examples/facilitation-suite/` | The worked example (`demo.json` + `marks.json`) |
+| `examples/facilitation-suite/` | The worked example (`demo.json`, `marks.json` with measured states, a synthetic `roster.txt`) |
 | `../demo_video_pipeline.py` | The CLI |

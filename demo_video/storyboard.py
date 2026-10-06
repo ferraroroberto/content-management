@@ -154,12 +154,20 @@ class Segment(_Model):
     seconds: Optional[float] = Field(None, gt=0)  # None = until the scene ends
 
 
+class Measure(_Model):
+    """Where to read the state on the recording: a box in source px and one colour per state."""
+    box: Crop
+    palette: list[str]  # "#rrggbb", in the legend's state order
+    step_s: float = Field(0.5, gt=0)
+
+
 class Legend(_Model):
     labels: Text
     colors: list[str]
     segment: int = Field(0, ge=0)
     anchor: ClipRef  # the beat whose start the change times count from
-    changes: list[tuple[float, int]]
+    changes: Optional[list[tuple[float, int]]] = None  # typed by hand, or …
+    measure: Optional[Measure] = None  # … measured by the prep stage into the marks file
 
 
 class WindowStates(_Scene):
@@ -212,6 +220,14 @@ class Cut(_Model):
 class ClipSpec(_Model):
     file: str  # relative to the media folder; may contain {lang}
     marks: Optional[str] = None  # this video's key in the marks file (default: the clip id)
+    source: Optional[str] = None  # the raw recording (relative to the demo folder) prep transcodes into `file`
+
+
+class Privacy(_Model):
+    roster: Optional[str] = None  # real names, one per line (.txt/.csv) or a "name" column (.xlsx); never committed
+    blocklist: list[str] = Field(default_factory=list)  # terms a public cut must not show (client names, …)
+    scan: list[str] = Field(default_factory=list)  # extra files to scan too (chat scripts, seed data)
+    allow: list[str] = Field(default_factory=list)  # name tokens the owner accepted (e.g. a common first name)
 
 
 class Product(_Model):
@@ -231,6 +247,7 @@ class Demo(_Model):
     copy_: dict[str, dict[str, Any]] = Field(alias="copy")
     cuts: list[Cut] = Field(min_length=1)
     scenes: list[Scene] = Field(min_length=1)
+    privacy: Privacy = Field(default_factory=Privacy)
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -252,6 +269,13 @@ def load_marks(folder: Path, demo: Demo, lang: str) -> dict[str, dict[str, list[
     if not path.is_file():
         return {}
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+STATES_KEY = "_states"
+
+
+def states_key(ref: ClipRef) -> str:
+    return f"{ref.video}:{ref.beat or ''}"
 
 
 def media_root(folder: Path, demo: Demo) -> Path:
@@ -308,6 +332,12 @@ def validate(demo: Demo, folder: Path) -> list[str]:
                         if value["beat"] not in beats:
                             errors.append(f"{where}: beat {value['beat']!r} not in the {cut.lang!r} marks "
                                           f"for {value['video']!r}")
+        for s in demo.scenes:
+            if isinstance(s, WindowStates) and s.legend.changes is None:
+                if s.legend.measure is None:
+                    errors.append(f"cut {cut.id}, scene {s.id}: legend needs `changes` or `measure`")
+                elif states_key(s.legend.anchor) not in marks.get(STATES_KEY, {}):
+                    errors.append(f"cut {cut.id}, scene {s.id}: legend states not measured yet — run the prep stage")
         for track in cut.soundtrack:
             for anchor in (track.start, track.end):
                 if isinstance(anchor, Anchor) and anchor.scene not in scene_ids:
@@ -396,6 +426,9 @@ def resolve_cut(demo: Demo, folder: Path, cut: Cut, *, track_seconds: Optional[d
             body["step_at"] = [c["from"] for c in body.get("step_at", [])]
         if s.type == "window_states":
             body["legend"]["anchor"] = body["legend"]["anchor"]["from"]
+            body["legend"].pop("measure", None)
+            if s.legend.changes is None:
+                body["legend"]["changes"] = marks[STATES_KEY][states_key(s.legend.anchor)]
             for seg in body["segments"]:
                 seg.setdefault("seconds", None)
         scenes.append({"id": s.id, "type": s.type, "from": start, "dur": dur, "fade": round(s.fade_s * fps), **body})

@@ -241,7 +241,7 @@
       "clip": {
         "video": "plan",
         "offset": 0.3,
-        "rate": 1.6
+        "rate": 1.5
       },
       "step_at": [
         {
@@ -300,7 +300,7 @@
       "panel": {
         "video": "presenter",
         "offset": 2.3,
-        "rate": 1.9,
+        "rate": 1.85,
         "beat": "cloud_kryptonite",
         "crop": {
           "x": 1536,
@@ -312,7 +312,7 @@
       "window": {
         "video": "stage",
         "offset": 2.3,
-        "rate": 1.9,
+        "rate": 1.85,
         "beat": "cloud_kryptonite"
       }
     },
@@ -361,28 +361,21 @@
           "rate": 1.0,
           "beat": "breakout"
         },
-        "changes": [
-          [
-            0,
-            0
+        "measure": {
+          "box": {
+            "x": 700,
+            "y": 520,
+            "w": 520,
+            "h": 200
+          },
+          "palette": [
+            "#1f1f1f",
+            "#00a44e",
+            "#a37e0a",
+            "#c40c0c"
           ],
-          [
-            3.2,
-            1
-          ],
-          [
-            8.5,
-            2
-          ],
-          [
-            11.7,
-            1
-          ],
-          [
-            20.5,
-            3
-          ]
-        ]
+          "step_s": 0.5
+        }
       }
     },
     {
@@ -444,5 +437,11 @@
       "tagline": "@tagline",
       "footer": "@footer"
     }
-  ]
+  ],
+  "privacy": {
+    "roster": "roster.txt",
+    "blocklist": [
+      "Example Client Ltd"
+    ]
+  }
 }
