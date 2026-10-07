@@ -136,5 +136,51 @@ class PipelineUnclassifiedTests(unittest.TestCase):
         tab.page.close.assert_not_called()
 
 
+class PipelineNoRoomTests(unittest.TestCase):
+    """No future newsletter row has room: a distinct outcome, a non-zero exit (#370)."""
+
+    def test_process_url_reports_no_room_not_skipped(self) -> None:
+        art = unittest.mock.Mock(title="T", author="A", body_text="x" * 500)
+        resolution = unittest.mock.Mock(via="fallback", connection=unittest.mock.Mock(),
+                                        raw_byline="A", llm_choice=None)
+        with unittest.mock.patch.object(pipeline.extractor, "extract", return_value=art), \
+             unittest.mock.patch.object(pipeline.classifier, "classify", return_value="innovation"), \
+             unittest.mock.patch.object(pipeline.summarizer, "summarize", return_value="s"), \
+             unittest.mock.patch.object(pipeline.author_resolver, "resolve", return_value=resolution), \
+             unittest.mock.patch.object(pipeline.notion_io, "pick_newsletter", return_value=None), \
+             unittest.mock.patch.object(pipeline.notion_io, "create_article") as create:
+            result = pipeline.process_url(
+                url="https://example.com/a", page=unittest.mock.Mock(),
+                archive_cfg=PipelineUnclassifiedTests.ARCHIVE_CFG, client=unittest.mock.Mock(),
+                cache=_Cache(), write=True,
+                logger=logging.getLogger("newsletter_archive.test"),
+            )
+        self.assertEqual(result, pipeline.NO_ROOM)
+        create.assert_not_called()
+
+    def test_run_batch_counts_no_room_and_exits_non_zero(self) -> None:
+        tab = unittest.mock.Mock(url="https://example.com/a", page=unittest.mock.Mock())
+        cfg = {"newsletter_archive": dict(PipelineUnclassifiedTests.ARCHIVE_CFG, chrome_debug_port=9222,
+                                          skip_url_substrings=[]),
+               "notion": {"api_token": "t"}}
+        with unittest.mock.patch.object(pipeline, "setup_logger",
+                                        return_value=logging.getLogger("newsletter_archive")), \
+             unittest.mock.patch.object(pipeline, "load_config", return_value=cfg), \
+             unittest.mock.patch.object(pipeline.llm, "health_check", return_value=True), \
+             unittest.mock.patch.object(pipeline.notion_io, "init_client"), \
+             unittest.mock.patch.object(pipeline.notion_io, "hydrate_cache"), \
+             unittest.mock.patch.object(pipeline.chrome_tabs, "connect"), \
+             unittest.mock.patch.object(pipeline.chrome_tabs, "close_browser"), \
+             unittest.mock.patch.object(pipeline.chrome_tabs, "list_tabs", return_value=[tab]), \
+             unittest.mock.patch.object(pipeline.chrome_tabs, "should_skip", return_value=False), \
+             unittest.mock.patch.object(pipeline, "process_url", return_value=pipeline.NO_ROOM):
+            with self.assertLogs("newsletter_archive", logging.INFO) as logs:
+                rc = pipeline.run_batch(write=True)
+        self.assertEqual(rc, 1)
+        self.assertTrue(any("1 no room" in m for m in logs.output), logs.output)
+        self.assertFalse(any("Done" in m for m in logs.output), logs.output)
+        tab.page.close.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

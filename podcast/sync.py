@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Optional
 
@@ -295,7 +295,19 @@ def retime(src: Path, dst: Path, d0: float, rho: float, encoder: str) -> None:
                timeout=4 * 3600)
 
 
+def source_tracks(ep: Episode) -> dict[str, Path]:
+    """The tracks ``episode.json`` names, before any ``sync.json`` swap. A re-run
+    must read these: after a first sync ``ep.tracks["guest"]`` is the synced
+    file itself, so re-timing it would write over its own input (and measuring
+    it would report ~zero offset)."""
+    if not (ep.package / SYNC_FILE).exists():
+        return ep.tracks
+    spec = json.loads((ep.folder / "episode.json").read_text(encoding="utf-8"))
+    return {k: ep.folder / v for k, v in spec["tracks"].items()}
+
+
 def run(ep: Episode, cfg: dict, rec: StageRecord) -> Optional[dict]:
+    ep = replace(ep, tracks=source_tracks(ep))
     refs = references(ep)
     if not refs:
         logger.info("ℹ️ sync: no recorder reference files beside the tracks; taking them as aligned")

@@ -215,6 +215,30 @@ class StageTests(unittest.TestCase):
         reread = load_episode(self.folder, cfg)
         self.assertEqual(reread.tracks, {"host": host, "guest": self.folder / "video editing" / sync.OUTPUT})
 
+    def test_a_forced_rerun_reads_the_original_tracks_not_its_own_output(self) -> None:
+        # After a first sync load_episode swaps in synced - guest.mp4; re-timing that
+        # would ask ffmpeg to write over its own input (#370).
+        (self.folder / "episode.json").write_text(json.dumps({
+            "guest": "Guest Person", "tracks": {"host": "video editing/h.mp4", "guest": "video editing/g.mp4"}}),
+            encoding="utf-8")
+        package = self.folder / "podcast package"
+        package.mkdir()
+        (package / sync.SYNC_FILE).write_text(json.dumps({"tracks": {"host": "video editing/h.mp4",
+                                                                     "guest": "video editing/synced - guest.mp4"}}),
+                                              encoding="utf-8")
+        cfg = {"package_dirname": "podcast package", "work_dir": str(self.folder / "work")}
+        ep = load_episode(self.folder, cfg)
+        calls = []
+        with mock.patch.object(sync, "references", return_value={"host": object()}), \
+                mock.patch.object(sync, "measure", side_effect=lambda r, tracks, w: calls.append(tracks) or {
+                    "offset_s": 1.0, "drift_ppm": 0.0, "method": "both references"}), \
+                mock.patch.object(sync, "retime", side_effect=lambda src, dst, *a: calls.append((src, dst))):
+            sync.run(ep, cfg, None)
+        measured, (src, dst) = calls
+        self.assertEqual(src, self.folder / "video editing" / "g.mp4")
+        self.assertNotEqual(src, dst)
+        self.assertEqual(measured["guest"], src)
+
     def test_the_episode_reads_the_synced_tracks(self) -> None:
         (self.folder / "episode.json").write_text(json.dumps({
             "guest": "Guest Person", "tracks": {"host": "video editing/h.mp4", "guest": "video editing/g.mp4"}}),

@@ -214,6 +214,29 @@ class RunTests(unittest.TestCase):
         self.assertIn("caption 'waste' → 'gift'", entry["rounds"][0]["applied"])
         self.assertEqual(state["clips"]["2"]["status"], "approved")
 
+    def test_a_title_change_the_filename_ignores_keeps_the_rerendered_videos(self) -> None:
+        # ":" is stripped from file names, so the new stem equals the old one: the
+        # "stale" files are the ones just rendered and must not be deleted (#370).
+        reply = {"title": "sleep is not a waste:"}
+
+        def fake_render(ep, clip, layout, words, scratch, out, encoder):
+            out.write_text("v2", encoding="utf-8")
+
+        with tempfile.TemporaryDirectory() as d:
+            ep, cfg = self._setup(d)
+            with mock.patch.object(revise, "ask_json", return_value=reply), \
+                    mock.patch.object(revise, "render_clip", side_effect=fake_render), \
+                    mock.patch.object(revise, "prepare_fonts"), \
+                    mock.patch.object(revise, "load_words", return_value=_words()):
+                revise.run(ep, cfg, mock.Mock())
+            clips = json.loads((ep.package / "clips.json").read_text(encoding="utf-8"))
+            videos = [ep.package / rel for rel in clips[0]["videos"].values()]
+            contents = [p.read_text(encoding="utf-8") if p.exists() else None for p in videos]
+
+        self.assertEqual(clips[0]["title"], "sleep is not a waste:")
+        self.assertEqual(clips[0]["file"], "sleep is not a waste")
+        self.assertEqual(contents, ["v2", "v2"])
+
     def test_feedback_added_during_the_run_opens_the_next_round(self) -> None:
         def ask(*_a, **_k):
             review_state.request_changes(ep, 1, "also: no punch-ins")  # the owner types while it runs
