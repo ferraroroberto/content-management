@@ -350,6 +350,22 @@ paywalled, promo) → caps (HBR ≤ 3, same author ≤ 2, same domain ≤ 3, one
 per email except digests) → 8 per topic + ⭐/🏆 suggestions →
 `results/newsletter/triage/triage-<start>_<end>.md`.
 
+Stage A (the batched metadata scoring) has an engine switch,
+`newsletter_triage.stage_a_engine` in `config.json` or `--stage-a-engine` on
+`python -m newsletter.triage.run`: `legacy` (default) uses the hub model
+alias, `jev` uses TypeSafe Jev through the hub's `/v1/systemone`, and `both`
+keeps legacy deciding every verdict while Jev scores the same links in the
+background and its answers (with their confidences) are written beside the
+report as `triage-<window>.jev-shadow.json` for comparison — never into the
+stored candidates. `python -m newsletter.triage.jev_pilot --run <id> [--run
+<id> …] [--repeat]` replays stored, reviewed runs through Jev and measures it
+against the legacy answers and the owner's applied review; `--shadow` runs
+the same measures over stored `both` runs, with no Jev calls. It is
+read-only on the store, and the artefact goes under `tmp/jev_pilot/`. A Jev
+or hub failure in `both` only marks those links `not evaluated`;
+`jev_budget_s` caps how long the shadow can add to a run. Only link metadata
+(sender name, anchor text, domain, path) and the criteria brief are sent.
+
 | Command | What it does |
 |---|---|
 | `python -m newsletter.triage.run` | Live: window from `state.json → reviewed_until` (else today−7) to today, one report per 7-day window. |
