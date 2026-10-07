@@ -7,8 +7,8 @@ vs ``--date`` vs ``--week-start`` target-day logic, Notion init and the
 duplicated the whole attempt-row / untick / summary loop, differing only in the
 platform label and the "return to start page" callback.
 
-``resolve_scope``, ``notion_or_none`` and ``drop_already_scheduled`` are the
-shared prelude every scheduler calls. ``run_single_post_scheduler`` is the
+``build_scheduler_parser``, ``resolve_scope``, ``notion_or_none`` and
+``drop_already_scheduled`` are the shared prelude every scheduler calls. ``run_single_post_scheduler`` is the
 complete ``main()`` body for the one-post-per-row platforms (Twitter, Threads);
 the multi-leg schedulers (Instagram story+post, LinkedIn routes, Videos
 drivers) keep their own per-row loop and reuse only the prelude.
@@ -39,6 +39,35 @@ class RunScope:
     target_days: Optional[list[date]]
 
 
+def build_scheduler_parser(
+    description: str,
+    *,
+    all_wip_help: Optional[str],
+    dry_run_help: str,
+    live_help: str,
+    force_help: str,
+) -> argparse.ArgumentParser:
+    """The ``--week-start/--date/[--all-wip]/--dry-run|--live/--force/--debug``
+    parser every scheduler shares (``resolve_scope`` is its only consumer).
+
+    ``all_wip_help=None`` omits ``--all-wip`` (the clone step has no such mode).
+    Callers add their own extra flags to the returned parser, then parse.
+    """
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("--week-start", type=str, default=None,
+                        help="Monday of the target week (YYYY-MM-DD). Default: next Monday.")
+    parser.add_argument("--date", type=str, default=None,
+                        help="Single-day mode (YYYYMMDD or YYYY-MM-DD). Overrides --week-start.")
+    if all_wip_help is not None:
+        parser.add_argument("--all-wip", action="store_true", help=all_wip_help)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--dry-run", action="store_true", help=dry_run_help)
+    mode.add_argument("--live", action="store_true", help=live_help)
+    parser.add_argument("--force", action="store_true", help=force_help)
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging.")
+    return parser
+
+
 def resolve_scope(
     args: argparse.Namespace,
     cfg: dict,
@@ -58,11 +87,13 @@ def resolve_scope(
     else:
         dry_run = cfg.get("dry_run_default", True)
 
-    if args.all_wip and (args.date or args.week_start):
+    # The clone step's parser has no --all-wip flag.
+    all_wip = getattr(args, "all_wip", False)
+    if all_wip and (args.date or args.week_start):
         log.error("❌ --all-wip is mutually exclusive with --date / --week-start.")
         return None
 
-    if args.all_wip:
+    if all_wip:
         target_days = None
         log.info("🎯 All-WIP mode: ignoring date filter, scheduling every %s row.", wip_label)
     elif args.date:

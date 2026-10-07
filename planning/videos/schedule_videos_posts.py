@@ -56,6 +56,7 @@ from reporting.notion.editorial import (  # noqa: E402
 from reporting.notion.notion_update import format_database_id  # noqa: E402
 from planning._dates import date_to_day_title  # noqa: E402
 from planning._scheduler_main import (  # noqa: E402
+    build_scheduler_parser,
     notion_or_none,
     resolve_scope,
 )
@@ -379,24 +380,14 @@ def _scheduled_sentinel(platform: str, day_title: str) -> str:
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(
-        description="Schedule the weekly video clip across LinkedIn / Instagram / Twitter / Threads."
+    p = build_scheduler_parser(
+        "Schedule the weekly video clip across LinkedIn / Instagram / Twitter / Threads.",
+        all_wip_help="Schedule every WIP-Video row, no date filter.",
+        dry_run_help="Walk each platform's flow up to Schedule; do NOT submit.",
+        live_help="Actually schedule on every platform.",
+        force_help=("Schedule even if already marked scheduled (link <P>(v) "
+                    "populated, or a tag-along ledger entry)."),
     )
-    p.add_argument("--week-start", type=str, default=None,
-                   help="Monday of the target week (YYYY-MM-DD). Default: next Monday.")
-    p.add_argument("--date", type=str, default=None,
-                   help="Single-day mode (YYYYMMDD or YYYY-MM-DD). Overrides --week-start.")
-    p.add_argument("--all-wip", action="store_true",
-                   help="Schedule every WIP-Video row, no date filter.")
-    mode = p.add_mutually_exclusive_group()
-    mode.add_argument("--dry-run", action="store_true",
-                      help="Walk each platform's flow up to Schedule; do NOT submit.")
-    mode.add_argument("--live", action="store_true",
-                      help="Actually schedule on every platform.")
-    p.add_argument("--force", action="store_true",
-                   help="Schedule even if already marked scheduled (link <P>(v) "
-                        "populated, or a tag-along ledger entry).")
-    p.add_argument("--debug", action="store_true", help="Enable debug logging.")
     p.add_argument("--skip-li", action="store_true")
     p.add_argument("--skip-ig", action="store_true")
     p.add_argument("--skip-tw", action="store_true")

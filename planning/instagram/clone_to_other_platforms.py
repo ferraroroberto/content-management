@@ -51,7 +51,7 @@ import argparse
 import logging
 import sys
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
@@ -62,20 +62,18 @@ from planning.instagram.instagram_session import (  # noqa: E402
     load_instagram_config,
     load_notion_token,
 )
-from reporting.notion.editorial import (  # noqa: E402
-    init_notion_client,
-    query_rows_by_filter,
-    retrieve_page,
-)
+from reporting.notion.editorial import retrieve_page  # noqa: E402
 from reporting.notion.notion_update import (  # noqa: E402
     format_database_id,
     prepare_notion_update,
 )
-from planning._dates import (  # noqa: E402
-    date_to_day_title,
-    parse_single_date,
-    parse_week_start,
+from planning._dates import date_to_day_title  # noqa: E402
+from planning._scheduler_main import (  # noqa: E402
+    build_scheduler_parser,
+    notion_or_none,
+    resolve_scope,
 )
+from planning._wip_rows import iter_wip_pages  # noqa: E402
 from planning._captions import canonical_caption_from_publish_ig  # noqa: E402
 
 logger = logging.getLogger("instagram_clone")
@@ -130,38 +128,28 @@ def fetch_wip_ig_rows(notion, db_id: str, ed_cols: dict, days: list[date]) -> li
     post_col = ed_cols["post_rel"]
 
     rows: list[IgRow] = []
-    for d in days:
-        title = date_to_day_title(d)
-        results = query_rows_by_filter(
-            notion,
-            db_id,
-            filter_obj={
-                "and": [
-                    {"property": title_col, "title": {"equals": title}},
-                    {"property": wip_col, "checkbox": {"equals": True}},
-                ]
-            },
-        )
-        for r in results:
-            props = r.get("properties", {})
-            illust_rels = props.get(illust_col, {}).get("relation", []) or []
-            post_rels = props.get(post_col, {}).get("relation", []) or []
-            text_rt = props.get(text_col, {}).get("rich_text", []) or []
-            text_val = "".join(seg.get("plain_text", "") for seg in text_rt).strip()
-            repost = bool(props.get(repost_col, {}).get("checkbox", False))
-            thread = bool(props.get(thread_col, {}).get("checkbox", False))
-            rows.append(
-                IgRow(
-                    page_id=r["id"],
-                    day=d,
-                    illustration_ig_ids=[rel["id"] for rel in illust_rels],
-                    text_ig=text_val,
-                    repost_ig=repost,
-                    thread_ig=thread,
-                    post_ig_ids=[rel["id"] for rel in post_rels],
-                    raw_properties=props,
-                )
+    for r, d in iter_wip_pages(
+        notion, db_id, wip_col=wip_col, title_col=title_col, days=days, logger=logger,
+    ):
+        props = r.get("properties", {})
+        illust_rels = props.get(illust_col, {}).get("relation", []) or []
+        post_rels = props.get(post_col, {}).get("relation", []) or []
+        text_rt = props.get(text_col, {}).get("rich_text", []) or []
+        text_val = "".join(seg.get("plain_text", "") for seg in text_rt).strip()
+        repost = bool(props.get(repost_col, {}).get("checkbox", False))
+        thread = bool(props.get(thread_col, {}).get("checkbox", False))
+        rows.append(
+            IgRow(
+                page_id=r["id"],
+                day=d,
+                illustration_ig_ids=[rel["id"] for rel in illust_rels],
+                text_ig=text_val,
+                repost_ig=repost,
+                thread_ig=thread,
+                post_ig_ids=[rel["id"] for rel in post_rels],
+                raw_properties=props,
             )
+        )
     return rows
 
 
@@ -350,22 +338,13 @@ def apply_to_targets(
 # ---------- Main ----------
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Clone IG editorial plan to Threads / Twitter / Substack."
-    )
-    parser.add_argument("--week-start", type=str, default=None,
-                        help="Monday of the target week (YYYY-MM-DD). Default: next Monday.")
-    parser.add_argument("--date", type=str, default=None,
-                        help="Single-day mode (YYYYMMDD or YYYY-MM-DD). Overrides --week-start.")
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--dry-run", action="store_true",
-                      help="Log planned writes only.")
-    mode.add_argument("--live", action="store_true",
-                      help="Actually update Notion.")
-    parser.add_argument("--force", action="store_true",
-                        help="Overwrite target rows that already have illustration/text set.")
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging.")
-    return parser.parse_args()
+    return build_scheduler_parser(
+        "Clone IG editorial plan to Threads / Twitter / Substack.",
+        all_wip_help=None,
+        dry_run_help="Log planned writes only.",
+        live_help="Actually update Notion.",
+        force_help="Overwrite target rows that already have illustration/text set.",
+    ).parse_args()
 
 
 def main() -> int:
@@ -374,28 +353,16 @@ def main() -> int:
     ig_cfg = load_instagram_config()
     clone_cfg = load_clone_config()
 
-    if args.live:
-        dry_run = False
-    elif args.dry_run:
-        dry_run = True
-    else:
-        dry_run = ig_cfg.get("dry_run_default", True)
-
-    if args.date:
-        d = parse_single_date(args.date)
-        target_days = [d]
-        logger.info("🎯 Single-day mode: %s", d.isoformat())
-    else:
-        monday = parse_week_start(args.week_start)
-        target_days = [monday + timedelta(days=i) for i in range(7)]
-        logger.info("🗓️  Target week: %s → %s",
-                    target_days[0].isoformat(), target_days[-1].isoformat())
+    scope = resolve_scope(args, ig_cfg, wip_label="WIP-IG", log=logger)
+    if scope is None:
+        return 2
+    dry_run = scope.dry_run
+    target_days = scope.target_days
     logger.info("🛠  Mode: %s%s", "DRY-RUN" if dry_run else "LIVE",
                 " --force" if args.force else "")
 
-    notion = init_notion_client(load_notion_token())
+    notion = notion_or_none(load_notion_token(), log=logger)
     if notion is None:
-        logger.error("❌ Could not initialize Notion client.")
         return 3
 
     db_id = format_database_id(ig_cfg["editorial_db_id"])
