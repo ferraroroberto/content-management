@@ -23,17 +23,17 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import time
 from pathlib import Path
 from typing import Optional
+
+from config.no_window import NO_WINDOW
 
 logger = logging.getLogger("recorder.store")
 
 RECORDING_ID = re.compile(r"^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$")
 EXTENSIONS = ("mp4", "webm")
 MAX_SEQ = 1_000_000
-NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 
 class MissingChunks(Exception):

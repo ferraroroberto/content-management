@@ -6,16 +6,15 @@ import json
 import logging
 import shutil
 import subprocess
-import sys
 import wave
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
 
-logger = logging.getLogger("podcast.media")
+from config.no_window import NO_WINDOW
 
-NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+logger = logging.getLogger("podcast.media")
 
 
 def _tool(name: str) -> str:

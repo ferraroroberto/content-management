@@ -18,7 +18,8 @@ from typing import Literal, Optional
 
 import numpy as np
 
-from podcast.media import NO_WINDOW, _tool, extract_wav, frame_at, probe, read_wav, run_ffmpeg
+from config.no_window import NO_WINDOW
+from podcast.media import _tool, extract_wav, frame_at, probe, read_wav, run_ffmpeg
 
 logger = logging.getLogger("demo_video.media")
 

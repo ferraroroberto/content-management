@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from config.no_window import NO_WINDOW  # noqa: E402
 from planning._session_base import configure_logger as _configure_logger  # noqa: E402
 from planning._session_base import load_config_block, load_notion_token  # noqa: E402
 from reporting.notion.editorial import (  # noqa: E402
@@ -46,12 +47,6 @@ from reporting.notion.editorial import (  # noqa: E402
 )
 
 logger = logging.getLogger("videos_session")
-
-
-def _no_window_flags() -> int:
-    """creationflags for a short-lived helper spawn (attrib/ffprobe/ffmpeg) so the
-    console-less Streamlit host doesn't flash a window per call (fleet convention)."""
-    return subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 
 # Per-platform role suffixes on the editorial DB. The roles are wired in
@@ -273,7 +268,7 @@ def _trigger_download(path: Path) -> None:
             subprocess.run(
                 ["attrib", "+P", "-U", str(path)],
                 check=True, capture_output=True, timeout=30,
-                creationflags=_no_window_flags(),
+                creationflags=NO_WINDOW,
             )
         except (OSError, subprocess.SubprocessError) as err:
             logger.debug("attrib pin failed (%s) — relying on read-through.", err)
@@ -394,7 +389,7 @@ def _probe_video(path: Path) -> Optional[dict]:
             [ffprobe, "-v", "error", "-show_format", "-show_streams",
              "-of", "json", str(path)],
             check=True, capture_output=True, timeout=120,
-            creationflags=_no_window_flags(),
+            creationflags=NO_WINDOW,
         )
         data = json.loads(proc.stdout or b"{}")
     except (OSError, subprocess.SubprocessError, ValueError) as err:
@@ -431,7 +426,7 @@ def probe_duration_seconds(path: Path) -> float:
     proc = subprocess.run(
         [ffprobe, "-v", "error", "-show_entries", "format=duration", "-of", "json", str(path)],
         check=True, capture_output=True, timeout=60,
-        creationflags=_no_window_flags(),
+        creationflags=NO_WINDOW,
     )
     data = json.loads(proc.stdout or b"{}")
     duration = (data.get("format") or {}).get("duration")
@@ -488,7 +483,7 @@ def _run_ffmpeg_transcode(src: Path, dst: Path, tcfg: dict) -> bool:
     ]
     logger.info("🎞️ Transcoding %s → platform-safe (%d Mbps cap)…", src.name, target)
     try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=1800, creationflags=_no_window_flags())
+        subprocess.run(cmd, check=True, capture_output=True, timeout=1800, creationflags=NO_WINDOW)
     except (OSError, subprocess.SubprocessError) as err:
         stderr = getattr(err, "stderr", b"") or b""
         logger.error(
