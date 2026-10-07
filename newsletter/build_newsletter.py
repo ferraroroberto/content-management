@@ -38,6 +38,7 @@ from notion_client.errors import APIResponseError, HTTPResponseError, RequestTim
 
 from config.loader import load_full_config
 from config.logger_config import configure_root_logging
+from config.no_window import NO_WINDOW
 from newsletter import notion_io
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -363,7 +364,7 @@ def copy_to_clipboard(text: str) -> None:
             ["clip"],
             input=text, text=True, encoding="utf-8", check=True,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            creationflags=NO_WINDOW,
         )
         return
     import tkinter as tk

@@ -49,6 +49,7 @@ if str(REPO_ROOT) not in sys.path:
 
 # Force UTF-8 stdio so emoji log lines don't crash Windows' cp1252 console.
 from config.console import force_utf8_stdio  # noqa: E402
+from config.logger_config import configure_root_logging  # noqa: E402
 force_utf8_stdio()
 
 from newsletter import bootstrap_chrome  # noqa: E402
@@ -68,15 +69,12 @@ def _wait_for_user(prompt: str) -> None:
     try:
         input(prompt)
     except (EOFError, KeyboardInterrupt):
-        print("❌ Cancelled by user.")
+        logger.error("❌ Cancelled by user.")
         raise SystemExit(2)
 
 
 def _banner(title: str) -> None:
-    print()
-    print("=" * 60)
-    print(f">>> {title}")
-    print("=" * 60)
+    logger.info("\n%s\n>>> %s\n%s", "=" * 60, title, "=" * 60)
 
 
 # ---------------------------------------------------------------------- steps
@@ -97,9 +95,11 @@ def step_schedule(*, count: int | None, target: int, dry_run: bool,
 def step_archive(debug: bool) -> int:
     _banner("archive open Chrome tabs to Notion")
     if not bootstrap_chrome.debug_port_up():
-        print("❌ Chrome isn't responding on :9222 — run the bootstrap step first")
-        print("   (the '① Bootstrap Chrome' button, or:")
-        print("       newsletter_pipeline.py bootstrap )")
+        logger.error(
+            "❌ Chrome isn't responding on :9222 — run the bootstrap step first\n"
+            "   (the '① Bootstrap Chrome' button, or:\n"
+            "       newsletter_pipeline.py bootstrap )"
+        )
         return 1
     return archive_pipeline.run_batch(write=True, debug=debug)
 
@@ -123,14 +123,14 @@ def step_build(newsletter_number: str | None, debug: bool, *,
             except (EOFError, KeyboardInterrupt):
                 raise SystemExit(2)
         if not newsletter_number:
-            print("❌ newsletter number is required (--newsletter NNN)")
+            logger.error("❌ newsletter number is required (--newsletter NNN)")
             return 1
     out_path = build_newsletter.run(
         newsletter_number, debug=debug,
         interactive_must_read=interactive_must_read,
         open_browser=open_browser, must_read=must_read,
     )
-    print(f"🎉 Newsletter HTML: {out_path}")
+    logger.info("🎉 Newsletter HTML: %s", out_path)
     return 0
 
 
@@ -146,7 +146,7 @@ def step_substack_draft(newsletter_number: str, debug: bool, *,
             open_browser=open_browser, debug=debug,
         )
     except substack_draft.SessionExpiredError as err:
-        print(f"❌ {err}")
+        logger.error("❌ %s", err)
         return 2
     return 0
 
@@ -157,7 +157,7 @@ def step_substack_draft(newsletter_number: str, debug: bool, *,
 def run_create(*, days: int, newsletter_number: str | None, debug: bool) -> int:
     """archive -> normalize -> build (no must-read prompt). Non-interactive."""
     if not newsletter_number:
-        print("❌ newsletter number is required for 'create' (--newsletter NNN)")
+        logger.error("❌ newsletter number is required for 'create' (--newsletter NNN)")
         return 1
     rc = step_archive(debug=debug)
     if rc != 0:
@@ -273,6 +273,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     debug = bool(getattr(args, "debug", False))
+    configure_root_logging(debug)
     cmd = args.cmd or "all"
 
     if cmd == "bootstrap":

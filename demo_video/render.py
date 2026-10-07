@@ -10,8 +10,9 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from config.no_window import NO_WINDOW
 from demo_video.storyboard import Cut, Demo, media_root, resolve_cut
-from podcast.media import NO_WINDOW, probe
+from podcast.media import probe
 
 logger = logging.getLogger("demo_video.render")
 

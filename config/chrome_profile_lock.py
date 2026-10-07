@@ -37,6 +37,7 @@ from typing import Optional, Sequence
 from playwright.sync_api import BrowserContext, Error as PlaywrightError, Playwright
 
 from config.chrome_launch import stealth_launch_kwargs
+from config.no_window import NO_WINDOW
 
 # Exponential backoff between launch re-attempts, in seconds (~15 min total).
 DEFAULT_LOCK_BACKOFF_SECONDS = (60, 120, 240, 480)
@@ -89,7 +90,7 @@ def pids_holding_profile(user_data_dir: Path) -> list[int]:
         proc = subprocess.run(
             [powershell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
             capture_output=True, text=True, timeout=20,
-            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+            creationflags=NO_WINDOW,
         )
     except (OSError, subprocess.SubprocessError) as err:
         logging.getLogger("chrome_profile_lock").warning(
