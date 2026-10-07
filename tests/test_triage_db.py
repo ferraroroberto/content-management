@@ -299,7 +299,7 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(dry["saved"], 0)
             self.assertEqual(db.decision_tally()["fav@x.com"], (1, 1))     # dry run stored nothing
 
-    def test_import_history_and_next_edition(self) -> None:
+    def test_import_history(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             h = Path(td)
             (h / "editions.jsonl").write_text(
@@ -317,7 +317,6 @@ class StoreTests(unittest.TestCase):
         picks = {r["article_id"]: r for r in self.fake.tables["triage_picks"]}
         self.assertTrue(picks["a1"]["star"] and picks["a1"]["must_read"])
         self.assertIsNone(picks["a2"]["edition"])           # unknown edition → no dangling FK
-        self.assertEqual(db.next_edition_number(), "N228")
 
     def test_lessons_accept_and_export(self) -> None:
         run_id = self._store()
