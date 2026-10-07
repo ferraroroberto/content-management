@@ -299,46 +299,24 @@ def upload_dataframe_to_db(df, table_name, primary_keys, connection=None):
             connection.close()
             logger.debug("Database connection closed")
 
-def get_primary_keys(platform, data_type):
+# Primary-key columns per data type: the only two the pipeline produces
+# (`<platform>_posts` / `<platform>_profile`, see data_processor).
+PRIMARY_KEYS = {
+    'posts': ['date', 'platform', 'data_type', 'post_id'],
+    'profile': ['date', 'platform', 'data_type'],
+}
+
+
+def get_primary_keys(data_type):
+    """Primary key columns for a ``posts`` or ``profile`` table.
+
+    Raises ``ValueError`` for any other data type rather than guessing a column.
     """
-    Determine the primary key columns based on platform and data type.
-    
-    Args:
-        platform (str): The platform name (e.g., 'facebook', 'instagram', etc.)
-        data_type (str): The type of data ('posts', 'profile', etc.)
-        
-    Returns:
-        list: List of column names that should be used as primary keys
-    """
-    data_type = data_type.lower()
-    
-    # Default primary keys for common data types
-    if data_type == 'posts':
-        return ['date', 'platform', 'data_type', 'post_id']
-    elif data_type == 'profile':
-        return ['date', 'platform', 'data_type']
-    elif data_type == 'comments':
-        return ['comment_id']
-    elif data_type == 'insights' or data_type == 'metrics':
-        # For insights/metrics, typically need combination of id and date
-        return ['post_id', 'date']
-    elif data_type == 'audience':
-        # For audience data, might be segmented by date
-        return ['date']
-    
-    # Platform-specific adjustments if needed
-    if platform.lower() == 'facebook':
-        if data_type == 'ads':
-            return ['ad_id']
-    elif platform.lower() == 'instagram':
-        if data_type == 'stories':
-            return ['story_id']
-    elif platform.lower() == 'linkedin':
-        if data_type == 'followers':
-            return ['date']
-    
-    # If no specific rule, use a generic id column based on data_type
-    return [f'{data_type.rstrip("s")}_id']
+    try:
+        return list(PRIMARY_KEYS[data_type.lower()])
+    except KeyError:
+        raise ValueError(f"No primary key defined for data type '{data_type}'") from None
+
 
 def upload_all_dataframes(dataframes, environment="cloud", db_config=None):
     """
@@ -370,7 +348,12 @@ def upload_all_dataframes(dataframes, environment="cloud", db_config=None):
             platform, data_type = parts
             
             # Determine primary keys based on data type
-            primary_keys = get_primary_keys(platform, data_type)
+            try:
+                primary_keys = get_primary_keys(data_type)
+            except ValueError as err:
+                logger.error(f"❌ {key}: {err}, skipping")
+                success = False
+                continue
             
             # Check if post_id is in the DataFrame for posts tables
             if data_type.lower() == 'posts' and 'post_id' not in df.columns:
@@ -420,7 +403,7 @@ def main():
         
         # Determine if this is a posts or profile table
         is_posts = 'posts' in table_name.lower()
-        primary_keys = get_primary_keys('test', 'posts' if is_posts else 'profile')
+        primary_keys = get_primary_keys('posts' if is_posts else 'profile')
         
         # Load database configuration for the specified environment
         db_config = load_db_config(args.environment)
