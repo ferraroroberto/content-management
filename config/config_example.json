@@ -321,7 +321,6 @@
     },
     "check_ip": {
         "images_folder": "C:/path/to/illustrations",
-        "legacy_metadata_folder": "C:/path/to/legacy-excel-store",
         "store_folder": "results/check_ip",
         "api_keys": {
             "serpapi_key": "${SERPAPI_KEY}",

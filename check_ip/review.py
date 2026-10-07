@@ -98,7 +98,7 @@ SORT_ORDERS = {
 def store_exists() -> bool:
     """Whether the database file has been created yet.
 
-    The tab calls this first so a fresh clone shows "run the migration"
+    The tab calls this first so a fresh clone shows "run a search first"
     instead of an empty table that looks like a missing-data bug.
     """
     return db.db_path().exists()

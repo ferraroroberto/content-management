@@ -68,10 +68,6 @@ SCREEN_COLUMNS = ("screen_verdict", "screen_outcome", "screen_reason", "screened
 # later and not preserved here would be silently lost on the next re-screen.
 SCREEN_HISTORY_COLUMNS = SCREEN_COLUMNS
 
-# Superseded by CONDITION_COLUMNS and no longer written by anything (#295).
-# Named rather than deleted so the migration that mapped them stays auditable.
-FROZEN_SCREEN_COLUMNS = ("screen_promotional", "screen_altered")
-
 VERDICTS = ("infringement", "acceptable", "unclear")
 
 # The two kinds of ``unclear``, which live screening showed are unrelated.
@@ -96,7 +92,7 @@ ADDED_RESULT_COLUMNS = (
 )
 
 # Why any row currently carries ``retired = 1``. One reason exists, so it is a
-# string rather than a column: `screen stats` and the migration both print it,
+# string rather than a column: `screen stats` and the tab both print it,
 # which is what stops a fresh checkout being silently wrong about what it is
 # skipping. A second reason is the moment to make it a column.
 RETIRED_REASON = (
@@ -461,16 +457,14 @@ def raw_dir() -> Path:
     return store_dir() / "api_raw"
 
 
-def raw_sidecar(api_id: str, *, truncated: bool = False) -> Path:
+def raw_sidecar(api_id: str) -> Path:
     """Path for one API payload, sharded by the id's first characters.
 
     Sharding keeps the directory from growing to tens of thousands of entries
-    as runs accumulate. A truncated legacy payload gets a distinct suffix so
-    nothing downstream tries to parse it as JSON.
+    as runs accumulate.
     """
     safe = "".join(c for c in str(api_id) if c.isalnum() or c in "-_") or "unknown"
-    suffix = ".json.truncated" if truncated else ".json"
-    return raw_dir() / safe[:2] / f"{safe}{suffix}"
+    return raw_dir() / safe[:2] / f"{safe}.json"
 
 
 # ---------------------------------------------------------------------------
@@ -541,7 +535,7 @@ def refresh_poster_keys(conn: sqlite3.Connection, *, only_missing: bool = True) 
     """Populate ``results.poster_key`` from ``found_link``. Returns rows written.
 
     Rows imported before the column existed have it NULL, and the queue ranking
-    needs it for every pending row, so the migration and the run both call this.
+    needs it for every pending row, so the run calls this.
     Derived purely from ``found_link``, so re-running it cannot lose anything.
     """
     where = "found_link is not null"
@@ -557,7 +551,7 @@ def refresh_poster_keys(conn: sqlite3.Connection, *, only_missing: bool = True) 
 
 
 def counts(conn: sqlite3.Connection) -> dict:
-    """Row counts per table — the reconciliation the migration reports on."""
+    """Row counts per table — the before/after check the migration lane reports on."""
     out = {}
     for table in ("images", "results", "api_history", "screen_history"):
         out[table] = conn.execute(f"select count(*) as n from {table}").fetchone()["n"]
@@ -633,50 +627,6 @@ def mark_duplicates(conn: sqlite3.Connection) -> dict:
     return {int(r["duplicate"]): r["n"] for r in rows}
 
 
-def retire_similar_matches(conn: sqlite3.Connection) -> dict:
-    """Flag every stored ``Similar Match`` row as out of scope. Never deletes.
-
-    Retirement is a one-way door only in intent: the rows, their titles, their
-    dates and their screening verdicts all stay exactly where they are, and
-    clearing the flag brings them back. That matters because each one cost a
-    SerpAPI call and no amount of code could re-derive it for free.
-
-    A row carrying **any** owner annotation is left alone. There are none today
-    — ten months of manual triage produced zero decisions on a similar match,
-    which is most of why the category is being retired — but a decision the
-    owner made is a decision that stays visible in the tab, and skipping those
-    rows makes that structurally true rather than merely true-by-count.
-
-    Returns the counts: ``retired`` newly flagged, ``already_retired``,
-    ``kept_annotated`` left visible.
-    """
-    annotated = " or ".join(f"{c} is not null" for c in OWNER_COLUMNS)
-    row = conn.execute(
-        f"""
-        select
-            sum(case when retired = 0 and not ({annotated}) then 1 else 0 end) as to_retire,
-            sum(case when retired = 1 then 1 else 0 end)                       as already_retired,
-            sum(case when retired = 0 and ({annotated}) then 1 else 0 end)     as kept_annotated
-          from results
-         where match_type = ?
-        """,
-        (process.SIMILAR_MATCH,),
-    ).fetchone()
-    counts = {
-        "retired": row["to_retire"] or 0,
-        "already_retired": row["already_retired"] or 0,
-        "kept_annotated": row["kept_annotated"] or 0,
-    }
-    if counts["retired"]:
-        conn.execute(
-            f"update results set retired = 1 "
-            f"where match_type = ? and retired = 0 and not ({annotated})",
-            (process.SIMILAR_MATCH,),
-        )
-        conn.commit()
-    return counts
-
-
 def push_screen_history(conn: sqlite3.Connection, row_id: int) -> bool:
     """Ensure row ``row_id``'s current screening opinion is in ``screen_history``.
 
@@ -695,8 +645,8 @@ def push_screen_history(conn: sqlite3.Connection, row_id: int) -> bool:
 
     ``insert or ignore`` resolves against ``unique (result_id, screened_at)``:
     re-preserving a state already in the table is a no-op rather than a
-    duplicate. That is what lets the back-fill run twice, and what stops the
-    first re-screen of a back-filled row recording its opinion a second time.
+    duplicate. That is what stops a re-screen recording an opinion the table
+    already holds a second time.
     The only constraint on the table is that key, so nothing else is masked —
     and "already there" is just as good an answer as "written now", which is
     why the check below asks whether the opinion is *preserved* rather than
@@ -731,175 +681,6 @@ def push_screen_history(conn: sqlite3.Connection, row_id: int) -> bool:
             f"could not be preserved in screen_history"
         )
     return True
-
-
-def backfill_screen_history(conn: sqlite3.Connection, rows: Iterable[dict]) -> dict:
-    """Land pre-existing screening opinions into ``screen_history`` (issue #301).
-
-    ``rows`` are dicts carrying ``id`` plus whichever of
-    ``SCREEN_HISTORY_COLUMNS`` the source recorded — the shape of the one-off
-    JSON export taken by hand before the first three-condition re-screen, which
-    is the only surviving copy of that pass's observations. A column the export
-    did not carry lands NULL rather than being guessed at; ``poster_url`` is the
-    only one in practice, and it is unaffected on ``results`` anyway because
-    ``record_verdict`` only ever coalesces it.
-
-    Nothing on ``results`` is read for content, written, or deleted here, and no
-    owner column is in any statement — the migration lane that calls this proves
-    it by taking the row, annotation and screened counts either side.
-
-    Idempotent by the same ``unique (result_id, screened_at)`` key
-    ``push_screen_history`` uses, so a second run inserts nothing.
-    """
-    rows = list(rows)
-    ids = [row["id"] for row in rows]
-    known = set()
-    # Chunked so the parameter list cannot outgrow SQLITE_MAX_VARIABLE_NUMBER
-    # on a larger export than today's 310.
-    for start in range(0, len(ids), 500):
-        chunk = ids[start:start + 500]
-        placeholders = ", ".join("?" for _ in chunk)
-        known.update(r["id"] for r in conn.execute(
-            f"select id from results where id in ({placeholders})", chunk))
-
-    recorded_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    payload = [
-        tuple([row["id"]] + [row.get(c) for c in SCREEN_HISTORY_COLUMNS] + [recorded_at])
-        for row in rows
-        if row["id"] in known and row.get("screened_at") is not None
-    ]
-
-    columns = ", ".join(SCREEN_HISTORY_COLUMNS)
-    placeholders = ", ".join("?" for _ in range(len(SCREEN_HISTORY_COLUMNS) + 2))
-    before = conn.total_changes
-    conn.executemany(
-        f"insert or ignore into screen_history (result_id, {columns}, recorded_at) "
-        f"values ({placeholders})",
-        payload,
-    )
-    inserted = conn.total_changes - before
-    conn.commit()
-
-    return {
-        "source_rows": len(rows),
-        "inserted": inserted,
-        "already_present": len(payload) - inserted,
-        "unknown_ids": sorted(set(ids) - known),
-        "no_timestamp": sum(1 for row in rows
-                            if row["id"] in known and row.get("screened_at") is None),
-    }
-
-
-def backfill_licence_conditions(conn: sqlite3.Connection) -> dict:
-    """Map rows screened under the credit-only question onto the three
-    licence conditions (issue #295). Writes screening columns only.
-
-    The mapping invents nothing. ``screen_credit_ok`` is filled for every
-    screened row because credit *was* the question that pass asked; the other
-    two are filled only where the old flag positively fired, and left NULL
-    otherwise. A row that was not flagged promotional was never checked for a
-    paid or business context, and a row whose watermark was intact was never
-    checked for a crop, added text or a translation — recording either as met
-    would invent a fact the screening never established.
-
-    ``screen_verdict`` is then recomputed from the conditions, because it is
-    derived now. The visible consequence is deliberate: an ``acceptable`` row
-    becomes ``unclear`` carrying ``screen_credit_ok = 1``, which reads as
-    "credit met, the other two unknown" rather than "compliant".
-
-    A legacy ``unclear`` row establishes nothing, so all three conditions stay
-    NULL — which means the conditions alone cannot say whether a row has been
-    through here. ``screen_outcome`` is what marks it: those rows are set to
-    ``ambiguous``, the state that claims the least. The legacy bucket mixes
-    "could not tell" with "nothing to assess" and there is no way to tell which
-    from the store, so the mapping picks the one that keeps the row in the
-    re-screen pile rather than the one that quietly retires it.
-
-    Only rows that are screened, carry all three conditions NULL **and** have
-    no outcome are touched, so a re-run is a no-op and a row screened under the
-    new criteria is never overwritten. Nothing is deleted and no owner column
-    is in any statement here.
-    """
-    untouched = (" and ".join(f"{c} is null" for c in CONDITION_COLUMNS)
-                 + " and screen_outcome is null")
-    scope = f"screened_at is not null and {untouched}"
-
-    before = conn.execute(
-        """
-        select screen_verdict as verdict, count(*) as n
-          from results where screened_at is not null group by screen_verdict
-        """
-    ).fetchall()
-    to_map = conn.execute(f"select count(*) from results where {scope}").fetchone()[0]
-    already_mapped = conn.execute(
-        f"select count(*) from results where screened_at is not null and not ({untouched})"
-    ).fetchone()[0]
-
-    conn.execute(
-        f"""
-        update results
-           set screen_credit_ok = case screen_verdict
-                                      when 'infringement' then 0
-                                      when 'acceptable'   then 1
-                                      else null end,
-               screen_noncommercial_ok = case when screen_promotional = 1 then 0 else null end,
-               screen_unmodified_ok    = case when screen_altered = 1 then 0 else null end
-         where {scope}
-        """
-    )
-    # Second statement, not a second expression in the first: it reads the
-    # conditions the statement above just wrote, and SQLite evaluates an
-    # UPDATE's SET list against the pre-update row. Applied to every screened
-    # row, which is a no-op on rows screened under the new criteria —
-    # record_verdict already refuses to store a verdict the conditions deny,
-    # and the coalesce keeps an outcome such a row already chose for itself.
-    conn.execute(
-        f"""
-        update results
-           set screen_verdict = ({verdict_sql('')}),
-               screen_outcome = case when ({verdict_sql('')}) = 'unclear'
-                                     then coalesce(screen_outcome, '{OUTCOME_AMBIGUOUS}')
-                                     else null end
-         where screened_at is not null
-        """
-    )
-    conn.commit()
-
-    after = conn.execute(
-        """
-        select screen_verdict as verdict, count(*) as n
-          from results where screened_at is not null group by screen_verdict
-        """
-    ).fetchall()
-    per_condition = {}
-    for column in CONDITION_COLUMNS:
-        row = conn.execute(
-            f"""
-            select sum(case when {column} = {CONDITION_MET} then 1 else 0 end) as met,
-                   sum(case when {column} = {CONDITION_VIOLATED} then 1 else 0 end) as violated,
-                   sum(case when {column} = {CONDITION_INDETERMINATE}
-                            then 1 else 0 end) as indeterminate,
-                   sum(case when {column} is null then 1 else 0 end) as not_assessed
-              from results where screened_at is not null
-            """
-        ).fetchone()
-        # The four buckets are exhaustive and must stay that way: this summary
-        # is read as a reconciliation of every screened row, so a state missing
-        # a bucket would silently stop it adding up (issue #305).
-        per_condition[column] = {k: (row[k] or 0)
-                                 for k in ("met", "violated", "indeterminate", "not_assessed")}
-
-    return {
-        "mapped": to_map,
-        "already_mapped": already_mapped,
-        "verdicts_before": {r["verdict"]: r["n"] for r in before},
-        "verdicts_after": {r["verdict"]: r["n"] for r in after},
-        "conditions": per_condition,
-        "not_fully_assessed": conn.execute(
-            f"""select count(*) from results
-                 where screened_at is not null and not ({assessed_sql('')})"""
-        ).fetchone()[0],
-    }
 
 
 def refresh_image_counts(conn: sqlite3.Connection) -> int:

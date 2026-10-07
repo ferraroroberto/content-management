@@ -71,7 +71,7 @@ Corrections from live runs; they live here rather than in a dispatch prompt.
 & .\.venv\Scripts\python.exe -m check_ip.screen stats
 ```
 
-No store → say so and point at `& .\.venv\Scripts\python.exe -m check_ip.migrate`. Don't run the migration unasked.
+No store → say so: nothing to screen until a search run (`check_ip.run`) has created it. Don't start a search run unasked — it costs money.
 
 Report the queue depth before starting, so the owner knows what fraction of the backlog this run covers. Report `not_fully_assessed` too — those are rows that look screened but are not, and they are a second backlog behind the first. At roughly 15-20s per link, 100 links is about half an hour and 500 is 2-3 hours — say which, so nobody is surprised by a long quiet stretch.
 

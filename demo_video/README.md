@@ -187,7 +187,7 @@ A `caption` is `{kicker?, title, sub?, color?, size?, width?}`. Colours are a pa
 | `render.py` | Writes `out/.props/<cut>.json` and runs the Remotion CLI with node (no `npx.cmd` shell) |
 | `prep.py` | The prep stage: transcode sources, measure states, read the music, recording contact sheets |
 | `checks.py` | `overrun`, `state_timeline`, `privacy`, `licence`, `run_checks` |
-| `record.py` | The record stage: `load_driver`, the beat `Runner`, `record_take`, `run_recording`, `beats_in_order` |
+| `record.py` | The record stage: `load_driver`, the beat `Runner`, `record_take`, `run_recording` |
 | `media.py` | `Result` (pass / fail / unknown), `transcode`, `loudness_envelope`, `suggest_swaps`, `contact_sheet`, `verify_output`. Every ffmpeg call goes through `podcast/media.py`. |
 | `remotion/src/ui.tsx` | Components: `Clip`, `ZoomWindow`, `Monitor`, `Laptop`, `Caption`, `ChatStream`, `Label`, `Logo`, `SceneFade`, `Backdrop`, `Pop` |
 | `remotion/src/scenes.tsx` | One component per scene type, landscape and stacked layouts |

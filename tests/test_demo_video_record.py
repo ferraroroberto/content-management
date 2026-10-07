@@ -14,7 +14,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from pydantic import ValidationError  # noqa: E402
 
-from demo_video.record import Runner, beats_in_order, load_driver  # noqa: E402
+from demo_video.record import Runner, load_driver  # noqa: E402
 from demo_video.storyboard import Recording, Step  # noqa: E402
 
 EXAMPLE = REPO_ROOT / "demo_video" / "examples" / "facilitation-suite"
@@ -94,7 +94,6 @@ class RunnerTests(unittest.TestCase):
         t0 = {"presenter": 100.0, "stage": 100.5}  # the stage page opened half a second later
         marks = self._runner(rec).run(take, {"presenter": FakePage(), "stage": FakePage()}, t0)
         self.assertEqual(list(marks["presenter"]), ["map", "scale"])
-        self.assertEqual(beats_in_order(marks, take), [])
         self.assertEqual(marks["presenter"]["map"], [2.0, 5.0])  # after the 2 s setup; 1.5 s + 3 × 0.5 s
         self.assertEqual(marks["stage"]["map"], [1.5, 4.5])  # same instant, measured from its own page
         self.assertEqual(marks["presenter"]["scale"], [5.0, 8.0])
@@ -138,14 +137,6 @@ class RunnerTests(unittest.TestCase):
             Step.model_validate({"click": "#x"})  # a browser step needs its page
         with self.assertRaises(ValidationError):
             Step.model_validate({})
-
-    def test_beats_in_order_reports_gaps_and_reversals(self) -> None:
-        rec = _recording([{"id": "t", "pages": {"p": {"url": "/"}},
-                           "beats": [{"name": "a"}, {"name": "b"}, {"name": "c"}]}])
-        problems = beats_in_order({"p": {"a": [0, 5], "b": [4, 3]}}, rec.takes[0])
-        self.assertTrue(any("ends before it starts" in p for p in problems))
-        self.assertTrue(any("starts before the previous" in p for p in problems))
-        self.assertTrue(any("beat c missing" in p for p in problems))
 
 
 class ExampleTests(unittest.TestCase):
