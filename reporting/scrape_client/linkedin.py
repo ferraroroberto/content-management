@@ -57,6 +57,19 @@ _REPOSTS_RE = re.compile(r"([\d][\d,. ]*)\s*reposts?", re.IGNORECASE)
 # Match URN like ``urn:li:activity:7464533218260680704``.
 _URN_ID_RE = re.compile(r"urn:li:activity:(\d+)")
 
+# Post containers on ``/recent-activity/all/``. The activity URN has lived in two places:
+#   * legacy: a ``data-urn`` attribute on the container itself;
+#   * server-driven markup (since 2026-10, issue #377): ``<div role="listitem">`` with no
+#     URN attribute — the URN survives only in anchor hrefs inside the post
+#     (``/analytics/post-summary/urn:li:activity:<id>/`` on every post,
+#     ``/feed/update/urn:li:activity:<id>/`` on some). Class names there are hashed
+#     and unstable, so the ``role`` + "has an activity link" pair is the anchor.
+# Both are accepted so a rollback of the markup does not break the scraper again.
+_URN_LINK_SELECTOR = "a[href*='urn:li:activity:']"
+_LEGACY_POST_SELECTOR = "[data-urn^='urn:li:activity:']"
+_POST_SELECTOR = f"{_LEGACY_POST_SELECTOR}, main [role='listitem']:has({_URN_LINK_SELECTOR})"
+
+POSTS_WAIT_MS = 20000
 MAX_POSTS = 15
 SCROLLS = 6
 SCROLL_PAUSE_MS = 1500
@@ -202,6 +215,42 @@ def _post_is_video(post_locator) -> int:
     return 0
 
 
+def _post_activity_id(post_locator) -> Optional[str]:
+    """Activity id of a post container — ``data-urn`` first, else its first URN anchor."""
+    try:
+        urn = post_locator.get_attribute("data-urn") or ""
+        if not _URN_ID_RE.search(urn):
+            href = post_locator.locator(_URN_LINK_SELECTOR).first.get_attribute("href", timeout=2000)
+            urn = href or ""
+    except Exception:
+        return None
+    m = _URN_ID_RE.search(urn)
+    return m.group(1) if m else None
+
+
+def _describe_missing_posts(page) -> str:
+    """Say *why* no post container matched, so the next DOM change is obvious from the log.
+
+    The page is already known to be logged in. Activity URNs in the DOM that no container
+    selector claimed point at changed markup; no URN anywhere points at an empty feed.
+    """
+    try:
+        legacy = page.locator(_LEGACY_POST_SELECTOR).count()
+        links = page.locator(_URN_LINK_SELECTOR).count()
+        items = page.locator("main [role='listitem']").count()
+    except Exception as err:
+        return f"could not inspect the page ({err})"
+    if legacy or links:
+        return (
+            f"logged in, {legacy + links} activity URN(s) are in the page but no post container "
+            f"matched the selector (listitems in main: {items}) — LinkedIn's markup likely changed"
+        )
+    return (
+        f"logged in, no activity URN anywhere in the page (listitems in main: {items}) — "
+        "the profile may have no recent posts, or the markup no longer carries the URN"
+    )
+
+
 def fetch_posts(target_date: Optional[str] = None) -> Optional[dict]:
     target_date = normalize_target_date(target_date)
     activity_url = _get_handle_url() + "/recent-activity/all/"
@@ -214,15 +263,17 @@ def fetch_posts(target_date: Optional[str] = None) -> Optional[dict]:
             raise ScrapeError(f"LinkedIn login required: {err}") from err
 
         try:
-            s.page.wait_for_selector("[data-urn^='urn:li:activity:']", timeout=20000)
+            s.page.wait_for_selector(_POST_SELECTOR, timeout=POSTS_WAIT_MS)
         except Exception as err:
             _raise_if_logged_out(s)
             s.screenshot_failure(f"{target_date}-activity-no-posts")
-            raise ScrapeError(f"No activity posts appeared at {activity_url}: {err}") from err
+            why = _describe_missing_posts(s.page)
+            logger.error("❌ LinkedIn fetch_posts: %s", why)
+            raise ScrapeError(f"No activity posts appeared at {activity_url}: {why}: {err}") from err
 
         _scroll_to_load(s.page)
 
-        post_locator = s.page.locator("[data-urn^='urn:li:activity:']")
+        post_locator = s.page.locator(_POST_SELECTOR)
         count = post_locator.count()
         logger.info("ℹ️ LinkedIn recent-activity: %d post containers visible", count)
         if count == 0:
@@ -236,14 +287,9 @@ def fetch_posts(target_date: Optional[str] = None) -> Optional[dict]:
             if len(posts) >= MAX_POSTS:
                 break
             post = post_locator.nth(i)
-            try:
-                urn = post.get_attribute("data-urn") or ""
-            except Exception:
+            activity_id = _post_activity_id(post)
+            if not activity_id:
                 continue
-            m = _URN_ID_RE.search(urn)
-            if not m:
-                continue
-            activity_id = m.group(1)
             if activity_id in seen_ids:
                 continue
             seen_ids.add(activity_id)
