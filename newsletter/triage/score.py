@@ -20,7 +20,6 @@ import hashlib
 import json
 import logging
 import re
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -30,6 +29,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from newsletter import llm
 from newsletter.topics import TOPICS, match_topic
 from newsletter.triage.criteria import load_overrides
+from newsletter.triage.json_cache import JsonFileCache
 
 logger = logging.getLogger("newsletter_triage.score")
 
@@ -37,7 +37,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 LLM_CACHE_PATH = REPO_ROOT / "results" / "newsletter" / "triage" / "llm_cache.json"
 
 
-class LLMCache:
+class LLMCache(JsonFileCache):
     """JSON cache for both stages, keyed by a hash of (model, prompt inputs).
 
     Makes re-runs and backtest iterations free for unchanged items; entries carry
@@ -45,15 +45,8 @@ class LLMCache:
     """
 
     def __init__(self, path: Path = LLM_CACHE_PATH) -> None:
-        self.path = path
-        self._lock = threading.Lock()
-        self._data: Dict[str, Any] = {}
+        super().__init__(path, label="llm cache")
         self.hits = self.misses = 0
-        if path.exists():
-            try:
-                self._data = json.loads(path.read_text(encoding="utf-8"))
-            except Exception as exc:
-                logger.warning("⚠️ llm cache unreadable (%s) — starting empty", exc)
 
     @staticmethod
     def key(model: str, *parts: str) -> str:
@@ -71,12 +64,6 @@ class LLMCache:
         with self._lock:
             self._data[k] = v
 
-    def flush(self) -> None:
-        with self._lock:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self.path.with_suffix(".tmp")
-            tmp.write_text(json.dumps(self._data, ensure_ascii=False), encoding="utf-8")
-            tmp.replace(self.path)
 
 TIER_WEIGHT = {"never": 0.0, "rarely": 0.35, "review": 1.0, "usually": 1.25, "always": 1.5}
 NEW_SENDER_WEIGHT = 0.85

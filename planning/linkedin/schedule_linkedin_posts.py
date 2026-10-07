@@ -108,6 +108,7 @@ from reporting.notion.editorial import (  # noqa: E402
 from reporting.notion.notion_update import format_database_id  # noqa: E402
 from planning._dates import date_to_day_title  # noqa: E402
 from planning._scheduler_main import (  # noqa: E402
+    build_scheduler_parser,
     drop_already_scheduled,
     notion_or_none,
     resolve_scope,
@@ -1204,20 +1205,14 @@ def schedule_one_row(
 # ---------- Main ----------
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Schedule LinkedIn posts from Notion editorial.")
-    parser.add_argument("--week-start", type=str, default=None,
-                        help="Monday of the target week (YYYY-MM-DD). Default: next Monday.")
-    parser.add_argument("--date", type=str, default=None,
-                        help="Single-day mode (YYYYMMDD or YYYY-MM-DD). Overrides --week-start.")
-    parser.add_argument("--all-wip", action="store_true",
-                        help="Schedule every WIP-LI row in the editorial DB, no date filter "
-                             "(supports multi-week planning runs).")
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--dry-run", action="store_true", help="Walk the flow up to Schedule dialog; do NOT schedule.")
-    mode.add_argument("--live", action="store_true", help="Actually click Schedule.")
-    parser.add_argument("--force", action="store_true", help="Schedule even if link LI is already populated.")
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging.")
-    return parser.parse_args()
+    return build_scheduler_parser(
+        "Schedule LinkedIn posts from Notion editorial.",
+        all_wip_help=("Schedule every WIP-LI row in the editorial DB, no date filter "
+                         "(supports multi-week planning runs)."),
+        dry_run_help="Walk the flow up to Schedule dialog; do NOT schedule.",
+        live_help="Actually click Schedule.",
+        force_help="Schedule even if link LI is already populated.",
+    ).parse_args()
 
 
 def main() -> tuple[int, list[dict]]:

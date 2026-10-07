@@ -53,7 +53,10 @@ from planning.twitter.twitter_session import (  # noqa: E402
     load_twitter_config,
 )
 from planning._failure import PostMayBeLiveError  # noqa: E402
-from planning._scheduler_main import run_single_post_scheduler  # noqa: E402
+from planning._scheduler_main import (  # noqa: E402
+    build_scheduler_parser,
+    run_single_post_scheduler,
+)
 
 logger = logging.getLogger("twitter_schedule")
 
@@ -169,20 +172,14 @@ def schedule_post(
 # ---------- Main ----------
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Schedule X (Twitter) content via /home composer.")
-    parser.add_argument("--week-start", type=str, default=None,
-                        help="Monday of the target week (YYYY-MM-DD). Default: next Monday.")
-    parser.add_argument("--date", type=str, default=None,
-                        help="Single-day mode (YYYYMMDD or YYYY-MM-DD). Overrides --week-start.")
-    parser.add_argument("--all-wip", action="store_true",
-                        help="Schedule every WIP-TW row in the editorial DB, no date filter "
-                             "(supports multi-week planning runs).")
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--dry-run", action="store_true", help="Walk the flow up to Confirm; do NOT submit.")
-    mode.add_argument("--live", action="store_true", help="Actually click Confirm + Schedule.")
-    parser.add_argument("--force", action="store_true", help="Schedule even if link TW is already populated.")
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging.")
-    return parser.parse_args()
+    return build_scheduler_parser(
+        "Schedule X (Twitter) content via /home composer.",
+        all_wip_help=("Schedule every WIP-TW row in the editorial DB, no date filter "
+                         "(supports multi-week planning runs)."),
+        dry_run_help="Walk the flow up to Confirm; do NOT submit.",
+        live_help="Actually click Confirm + Schedule.",
+        force_help="Schedule even if link TW is already populated.",
+    ).parse_args()
 
 
 def main() -> tuple[int, list[dict]]:

@@ -98,6 +98,31 @@ class ResolveScopeTests(unittest.TestCase):
         self.assertEqual(scope.target_days[-1], date(2026, 1, 11))
 
 
+class BuildSchedulerParserTests(unittest.TestCase):
+    def _parser(self, **over):
+        kw = dict(all_wip_help="every row", dry_run_help="dry", live_help="live", force_help="force")
+        kw.update(over)
+        return sm.build_scheduler_parser("desc", **kw)
+
+    def test_parsed_args_feed_resolve_scope(self):
+        args = self._parser().parse_args(["--live", "--date", "20260105", "--force"])
+        self.assertEqual((args.live, args.date, args.force, args.all_wip, args.debug),
+                         (True, "20260105", True, False, False))
+        scope = sm.resolve_scope(args, {}, wip_label="WIP-XX", log=LOG)
+        self.assertEqual((scope.dry_run, scope.target_days), (False, [date(2026, 1, 5)]))
+
+    def test_dry_run_and_live_are_mutually_exclusive(self):
+        with self.assertRaises(SystemExit), mock.patch("sys.stderr"):
+            self._parser().parse_args(["--dry-run", "--live"])
+
+    def test_all_wip_flag_is_optional(self):
+        args = self._parser(all_wip_help=None).parse_args([])
+        self.assertFalse(hasattr(args, "all_wip"))
+        scope = sm.resolve_scope(args, {"dry_run_default": True}, wip_label="WIP-XX", log=LOG)
+        self.assertTrue(scope.dry_run)
+        self.assertEqual(len(scope.target_days), 7)
+
+
 class DropAlreadyScheduledTests(unittest.TestCase):
     def setUp(self):
         self.rows = [SimpleNamespace(existing_post_url=None), SimpleNamespace(existing_post_url="u")]

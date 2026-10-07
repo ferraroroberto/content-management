@@ -20,7 +20,6 @@ import base64
 import json
 import logging
 import re
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
@@ -37,6 +36,7 @@ from config.loader import load_block
 from gmail_readonly.core import GmailLabel, GmailMailbox, GmailSearch
 from gmail_readonly.google_client import build_google_read_client
 from newsletter.cache import canonicalize_url
+from newsletter.triage.json_cache import JsonFileCache
 
 logger = logging.getLogger("newsletter_triage.gmail")
 
@@ -500,18 +500,11 @@ def publication_domain(url: str, sender_address: str = "") -> str:
 # redirect resolution — HTTP, cached, bounded
 
 
-class RedirectCache:
+class RedirectCache(JsonFileCache):
     """JSON-file cache ``{href_or_key: final_url | ""}`` with atomic writes."""
 
     def __init__(self, path: Path) -> None:
-        self.path = path
-        self._lock = threading.Lock()
-        self._data: Dict[str, str] = {}
-        if path.exists():
-            try:
-                self._data = json.loads(path.read_text(encoding="utf-8"))
-            except Exception as exc:
-                logger.warning("⚠️ redirect cache unreadable (%s) — starting empty", exc)
+        super().__init__(path, label="redirect cache")
         self._dirty = 0
 
     def get(self, key: str) -> Optional[str]:
@@ -524,19 +517,9 @@ class RedirectCache:
             if self._dirty >= 200:
                 self._flush_locked()
 
-    def flush(self) -> None:
-        with self._lock:
-            self._flush_locked()
-
     def _flush_locked(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self._data, ensure_ascii=False), encoding="utf-8")
-        tmp.replace(self.path)
+        super()._flush_locked()
         self._dirty = 0
-
-    def __len__(self) -> int:
-        return len(self._data)
 
 
 _UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "

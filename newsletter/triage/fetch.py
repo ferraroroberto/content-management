@@ -13,10 +13,8 @@ candidate; metered walls on the ``METERED_OK`` domains (HBR…) stay eligible.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
@@ -29,6 +27,7 @@ from lxml import html as lxml_html
 from readability import Document
 
 from newsletter.extractor import _AUTHOR_META_NAMES, _meta, _normalise_author
+from newsletter.triage.json_cache import JsonFileCache
 
 logger = logging.getLogger("newsletter_triage.fetch")
 
@@ -195,16 +194,9 @@ def fetch_one(session: requests.Session, url: str, *, timeout: float = 15.0) -> 
     return f
 
 
-class FetchCache:
+class FetchCache(JsonFileCache):
     def __init__(self, path: Path = FETCH_CACHE) -> None:
-        self.path = path
-        self._lock = threading.Lock()
-        self._data: Dict[str, Dict[str, Any]] = {}
-        if path.exists():
-            try:
-                self._data = json.loads(path.read_text(encoding="utf-8"))
-            except Exception as exc:
-                logger.warning("⚠️ fetch cache unreadable (%s) — starting empty", exc)
+        super().__init__(path, label="fetch cache")
 
     def get(self, url: str) -> Optional[Fetched]:
         d = self._data.get(url)
@@ -213,16 +205,6 @@ class FetchCache:
     def put(self, f: Fetched) -> None:
         with self._lock:
             self._data[f.url] = f.to_json()
-
-    def flush(self) -> None:
-        with self._lock:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self.path.with_suffix(".tmp")
-            tmp.write_text(json.dumps(self._data, ensure_ascii=False), encoding="utf-8")
-            tmp.replace(self.path)
-
-    def __len__(self) -> int:
-        return len(self._data)
 
 
 def _session(pool: int) -> requests.Session:

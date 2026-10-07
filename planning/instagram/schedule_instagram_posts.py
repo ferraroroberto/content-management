@@ -58,18 +58,22 @@ from planning.instagram.instagram_session import (  # noqa: E402
     load_notion_token,
 )
 from reporting.notion.editorial import (  # noqa: E402
-    get_field,
     retrieve_page,
     set_field,
 )
 from reporting.notion.notion_update import format_database_id  # noqa: E402
 from planning._dates import date_to_day_title  # noqa: E402
 from planning._scheduler_main import (  # noqa: E402
+    build_scheduler_parser,
     drop_already_scheduled,
     notion_or_none,
     resolve_scope,
 )
-from planning._wip_rows import iter_wip_pages  # noqa: E402
+from planning._wip_rows import (  # noqa: E402
+    illustration_filename,
+    iter_wip_pages,
+    resolve_image_path,
+)
 
 logger = logging.getLogger("instagram_schedule")
 
@@ -145,30 +149,6 @@ def fetch_wip_ig_rows(notion, db_id: str, ed_cols: dict, days: Optional[list[dat
     return rows
 
 
-def _resolve_image_path(folder: str, image_filename: str) -> Path:
-    """Resolve <folder>/<name>.png. Accepts a name with or without extension.
-
-    The illustration title in Notion is the bare filename stem; on disk the
-    Instagram-format copies live as ``<stem>.png`` under
-    ``archived_IGformat/``.
-    """
-    if not image_filename:
-        raise FileNotFoundError("Illustration row has no filename.")
-    first = str(image_filename).split(",")[0].strip()
-    if first and not first.lower().endswith(".png"):
-        first = f"{first}.png"
-    candidate = Path(folder) / first
-    if not candidate.exists():
-        raise FileNotFoundError(f"Illustration not found: {candidate}")
-    return candidate
-
-
-def _illustration_filename(notion, illustration_page_id: str, illust_cols: dict) -> str:
-    page = retrieve_page(notion, illustration_page_id)
-    name = get_field(page, "image_filename", illust_cols) or ""
-    return str(name).strip()
-
-
 def resolve_post_payload(notion, cfg: dict, row: ScheduleRow) -> PostPayload:
     """Build the (image paths, caption) for the day's 15:00 feed post."""
     illust_cols = cfg["illustration_columns"]
@@ -193,9 +173,9 @@ def resolve_post_payload(notion, cfg: dict, row: ScheduleRow) -> PostPayload:
         paths: list[Path] = []
         missing = 0
         for rel in illust_rels:
-            fname = _illustration_filename(notion, rel["id"], illust_cols)
+            fname = illustration_filename(notion, rel["id"], illust_cols)
             try:
-                paths.append(_resolve_image_path(folder, fname))
+                paths.append(resolve_image_path(folder, fname))
             except FileNotFoundError as err:
                 missing += 1
                 logger.warning("⚠️  %s: carousel illustration missing, skipping: %s", row.day_title, err)
@@ -213,9 +193,9 @@ def resolve_post_payload(notion, cfg: dict, row: ScheduleRow) -> PostPayload:
 
     if not row.illustration_ig_ids:
         raise RuntimeError(f"{row.day_title}: illustration IG is empty.")
-    fname = _illustration_filename(notion, row.illustration_ig_ids[0], illust_cols)
+    fname = illustration_filename(notion, row.illustration_ig_ids[0], illust_cols)
     return PostPayload(
-        image_paths=[_resolve_image_path(folder, fname)],
+        image_paths=[resolve_image_path(folder, fname)],
         caption=row.text_ig,
     )
 
@@ -242,8 +222,8 @@ def resolve_story_payload(notion, cfg: dict, row: ScheduleRow) -> PostPayload:
         first_id = rels[0]["id"]
     else:
         raise RuntimeError(f"{row.day_title}: nothing to use for story.")
-    fname = _illustration_filename(notion, first_id, illust_cols)
-    return PostPayload(image_paths=[_resolve_image_path(folder, fname)])
+    fname = illustration_filename(notion, first_id, illust_cols)
+    return PostPayload(image_paths=[resolve_image_path(folder, fname)])
 
 
 # ---------- Meta planner UI helpers ----------
@@ -886,20 +866,14 @@ def schedule_post(
 # ---------- Main ----------
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Schedule Instagram + Facebook content via the Meta planner.")
-    parser.add_argument("--week-start", type=str, default=None,
-                        help="Monday of the target week (YYYY-MM-DD). Default: next Monday.")
-    parser.add_argument("--date", type=str, default=None,
-                        help="Single-day mode (YYYYMMDD or YYYY-MM-DD). Overrides --week-start.")
-    parser.add_argument("--all-wip", action="store_true",
-                        help="Schedule every WIP-IG row in the editorial DB, no date filter "
-                             "(supports multi-week planning runs).")
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--dry-run", action="store_true", help="Walk the flow up to Schedule; do NOT submit.")
-    mode.add_argument("--live", action="store_true", help="Actually click Save/Schedule.")
-    parser.add_argument("--force", action="store_true", help="Schedule even if link IG is already populated.")
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging.")
-    return parser.parse_args()
+    return build_scheduler_parser(
+        "Schedule Instagram + Facebook content via the Meta planner.",
+        all_wip_help=("Schedule every WIP-IG row in the editorial DB, no date filter "
+                         "(supports multi-week planning runs)."),
+        dry_run_help="Walk the flow up to Schedule; do NOT submit.",
+        live_help="Actually click Save/Schedule.",
+        force_help="Schedule even if link IG is already populated.",
+    ).parse_args()
 
 
 def main() -> tuple[int, list[dict]]:
