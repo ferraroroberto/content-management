@@ -153,6 +153,27 @@ SEL_SORT_RECENT_OPTION = [
     "li:has-text('Most recent')",
 ]
 
+# Pacing for the unattended per-post scrape. The values are the originals,
+# unchanged by naming them; each comment says what the pause or count is for.
+POST_LOAD_TIMEOUT_MS = 45_000        # goto() budget for a slow LinkedIn post page
+NETWORK_IDLE_TIMEOUT_MS = 15_000     # best-effort wait; the scrape proceeds if it expires
+POST_SETTLE_MS = 1_500               # let the post body and action bar render after load
+COMMENT_LIST_TIMEOUT_MS = 10_000     # how long to wait for the comment-list container
+HYDRATE_SCROLLS = 4                  # page-heights down before comments hydrate
+HYDRATE_WHEEL_PX = 1_200             # ~one viewport per step
+HYDRATE_PAUSE_MS = 500               # lets each scroll step trigger its lazy load
+ANCHOR_SETTLE_MS = 800               # after scrolling the Comment button into view
+LAZY_LOAD_SCROLLS = 8                # phase 1: unconditional scrolls to trigger comment lazy-load
+STABLE_SCROLL_PASSES = 10            # phase 2: max scrolls while waiting for the count to stop growing
+LAZY_LOAD_WHEEL_PX = 1_500           # a little more than a viewport per comment-loading step
+LAZY_LOAD_PAUSE_MS = 600             # phase 1: time for newly-scrolled comments to render
+STABLE_SCROLL_PAUSE_MS = 700         # phase 2: slightly longer, the count is read right after
+MIN_COMMENT_BOXES = 2                # the post body is itself one text-box, so comments need >= 2
+STABLE_PASSES_TO_STOP = 2            # consecutive unchanged counts that mean "fully loaded"
+EXTRACT_SETTLE_MS = 1_000            # final settle before reading the DOM
+SORT_MENU_SETTLE_MS = 400            # sort dropdown opening
+SORT_APPLIED_SETTLE_MS = 1_200       # the re-sorted list re-rendering
+
 
 # JS extractor — runs in the page context, walks the DOM by stable hooks
 # (data-testid + href patterns), tolerates the obfuscated class soup. Returns
@@ -342,12 +363,12 @@ def _try_switch_to_most_recent(page: Page) -> bool:
                 continue
             trigger.scroll_into_view_if_needed()
             trigger.click()
-            page.wait_for_timeout(400)
+            page.wait_for_timeout(SORT_MENU_SETTLE_MS)
             for opt_sel in SEL_SORT_RECENT_OPTION:
                 opt = page.locator(opt_sel).first
                 if opt.count() and opt.is_visible():
                     opt.click()
-                    page.wait_for_timeout(1200)
+                    page.wait_for_timeout(SORT_APPLIED_SETTLE_MS)
                     logger.info("↕️ switched comment sort → Most recent")
                     return True
         except Exception as err:
@@ -458,23 +479,23 @@ def scrape_post_comments(
     uses to tell a quiet day (0 comments, no error) from a broken scrape (0
     comments because extraction never found what it was looking for)."""
     logger.info("➡️ scraping %s", post_url)
-    page.goto(post_url, wait_until="domcontentloaded", timeout=45_000)
+    page.goto(post_url, wait_until="domcontentloaded", timeout=POST_LOAD_TIMEOUT_MS)
 
     # Comments are lazy-loaded — scroll the bottom of the post into view to
     # trigger the comments-section hydration, then wait for the network to
     # settle before we look for comment articles.
     try:
-        page.wait_for_load_state("networkidle", timeout=15_000)
+        page.wait_for_load_state("networkidle", timeout=NETWORK_IDLE_TIMEOUT_MS)
     except PWTimeoutError:
         logger.debug("networkidle wait timed out — proceeding anyway")
-    page.wait_for_timeout(1_500)
+    page.wait_for_timeout(POST_SETTLE_MS)
 
     # Scroll a few page-heights down — LinkedIn hydrates the comments only
     # once the comment region is close to the viewport.
-    for _ in range(4):
+    for _ in range(HYDRATE_SCROLLS):
         try:
-            page.mouse.wheel(0, 1200)
-            page.wait_for_timeout(500)
+            page.mouse.wheel(0, HYDRATE_WHEEL_PX)
+            page.wait_for_timeout(HYDRATE_PAUSE_MS)
         except Exception:
             break
     # Then jump to the "Comment" action button if present — most reliable anchor.
@@ -483,47 +504,49 @@ def scrape_post_comments(
             anchor = page.locator(anchor_sel).first
             if anchor.count() and anchor.is_visible():
                 anchor.scroll_into_view_if_needed()
-                page.wait_for_timeout(800)
+                page.wait_for_timeout(ANCHOR_SETTLE_MS)
                 break
         except Exception:
             continue
-    page.wait_for_timeout(1_500)
+    page.wait_for_timeout(POST_SETTLE_MS)
 
     # Wait for the comment-list container before trying to extract.
     try:
-        page.wait_for_selector(SEL_COMMENT_LIST_CONTAINER, timeout=10_000)
+        page.wait_for_selector(SEL_COMMENT_LIST_CONTAINER, timeout=COMMENT_LIST_TIMEOUT_MS)
     except PWTimeoutError:
-        logger.warning("⚠️ comment list container not found within 10s on %s", post_url)
+        logger.warning("⚠️ comment list container not found within %ds on %s",
+                       COMMENT_LIST_TIMEOUT_MS // 1000, post_url)
 
     _try_switch_to_most_recent(page)
 
     # Scroll until expandable-text-box count stabilises. The post body itself
-    # is rendered as ONE text-box, so we need count >= 2 before considering
-    # the comments loaded (otherwise we exit early on a post-only page).
-    # Phase 1: 8 unconditional scrolls to trigger lazy-load. Phase 2: 10 more,
-    # exit early on stability with count >= 2.
-    for _ in range(8):
+    # is rendered as ONE text-box, so we need count >= MIN_COMMENT_BOXES before
+    # considering the comments loaded (otherwise we exit early on a post-only page).
+    # Phase 1: LAZY_LOAD_SCROLLS unconditional scrolls to trigger lazy-load.
+    # Phase 2: up to STABLE_SCROLL_PASSES more, exit early on stability with
+    # count >= MIN_COMMENT_BOXES.
+    for _ in range(LAZY_LOAD_SCROLLS):
         try:
-            page.mouse.wheel(0, 1500)
-            page.wait_for_timeout(600)
+            page.mouse.wheel(0, LAZY_LOAD_WHEEL_PX)
+            page.wait_for_timeout(LAZY_LOAD_PAUSE_MS)
         except Exception:
             break
     last_count, stable_passes = -1, 0
-    for _ in range(10):
+    for _ in range(STABLE_SCROLL_PASSES):
         try:
             count = page.locator(SEL_COMMENT_TEXT_NODES).count()
         except Exception:
             count = 0
-        if count >= 2 and count == last_count:
+        if count >= MIN_COMMENT_BOXES and count == last_count:
             stable_passes += 1
-            if stable_passes >= 2:
+            if stable_passes >= STABLE_PASSES_TO_STOP:
                 break
         else:
             stable_passes = 0
         last_count = count
         try:
-            page.mouse.wheel(0, 1500)
-            page.wait_for_timeout(700)
+            page.mouse.wheel(0, LAZY_LOAD_WHEEL_PX)
+            page.wait_for_timeout(STABLE_SCROLL_PAUSE_MS)
         except Exception:
             break
     logger.info("📊 comment text-boxes on page after scroll: %d", last_count)
@@ -531,7 +554,7 @@ def scrape_post_comments(
     _expand_all_comments(page)
 
     # Final settle before extraction.
-    page.wait_for_timeout(1_000)
+    page.wait_for_timeout(EXTRACT_SETTLE_MS)
 
     my_handle = _my_handle_from_config()
     result = page.evaluate(

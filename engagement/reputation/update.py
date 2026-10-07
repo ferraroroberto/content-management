@@ -104,6 +104,7 @@ def _aggregate(
     display_name: Optional[str] = None
 
     praise_terms = phrases["generic_praise_substrings"]
+    sub_2_min_max_seconds = phrases["rules"]["sub_2_min_max_seconds"]
 
     for r in rows:
         text = (r.get("text") or "").strip()
@@ -117,7 +118,7 @@ def _aggregate(
         secs = _seconds_after(r.get("post_posted_at"), r.get("posted_at"))
         if secs is not None:
             seconds_to_comment.append(secs)
-            if secs <= 120:
+            if secs <= sub_2_min_max_seconds:
                 counters["sub_2_min_count"] += 1
         if text_norm and text_norm in duplicates:
             counters["exact_dup_count"] += 1
