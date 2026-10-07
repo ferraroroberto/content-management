@@ -377,18 +377,6 @@ def import_history(history_dir: Path = HISTORY_DIR) -> Dict[str, int]:
     return {"editions": n_e, "picks": n_p}
 
 
-def next_edition_number() -> Optional[str]:
-    """``N<max+1>`` from ``triage_editions`` (the next free edition), or None when the table is empty."""
-    rows = _t("triage_editions").select("number").order("number", desc=True).limit(1).execute().data or []
-    if not rows:
-        return None
-    num = rows[0]["number"]
-    try:
-        return f"N{int(num.lstrip('N')) + 1}"
-    except ValueError:
-        return None
-
-
 def table_counts() -> Dict[str, int]:
     out: Dict[str, int] = {}
     for name in TABLES:
