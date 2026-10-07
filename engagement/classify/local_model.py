@@ -130,7 +130,7 @@ def featurize_one(comment: dict, duplicate_texts: set, phrases: dict) -> dict:
         "is_emoji_only": int(_is_emoji_only(text)),
         "generic_praise_hits": _generic_praise_hits(text_norm, phrases["generic_praise_substrings"]),
         "has_personal_token": int(_has_personal_token(text_norm, phrases["personal_tokens"])),
-        "sub_2_min": int(secs is not None and secs <= 120),
+        "sub_2_min": int(secs is not None and secs <= phrases["rules"]["sub_2_min_max_seconds"]),
         "exact_text_duplicate": int(bool(text_norm) and text_norm in duplicate_texts),
     }
 

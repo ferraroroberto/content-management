@@ -122,7 +122,7 @@ def _score_comment(
         reasons.append({"rule": "exact_text_duplicate", "weight": rules["exact_text_duplicate_weight"]})
 
     secs = _seconds_after(comment.get("post_posted_at"), comment.get("posted_at"))
-    if secs is not None and secs <= 120:
+    if secs is not None and secs <= rules["sub_2_min_max_seconds"]:
         score += rules["sub_2_min_weight"]
         reasons.append({"rule": "sub_2_min", "seconds": secs, "weight": rules["sub_2_min_weight"]})
 
