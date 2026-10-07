@@ -64,6 +64,12 @@ def _seed(conn, rows):
     return ids
 
 
+def _retire_similar(conn):
+    """Put every Similar Match row in the retired state the removed lane used to set."""
+    conn.execute("update results set retired = 1 where match_type = 'Similar Match'")
+    conn.commit()
+
+
 class CheckIpStoreTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -385,117 +391,6 @@ class CheckIpStoreTests(unittest.TestCase):
         self.assertEqual((stats["not_fully_assessed"], stats["nothing_to_assess"]), (1, 1))
         overview = review.overview(self.conn)
         self.assertEqual((overview["not_fully_assessed"], overview["nothing_to_assess"]), (1, 1))
-
-    # ── the migration lane (issue #295 §5) ────────────────────────────────
-
-    def test_backfill_maps_the_credit_only_screening_without_inventing_facts(self):
-        """`migrate --assess-conditions`, on rows shaped like the live store's.
-
-        The mapping is deliberately lossy in one direction only: a flag that
-        fired becomes a violation, a flag that did not fire becomes NULL,
-        because "not flagged promotional" never meant "checked and clean".
-        """
-        plain, promo, altered, acceptable, unclear, unscreened = _seed(self.conn, [
-            {"found_link": "https://example.test/plain"},
-            {"found_link": "https://example.test/promo"},
-            {"found_link": "https://example.test/altered", "ok": 0, "person": "contact-ref"},
-            {"found_link": "https://example.test/acceptable"},
-            {"found_link": "https://example.test/unclear"},
-            {"found_link": "https://example.test/untouched"},
-        ])
-        # The pre-#295 shape, written directly: record_verdict no longer
-        # produces it, and the point is to migrate stores that already hold it.
-        for row_id, verdict, promotional, edited in (
-            (plain, "infringement", 0, 0),
-            (promo, "infringement", 1, 0),
-            (altered, "infringement", 0, 1),
-            (acceptable, "acceptable", 0, 0),
-            (unclear, "unclear", 0, 0),
-        ):
-            self.conn.execute(
-                "update results set screen_verdict = ?, screen_promotional = ?, "
-                "screen_altered = ?, screened_at = '2026-01-02 03:04:05', "
-                "screen_source = 'check-ip skill' where id = ?",
-                (verdict, promotional, edited, row_id))
-        self.conn.commit()
-
-        before = db.counts(self.conn)
-        result = db.backfill_licence_conditions(self.conn)
-        after = db.counts(self.conn)
-
-        self.assertEqual(result["mapped"], 5)
-        self.assertEqual((after["annotated"], after["results"], after["screened"]),
-                         (before["annotated"], before["results"], before["screened"]),
-                         "the migration changed the shape of the store")
-
-        mapped = {r["id"]: dict(r) for r in self.conn.execute(
-            "select id, screen_verdict, screen_outcome, screen_credit_ok, "
-            "screen_noncommercial_ok, screen_unmodified_ok from results")}
-
-        # An infringement was a failed credit check, and nothing else was asked.
-        self.assertEqual((mapped[plain]["screen_credit_ok"],
-                          mapped[plain]["screen_noncommercial_ok"],
-                          mapped[plain]["screen_unmodified_ok"]), (0, None, None))
-        self.assertEqual(mapped[plain]["screen_verdict"], "infringement")
-
-        # A flag that fired is the one thing that *was* established.
-        self.assertEqual(mapped[promo]["screen_noncommercial_ok"], 0)
-        self.assertIsNone(mapped[promo]["screen_unmodified_ok"])
-        self.assertEqual(mapped[altered]["screen_unmodified_ok"], 0)
-        self.assertIsNone(mapped[altered]["screen_noncommercial_ok"])
-
-        # The deliberate, visible consequence: an `acceptable` row becomes
-        # "credit met, the other two unknown", not "compliant".
-        self.assertEqual(mapped[acceptable]["screen_credit_ok"], 1)
-        self.assertIsNone(mapped[acceptable]["screen_noncommercial_ok"])
-        self.assertIsNone(mapped[acceptable]["screen_unmodified_ok"])
-        self.assertEqual(mapped[acceptable]["screen_verdict"], "unclear",
-                         "a credit-only pass still reads as acceptable")
-
-        # An unclear row established nothing at all. It is marked `ambiguous`
-        # rather than permanent: the legacy bucket mixed both kinds and the
-        # store cannot say which, so the row stays in the re-screen pile.
-        self.assertEqual((mapped[unclear]["screen_credit_ok"],
-                          mapped[unclear]["screen_noncommercial_ok"],
-                          mapped[unclear]["screen_unmodified_ok"]), (None, None, None))
-        for row_id in (acceptable, unclear):
-            with self.subTest(row=row_id):
-                self.assertEqual(mapped[row_id]["screen_outcome"], db.OUTCOME_AMBIGUOUS)
-        self.assertIsNone(mapped[plain]["screen_outcome"],
-                          "an infringement is not a kind of unclear")
-        self.assertEqual(
-            screen.stats(self.conn, source="LinkedIn")["nothing_to_assess"], 0,
-            "the mapping invented a permanently-unassessable row")
-
-        # A never-screened row is not touched.
-        self.assertIsNone(mapped[unscreened]["screen_verdict"])
-        self.assertEqual(result["not_fully_assessed"], 5)
-
-        # The owner's annotation on the altered row survived untouched.
-        self.assertEqual(dict(self.conn.execute(
-            "select ok, person from results where id = ?", (altered,)).fetchone()),
-            {"ok": 0, "person": "contact-ref"})
-
-        # Idempotent: a second pass finds nothing left to map and changes nothing.
-        again = db.backfill_licence_conditions(self.conn)
-        self.assertEqual((again["mapped"], again["already_mapped"]), (0, 5))
-        self.assertEqual(
-            {r["id"]: dict(r) for r in self.conn.execute(
-                "select id, screen_verdict, screen_outcome, screen_credit_ok, "
-                "screen_noncommercial_ok, screen_unmodified_ok from results")},
-            mapped, "a second pass rewrote rows it had already mapped")
-
-    def test_backfill_leaves_rows_screened_under_the_new_criteria_alone(self):
-        """A fully-assessed row must not be re-derived from the frozen flags."""
-        (row_id,) = _seed(self.conn, [{"found_link": "https://example.test/new"}])
-        screen.record_verdict(self.conn, row_id, verdict="acceptable",
-                              credit_ok=1, noncommercial_ok=1, unmodified_ok=1)
-        result = db.backfill_licence_conditions(self.conn)
-        self.assertEqual((result["mapped"], result["already_mapped"]), (0, 1))
-        row = self.conn.execute(
-            "select screen_verdict, screen_credit_ok, screen_noncommercial_ok, "
-            "screen_unmodified_ok from results where id = ?", (row_id,)).fetchone()
-        self.assertEqual(tuple(row), ("acceptable", 1, 1, 1))
 
     # ── poster identity, which drives the queue ranking ───────────────────
 
@@ -1014,31 +909,6 @@ class CheckIpStoreTests(unittest.TestCase):
         self.assertNotIn(similar_live, [r["id"] for r in served],
                          "an un-retired Similar Match row reached the queue")
 
-    def test_retire_similar_matches_flags_without_deleting(self):
-        """The retirement is reversible and leaves every annotated row alone."""
-        exact, plain, annotated = _seed(self.conn, [
-            {"found_link": "https://example.test/exact", "match_type": "Exact Match"},
-            {"found_link": "https://example.test/plain", "match_type": "Similar Match"},
-            {"found_link": "https://example.test/judged", "match_type": "Similar Match",
-             "ok": 1, "person": "contact-ref"},
-        ])
-
-        result = db.retire_similar_matches(self.conn)
-        self.assertEqual(result, {"retired": 1, "already_retired": 0, "kept_annotated": 1})
-
-        rows = {r["id"]: r for r in self.conn.execute(
-            "select id, retired, ok, person, match_type from results")}
-        self.assertEqual(len(rows), 3, "retirement deleted a row")
-        self.assertEqual(rows[plain]["retired"], 1)
-        self.assertEqual(rows[exact]["retired"], 0, "an Exact Match row was retired")
-        self.assertEqual(rows[annotated]["retired"], 0,
-                         "a row carrying an owner decision was hidden from the tab")
-        self.assertEqual((rows[annotated]["ok"], rows[annotated]["person"]), (1, "contact-ref"))
-
-        # Idempotent: a second pass finds nothing new to do.
-        self.assertEqual(db.retire_similar_matches(self.conn),
-                         {"retired": 0, "already_retired": 1, "kept_annotated": 1})
-
     def test_stats_reports_retired_rows_outside_the_workable_totals(self):
         _seed(self.conn, [
             {"found_link": "https://example.test/exact", "match_type": "Exact Match"},
@@ -1047,7 +917,7 @@ class CheckIpStoreTests(unittest.TestCase):
         before = screen.stats(self.conn, source="LinkedIn")
         self.assertEqual((before["canonical"], before["retired"]), (2, 0))
 
-        db.retire_similar_matches(self.conn)
+        _retire_similar(self.conn)
         after = screen.stats(self.conn, source="LinkedIn")
         self.assertEqual(after["canonical"], 1, "a retired row still counts as workable")
         self.assertEqual(after["retired"], 1)
@@ -1058,7 +928,7 @@ class CheckIpStoreTests(unittest.TestCase):
             {"found_link": "https://example.test/exact", "match_type": "Exact Match"},
             {"found_link": "https://example.test/similar", "match_type": "Similar Match"},
         ])
-        db.retire_similar_matches(self.conn)
+        _retire_similar(self.conn)
 
         frame = review.results_frame(self.conn, source="LinkedIn", status="everything")
         self.assertEqual(list(frame["found_link"]), ["https://example.test/exact"])
@@ -1235,7 +1105,7 @@ class CheckIpStoreTests(unittest.TestCase):
             {"found_link": f"https://www.linkedin.com/posts/{slug}",
              "match_type": "Exact Match", "search_date": "2026-03-01 00:00:00"},
         ])
-        db.retire_similar_matches(self.conn)
+        _retire_similar(self.conn)
         db.mark_duplicates(self.conn)
 
         flags = {r["id"]: r["duplicate"] for r in self.conn.execute(
@@ -1411,68 +1281,6 @@ class CheckIpStoreTests(unittest.TestCase):
         # And it does preserve every screening column, or a re-screen would
         # silently drop whichever one was left out.
         self.assertEqual(set(db.SCREEN_HISTORY_COLUMNS) - columns, set())
-
-    def test_backfilling_history_writes_no_row_twice_and_leaves_results_alone(self):
-        """The back-fill lane: idempotent, and `results` is not touched at all.
-
-        Also covers the convergence that matters after it — a later re-screen
-        of a back-filled row records no second copy of the opinion already in
-        the table, because it is the same (row, screening timestamp).
-        """
-        ids = _seed(self.conn, [
-            {"found_link": "https://example.test/d"},
-            {"found_link": "https://example.test/e"},
-        ])
-        export = [
-            {"id": ids[0], "screen_verdict": "unclear", "screen_outcome": "ambiguous",
-             "screen_reason": "invented observation one", "screened_at": "2026-01-01 00:00:00",
-             "screen_source": "credit-only pass", "screen_credit_ok": 1},
-            {"id": ids[1], "screen_verdict": "infringement", "screen_outcome": None,
-             "screen_reason": "invented observation two", "screened_at": "2026-01-02 00:00:00",
-             "screen_source": "credit-only pass", "screen_credit_ok": 0},
-            {"id": max(ids) + 9999, "screen_verdict": "unclear",
-             "screen_reason": "row that is not in the store",
-             "screened_at": "2026-01-03 00:00:00"},
-        ]
-        fingerprint = self.conn.execute(
-            "select count(*) n, coalesce(sum(coalesce(ok, 0)), 0) s from results").fetchone()
-
-        first = db.backfill_screen_history(self.conn, export)
-        self.assertEqual(first["inserted"], 2)
-        self.assertEqual(first["unknown_ids"], [max(ids) + 9999],
-                         "an id absent from the store must be reported, not invented")
-
-        second = db.backfill_screen_history(self.conn, export)
-        self.assertEqual(second["inserted"], 0, "the back-fill is not idempotent")
-        self.assertEqual(second["already_present"], 2)
-        self.assertEqual(self.conn.execute(
-            "select count(*) n from screen_history").fetchone()["n"], 2)
-
-        after = self.conn.execute(
-            "select count(*) n, coalesce(sum(coalesce(ok, 0)), 0) s from results").fetchone()
-        self.assertEqual(tuple(fingerprint), tuple(after),
-                         "the back-fill wrote to results")
-
-        # Now re-screen a back-filled row whose current state is the one the
-        # export recorded: the opinion is already preserved, so nothing is added.
-        self.conn.execute(
-            "update results set screen_verdict = 'unclear', screen_outcome = 'ambiguous', "
-            "screen_reason = 'invented observation one', screened_at = '2026-01-01 00:00:00', "
-            "screen_source = 'credit-only pass', screen_credit_ok = 1 where id = ?", (ids[0],))
-        self.conn.commit()
-        out = screen.record_verdict(self.conn, ids[0], verdict="infringement",
-                                    reason="invented re-screen observation",
-                                    screen_source="three-condition re-screen",
-                                    credit_ok=0, noncommercial_ok=1, unmodified_ok=1)
-        self.assertEqual(self.conn.execute(
-            "select count(*) n from screen_history where result_id = ?",
-            (ids[0],)).fetchone()["n"], 1,
-            "the re-screen duplicated an opinion the back-fill had already kept")
-        # Still a supersession, even though this call wrote no history row: the
-        # question is whether the replaced opinion is preserved, not whether
-        # this particular write is what preserved it.
-        self.assertTrue(out["superseded"],
-                        "a re-screen of a back-filled row reported nothing superseded")
 
 
 class CheckIpProcessTests(unittest.TestCase):

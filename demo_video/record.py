@@ -231,22 +231,4 @@ def run_recording(demo: Demo, folder: Path, lang: str) -> Path:
     return path
 
 
-def beats_in_order(marks: dict, take: Take) -> list[str]:
-    """Problems with a take's marks: a missing beat, ``end ≤ start``, or beats out of order."""
-    problems = []
-    for role in take.pages:
-        last = -1.0
-        for beat in take.beats:
-            span = marks.get(role, {}).get(beat.name)
-            if span is None:
-                problems.append(f"{role}: beat {beat.name} missing")
-                continue
-            if span[1] <= span[0]:
-                problems.append(f"{role}: beat {beat.name} ends before it starts")
-            if span[0] < last:
-                problems.append(f"{role}: beat {beat.name} starts before the previous one ended")
-            last = span[1]
-    return problems
-
-
-__all__ = ["Beat", "Runner", "load_driver", "record_take", "run_recording", "beats_in_order"]
+__all__ = ["Beat", "Runner", "load_driver", "record_take", "run_recording"]

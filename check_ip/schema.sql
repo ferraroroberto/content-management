@@ -35,7 +35,7 @@ create table if not exists results (
     match_type     text,                         -- 'Exact Match' | 'Similar Match' (retired)
 
     -- 1 = out of scope for the queue and the tab, kept for the record.
-    -- Set only by db.retire_similar_matches() via `migrate --retire-similar`
+    -- Set once for every Similar Match row by a since-removed migration lane
     -- (issue #292). Deliberately a flag and not a DELETE: every row cost a
     -- SerpAPI call and could not be re-derived without paying for it again,
     -- so a change of heart stays one UPDATE away.
@@ -104,7 +104,7 @@ create table if not exists results (
     -- The record of the credit-only screening pass: 1 = the poster pushed
     -- their own following or product · 1 = the watermark was cropped, painted
     -- over or removed. Both were narrower than the licence they stood in for,
-    -- so `migrate --assess-conditions` mapped them onto screen_noncommercial_ok
+    -- so a one-off migration (#295) mapped them onto screen_noncommercial_ok
     -- and screen_unmodified_ok and nothing writes them any more. Kept, not
     -- dropped: they are what that pass actually established, and the mapping
     -- is only auditable while the input survives.
@@ -202,7 +202,7 @@ create table if not exists api_history (
 
 create index if not exists api_history_image_idx on api_history (local_image, search_date);
 
--- Bookkeeping for migrate.py so a re-run is a no-op it can prove rather than assume.
+-- Bookkeeping for migrate.py: the stamps its lane leaves so a run can be audited.
 create table if not exists meta (
     key   text primary key,
     value text

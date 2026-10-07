@@ -46,24 +46,14 @@ a queue of 13,000 links: the worst it can do is propose something wrong.
 ## Commands
 
 ```powershell
-# import the legacy Excel store (idempotent — run it twice, nothing changes)
-& .\.venv\Scripts\python.exe -m check_ip.migrate --report    # reconcile, write nothing
-& .\.venv\Scripts\python.exe -m check_ip.migrate
-
 # reverse-image search — COSTS MONEY, one SerpAPI call per image
 & .\.venv\Scripts\python.exe -m check_ip.run --dry-run       # what it would search
 & .\.venv\Scripts\python.exe -m check_ip.run --limit 10      # a small live run
 & .\.venv\Scripts\python.exe -m check_ip.run                 # everything that is due
 & .\.venv\Scripts\python.exe -m check_ip.run --force         # ignore re-search windows
 
-# retire the stored 'Similar Match' rows (issue #292) — flags them, deletes nothing
-& .\.venv\Scripts\python.exe -m check_ip.migrate --retire-similar
-
 # re-elect the canonical row of every group (issue #291) — writes only `duplicate`
 & .\.venv\Scripts\python.exe -m check_ip.migrate --recompute-duplicates
-
-# map screened rows onto the three licence conditions (issue #295)
-& .\.venv\Scripts\python.exe -m check_ip.migrate --assess-conditions
 
 # the screening queue
 & .\.venv\Scripts\python.exe -m check_ip.screen stats
@@ -112,8 +102,8 @@ all reverted. Removing the category removes the exposure
 So: `MATCH_TYPES` no longer maps the `visual_matches` section, a live run skips
 that search rather than paying for it, `next_batch` filters on
 `match_type = 'Exact Match'`, and the 139,874 stored similar matches are
-**retired, not deleted** — `results.retired = 1`, set by
-`migrate --retire-similar`, reversible with one `update`. Each of those rows
+**retired, not deleted** — `results.retired = 1`, set once by a migration lane
+since removed (git history has it), reversible with one `update`. Each of those rows
 cost a SerpAPI call and could not be re-derived without paying again.
 
 A retired row is out of the queue, out of the tab and out of every `screen
@@ -220,7 +210,8 @@ credit check, clearing both whenever the verdict was not `infringement`. So a
 post that credited me properly and was plainly a company's marketing scored
 `acceptable`, severity 0, and never reached the tab.
 
-`migrate --assess-conditions` maps those rows without inventing anything:
+A one-off migration (since removed; git history has it) mapped those rows
+without inventing anything:
 `screen_credit_ok` from the old verdict (credit *was* the question that pass
 asked), and the other two set to `0` only where the old flag positively fired,
 `NULL` otherwise — a row not flagged promotional was never checked for a paid
@@ -230,8 +221,8 @@ re-screen (`/check-ip --recheck`), because marking it compliant would invent a
 fact the screening never established.
 
 `screen_promotional` and `screen_altered` are **frozen** after that mapping:
-still in the table as the record of what that pass established and what the
-mapping read, no longer written by anything.
+still in the table as the record of what that pass established, no longer
+written by anything.
 
 ## Superseded screening opinions are kept
 
@@ -257,16 +248,11 @@ Things worth knowing:
   written by this package, and have nothing to be superseded by. A test asserts
   the column list, so adding one fails the suite rather than shipping.
 - **One row per `(result_id, screened_at)`.** Re-preserving a state already in
-  the table is a no-op, which is what makes the back-fill idempotent and stops
-  the first re-screen of a back-filled row recording the same opinion twice.
-- **`migrate --backfill-history`** lands the opinions from
-  `screen_reasons_pre_rescreen.json` — a one-off export taken by hand before the
-  first three-condition re-screen, and the only surviving copy of what those 310
-  rows observed. The lane writes only `screen_history`, reads the export without
-  moving it, and takes the row / annotation / screened counts either side; a
-  change in any of them is a failure, not a warning. The export carried no
-  `poster_url`, so back-filled rows have it NULL — it is unaffected on `results`,
-  which only ever coalesces it.
+  the table is a no-op, which stops a re-screen recording the same opinion twice.
+- **The pre-re-screen opinions are already in the table.** A one-off lane
+  (since removed; git history has it) landed the 310 opinions from a hand-taken
+  export taken before the first three-condition re-screen. They carry no
+  `poster_url`, so those rows have it NULL.
 - **Growth is negligible** — a few hundred rows per re-screen pass.
 
 ## How the queue ranks
@@ -285,9 +271,9 @@ than silently wrong (`config.json` is gitignored).
 
 | module | does |
 |---|---|
-| `db.py` | the store — connection, schema, the canonical link, duplicate marking, per-image tallies, retirement, screening history |
+| `db.py` | the store — connection, schema, the canonical link, duplicate marking, per-image tallies, screening history |
 | `schema.sql` | four tables plus a `meta` bookkeeping row |
-| `migrate.py` | one-shot Excel → SQLite import + payload extraction; also the store's bulk-update lanes (`--retire-similar`, `--recompute-duplicates`, `--assess-conditions`, `--backfill-history`) |
+| `migrate.py` | the store's bulk-update lane, `--recompute-duplicates` |
 | `process.py` | pure helpers: post-date extraction, platform identification, row building |
 | `imgur.py` | upload each illustration once, with backoff |
 | `lens.py` | one Google Lens search per call, logged to the store |
@@ -303,7 +289,6 @@ A `check_ip` block in `config/config.json` (gitignored — see
 | key | meaning |
 |---|---|
 | `images_folder` | where the illustrations live |
-| `legacy_metadata_folder` | the old Excel workbooks, read by `migrate.py` |
 | `store_folder` | defaults to `results/check_ip` |
 | `api_keys` | `serpapi_key`, `imgur_client_id`, `imgur_access_token` — a `${VAR}` placeholder falls back to that environment variable |
 | `processing_thresholds` | re-search windows (see below) |

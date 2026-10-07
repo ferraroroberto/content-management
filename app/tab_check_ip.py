@@ -404,9 +404,8 @@ def run() -> None:
 
     if not review.store_exists():
         st.warning(
-            "No store yet. Import the existing Excel history first:\n\n"
-            "```\n& .\\.venv\\Scripts\\python.exe -m check_ip.migrate --report\n"
-            "& .\\.venv\\Scripts\\python.exe -m check_ip.migrate\n```"
+            "No store yet. The first search run creates it:\n\n"
+            "```\n& .\\.venv\\Scripts\\python.exe -m check_ip.run --dry-run\n```"
         )
         return
 
