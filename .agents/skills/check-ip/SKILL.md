@@ -29,7 +29,7 @@ The illustrations are published under **CC BY-NC-ND 4.0**. Three conditions, and
 
 **Each is recorded on its own, with three possible answers: `met`, `violated`, or `unknown`.** `unknown` is a real answer — it means you looked and the post did not let you establish that condition. It is *not* a pass, and the store, the counters and the review tab all keep it apart from one. Never guess a condition to `met` to finish a row: an honest `unknown` hands the row to the owner to judge, while a wrong `met` retires it as compliant forever.
 
-**Answer all three on every row.** A condition you leave out is stored as *never assessed*, which is a different state from `unknown`: it says nobody has looked yet, so the row stays in the re-screen queue and will be served to another worker. That is right when you truly could not open the post, and wrong — it burns a whole second batch on a post you already read — when you did look and simply could not tell. Say `unknown` then (issue #305).
+**Answer all three on every row.** A condition you leave out is stored as *never assessed*, which is a different state from `unknown`: it says nobody has looked yet, so the row stays in the re-screen queue and will be served to another worker. That is right only when you truly could not open the post; if you looked and could not tell, say `unknown`, or a second batch is burned on a post you already read (issue #305).
 
 The verdict follows from the three conditions and the CLI refuses a combination that contradicts them:
 
@@ -41,19 +41,19 @@ The verdict follows from the three conditions and the CLI refuses a combination 
 
 ### The mistakes that have actually happened
 
-These are corrections from live runs. They cost real rework, so they live here rather than in a dispatch prompt.
+Corrections from live runs; they live here rather than in a dispatch prompt.
 
-- **A visible `ROBERTOFERRARO.ART` watermark is not credit.** The easiest rule to get backwards. An intact watermark with no mention anywhere is still a **BY violation**. The watermark's *absence* is what counts against a post (an ND violation), not its presence in its favour.
-- **Credit and commercial use are independent.** A post that credits him properly and is plainly a company page's marketing or a paid training, workshop or conference deck is an **infringement on NC** — `--credit met --noncommercial violated`. Being paid for the context is commercial under the terms; no call to action is required — but the paid context has to be visible in the post.
-- **NC is judged from the post, not the profile.** A worker once took a poster's services page, follower count and "top content creator" badge as proof of commercial use and marked NC violated on a whole batch of ten posts that contained no promotional content at all, moving every row from severity 1 to 3. The owner's ruling: *use only the evidence of the post.* NC is violated only by something **in the post** — a call to action for the poster's own following, product, course, newsletter or service; a visible paid or sponsored context; a training, workshop or conference deck; or a post published by a company or agency page. The poster's occupation, services page, follower count or personal-brand positioning is not evidence. If the post itself shows nothing, NC is `unknown`, not `violated`: an `unknown` costs a re-screen, a wrong `violated` puts a person at the top of the owner's worst-first list on evidence nobody established.
+- **A visible `ROBERTOFERRARO.ART` watermark is not credit.** An intact watermark with no mention anywhere is still a **BY violation**. The watermark's *absence* counts against a post (ND violation); its presence does not help.
+- **Credit and commercial use are independent.** A post that credits him but is a company page's marketing or a paid training, workshop or conference deck is an **infringement on NC** — `--credit met --noncommercial violated`. No call to action is required, but the paid context must be visible in the post.
+- **NC is judged from the post, not the profile.** A worker once marked NC violated on ten promo-free posts from a poster's services page, follower count and "top content creator" badge, moving every row from severity 1 to 3. Owner's ruling: *use only the evidence of the post.* NC is violated only by something **in the post** — a call to action for the poster's own following, product, course, newsletter or service; a visible paid or sponsored context; a training, workshop or conference deck; or a post published by a company or agency page. Occupation, services page, follower count or personal-brand positioning is not evidence. If the post shows nothing, NC is `unknown`, not `violated`: `unknown` costs a re-screen, a wrong `violated` puts a person atop the worst-first list on unestablished evidence.
 - **ND is broader than "the watermark was removed".** Any crop, filter, added logo or text block, redraw or translation breaks it, even with the signature untouched.
-- **ND is substantial editing, not any difference.** A worker once read a one-word difference in the in-image caption as an edit and recorded ND violated on two posts whose watermark was fully intact. The owner keeps alternate caption versions of the same composition, so a wording difference is far more likely one of his own versions than someone else's edit. His ruling: *editing is substantial editing or translation.* A different wording on an otherwise untouched image is ND `met` — see the reused-compositions note below.
-- **Authorship has exactly two routes.** The post shows the same image as `local_image` (same composition *and* the same in-image text), **or** it visibly carries the `ROBERTOFERRARO.ART` watermark. Anything else is not assessable. Never reason from artistic style, from "the same series", or from the same idea or wording appearing — many illustrators draw minimalist business graphics, and another artist can illustrate the same concept with the same caption.
-- **Someone else's name or watermark on the image settles nothing by itself.** Compare against the file on record first: if composition and in-image text match, it is his work with the credit replaced, which is an **ND violation** as well as a BY one. If they do not match, it is probably that artist's own work. Both errors have occurred in live runs, in opposite directions.
-- **Never revise an earlier verdict — or judge a condition — on a theory about the poster.** A poster who credited him on nine posts earns no presumption on the tenth, in either direction, and who the poster is does not make a post commercial. Judge the post in front of you.
-- **A bare source hint is not credit.** "Pic from IG", "credit: unknown", "seen somewhere" — BY violated, just not dishonestly.
+- **ND is substantial editing, not any difference.** A worker once recorded ND violated on two intact-watermark posts over a one-word in-image caption difference. The owner keeps alternate caption versions of the same composition, so a wording difference is likely his own version. Ruling: *editing is substantial editing or translation.* Different wording on an otherwise untouched image is ND `met`.
+- **Authorship has exactly two routes.** The post shows the same image as `local_image` (same composition *and* same in-image text), **or** visibly carries the `ROBERTOFERRARO.ART` watermark. Anything else is not assessable. Never reason from artistic style, "the same series", or the same idea or wording — another artist can illustrate the same concept with the same caption.
+- **Someone else's name or watermark on the image settles nothing by itself.** Compare against the file on record: composition and in-image text match → his work with the credit replaced, an **ND violation** as well as BY. No match → probably that artist's own work. Both errors have occurred, in opposite directions.
+- **Never revise an earlier verdict — or judge a condition — on a theory about the poster.** A poster who credited him on nine posts earns no presumption on the tenth, and who the poster is does not make a post commercial.
+- **A bare source hint is not credit.** "Pic from IG", "credit: unknown", "seen somewhere" — BY violated.
 - **Posts are often carousels.** The matched illustration may be any slide, not the cover.
-- **He reuses his own compositions with different in-image captions.** Same template plus different wording is not a file match, but such a post usually still carries the watermark. Read this together with the ND test: a watermarked post whose only difference from the file on record is the wording is carrying one of his versions unmodified — ND `met`, not violated.
+- **He reuses his own compositions with different in-image captions.** Same template plus different wording is not a file match, but the post usually still carries the watermark; if wording is the only difference from the file on record, it is one of his versions unmodified — ND `met`.
 
 ## Arguments
 
@@ -62,7 +62,7 @@ These are corrections from live runs. They cost real rework, so they live here r
 - bare `/check-ip` → one batch (10 links).
 - a number → that many links in total, screened in batches of 10.
 - `--image` → restrict to one illustration.
-- `--source` → another platform (`Twitter/X`, `Instagram`, `Facebook`, `any`). Default is LinkedIn: that is where 97% of the owner's past decisions are and the only place acting on a finding is practical.
+- `--source` → another platform (`Twitter/X`, `Instagram`, `Facebook`, `any`). Default is LinkedIn: 97% of the owner's past decisions are there and it is the only place where acting on a finding is practical.
 - `--recheck` → drain the **not fully assessed** backlog instead of the pending queue: rows judged under the old credit-only question, where two of their three conditions were never looked at. It runs `screen next --unassessed`, which serves *only* those rows — the count `stats` reports as `not_fully_assessed`. Do **not** reach for `--include-screened`: that flag only stops excluding screened rows, so the backlog competes with every pending row under the same ranking and is never reached (issue #300).
 
 ## Step 1 — pre-flight
@@ -91,7 +91,7 @@ Hand each worker the brief below verbatim, with its own 10 rows pulled fresh:
 
 Under `--recheck`, add `--unassessed` to that command. Each served row then also carries `screen_verdict` and `screen_reason` — the opinion this pass is replacing. Hand them to the worker as context, not as an answer: it re-judges all three conditions from the page, and `record_verdict` preserves the old opinion in `screen_history` either way (issue #301).
 
-Pull the *next* batch only after the previous worker has finished, so rows it screened are already excluded — that is what makes an interrupted run resumable with no bookkeeping. This holds for `--recheck` too: a re-screened row leaves the `--unassessed` set as soon as its three conditions are recorded, so the backlog drains to zero batch by batch.
+Pull the *next* batch only after the previous worker has finished, so screened rows are already excluded — that makes an interrupted run resumable with no bookkeeping. Under `--recheck` a re-screened row leaves the `--unassessed` set once its three conditions are recorded, so the backlog drains batch by batch.
 
 ### Worker brief — pass this to each subagent
 
