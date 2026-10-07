@@ -60,6 +60,18 @@ class ScrapeRetryTests(unittest.TestCase):
         self.assertIsNone(result)
         self.assertEqual(native_mock.call_count, len(sac.SCRAPE_RETRY_BACKOFF) + 1)
 
+    def test_rapidapi_request_has_a_timeout(self):
+        # A host that accepts the connection and stalls never raises, so without
+        # a timeout the retry ladder never fires (#370).
+        config = {"x_profile": {"source": "rapidapi", "api_url": "https://example.test",
+                                "api_key": "k", "api_host": "h"}}
+        response = MagicMock()
+        response.json.return_value = {"ok": 1}
+        with patch.object(sac.requests, "get", return_value=response) as get_mock:
+            result = sac.get_api_data("x_profile", config, reference_date="2026-08-04")
+        self.assertEqual(result, {"ok": 1})
+        self.assertEqual(get_mock.call_args.kwargs.get("timeout"), sac.RAPIDAPI_TIMEOUT_S)
+
 
 if __name__ == "__main__":
     unittest.main()

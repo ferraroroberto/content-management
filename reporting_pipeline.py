@@ -412,10 +412,18 @@ def run_module(module_func, module_name, debug_mode=False, extra_args=None, fail
         # only ``return``/implicit ``None`` on their success path) are
         # treated as successful, matching prior behaviour.
         result = module_func()
+        # CLI-style steps (``substack.daily_pipeline.main``) return an int exit
+        # code instead of a bool: non-zero is a failure, 0 is success.
         if result is False:
+            reason = "step reported failure (returned False)"
+        elif isinstance(result, int) and not isinstance(result, bool) and result != 0:
+            reason = f"step reported failure (exit code {result})"
+        else:
+            reason = None
+        if reason is not None:
             logger.error(f"❌ {module_name} completed with errors (see above)")
             if failures is not None:
-                failures.step_failures.append((module_name, "step reported failure (returned False)"))
+                failures.step_failures.append((module_name, reason))
         else:
             logger.info(f"✅ {module_name} completed successfully")
     except Exception as e:

@@ -117,6 +117,11 @@ def _fetch_via_native(platform_key, reference_date):
 # backoff since each attempt re-launches a full browser session.
 SCRAPE_RETRY_BACKOFF = [20, 60]  # seconds between attempts
 
+# Per-request cap for the RapidAPI branch: without it a host that accepts the
+# connection and then stalls never raises, so the retry ladder below never
+# fires and the unattended daily run hangs forever.
+RAPIDAPI_TIMEOUT_S = 60
+
 
 def _fetch_scrape_with_retries(fetch_fn, platform_key, reference_date):
     """Retry a Playwright/native scrape fetch on failure before giving up."""
@@ -183,7 +188,7 @@ def get_api_data(platform_key, config, reference_date=None):
         try:
             logger.debug(f"📡 Making API request to {url} (attempt {attempt+1}/{retries})")
             logger.debug(f"🔑 Using query parameters: {querystring}")
-            response = requests.get(url, headers=headers, params=querystring)
+            response = requests.get(url, headers=headers, params=querystring, timeout=RAPIDAPI_TIMEOUT_S)
             response.raise_for_status()  # Raise an exception for bad status codes
             data = response.json()
             logger.info(f"✅ Successfully retrieved {platform_key} data")

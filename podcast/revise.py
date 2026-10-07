@@ -403,9 +403,13 @@ def _revise_one(ep: Episode, cfg: dict, rec: StageRecord, clips: list[dict], cli
         taken = {c["file"].lower() for c in clips if c.get("file") and c["number"] != number}
         clip["file"] = clip_filename(clip, taken)
         stale = clip_outputs(ep, old, "videos")
-    for (name, layout), out in zip(LAYOUTS.items(), clip_outputs(ep, clip, "videos")):
+    new_videos = clip_outputs(ep, clip, "videos")
+    for (name, layout), out in zip(LAYOUTS.items(), new_videos):
         render_clip(ep, clip, layout, output_words(clip, words), scratch, out, encoder)
         clip.setdefault("videos", {})[name] = out.relative_to(ep.package).as_posix()
+    # A title change that windows_safe_filename strips (a "?" or ":") keeps the
+    # old stem, so the "stale" files are the ones just rendered — keep those.
+    stale = [p for p in stale if p not in new_videos]
     # The cover waits for the covers stage (after review); the old one is in the version folder.
     for path in [*stale, clip_outputs(ep, old, "covers")[0]]:
         path.unlink(missing_ok=True)

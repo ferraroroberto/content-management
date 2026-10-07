@@ -34,6 +34,7 @@ from newsletter.cache import CacheState  # noqa: E402
 CREATED = "created"
 SKIPPED = "skipped"
 UNCLASSIFIED = "unclassified"
+NO_ROOM = "no_room"
 
 
 def process_url(
@@ -43,9 +44,10 @@ def process_url(
     """Process a single tab.
 
     Returns :data:`CREATED` if a page was (or in a dry run would be) created,
-    :data:`UNCLASSIFIED` if the topic classifier produced no valid label, and
+    :data:`UNCLASSIFIED` if the topic classifier produced no valid label,
+    :data:`NO_ROOM` if no future newsletter row has room for the topic, and
     :data:`SKIPPED` for every other no-write outcome (duplicate, body too
-    short, no newsletter row with room).
+    short).
     """
     if cache.find_article(url):
         logger.info("⏭️  Already in Notion (duplicate URL): %s", url)
@@ -129,8 +131,9 @@ def process_url(
         category_cap=archive_cfg["newsletter_category_cap"],
     )
     if not newsletter:
-        logger.error("❌ No future newsletter has room for topic '%s' — stopping", topic)
-        return SKIPPED
+        logger.error("❌ No future newsletter has room for topic '%s' — not archiving, "
+                     "leaving tab open: %s", topic, url)
+        return NO_ROOM
     nl_number = (
         newsletter.get("properties", {}).get("number", {}).get("title", [{}])[0]
         .get("plain_text", "?")
@@ -193,6 +196,7 @@ def run_batch(*, write: bool, debug: bool = False) -> int:
     archived = skipped = 0
     failed_urls: list[str] = []
     unclassified_urls: list[str] = []
+    no_room_urls: list[str] = []
     consecutive = 0
     aborted = False
 
@@ -221,6 +225,11 @@ def run_batch(*, write: bool, debug: bool = False) -> int:
                     # Not an error and not a silent skip — the owner has to
                     # file this one (or re-run it) by hand.
                     unclassified_urls.append(t.url)
+                elif result == NO_ROOM:
+                    # Nothing was filed — the owner has to add a newsletter
+                    # row (or raise the cap) and re-run. Other topics may
+                    # still have room, so the batch keeps going.
+                    no_room_urls.append(t.url)
                 else:
                     # Duplicate or empty-body skip — not an error.
                     skipped += 1
@@ -240,8 +249,13 @@ def run_batch(*, write: bool, debug: bool = False) -> int:
     finally:
         chrome_tabs.close_browser(browser)
 
-    logger.info("📊 %d archived, %d skipped, %d unclassified, %d failed",
-                archived, skipped, len(unclassified_urls), len(failed_urls))
+    logger.info("📊 %d archived, %d skipped, %d unclassified, %d failed, %d no room",
+                archived, skipped, len(unclassified_urls), len(failed_urls),
+                len(no_room_urls))
+    if no_room_urls:
+        logger.error("❌ No newsletter room — not archived (left open):")
+        for u in no_room_urls:
+            logger.error("   • %s", u)
     if unclassified_urls:
         logger.warning("🏷️ Unclassified — no topic, not archived (left open):")
         for u in unclassified_urls:
@@ -251,7 +265,7 @@ def run_batch(*, write: bool, debug: bool = False) -> int:
         for u in failed_urls:
             logger.info("   • %s", u)
 
-    if aborted:
+    if aborted or no_room_urls:
         return 1
     logger.info("🎉 Done")
     return 0
