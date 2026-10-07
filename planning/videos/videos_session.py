@@ -135,49 +135,13 @@ def first_clip_relation_id(editorial_row: dict, video_cols: dict) -> Optional[st
     return None
 
 
-def _clip_text_property(clip_page: dict, clip_cols: dict) -> str:
-    """Extract the short caption ``Text`` property from the clip page.
-
-    The clips DB's ``Text`` field can be either rich_text or a title-styled
-    rich_text. Walk all possible shapes defensively.
-    """
-    col = clip_cols.get("caption_text", "Text")
-    prop = clip_page.get("properties", {}).get(col, {})
-    ptype = prop.get("type")
-    if ptype == "rich_text":
-        segs = prop.get("rich_text", []) or []
-        return "".join(s.get("plain_text", "") for s in segs).strip()
-    if ptype == "title":
-        segs = prop.get("title", []) or []
-        return "".join(s.get("plain_text", "") for s in segs).strip()
-    return ""
-
-
 def _clip_string_property(clip_page: dict, clip_cols: dict, role: str) -> str:
-    """Read a single-string clip property (``clipPC`` / ``filePC``).
+    """Read a single-string clip property (``clipPC`` / ``filePC`` / ``Text`` ...).
 
-    These properties can be stored as rich_text in the clips DB, but the
-    schema sometimes exposes them as formula(string) when computed. Tolerate
-    both. Returns '' if the property is missing/empty.
+    ``get_field`` already flattens rich_text, title, formula(string) and url;
+    returns '' when the property is empty.
     """
-    col = clip_cols[role]
-    prop = clip_page.get("properties", {}).get(col, {})
-    ptype = prop.get("type")
-    if ptype == "rich_text":
-        segs = prop.get("rich_text", []) or []
-        return "".join(s.get("plain_text", "") for s in segs).strip()
-    if ptype == "title":
-        segs = prop.get("title", []) or []
-        return "".join(s.get("plain_text", "") for s in segs).strip()
-    if ptype == "formula":
-        formula = prop.get("formula", {})
-        if formula.get("type") == "string":
-            return str(formula.get("string") or "").strip()
-    if ptype == "url":
-        return str(prop.get("url") or "").strip()
-    # Fallback to the generic extractor.
-    val = get_field({"properties": {col: prop}}, role, clip_cols) or ""
-    return str(val).strip()
+    return str(get_field(clip_page, role, clip_cols) or "").strip()
 
 
 def _clip_page_title(clip_page: dict) -> str:
@@ -635,7 +599,7 @@ def load_clip_payload(notion, editorial_row: dict, video_cols: dict, clip_cols: 
     else:
         ensure_local_file(thumb_path)
 
-    caption_short = _clip_text_property(clip_page, clip_cols)
+    caption_short = _clip_string_property(clip_page, clip_cols, "caption_text")
 
     # The LinkedIn long caption is stored on the clip page in two places:
     #   (a) the page body — historically a single ``code`` block (language=

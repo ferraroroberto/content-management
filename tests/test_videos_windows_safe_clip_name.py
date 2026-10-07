@@ -52,8 +52,7 @@ class LoadClipPayloadPathTests(unittest.TestCase):
              mock.patch.object(vs, "retrieve_page", return_value={}), \
              mock.patch.object(vs, "_clip_page_title", return_value="clip"), \
              mock.patch.object(vs, "_clip_string_property",
-                               side_effect=lambda _p, _c, role: props.get(role, "")), \
-             mock.patch.object(vs, "_clip_text_property", return_value="short"), \
+                               side_effect=lambda _p, _c, role: props.get(role, "short")), \
              mock.patch.object(vs, "get_page_body_text", return_value="long"), \
              mock.patch.object(vs, "ensure_local_file"), \
              mock.patch.object(vs, "ensure_platform_safe_clip", side_effect=lambda p: p):
@@ -82,6 +81,31 @@ class LoadClipPayloadPathTests(unittest.TestCase):
         msg = str(ctx.exception)
         self.assertIn(f"{LIVE_FILE_PC}.mp4", msg)
         self.assertIn(f"{ON_DISK_STEM}.mp4", msg)
+
+
+class ClipStringPropertyTests(unittest.TestCase):
+    COLS = {"clip_pc": "clipPC", "caption_text": "Text"}
+
+    def _read(self, prop: dict, role: str = "clip_pc") -> str:
+        col = self.COLS[role]
+        return vs._clip_string_property({"properties": {col: prop}}, self.COLS, role)
+
+    def test_flattens_every_string_shape(self) -> None:
+        seg = [{"plain_text": " a"}, {"plain_text": "b "}]
+        cases = [
+            {"type": "rich_text", "rich_text": seg},
+            {"type": "title", "title": seg},
+            {"type": "formula", "formula": {"type": "string", "string": " ab "}},
+            {"type": "url", "url": " ab "},
+        ]
+        for prop in cases:
+            with self.subTest(type=prop["type"]):
+                self.assertEqual(self._read(prop), "ab")
+
+    def test_empty_or_missing_property_is_empty_string(self) -> None:
+        self.assertEqual(self._read({"type": "url", "url": None}), "")
+        self.assertEqual(self._read({"type": "rich_text", "rich_text": []}, "caption_text"), "")
+        self.assertEqual(vs._clip_string_property({"properties": {}}, self.COLS, "clip_pc"), "")
 
 
 if __name__ == "__main__":
