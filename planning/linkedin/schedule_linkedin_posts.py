@@ -579,8 +579,31 @@ def _summary_matches(summary: str, target: date) -> bool:
     return any(tok.lower() in low for tok in month_token_candidates(target))
 
 
-def _wait_for_summary_match(page: Page, target: date, *, timeout_ms: int = 4000) -> bool:
-    """Poll the summary line until it describes ``target``, or give up.
+def _summary_has_time(summary: str, hour: int, minute: int) -> bool:
+    """True when LinkedIn's summary line shows ``hour:minute``.
+
+    Accepts the 12-hour form with an AM/PM marker in either locale ("6:30 AM",
+    "6:30 a. m.") or a 24-hour form with no marker ("06:30", "18:30"). The
+    digit guards keep 6:30 from matching 16:30, and the marker guard keeps a
+    24-hour 6:30 from matching "6:30 PM".
+    """
+    low = summary.lower()
+    marker = r"a\.?\s*m\.?" if hour < 12 else r"p\.?\s*m\.?"
+    h12 = hour % 12 or 12
+    if re.search(rf"(?<!\d){h12}:{minute:02d}\s*{marker}", low):
+        return True
+    return re.search(rf"(?<!\d)0?{hour}:{minute:02d}(?!\d)(?!\s*[ap]\.?\s*m)", low) is not None
+
+
+def _wait_for_summary_match(
+    page: Page,
+    target: date,
+    *,
+    time: Optional[tuple[int, int]] = None,
+    timeout_ms: int = 4000,
+) -> bool:
+    """Poll the summary line until it describes ``target`` (and ``time``, if
+    given), or give up.
 
     Polled rather than slept: the summary is re-rendered asynchronously after
     the field changes, and a single fixed wait is a coin flip — a 700 ms sleep
@@ -590,7 +613,10 @@ def _wait_for_summary_match(page: Page, target: date, *, timeout_ms: int = 4000)
     """
     deadline = page.evaluate("() => Date.now()") + timeout_ms
     while True:
-        if _summary_matches(_schedule_summary(page), target):
+        summary = _schedule_summary(page)
+        if _summary_matches(summary, target) and (
+            time is None or _summary_has_time(summary, *time)
+        ):
             return True
         if page.evaluate("() => Date.now()") >= deadline:
             return False
@@ -636,48 +662,148 @@ def _set_schedule_date(page: Page, target: date) -> None:
     )
 
 
+# How long to wait, per menu opening, for the wanted slot to render (issue
+# #390). The menu's slot list trails the date field: opened right after a date
+# change it can still show the previous date's list, which for today is only
+# the slots after now (an evening run sees 7:45 PM … 11:45 PM, no morning).
+# The live probe saw it refresh to the full 96 slots within ~100 ms.
+TIME_SLOT_WAIT_MS = 4000
+
+# Opening attempts before giving up — the second one re-renders the menu
+# against the committed date in case the open list never refreshed.
+TIME_MENU_OPENS = 2
+
+# How long to wait for the picker to report the clicked slot as its value.
+TIME_SELECTED_WAIT_MS = 2000
+
+
+def _open_time_menu(page: Page):
+    """Click the time field and return the visible slot menu."""
+    try:
+        page.locator(TIME_INPUT_SEL).first.click(timeout=10000)
+        menu = page.locator(TIME_MENU_SEL).first
+        menu.wait_for(state="visible", timeout=10000)
+    except Exception as err:
+        raise RuntimeError(f"Could not open the time picker: {err}")
+    return menu
+
+
+def _wait_for_time_slot(page: Page, menu, candidates: tuple[str, ...]):
+    """Poll ``menu`` until a slot labelled with any candidate renders, or None."""
+    patterns = [re.compile(rf"^\s*{re.escape(c)}\s*$", re.I) for c in candidates]
+    deadline = page.evaluate("() => Date.now()") + TIME_SLOT_WAIT_MS
+    while True:
+        for pattern in patterns:
+            entry = menu.get_by_text(pattern)
+            if entry.count() > 0:
+                return entry.first
+        if page.evaluate("() => Date.now()") >= deadline:
+            return None
+        page.wait_for_timeout(200)
+
+
+def _time_menu_labels(menu) -> list[str]:
+    """The slot labels the open menu currently renders, top to bottom."""
+    try:
+        return [ln.strip() for ln in menu.inner_text(timeout=2000).splitlines() if ln.strip()]
+    except Exception:
+        return []
+
+
+def _describe_time_labels(labels: list[str], *, edge: int = 6) -> str:
+    """Compact rendering of the menu's labels for a failure message."""
+    if not labels:
+        return "no slots"
+    if len(labels) <= 2 * edge:
+        return f"{len(labels)} slot(s): {', '.join(labels)}"
+    return (f"{len(labels)} slot(s): {', '.join(labels[:edge])} … "
+            f"{', '.join(labels[-edge:])}")
+
+
+def _time_selected(page: Page, target_minutes: int, candidates: tuple[str, ...]) -> bool:
+    """Poll until the time field holds the wanted slot; False if it never does.
+
+    ``data-time-picker-value`` is the picker's own minutes-since-midnight value
+    (6:30 AM → ``390``) — locale-proof, so it is authoritative when present.
+    The displayed text is the fallback should LinkedIn drop the attribute.
+    """
+    ti = page.locator(TIME_INPUT_SEL).first
+    wanted = {c.lower() for c in candidates}
+    deadline = page.evaluate("() => Date.now()") + TIME_SELECTED_WAIT_MS
+    while True:
+        raw = ti.get_attribute("data-time-picker-value")
+        if raw is not None:
+            if raw.strip() == str(target_minutes):
+                return True
+        elif " ".join(ti.input_value().split()).lower() in wanted:
+            return True
+        if page.evaluate("() => Date.now()") >= deadline:
+            return False
+        page.wait_for_timeout(200)
+
+
 def _set_schedule_time(page: Page, hour: int, minute: int) -> None:
     """Pick the time from the dialog's 15-minute-slot menu.
 
     Typed input is unreliable here — the field re-formats each keystroke and
     ends up rejecting even the exact string it displays by default — so we open
     the menu and click the slot, which is also locale-proof.
-    """
-    ti = page.locator(TIME_INPUT_SEL).first
-    candidates = time_picker_candidates(hour, minute)
-    try:
-        ti.click(timeout=10000)
-        menu = page.locator(TIME_MENU_SEL).first
-        menu.wait_for(state="visible", timeout=10000)
-    except Exception as err:
-        raise RuntimeError(f"Could not open the time picker: {err}")
 
-    for cand in candidates:
-        entry = menu.get_by_text(re.compile(rf"^\s*{re.escape(cand)}\s*$", re.I))
-        if entry.count() == 0:
-            continue
-        try:
-            entry.first.scroll_into_view_if_needed(timeout=5000)
-            entry.first.click(timeout=5000)
-            page.wait_for_timeout(600)
-            return
-        except Exception:
-            continue
-    raise RuntimeError(
-        f"No time-picker slot matched any locale candidate {candidates}"
-    )
+    The slot is polled for rather than looked up once (issue #390): the menu
+    can open still holding the previous date's slot list. If it never shows
+    up, the menu is closed (focusing the date field dismisses it; Escape would
+    close the whole Schedule dialog) and reopened once. After the click the
+    picker's own value must equal the wanted time, so a wrong slot is an error.
+    """
+    candidates = time_picker_candidates(hour, minute)
+    entry = None
+    labels: list[str] = []
+    for attempt in range(1, TIME_MENU_OPENS + 1):
+        menu = _open_time_menu(page)
+        entry = _wait_for_time_slot(page, menu, candidates)
+        if entry is not None:
+            break
+        labels = _time_menu_labels(menu)
+        logger.info("ℹ️ time menu open %d/%d has no %02d:%02d slot (%s)",
+                    attempt, TIME_MENU_OPENS, hour, minute, _describe_time_labels(labels))
+        if attempt < TIME_MENU_OPENS:
+            try:
+                page.locator(DATE_INPUT_SEL).first.click(timeout=5000)
+                page.wait_for_timeout(300)
+            except Exception:
+                pass
+    if entry is None:
+        raise RuntimeError(
+            f"No time-picker slot matched any locale candidate {candidates} after "
+            f"{TIME_MENU_OPENS} menu openings; the menu showed {_describe_time_labels(labels)}"
+        )
+
+    try:
+        entry.scroll_into_view_if_needed(timeout=5000)
+        entry.click(timeout=5000)
+    except Exception as err:
+        raise RuntimeError(f"Could not click the {hour:02d}:{minute:02d} time slot: {err}")
+
+    if not _time_selected(page, hour * 60 + minute, candidates):
+        ti = page.locator(TIME_INPUT_SEL).first
+        raise RuntimeError(
+            f"Time picker did not take {hour:02d}:{minute:02d}: field reads "
+            f"{ti.input_value()!r} (picker value "
+            f"{ti.get_attribute('data-time-picker-value')!r})"
+        )
 
 
 def _set_schedule_datetime(page: Page, target: date, hour: int, minute: int) -> None:
     """Set Date and Time in the rebuilt Schedule dialog, then verify both.
 
     Date first: the time menu offers only future slots, so a stale date can
-    hide the slot we want.
+    hide the slot we want. The summary is checked for the time too: it
+    re-renders a beat after the picker takes the click (issue #390).
     """
     _set_schedule_date(page, target)
     _set_schedule_time(page, hour, minute)
 
-    if not _wait_for_summary_match(page, target):
+    if not _wait_for_summary_match(page, target, time=(hour, minute)):
         raise RuntimeError(
             f"Schedule did not stick for {target:%Y-%m-%d} {hour:02d}:{minute:02d} — "
             f"LinkedIn summary reads {_schedule_summary(page)!r}"
