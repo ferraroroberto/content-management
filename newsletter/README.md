@@ -360,7 +360,13 @@ report as `triage-<window>.jev-shadow.json` for comparison — never into the
 stored candidates. `python -m newsletter.triage.jev_pilot --run <id> [--run
 <id> …] [--repeat]` replays stored, reviewed runs through Jev and measures it
 against the legacy answers and the owner's applied review; `--shadow` runs
-the same measures over stored `both` runs, with no Jev calls. It is
+the same measures over stored `both` runs, with no Jev calls. `--legacy`
+re-scores the same links with legacy Stage A as well (fresh, LLM cache
+bypassed, the two engines interleaved) and adds per-engine calls, wall clock,
+concurrency reached and tokens (from each response's usage), reproduction of
+the stored answers, and which links each engine would send to Stage B;
+`--capture` keeps one request + raw response per engine; `--allow-unreviewed`
+admits a run without an applied review. It is
 read-only on the store, and the artefact goes under `tmp/jev_pilot/`. A Jev
 or hub failure in `both` only marks those links `not evaluated`;
 `jev_budget_s` caps how long the shadow can add to a run. Only link metadata

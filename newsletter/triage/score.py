@@ -216,14 +216,30 @@ def _meta_key(model: str, it: Dict[str, str]) -> str:
     return LLMCache.key(model, "A", it.get("sender", ""), it.get("label", ""), it.get("domain", ""), it.get("path", ""))
 
 
+def meta_request(brief: str, chunk: Sequence[Dict[str, str]]) -> Tuple[str, int]:
+    """One Stage A batch → (prompt, max_tokens): the exact request ``score_metadata`` sends."""
+    lines = [f"{i + 1}. sender=\"{it['sender'][:40]}\" | anchor=\"{it['label'][:120]}\" | domain={it['domain']} | path={it['path'][:80]}"
+             for i, it in enumerate(chunk)]
+    prompt = (f"{brief}\n\nYou triage links from newsletter emails for a weekly curated newsletter with three sections. "
+              f"For EACH numbered link below, judge from the metadata only (no fetching): the best-fitting topic, how well it fits "
+              f"the criteria (fit 0–5: 0 = promo/noise/irrelevant, 3 = plausible, 5 = textbook pick), whether it is a news/"
+              f"release announcement, whether it is a promo (course, book, product, event, sponsor). Be strict: most links are 0–2.\n"
+              f"Return ONLY a JSON array with one object per link, in order: "
+              f"{{\"i\": <number>, \"topic\": \"leadership and management|personal development|innovation\", \"fit\": 0-5, "
+              f"\"news\": true|false, \"promo\": true|false, \"reason\": \"<= 12 words\"}}\n\n" + "\n".join(lines))
+    return prompt, 70 * len(chunk) + 150
+
+
 def score_metadata(items: Sequence[Dict[str, str]], criteria: Dict[str, Any], *, base_url: str, model: str,
                    batch: int = 25, timeout: int = 180, workers: int = 4,
-                   cache: Optional["LLMCache"] = None) -> List[MetaScore]:
+                   cache: Optional["LLMCache"] = None, calls: Optional[List[Dict[str, Any]]] = None) -> List[MetaScore]:
     """``items``: dicts with sender, label, domain, path. Returns one MetaScore per item (same order).
 
     Batches run concurrently (``workers``) — the hub's per-call overhead (~8 s
     CLI start for the Claude aliases) dominates, not generation. Cached items
-    are not re-sent.
+    are not re-sent. ``calls``, when given, receives one record per hub call
+    (links, monotonic start/end, ok, the response's token usage) for the
+    engine comparison in ``jev_pilot --legacy`` (#392).
     """
     brief = _criteria_brief(criteria)
     out: List[MetaScore] = [MetaScore() for _ in items]
@@ -243,21 +259,19 @@ def score_metadata(items: Sequence[Dict[str, str]], criteria: Dict[str, Any], *,
     def one(start: int) -> None:
         idxs = todo_idx[start:start + batch]
         chunk = [items[i] for i in idxs]
-        lines = [f"{i + 1}. sender=\"{it['sender'][:40]}\" | anchor=\"{it['label'][:120]}\" | domain={it['domain']} | path={it['path'][:80]}"
-                 for i, it in enumerate(chunk)]
-        prompt = (f"{brief}\n\nYou triage links from newsletter emails for a weekly curated newsletter with three sections. "
-                  f"For EACH numbered link below, judge from the metadata only (no fetching): the best-fitting topic, how well it fits "
-                  f"the criteria (fit 0–5: 0 = promo/noise/irrelevant, 3 = plausible, 5 = textbook pick), whether it is a news/"
-                  f"release announcement, whether it is a promo (course, book, product, event, sponsor). Be strict: most links are 0–2.\n"
-                  f"Return ONLY a JSON array with one object per link, in order: "
-                  f"{{\"i\": <number>, \"topic\": \"leadership and management|personal development|innovation\", \"fit\": 0-5, "
-                  f"\"news\": true|false, \"promo\": true|false, \"reason\": \"<= 12 words\"}}\n\n" + "\n".join(lines))
+        prompt, max_tokens = meta_request(brief, chunk)
+        usage: Dict[str, int] = {}
+        t_call = time.monotonic()
         try:
-            text = llm.call(base_url=base_url, model=model, prompt=prompt, max_tokens=70 * len(chunk) + 150, timeout=timeout)
+            text, usage = llm.call_with_usage(base_url=base_url, model=model, prompt=prompt, max_tokens=max_tokens,
+                                              timeout=timeout)
             data = _parse_json(text)
         except Exception as exc:  # noqa: BLE001 — logged, stays unknown
             logger.warning("⚠️ stage-A batch %d failed: %s", start // batch, type(exc).__name__)
             data = None
+        if calls is not None:
+            calls.append({"links": len(chunk), "start": t_call, "end": time.monotonic(),
+                          "ok": isinstance(data, list), "usage": usage})
         if not isinstance(data, list):
             return
         for obj in data:

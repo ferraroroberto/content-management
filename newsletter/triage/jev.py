@@ -74,6 +74,7 @@ class JevMetaScore(MetaScore):
     conf: Dict[str, float] = field(default_factory=dict)            # topic / fit / news / promo
     probs: Dict[str, Dict[str, float]] = field(default_factory=dict)  # topic + fit distributions
     served_model: str = ""
+    usage: Dict[str, int] = field(default_factory=dict)            # the response's input / output tokens
     error: str = ""                       # set when the item is not evaluated
 
 
@@ -144,6 +145,7 @@ def parse_answers(doc: Any) -> JevMetaScore:
         ms.error = "no answers in response"
         return ms
     ms.served_model = str(doc.get("model") or "")
+    ms.usage = {k: int(v) for k, v in (doc.get("usage") or {}).items() if isinstance(v, (int, float))}
     topic, fit = answers.get("topic") or {}, answers.get("fit") or {}
     news, promo = answers.get("news") or {}, answers.get("promo") or {}
     ms.topic = TOPIC_KEYS.get(str(topic.get("choice") or ""))
@@ -199,11 +201,12 @@ def evaluate(item: Dict[str, str], questions: Dict[str, Any], *, base_url: str, 
 def score_metadata_jev(items: Sequence[Dict[str, str]], criteria: Dict[str, Any], *, base_url: str,
                        model: str = DEFAULT_MODEL, workers: int = DEFAULT_WORKERS, timeout: float = DEFAULT_TIMEOUT_S,
                        stop: Optional[threading.Event] = None, results: Optional[List[JevMetaScore]] = None,
-                       ) -> List[JevMetaScore]:
+                       calls: Optional[List[Dict[str, Any]]] = None) -> List[JevMetaScore]:
     """Same input as ``score.score_metadata``; one ``JevMetaScore`` per item, same order.
 
     ``stop`` ends the pass early: items not yet started stay ``not evaluated``.
     ``results`` lets a caller read finished items while the pass is still running.
+    ``calls`` receives one record per hub call, shaped like ``score.score_metadata``'s (#392).
     """
     questions = build_questions(criteria)
     out = results if results is not None else [JevMetaScore(error=NOT_EVALUATED) for _ in items]
@@ -215,8 +218,12 @@ def score_metadata_jev(items: Sequence[Dict[str, str]], criteria: Dict[str, Any]
     def one(i: int) -> None:
         if stop is not None and stop.is_set():
             return
+        t_call = time.monotonic()
         out[i] = evaluate(items[i], questions, base_url=base_url, model=model, timeout=timeout, session=session)
         with lock:
+            if calls is not None:
+                calls.append({"links": 1, "start": t_call, "end": time.monotonic(), "ok": out[i].ok,
+                              "usage": out[i].usage})
             done[0] += 1
             if done[0] % 200 == 0 or done[0] == len(items):
                 logger.info("  … jev stage A %d/%d links (%.0fs)", done[0], len(items), time.monotonic() - t0)
