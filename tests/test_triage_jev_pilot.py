@@ -10,7 +10,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -20,6 +21,7 @@ from newsletter.topics import TOPICS  # noqa: E402
 from newsletter.triage import db  # noqa: E402
 from newsletter.triage import jev as jx  # noqa: E402
 from newsletter.triage import jev_pilot as jp  # noqa: E402
+from newsletter.triage import score as sc  # noqa: E402
 
 L, P, I = TOPICS
 
@@ -131,6 +133,132 @@ class ShadowCompareTests(unittest.TestCase):
         self.assertEqual(p["owner_agreement"]["jev"]["recall_fit_ge3"], 1.0)
         self.assertEqual(result["runs"]["17"]["_items"][0]["input"],
                          {"sender": "S1", "label": "A", "domain": "x.com", "path": "/a"})
+
+
+class CallSinkTests(unittest.TestCase):
+    """Both scorers report one record per hub call: timing + the response's token usage (#392)."""
+
+    def test_legacy_sink_records_each_batch_with_usage(self) -> None:
+        usage = {"input_tokens": 900, "output_tokens": 120, "cache_read_input_tokens": 0,
+                 "cache_creation_input_tokens": 4000}
+        reply = '[{"i": 1, "topic": "innovation", "fit": 3, "news": false, "promo": false, "reason": "x"}]'
+        items = [{"sender": "S", "label": f"link {i}", "domain": "x.com", "path": f"/{i}"} for i in range(3)]
+        calls: List[Dict[str, Any]] = []
+        with mock.patch.object(sc.llm, "call_with_usage", return_value=(reply, usage)) as call:
+            out = sc.score_metadata(items, {"rules": {}}, base_url="http://hub", model="m", batch=2, calls=calls)
+        self.assertEqual(call.call_count, 2)
+        self.assertEqual(sorted(c["links"] for c in calls), [1, 2])
+        self.assertTrue(all(c["ok"] and c["usage"] == usage and c["end"] >= c["start"] for c in calls))
+        self.assertTrue(out[0].ok)
+
+    def test_meta_request_is_what_the_scorer_sends(self) -> None:
+        items = [{"sender": "S", "label": "A title", "domain": "x.com", "path": "/a"}]
+        prompt, max_tokens = sc.meta_request("BRIEF", items)
+        with mock.patch.object(sc.llm, "call_with_usage", return_value=("[]", {})) as call:
+            sc.score_metadata(items, {"rules": {}}, base_url="http://hub", model="m", calls=[])
+        self.assertEqual(call.call_args.kwargs["max_tokens"], max_tokens)
+        self.assertTrue(prompt.endswith('1. sender="S" | anchor="A title" | domain=x.com | path=/a'))
+        self.assertTrue(call.call_args.kwargs["prompt"].endswith(prompt[len("BRIEF"):]))
+
+    def test_jev_sink_records_each_link_with_usage(self) -> None:
+        answer = {"model": "jev-1.13.0", "usage": {"input_tokens": 1700, "output_tokens": 90}, "answers": {
+            "topic": {"choice": "innovation", "confidence": 0.9, "probabilities": {}},
+            "fit": {"score": 2.2, "confidence": 0.5, "probabilities": {}},
+            "news": {"noul": 0.1}, "promo": {"noul": 0.2}}}
+        resp = mock.Mock(status_code=200, headers={})
+        resp.json.return_value = answer
+        session = mock.Mock()
+        session.post.return_value = resp
+        calls: List[Dict[str, Any]] = []
+        with mock.patch.object(jx.requests, "Session", return_value=session):
+            out = jx.score_metadata_jev([{"sender": "S", "label": "A", "domain": "x.com", "path": "/a"}] * 2,
+                                        {"rules": {}}, base_url="http://hub", calls=calls)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0]["usage"], {"input_tokens": 1700, "output_tokens": 90})
+        self.assertEqual(out[0].usage, calls[0]["usage"])
+
+
+class PerfTests(unittest.TestCase):
+    def test_concurrency_reached_and_tokens(self) -> None:
+        calls = [{"links": 25, "start": 0.0, "end": 10.0, "ok": True,
+                  "usage": {"input_tokens": 10, "output_tokens": 500, "cache_creation_input_tokens": 4000}},
+                 {"links": 25, "start": 2.0, "end": 9.0, "ok": True,
+                  "usage": {"input_tokens": 10, "output_tokens": 500, "cache_read_input_tokens": 3000}},
+                 {"links": 10, "start": 10.0, "end": 14.0, "ok": False, "usage": {}}]   # starts as the first ends
+        p = jp.perf(calls, wall_s=14.0, n_links=60)
+        self.assertEqual(p["max_in_flight"], 2)
+        self.assertEqual((p["calls"], p["failed_calls"], p["calls_without_usage"]), (3, 1, 1))
+        self.assertEqual(p["input_tokens"], 7020)
+        self.assertEqual((p["cache_write_tokens"], p["cache_read_tokens"], p["output_tokens"]), (4000, 3000, 1000))
+        self.assertEqual(p["ms_per_link"], round(14.0 / 60 * 1000, 1))
+
+    def test_no_calls(self) -> None:
+        self.assertEqual(jp.perf([], wall_s=0.0, n_links=0), {"calls": 0, "links": 0, "wall_s": 0.0})
+
+
+class StageBEntryTests(unittest.TestCase):
+    def test_ranks_like_run_py_and_counts_picks_reached(self) -> None:
+        def it(cid: str, fit: int, *, fetched: bool = False, pick: bool = False, news: bool = False) -> Dict[str, Any]:
+            return {"cid": cid, "domain": "x.com", "sender_weight": 1.0, "fetched": fetched,
+                    "legacy": {"ok": True, "topic": L, "fit": fit, "news": news, "promo": False},
+                    "jev": {"status": "ok", "topic": L, "fit": 5 - fit, "news": False, "promo": False},
+                    "owner": {"decided": pick, "pick": pick, "topic": L if pick else None}}
+        items = [it("a", 5, fetched=True, pick=True), it("b", 4, fetched=True), it("c", 5, news=True),
+                 it("d", 1, pick=True)]
+        priors = mock.Mock()
+        priors.domain.return_value = (0.0, 0)
+        leg = jp.stage_b_entry(items, "legacy", priors, depth=2)          # a (5) and b (4) beat c (5, news × 0.6)
+        self.assertEqual((leg["overlap_with_original"], leg["owner_picks_reached"]), (1.0, 1))
+        jev = jp.stage_b_entry(items, "jev", priors, depth=2)             # d (4) and b (1) beat a (0) and c (0)
+        self.assertEqual((jev["overlap_with_original"], jev["owner_picks_reached"]), (0.5, 1))
+        self.assertEqual(jev["original_fetched"], 2)
+
+
+class LegacyReplayTests(unittest.TestCase):
+    def test_both_engines_interleave_and_reproduction(self) -> None:
+        cands = [{"cid": f"m{i}:0", "message_id": f"m{i}", "canonical": f"u{i}", "url": f"https://x.com/{i}",
+                  "title": f"T{i}", "domain": "x.com", "sender_weight": 1.0, "fetched_ok": i == 0,
+                  "meta": {"ok": True, "topic": L, "fit": 4, "news": False, "promo": False}} for i in range(2)]
+        patches = {"get_run": lambda rid: {"id": rid, "window_start": "2026-09-26", "window_end": "2026-10-03",
+                                           "model": "claude_haiku", "report_path": None},
+                   "get_review": lambda *_a: None, "emails": lambda _r: [], "candidates": lambda _r: cands,
+                   "load_decisions": lambda *_a: []}
+        order: List[str] = []
+
+        def legacy(items: Any, _crit: Any, **kw: Any) -> List[sc.MetaScore]:
+            order.append("legacy")
+            kw["calls"].append({"links": len(items), "start": 0.0, "end": 1.0, "ok": True, "usage": {"input_tokens": 5}})
+            return [sc.MetaScore(topic=L, fit=4, ok=True), sc.MetaScore(topic=P, fit=1, ok=True)]
+
+        def jev(items: Any, _crit: Any, **_kw: Any) -> List[jx.JevMetaScore]:
+            order.append("jev")
+            return [jx.JevMetaScore(topic=L, fit=3, ok=True, conf={"topic": 0.9, "fit": 0.5}) for _ in items]
+
+        legacy_cfg = {"model": "m", "workers": 4, "top_k": 1}
+        priors = mock.Mock()
+        priors.domain.return_value = (0.0, 0)
+        saved = {k: getattr(db, k) for k in patches}
+        try:
+            for k, v in patches.items():
+                setattr(db, k, v)
+            with mock.patch.object(sc, "score_metadata", legacy), mock.patch.object(jx, "score_metadata_jev", jev), \
+                    mock.patch.object(jp, "RingRecorder"), mock.patch.object(sc, "Priors", return_value=priors):
+                with self.assertRaises(SystemExit):                       # unreviewed is refused by default
+                    jp.replay([17], base_url="http://hub", model="jev-latest", workers=2, repeat=False,
+                              criteria={}, legacy=legacy_cfg)
+                result = jp.replay([17, 16], base_url="http://hub", model="jev-latest", workers=2, repeat=False,
+                                   criteria={}, legacy=legacy_cfg, require_review=False)
+        finally:
+            for k, v in saved.items():
+                setattr(db, k, v)
+        self.assertEqual(order, ["legacy", "jev", "jev", "legacy"])      # the first engine alternates per run
+        r = result["runs"]["17"]
+        self.assertEqual(r["engines"]["legacy"]["calls"], 1)
+        self.assertEqual(r["engines"]["jev"]["calls"], 0)                 # the patched scorer reported none
+        rep = r["reproduction"]["legacy_fresh_vs_stored"]
+        self.assertEqual((rep["n"], rep["topic_changed"], rep["fit_band_changed"]), (2, 0.5, 0.5))
+        self.assertEqual(result["mode"], "replay + legacy")
+        self.assertIn("pooled_fresh_legacy", result)
 
 
 if __name__ == "__main__":
