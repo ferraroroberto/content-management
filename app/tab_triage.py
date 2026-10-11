@@ -6,7 +6,8 @@ UI only: every read/write goes through ``newsletter.triage.review`` / ``.db`` / 
 status badge / live log panel / sidebar work exactly like the other pipelines.
 
 Nothing is written before the owner clicks **Apply review**; a stored week is never re-run
-silently — the override toggle must be on (the engine itself refuses without ``--force``).
+silently — the replace toggle must be on (the engine itself refuses without ``--force``). A stored
+week can be re-scored from its stored links with the chosen Stage A engine (``--rescore``, #395).
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from newsletter.triage.rank import TOPICS
 
 PIPELINE_NAME = "triage"
 _SHORT = {"leadership and management": "leadership", "personal development": "persdev", "innovation": "innovation"}
+_ENGINES = ("jev", "legacy")    # the Stage A choices offered here, Jev first = the default (#395)
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +145,10 @@ def _render_run_controls(runs: list[dict]) -> None:
             end = st.date_input("until (exclusive)", value=weeks[1][1], key="triage-until")
     else:
         start, end = next((w[0], w[1]) for w in weeks if w[2] == choice)
+    engine = st.radio("stage A engine", list(_ENGINES), index=0, key="triage-engine", horizontal=True,
+                      format_func=review.ENGINE_LABELS.get,
+                      help="Scores every link's metadata before the top links are fetched. Passed as "
+                           "--stage-a-engine to every run, re-run, re-score and backtest started here.")
     with st.container(horizontal=True, gap="small"):
         offline = st.toggle("offline (history cache)", value=False, key="triage-offline",
                             help="Read the e-mails from results/newsletter/triage/history instead of Gmail.")
@@ -152,31 +158,42 @@ def _render_run_controls(runs: list[dict]) -> None:
     stored = next((r for r in runs if r["kind"] == "live" and r["window_start"] == str(start)
                    and r["window_end"] == str(end)), None)
     running = is_running(PIPELINE_NAME)
-    cmd = [str(VENV_PY), "-m", "newsletter.triage.run", "--since", str(start), "--until", str(end),
-           "--days", str(max(1, (end - start).days))]
+    base = [str(VENV_PY), "-m", "newsletter.triage.run", "--stage-a-engine", engine]
+    tail = ["--debug"] if debug else []
+    cmd = base + ["--since", str(start), "--until", str(end), "--days", str(max(1, (end - start).days))]
     if offline:
         cmd += ["--source", "cache"]
     if no_llm:
         cmd.append("--no-llm")
-    if debug:
-        cmd.append("--debug")
+    cmd += tail
 
+    if stored:
+        st.caption(f"stored run {stored['id']} · {stored['status']} · "
+                   f"scored by {review.engine_label(stored.get('stats')) or '?'}"
+                   + (f" · {stored['stats'].get('links', '?')} links" if stored.get("stats") else "")
+                   + (" · reviewed ✓ (decisions + comment survive a replace)" if stored.get("reviewed") else ""))
     with st.container(horizontal=True, gap="small"):
         if stored:
-            override = st.toggle(f"override stored run {stored['id']} ({stored['status']})", value=False,
-                                 key="triage-override",
-                                 help="This week is already stored. Re-running replaces its candidates; your "
-                                      "applied decisions are kept and pre-fill the new table.")
-            st.button("↻ Re-run week (override)", key="triage-rerun", type="primary", disabled=running or not override,
-                      on_click=_launch, args=(cmd + ["--force"],))
+            override = st.toggle(f"replace stored run {stored['id']}", value=False, key="triage-override",
+                                 help="This week is already stored. Re-scoring or re-running replaces its "
+                                      "candidates; your applied decisions, review comment and lessons are kept and "
+                                      "pre-fill the new table.")
+            st.button(f"↻ Re-score with {review.ENGINE_LABELS[engine]} (no Gmail)", key="triage-rescore",
+                      type="primary", disabled=running or not override,
+                      on_click=_launch, args=(base + ["--rescore", str(stored["id"])] + tail,),
+                      help="Scores the run's stored links again with the chosen engine — no Gmail fetch. Only the "
+                           "top links' pages are fetched, mostly from the local cache.")
+            st.button("↻ Re-run week from Gmail", key="triage-rerun", disabled=running or not override,
+                      on_click=_launch, args=(cmd + ["--force"],),
+                      help="Reads the week's e-mails again (Gmail, or the history cache when offline) and "
+                           "rebuilds the links from scratch.")
         else:
             st.button("▶ Run triage", key="triage-run", type="primary", disabled=running or start >= end,
                       on_click=_launch, args=(cmd,))
         bt = st.text_input("backtest editions", value="", key="triage-backtest", placeholder="N226,N227",
                            label_visibility="collapsed", width=160)
         st.button("🧪 Backtest", key="triage-backtest-run", disabled=running or not bt.strip(),
-                  on_click=_launch, args=([str(VENV_PY), "-m", "newsletter.triage.run", "--backtest", bt.strip(),
-                                           "--force"] + (["--debug"] if debug else []),),
+                  on_click=_launch, args=(base + ["--backtest", bt.strip(), "--force"] + tail,),
                   help="Replay past editions offline from the history cache (stored as kind=backtest).")
     render_status_badge(PIPELINE_NAME)
     render_log_panel(PIPELINE_NAME)
@@ -185,8 +202,12 @@ def _render_run_controls(runs: list[dict]) -> None:
 def _render_review(run: dict) -> None:
     run_id = int(run["id"])
     start, end = run["window_start"], run["window_end"]
+    engine = review.engine_label(run.get("stats"))
+    rescored_from = (run.get("stats") or {}).get("rescored_from")
     st.markdown(f"#### review — {start} → {end} · {run['kind']}"
                 + (f" · {run.get('edition')}" if run.get("edition") else "")
+                + (f" · scored by {engine}" if engine else "")
+                + (f" · re-scored from run {rescored_from}" if rescored_from else "")
                 + (f" · stats: {run['stats'].get('emails', '?')} emails · {run['stats'].get('links', '?')} links · "
                    f"{run['stats'].get('llm_calls', '?')} LLM calls" if run.get("stats") else ""))
     if run.get("status") != "done":
@@ -342,6 +363,15 @@ def _render_new_senders(run_id: int) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _run_label(r: dict) -> str:
+    engine = review.engine_label(r.get("stats"))
+    return (f"{r['window_start']} → {r['window_end']} · {r['kind']}"
+            + (f" {r.get('edition')}" if r.get("edition") else "")
+            + f" · {r['status']} · {r.get('picks') if r.get('picks') is not None else '?'} picks"
+            + (f" · {engine}" if engine else "")
+            + (" · reviewed ✓" if r.get("reviewed") else ""))
+
+
 def run() -> None:
     st.subheader("🧭 triage — weekly newsletter inbox → edition shortlist")
     st.caption(
@@ -373,10 +403,7 @@ def run() -> None:
         st.info("a triage process is running — follow it in ▶ run; stored runs below refresh when it finishes")
     # options are run ids, not labels: a label changes after Apply (" · reviewed ✓") and a selectbox whose stored
     # value vanished from its options silently resets to index 0 — the newest run (#225)
-    labels = {r["id"]: f"{r['window_start']} → {r['window_end']} · {r['kind']}"
-              + (f" {r.get('edition')}" if r.get("edition") else "")
-              + f" · {r['status']} · {r.get('picks') if r.get('picks') is not None else '?'} picks"
-              + (" · reviewed ✓" if r.get("reviewed") else "") for r in runs}
+    labels = {r["id"]: _run_label(r) for r in runs}
     choice = st.selectbox("stored run", list(labels.keys()), index=0, key="triage-run-pick",
                           format_func=lambda rid: labels.get(rid, f"run {rid}"))
     run = _run(choice)

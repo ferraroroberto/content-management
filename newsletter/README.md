@@ -378,7 +378,8 @@ or hub failure in `both` only marks those links `not evaluated`;
 | `python -m newsletter.triage.run --since 2026-08-08 --until 2026-08-22` | Explicit range (split into windows). |
 | `python -m newsletter.triage.run --backtest N224,N225,N226,N227` | Offline replay from the history cache: precision of the shortlist vs real picks, recall of the edition's picks sourced in the window. |
 | `python -m newsletter.triage.run --no-llm` | Rule-only report (sender/domain priors) when the hub is down. |
-| `python -m newsletter.triage.run --force` | Replace a run already stored for the same window (without it the engine refuses with exit 3 — the control panel's override toggle passes it). |
+| `python -m newsletter.triage.run --force` | Replace a run already stored for the same window (without it the engine refuses with exit 3 — the control panel's replace toggle passes it). |
+| `python -m newsletter.triage.run --rescore <run id> [--stage-a-engine jev]` | Re-score a stored live run from its stored links — **no Gmail**: the inbox and candidates come from the store (anchor = the stored display title, as `jev_pilot` replays them), sender/domain priors are re-read, and the week is replaced like `--force` (new run id, `stats.rescored_from` = the old one). Decisions, review comment and lessons are keyed by window and survive. The inputs are snapshotted first to `results/newsletter/triage/inputs/`, so a re-score that fails after the replace can be retried from the snapshot. `state.json` is not touched; exit 4 when neither the store nor a snapshot holds the inputs. |
 | `python -m newsletter.triage.feedback <report.md>` | Ingest a reviewed markdown report (tick = yes) for the window in its name → `triage_decisions` + sender tiers in `overrides.json`. The control panel's Apply is the same path. |
 
 First dry run (2026-08-21, `claude_haiku`, 2-week windows ending 7 days before
@@ -418,8 +419,13 @@ Markdown reports and caches stay in gitignored `results/newsletter/triage/`.
 | `triage_editions`, `triage_picks` | the 54-week knowledge base from the history files (`python -m newsletter.triage.db import-history`) |
 
 Control panel → **🧭 triage**: pick a closed Saturday→Saturday week (or the
-open week / custom dates) → ▶ run with the live log (slot `triage`; a stored
-week only re-runs behind the *override* toggle) → choose a stored run → the
+open week / custom dates) and the Stage A engine (**Jev** pre-selected, or
+**Claude Haiku** = `legacy`; passed as `--stage-a-engine` to everything the tab
+launches) → ▶ run with the live log (slot `triage`). A stored week shows which
+engine scored it and is only replaced behind the *replace stored run* toggle:
+**↻ Re-score** (`--rescore`, stored links, no Gmail) or **↻ Re-run week from
+Gmail** (`--force`). → choose a stored run (the list and header name its
+engine) → the
 editable table (`review.py`): suggestions pre-ticked (weak fills unticked),
 tick / untick / promote from runners-up or the whole scored long tail, ⭐ / 🏆,
 per-row notes — **nothing is written until ✅ Apply**, which saves every row's
