@@ -189,7 +189,7 @@ class EngineSwitchTests(unittest.TestCase):
     def _body(self, engine: str, **patches: Any) -> Any:
         cands = _cands()
         by_email = {c.message_id: [c] for c in cands}
-        legacy = mock.MagicMock(side_effect=_legacy_scores)
+        legacy = mock.MagicMock(side_effect=patches.pop("legacy", _legacy_scores))
         cache = mock.MagicMock(misses=0)
         with tempfile.TemporaryDirectory() as tmp, \
                 mock.patch.object(run, "emails_from_cache", return_value=[]), \
@@ -207,7 +207,7 @@ class EngineSwitchTests(unittest.TestCase):
                     date(2026, 8, 8), date(2026, 8, 15), cfg={"llm_hub_base_url": "http://hub", "jev_budget_s": 0.3},
                     criteria=CRITERIA, source="cache", use_llm=True, use_fetch=False, top_k=10, model="claude_haiku",
                     out_dir=Path(tmp), edition_hint="next", backtest=None, limit_links=None, engine=engine)
-                shadow_doc = jx.read_shadow(jx.shadow_path(path))
+                shadow_doc = jx.read_shadow(jx.shadow_path(path)) or jx.read_shadow(jx.legacy_shadow_path(path))
             finally:
                 mock.patch.stopall()
         shadow = shadow_doc["rows"] if shadow_doc else None
@@ -257,6 +257,69 @@ class EngineSwitchTests(unittest.TestCase):
         self.assertEqual(rows[0]["meta"]["topic"], TOPICS[1])
         self.assertEqual(rows[0]["meta"]["conf"]["fit"], 0.71)
         self.assertEqual(rows[0]["verdict"], "vetoed")                    # promo_p 0.7 → promo veto
+
+    # `jev+legacy` (#394) — the mirror of `both`
+
+    @staticmethod
+    def _legacy_fills(items: Any, *_a: Any, results: Any = None, **_k: Any) -> List[sc.MetaScore]:
+        """The legacy scorer as ``LegacyShadow`` drives it: answers land in the shared ``results`` list."""
+        out = _legacy_scores(items)
+        if results is not None:
+            results[:] = out
+        return out
+
+    def test_jev_plus_legacy_decides_with_jev_and_writes_legacy_beside(self) -> None:
+        ok = mock.MagicMock(side_effect=lambda *a, **k: jx.parse_answers(ANSWER))
+        _l, _s, jev_rows, _ = self._body("jev", evaluate=ok)
+        legacy, stats, rows, shadow = self._body("jev+legacy", evaluate=ok, legacy=self._legacy_fills)
+        self.assertEqual(rows, jev_rows)                                 # legacy never decides in `jev+legacy`
+        self.assertEqual({"cache", "stop", "results"} - set(legacy.call_args.kwargs), set())
+        self.assertEqual((stats["stage_a_engine"], stats["legacy_evaluated"], stats["legacy_not_evaluated"]),
+                         ("jev+legacy", 4, 0))
+        self.assertTrue(stats["legacy_shadow"].endswith(".legacy-shadow.json"))
+        self.assertNotIn("jev_shadow", stats)
+        self.assertEqual([r["cid"] for r in shadow], [f"m{i}:0" for i in range(4)])
+        self.assertEqual((shadow[1]["status"], shadow[1]["topic"], shadow[1]["fit"], shadow[1]["reason"]),
+                         ("ok", TOPICS[1], 4, "r1"))
+
+    def test_jev_plus_legacy_keeps_jev_verdicts_when_legacy_fails(self) -> None:
+        ok = mock.MagicMock(side_effect=lambda *a, **k: jx.parse_answers(ANSWER))
+        _l, _s, jev_rows, _ = self._body("jev", evaluate=ok)
+        _l, stats, rows, shadow = self._body("jev+legacy", evaluate=ok, legacy=RuntimeError("hub fell over"))
+        self.assertEqual(rows, jev_rows)
+        self.assertEqual((stats["legacy_evaluated"], stats["legacy_not_evaluated"]), (0, 4))
+        self.assertEqual({r["status"] for r in shadow}, {jx.NOT_EVALUATED})
+
+
+class LegacyShadowTests(unittest.TestCase):
+    def test_budget_bounds_a_hanging_legacy_pass(self) -> None:
+        release = threading.Event()
+
+        def slow(*_a: Any, **_k: Any) -> Any:
+            release.wait(5)
+            return ('[{"i": 1, "topic": "innovation", "fit": 3, "news": false, "promo": false, "reason": "x"}]',
+                    {})
+
+        with mock.patch.object(sc.llm, "call_with_usage", side_effect=slow):
+            t0 = time.monotonic()
+            shadow = sc.LegacyShadow([ITEM] * 3, CRITERIA, base_url="http://hub", model="claude_haiku", workers=1,
+                                     budget_s=0.2)
+            out = shadow.collect()
+            elapsed = time.monotonic() - t0
+            release.set()
+        self.assertLess(elapsed, 2.0)
+        self.assertFalse(any(m.ok for m in out))
+        rows = sc.legacy_shadow_rows(["a", "b", "c"], out, model="claude_haiku", not_evaluated=jx.NOT_EVALUATED)
+        self.assertEqual({r["status"] for r in rows}, {jx.NOT_EVALUATED})
+        self.assertTrue(all(r["fit"] is None and r["news"] is None for r in rows))
+
+    def test_stop_skips_batches_not_yet_started(self) -> None:
+        stop = threading.Event()
+        stop.set()
+        with mock.patch.object(sc.llm, "call_with_usage") as call:
+            out = sc.score_metadata([ITEM] * 3, CRITERIA, base_url="http://hub", model="m", batch=1, stop=stop)
+        call.assert_not_called()
+        self.assertFalse(any(m.ok for m in out))
 
 
 class ShadowFileTests(unittest.TestCase):

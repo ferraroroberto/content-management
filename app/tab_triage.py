@@ -30,7 +30,7 @@ from newsletter.triage.rank import TOPICS
 
 PIPELINE_NAME = "triage"
 _SHORT = {"leadership and management": "leadership", "personal development": "persdev", "innovation": "innovation"}
-_ENGINES = ("jev", "legacy")    # the Stage A choices offered here, Jev first = the default (#395)
+_ENGINES = ("jev+legacy", "jev", "legacy")   # Stage A choices here; the first (the recommended setting, #394) is the default
 
 
 # ---------------------------------------------------------------------------

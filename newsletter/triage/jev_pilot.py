@@ -15,8 +15,10 @@ Replay inputs are the stored Stage A items (candidates with a ``meta`` score): s
 run that Stage B fetched, the stored title is the page title rather than the email anchor — a
 small advantage for Jev on exactly the links that matter most; noted in the summary.
 
-``--shadow`` reads ``<report>.jev-shadow.json`` next to each run's stored report (written by
-``run.py`` when ``stage_a_engine = both``), so weekly runs are compared with the same measures.
+``--shadow`` reads the shadow file next to each run's stored report, so weekly runs are compared with
+the same measures in either direction: ``<report>.jev-shadow.json`` for a ``both`` run (legacy decided)
+and ``<report>.legacy-shadow.json`` for a ``jev+legacy`` run (Jev decided, #394). Each run reports
+``decided_by``; on a Jev-decided run the stored answers are Jev's and legacy's come from the shadow file.
 
 Measures (per run and pooled):
 
@@ -52,6 +54,7 @@ import re
 import sys
 import threading
 import time
+from dataclasses import fields
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -98,9 +101,32 @@ def lang(text: str) -> str:
     return "en" if en >= other else "other"
 
 
+def decided_by(run: Dict[str, Any]) -> str:
+    """``jev`` when the run's stored Stage A answers are Jev's (``jev`` / ``jev+legacy``), else ``legacy``."""
+    return "jev" if (run.get("stats") or {}).get("stage_a_engine") in jx.JEV_DECIDES else "legacy"
+
+
+def _shadow_doc(run: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The run's shadow file — the engine that did *not* decide: Jev's for a legacy-decided run (``both``),
+    legacy's for a Jev-decided one (``jev+legacy``, #394)."""
+    if not run.get("report_path"):
+        return None
+    report = Path(run["report_path"])
+    return jx.read_shadow(jx.legacy_shadow_path(report) if decided_by(run) == "jev" else jx.shadow_path(report))
+
+
+def _stored_jev(meta: Dict[str, Any]) -> Dict[str, Any]:
+    """A Jev-decided run's stored ``meta`` (``asdict(JevMetaScore)``) → the Jev row shape."""
+    names = {f.name for f in fields(jx.JevMetaScore)}
+    return jev_answer(jx.JevMetaScore(**{k: v for k, v in meta.items() if k in names}))
+
+
 def stage_a_items(run_id: int, *, require_review: bool = True) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     """A stored run → (run row, Stage A items with legacy answer + owner decision).
 
+    Direction-aware (#394): on a legacy-decided run ``legacy`` is the stored answer; on a Jev-decided run it
+    comes from the legacy shadow file (``not evaluated`` without one) and the stored answer is ``jev_stored``.
+    The run row gains ``decided_by`` and ``shadow`` (the shadow file, or None).
     ``require_review=False`` admits a run with no applied review: every owner measure is then empty.
     """
     run = db.get_run(run_id)
@@ -110,6 +136,8 @@ def stage_a_items(run_id: int, *, require_review: bool = True) -> Tuple[Dict[str
         if require_review:
             raise SystemExit(f"run {run_id} has no applied review — nothing to compare against")
         logger.warning("⚠️ run %s has no applied review — owner measures stay empty", run_id)
+    run["decided_by"], run["shadow"] = decided_by(run), _shadow_doc(run)
+    legacy_rows = {r["cid"]: r for r in (run["shadow"] or {}).get("rows", [])} if run["decided_by"] == "jev" else {}
     senders = {e["message_id"]: e.get("sender_name") or "" for e in db.emails(run_id)}
     decisions = {d["canonical"]: d for d in db.load_decisions(run["window_start"], run["window_end"])
                  if d.get("canonical")}
@@ -120,17 +148,26 @@ def stage_a_items(run_id: int, *, require_review: bool = True) -> Tuple[Dict[str
             continue
         d = decisions.get(c.get("canonical") or "")
         title = c.get("title") or c.get("url") or ""
-        items.append({
+        if run["decided_by"] == "jev":
+            row = legacy_rows.get(c["cid"]) or {"status": jx.NOT_EVALUATED}
+            legacy = {"ok": row["status"] == "ok", "topic": row.get("topic"), "fit": row.get("fit"),
+                      "news": bool(row.get("news")), "promo": bool(row.get("promo"))}
+        else:
+            legacy = {"ok": bool(meta.get("ok")), "topic": meta.get("topic"), "fit": meta.get("fit"),
+                      "news": bool(meta.get("news")), "promo": bool(meta.get("promo"))}
+        item = {
             "cid": c["cid"], "title": title, "domain": c.get("domain") or "", "suggested": c.get("suggested"),
             "sender_weight": float(c.get("sender_weight") or 0.0), "fetched": c.get("fetched_ok") is not None,
             "input": {"sender": senders.get(c.get("message_id"), ""), "label": title, "domain": c.get("domain") or "",
                       "path": urlsplit(c.get("url") or "").path},
             "lang": lang(title),
-            "legacy": {"ok": bool(meta.get("ok")), "topic": meta.get("topic"), "fit": meta.get("fit"),
-                       "news": bool(meta.get("news")), "promo": bool(meta.get("promo"))},
+            "legacy": legacy,
             "owner": {"decided": d is not None, "pick": bool(d and d.get("pick")),
                       "topic": d.get("topic") if d else None},
-        })
+        }
+        if run["decided_by"] == "jev":
+            item["jev_stored"] = _stored_jev(meta)
+        items.append(item)
     return run, items
 
 
@@ -451,7 +488,7 @@ def replay(run_ids: Sequence[int], *, base_url: str, model: str, workers: int, r
             logger.info("  ⏱️ %s: %.0fs, %d calls, max %d in flight", engine, wall, len(calls),
                         engines[engine].get("max_in_flight", 0))
         entry = {"window": [run["window_start"], run["window_end"]], "legacy_model": run.get("model"),
-                 "latency": ring.summary(len(items)), "measures": measures(items)}
+                 "decided_by": run["decided_by"], "latency": ring.summary(len(items)), "measures": measures(items)}
         if legacy:
             fresh = [dict(it, legacy=it["legacy_fresh"]) for it in items]
             depth = max(int(legacy["top_k"]), len(items) // 12)
@@ -463,9 +500,11 @@ def replay(run_ids: Sequence[int], *, base_url: str, model: str, workers: int, r
                 "stage_b_entry": {"legacy_stored": stage_b_entry(items, "legacy", priors, depth),
                                   "legacy_fresh": stage_b_entry(items, "legacy_fresh", priors, depth),
                                   "jev": stage_b_entry(items, "jev", priors, depth)}}
-            shadow_doc = jx.read_shadow(jx.shadow_path(Path(run["report_path"]))) if run.get("report_path") else None
-            if shadow_doc is not None:
-                prior = {r["cid"]: r for r in shadow_doc["rows"]}
+            if run["decided_by"] == "jev":
+                entry["reproduction"]["jev_fresh_vs_stored"] = consistency(
+                    [it["jev_stored"] for it in items], [it["jev"] for it in items])
+            elif run["shadow"] is not None:
+                prior = {r["cid"]: r for r in run["shadow"]["rows"]}
                 entry["reproduction"]["jev_fresh_vs_shadow"] = consistency(
                     [prior.get(it["cid"]) or {"status": jx.NOT_EVALUATED} for it in items], [it["jev"] for it in items])
             fresh_pooled.extend(fresh)
@@ -484,23 +523,29 @@ def replay(run_ids: Sequence[int], *, base_url: str, model: str, workers: int, r
 
 
 def shadow(run_ids: Sequence[int]) -> Dict[str, Any]:
+    """Stored runs with a shadow pass, either direction: ``both`` (legacy decided, Jev in ``.jev-shadow.json``)
+    and ``jev+legacy`` (Jev decided, legacy in ``.legacy-shadow.json``, #394). No model calls."""
     if not run_ids:
-        run_ids = [r["id"] for r in db.list_runs(60) if r.get("reviewed") and (r.get("stats") or {}).get("jev_shadow")]
+        run_ids = [r["id"] for r in db.list_runs(60) if r.get("reviewed")
+                   and ((r.get("stats") or {}).get("jev_shadow") or (r.get("stats") or {}).get("legacy_shadow"))]
     per_run: Dict[str, Any] = {}
     pooled: List[Dict[str, Any]] = []
     for rid in run_ids:
         run, items = stage_a_items(rid)
-        doc = jx.read_shadow(jx.shadow_path(Path(run.get("report_path") or ""))) if run.get("report_path") else None
-        if doc is None:
-            logger.warning("⚠️ run %s has no jev shadow file — skipped", rid)
+        if run["shadow"] is None:
+            logger.warning("⚠️ run %s (%s decided) has no shadow file — skipped", rid, run["decided_by"])
             continue
-        rows = {r["cid"]: r for r in doc["rows"]}
-        for it in items:
-            r = rows.get(it["cid"])
-            it["jev"] = {k: v for k, v in r.items() if k not in ("cid", "probs")} if r else \
-                {"status": jx.NOT_EVALUATED, "error": "not in shadow file"}
+        if run["decided_by"] == "jev":
+            for it in items:
+                it["jev"] = it["jev_stored"]
+        else:
+            rows = {r["cid"]: r for r in run["shadow"]["rows"]}
+            for it in items:
+                r = rows.get(it["cid"])
+                it["jev"] = {k: v for k, v in r.items() if k not in ("cid", "probs")} if r else \
+                    {"status": jx.NOT_EVALUATED, "error": "not in shadow file"}
         per_run[str(rid)] = {"window": [run["window_start"], run["window_end"]], "legacy_model": run.get("model"),
-                             "measures": measures(items), "_items": items}
+                             "decided_by": run["decided_by"], "measures": measures(items), "_items": items}
         pooled.extend(items)
     return {"mode": "shadow", "runs": per_run, "pooled": measures(pooled) if pooled else None}
 
@@ -582,7 +627,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     force_utf8_stdio()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run", type=int, action="append", default=[], help="stored, reviewed run id (repeatable)")
-    ap.add_argument("--shadow", action="store_true", help="compare stored `both` runs (no Jev calls)")
+    ap.add_argument("--shadow", action="store_true", help="compare stored runs with a shadow pass, `both` or `jev+legacy` (no model calls)")
     ap.add_argument("--repeat", action="store_true", help="replay: score each run twice for consistency")
     ap.add_argument("--model", default=None)
     ap.add_argument("--legacy", action="store_true",

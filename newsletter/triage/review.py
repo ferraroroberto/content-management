@@ -36,7 +36,8 @@ TIERS = ("always", "usually", "review", "rarely", "never")
 EDITOR_COLUMNS = ["cid", "topic", "pick", "star", "must_read", "score", "title", "url", "sender", "summary", "why",
                   "note", "suggested", "canonical", "sender_address"]
 # Stage A engine (``run.py --stage-a-engine``) → the name the owner reads; legacy = the hub's ``claude_haiku``
-ENGINE_LABELS = {"jev": "Jev", "legacy": "Claude Haiku", "both": "Claude Haiku (Jev shadow)"}
+ENGINE_LABELS = {"jev+legacy": "Jev + Claude Haiku shadow", "jev": "Jev", "legacy": "Claude Haiku",
+                 "both": "Claude Haiku + Jev shadow"}
 
 
 def engine_label(stats: Optional[Dict[str, Any]]) -> str:

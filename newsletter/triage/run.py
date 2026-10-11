@@ -2,7 +2,7 @@
 
     python -m newsletter.triage.run [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--days 7]
                                     [--source gmail|cache] [--no-llm] [--no-fetch] [--top-k 90]
-                                    [--model claude_haiku] [--stage-a-engine legacy|jev|both]
+                                    [--model claude_haiku] [--stage-a-engine legacy|jev|both|jev+legacy]
                                     [--out DIR] [--debug]
     python -m newsletter.triage.run --backtest N226[,N227,…]   # offline, from the history cache
     python -m newsletter.triage.run --rescore RUN_ID [--stage-a-engine jev]   # stored inputs, no Gmail
@@ -23,6 +23,9 @@ Stage A engine (``newsletter_triage.stage_a_engine`` / ``--stage-a-engine``, #28
 Jev through the hub's ``/v1/systemone``; ``both`` lets legacy decide every verdict
 while Jev scores the same links in the background (bounded by ``jev_budget_s``) and
 its answers are written beside the report as ``<report>.jev-shadow.json``.
+``jev+legacy`` (#394, the recommended setting) is the mirror: Jev decides every verdict
+while legacy scores the same links in the background through stage B (bounded by
+``legacy_budget_s``), its answers written as ``<report>.legacy-shadow.json``.
 
 Re-score (``--rescore RUN_ID``, #395): replace a stored live run's scoring without
 touching Gmail — Stage A inputs are rebuilt from the run's stored emails + candidates
@@ -381,18 +384,46 @@ def _collect_shadow(shadow: Optional[jx.Shadow], cids: List[str], stats: Dict[st
     return rows
 
 
-def _write_shadow(report: Path, rows: List[Dict[str, Any]], *, start: date, end: date,
-                  stats: Dict[str, Any]) -> None:
-    """``both``: Jev's answers beside the report — never in ``triage_candidates``. A failure is logged and
-    recorded in ``stats``, never raised."""
-    path = jx.shadow_path(report)
+def _start_legacy_shadow(items: List[Dict[str, str]], criteria: Dict[str, Any], *, base_url: str, model: str,
+                         cfg: Dict[str, Any], cache: sc.LLMCache) -> Optional[sc.LegacyShadow]:
     try:
-        jx.write_shadow(path, rows, window=(start.isoformat(), end.isoformat()))
-        stats["jev_shadow"] = path.name
-        logger.info("🧪 jev shadow: %d answers (%d not evaluated) → %s", len(rows), stats["jev_not_evaluated"], path)
+        return sc.LegacyShadow(items, criteria, base_url=base_url, model=model,
+                               workers=int(cfg.get("llm_workers", 3)) + 1, cache=cache,
+                               budget_s=float(cfg.get("legacy_budget_s", sc.DEFAULT_LEGACY_BUDGET_S)))
+    except Exception as err:  # noqa: BLE001 — the shadow must never fail the Jev run
+        logger.warning("⚠️ legacy shadow not started: %s", type(err).__name__)
+        return None
+
+
+def _collect_legacy_shadow(shadow: Optional[sc.LegacyShadow], cids: List[str], model: str,
+                           stats: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """``jev+legacy``: legacy's answers as rows; a shadow that never started → every item ``not evaluated``."""
+    scores = [sc.MetaScore() for _ in cids]
+    if shadow is not None:
+        try:
+            scores = shadow.collect()
+        except Exception as err:  # noqa: BLE001
+            logger.warning("⚠️ legacy shadow not collected: %s", type(err).__name__)
+    rows = sc.legacy_shadow_rows(cids, scores, model=model, not_evaluated=jx.NOT_EVALUATED)
+    stats["legacy_evaluated"] = sum(1 for r in rows if r["status"] == "ok")
+    stats["legacy_not_evaluated"] = len(rows) - stats["legacy_evaluated"]
+    return rows
+
+
+def _write_shadow(report: Path, rows: List[Dict[str, Any]], *, start: date, end: date,
+                  stats: Dict[str, Any], engine: str = "jev") -> None:
+    """The shadow engine's answers beside the report — never in ``triage_candidates``: Jev's for ``both``,
+    legacy's for ``jev+legacy`` (``engine="legacy"``). A failure is logged and recorded in ``stats``, never
+    raised."""
+    path = jx.legacy_shadow_path(report) if engine == "legacy" else jx.shadow_path(report)
+    try:
+        jx.write_shadow(path, rows, window=(start.isoformat(), end.isoformat()), engine=engine)
+        stats[f"{engine}_shadow"] = path.name
+        logger.info("🧪 %s shadow: %d answers (%d not evaluated) → %s", engine, len(rows),
+                    stats[f"{engine}_not_evaluated"], path)
     except Exception as err:  # noqa: BLE001
-        stats["jev_shadow"] = f"failed: {type(err).__name__}"
-        logger.warning("⚠️ jev shadow not written: %s", err)
+        stats[f"{engine}_shadow"] = f"failed: {type(err).__name__}"
+        logger.warning("⚠️ %s shadow not written: %s", engine, err)
 
 
 def _truth_decisions(cands: List[rk.Candidate], sel: rk.Selection, bt: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -455,10 +486,15 @@ def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: D
             logger.error("❌ LLM hub unreachable at %s — producing a rule-only report", base_url)
             use_llm = False
     shadow_rows: Optional[List[Dict[str, Any]]] = None
+    legacy_shadow: Optional[sc.LegacyShadow] = None
     if use_llm and stage_a:
         items = [{"sender": c.sender_name, "label": c.label or c.url, "domain": c.domain,
                   "path": urlsplit(c.url).path} for c in stage_a]
-        if engine == "jev":
+        if engine in jx.JEV_DECIDES:
+            # `jev+legacy` (#394): legacy keeps scoring in the background through stage B, collected below
+            if engine == "jev+legacy":
+                legacy_shadow = _start_legacy_shadow(items, criteria, base_url=base_url, model=model, cfg=cfg,
+                                                     cache=llm_cache)
             metas = jx.score_metadata_jev(items, criteria, base_url=base_url,
                                           model=cfg.get("jev_model", jx.DEFAULT_MODEL),
                                           workers=int(cfg.get("jev_workers", jx.DEFAULT_WORKERS)))
@@ -530,6 +566,9 @@ def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: D
                 if c.content and c.content.ok:
                     c.summary = c.content.summary
             stats["stage_b_scored"] = sum(1 for c in todo if c.content and c.content.ok)
+    if engine == "jev+legacy" and use_llm and stage_a:
+        shadow_rows = _collect_legacy_shadow(legacy_shadow, [c.cid for c in stage_a], model, stats)
+        llm_cache.flush()
     stats["scored"] = sum(1 for c in cands if c.score is not None)
     stats["llm_calls"] = llm_calls
 
@@ -566,7 +605,8 @@ def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: D
     path = out_dir / name
     path.write_text(md, encoding="utf-8")
     if shadow_rows is not None:
-        _write_shadow(path, shadow_rows, start=start, end=end, stats=stats)
+        _write_shadow(path, shadow_rows, start=start, end=end, stats=stats,
+                      engine="legacy" if engine == "jev+legacy" else "jev")
     logger.info("📝 report: %s — %d picks (%s) in %.0fs", path, stats["selected"],
                 ", ".join(f"{t[:6]} {len(sel.picks[t])}" for t in rk.TOPICS), stats["elapsed_s"])
     return path, sel, stats, cands, emails_view
