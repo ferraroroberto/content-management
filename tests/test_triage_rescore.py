@@ -256,10 +256,11 @@ class RescoreStoreRoundTripTests(unittest.TestCase):
 class EngineLabelTests(unittest.TestCase):
     def test_labels(self) -> None:
         self.assertEqual(review.engine_label({"stage_a_engine": "jev", "stage_a_scored": 3}), "Jev")
-        self.assertEqual(review.engine_label({"stage_a_engine": "both"}), "Claude Haiku (Jev shadow)")
+        self.assertEqual(review.engine_label({"stage_a_engine": "both"}), "Claude Haiku + Jev shadow")
         self.assertEqual(review.engine_label({"stage_a_scored": 3, "scored": 3}), "Claude Haiku")   # pre-#285 legacy
         self.assertEqual(review.engine_label({"scored": 3}), "rule-only")
-        self.assertEqual(review.engine_label({"stage_a_engine": "jev+legacy"}), "jev+legacy")      # unknown → raw
+        self.assertEqual(review.engine_label({"stage_a_engine": "jev+legacy"}), "Jev + Claude Haiku shadow")
+        self.assertEqual(review.engine_label({"stage_a_engine": "next-engine"}), "next-engine")     # unknown → raw
         self.assertEqual(review.engine_label(None), "")
 
 
@@ -291,14 +292,14 @@ class TabTests(unittest.TestCase):
     def test_rescore_is_behind_the_replace_toggle_with_jev_preselected(self) -> None:
         at, launched = self._app()
         self.assertFalse(at.exception)
-        self.assertEqual(at.radio(key="triage-engine").value, "jev")
-        self.assertTrue(any("scored by Claude Haiku (Jev shadow)" in c.value for c in at.caption))
+        self.assertEqual(at.radio(key="triage-engine").value, "jev+legacy")
+        self.assertTrue(any("scored by Claude Haiku + Jev shadow" in c.value for c in at.caption))
         self.assertTrue(at.button(key="triage-rescore").disabled)
         at.toggle(key="triage-override").set_value(True).run()
         at.button(key="triage-rescore").click().run()
         self.assertFalse(at.exception)
         cmd = launched.call_args.args[1]
-        self.assertEqual(cmd[1:], ["-m", "newsletter.triage.run", "--stage-a-engine", "jev", "--rescore", "18"])
+        self.assertEqual(cmd[1:], ["-m", "newsletter.triage.run", "--stage-a-engine", "jev+legacy", "--rescore", "18"])
 
     def test_claude_haiku_passes_legacy(self) -> None:
         at, launched = self._app()

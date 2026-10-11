@@ -49,7 +49,8 @@ from newsletter.triage.score import MetaScore, load_lessons
 
 logger = logging.getLogger("newsletter_triage.jev")
 
-ENGINES = ("legacy", "jev", "both")
+ENGINES = ("legacy", "jev", "both", "jev+legacy")
+JEV_DECIDES = ("jev", "jev+legacy")   # engines whose Stage A answers are Jev's; `jev+legacy` = legacy shadow (#394)
 DEFAULT_ENGINE = "legacy"
 DEFAULT_MODEL = "jev-latest"
 ROUTE = "/v1/systemone"
@@ -292,7 +293,8 @@ def shadow_rows(cids: Sequence[str], scores: Sequence[JevMetaScore], *, model: s
 
 
 # ---------------------------------------------------------------------------
-# shadow file — beside the run's report, so a `both` run never writes Jev into the store's legacy fields
+# shadow files — beside the run's report, so the shadow engine never writes into the store's candidate fields
+# (`both`: Jev's answers in `.jev-shadow.json`; `jev+legacy`: legacy's in `.legacy-shadow.json`)
 
 
 def shadow_path(report: Path) -> Path:
@@ -300,8 +302,15 @@ def shadow_path(report: Path) -> Path:
     return report.with_suffix(".jev-shadow.json")
 
 
-def write_shadow(path: Path, rows: Sequence[Dict[str, Any]], *, window: Tuple[str, str]) -> None:
-    data = {"window": list(window), "written_at": datetime.now(timezone.utc).isoformat(),
+def legacy_shadow_path(report: Path) -> Path:
+    """``jev+legacy`` (#394): ``triage-<start>_<end>.md`` → ``triage-<start>_<end>.legacy-shadow.json``."""
+    return report.with_suffix(".legacy-shadow.json")
+
+
+def write_shadow(path: Path, rows: Sequence[Dict[str, Any]], *, window: Tuple[str, str],
+                 engine: str = "jev") -> None:
+    """``engine`` = the shadow engine whose answers ``rows`` hold (``jev`` or ``legacy``); the other one decided."""
+    data = {"window": list(window), "written_at": datetime.now(timezone.utc).isoformat(), "engine": engine,
             "evaluated": sum(1 for r in rows if r["status"] == "ok"), "rows": list(rows)}
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
@@ -309,7 +318,7 @@ def write_shadow(path: Path, rows: Sequence[Dict[str, Any]], *, window: Tuple[st
 
 
 def read_shadow(path: Path) -> Optional[Dict[str, Any]]:
-    """The shadow file of a run, or None when the run had no ``both`` pass (or the file is unreadable)."""
+    """A run's shadow file, or None when the run had no shadow pass (or the file is unreadable)."""
     if not path.exists():
         return None
     try:

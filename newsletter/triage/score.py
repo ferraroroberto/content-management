@@ -20,6 +20,7 @@ import hashlib
 import json
 import logging
 import re
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -35,6 +36,7 @@ logger = logging.getLogger("newsletter_triage.score")
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LLM_CACHE_PATH = REPO_ROOT / "results" / "newsletter" / "triage" / "llm_cache.json"
+DEFAULT_LEGACY_BUDGET_S = 1200   # `jev+legacy`: the most the legacy shadow may run (a legacy pass is ~10–15 min)
 
 
 class LLMCache(JsonFileCache):
@@ -232,17 +234,21 @@ def meta_request(brief: str, chunk: Sequence[Dict[str, str]]) -> Tuple[str, int]
 
 def score_metadata(items: Sequence[Dict[str, str]], criteria: Dict[str, Any], *, base_url: str, model: str,
                    batch: int = 25, timeout: int = 180, workers: int = 4,
-                   cache: Optional["LLMCache"] = None, calls: Optional[List[Dict[str, Any]]] = None) -> List[MetaScore]:
+                   cache: Optional["LLMCache"] = None, calls: Optional[List[Dict[str, Any]]] = None,
+                   stop: Optional[threading.Event] = None,
+                   results: Optional[List[MetaScore]] = None) -> List[MetaScore]:
     """``items``: dicts with sender, label, domain, path. Returns one MetaScore per item (same order).
 
     Batches run concurrently (``workers``) — the hub's per-call overhead (~8 s
     CLI start for the Claude aliases) dominates, not generation. Cached items
     are not re-sent. ``calls``, when given, receives one record per hub call
     (links, monotonic start/end, ok, the response's token usage) for the
-    engine comparison in ``jev_pilot --legacy`` (#392).
+    engine comparison in ``jev_pilot --legacy`` (#392). ``stop`` ends the pass early (batches not yet
+    started stay unscored) and ``results`` lets a caller read finished items while it runs — the
+    ``jev+legacy`` shadow (#394), like ``jev.score_metadata_jev``.
     """
     brief = _criteria_brief(criteria)
-    out: List[MetaScore] = [MetaScore() for _ in items]
+    out: List[MetaScore] = results if results is not None else [MetaScore() for _ in items]
     todo_idx: List[int] = []
     for i, it in enumerate(items):
         hit = cache.get(_meta_key(model, it)) if cache is not None else None
@@ -257,6 +263,8 @@ def score_metadata(items: Sequence[Dict[str, str]], criteria: Dict[str, Any], *,
     done = 0
 
     def one(start: int) -> None:
+        if stop is not None and stop.is_set():
+            return
         idxs = todo_idx[start:start + batch]
         chunk = [items[i] for i in idxs]
         prompt, max_tokens = meta_request(brief, chunk)
@@ -297,6 +305,55 @@ def score_metadata(items: Sequence[Dict[str, str]], criteria: Dict[str, Any], *,
     if cache is not None:
         cache.flush()
     return out
+
+
+class LegacyShadow:
+    """``jev+legacy`` mode (#394): legacy scores the same Stage A items on a background thread while Jev
+    decides — the mirror of ``jev.Shadow``.
+
+    ``collect()`` waits at most until ``budget_s`` after start, then stops the pass and returns copies of
+    what finished — every other item has ``ok=False``. Nothing here can raise into the Jev run.
+    """
+
+    def __init__(self, items: Sequence[Dict[str, str]], criteria: Dict[str, Any], *, base_url: str, model: str,
+                 workers: int = 4, cache: Optional["LLMCache"] = None,
+                 budget_s: float = DEFAULT_LEGACY_BUDGET_S) -> None:
+        self.model = model
+        self.budget_s = budget_s
+        self.results: List[MetaScore] = [MetaScore() for _ in items]
+        self._stop = threading.Event()
+        self._t0 = time.monotonic()
+        self._thread = threading.Thread(target=self._run, name="legacy-shadow", daemon=True,
+                                        args=(items, criteria, base_url, workers, cache))
+        self._thread.start()
+
+    def _run(self, items: Sequence[Dict[str, str]], criteria: Dict[str, Any], base_url: str, workers: int,
+             cache: Optional["LLMCache"]) -> None:
+        try:
+            score_metadata(items, criteria, base_url=base_url, model=self.model, workers=workers, cache=cache,
+                           stop=self._stop, results=self.results)
+        except Exception as exc:  # noqa: BLE001 — the shadow must never surface into the Jev run
+            logger.warning("⚠️ legacy shadow pass failed: %s", type(exc).__name__)
+
+    def collect(self) -> List[MetaScore]:
+        remaining = self.budget_s - (time.monotonic() - self._t0)
+        self._thread.join(timeout=max(0.0, remaining))
+        if self._thread.is_alive():
+            self._stop.set()
+            logger.warning("⚠️ legacy shadow over its %.0fs budget — unfinished links recorded as not evaluated",
+                           self.budget_s)
+        # copies: a batch still in flight keeps writing into ``results`` after the budget
+        return [MetaScore(**m.__dict__) for m in list(self.results)]
+
+
+def legacy_shadow_rows(cids: Sequence[str], scores: Sequence[MetaScore], *, model: str,
+                       not_evaluated: str = "not evaluated") -> List[Dict[str, Any]]:
+    """Legacy shadow rows — the row shape of ``jev.shadow_rows`` (``cid``, ``model``, ``status`` ok / not
+    evaluated, ``topic``, ``fit``, ``news``, ``promo``) plus legacy's ``reason``."""
+    return [{"cid": cid, "model": model, "status": "ok" if m.ok else not_evaluated,
+             "error": None if m.ok else not_evaluated, "topic": m.topic, "fit": m.fit,
+             "news": bool(m.news) if m.ok else None, "promo": bool(m.promo) if m.ok else None,
+             "reason": m.reason or None} for cid, m in zip(cids, scores)]
 
 
 # ---------------------------------------------------------------------------

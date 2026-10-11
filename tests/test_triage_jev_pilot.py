@@ -93,12 +93,13 @@ class MeasureTests(unittest.TestCase):
 class _Store:
     """Just enough of the store for ``stage_a_items`` + ``shadow``."""
 
-    def __init__(self, report: Path) -> None:
+    def __init__(self, report: Path, stats: Optional[Dict[str, Any]] = None) -> None:
         self.report = report
+        self.stats = stats or {}
 
     def get_run(self, rid: int) -> Dict[str, Any]:
         return {"id": rid, "window_start": "2026-09-26", "window_end": "2026-10-03", "model": "claude_haiku",
-                "report_path": str(self.report)}
+                "report_path": str(self.report), "stats": dict(self.stats)}
 
 
 class ShadowCompareTests(unittest.TestCase):
@@ -133,6 +134,46 @@ class ShadowCompareTests(unittest.TestCase):
         self.assertEqual(p["owner_agreement"]["jev"]["recall_fit_ge3"], 1.0)
         self.assertEqual(result["runs"]["17"]["_items"][0]["input"],
                          {"sender": "S1", "label": "A", "domain": "x.com", "path": "/a"})
+        self.assertEqual(result["runs"]["17"]["decided_by"], "legacy")
+
+    def test_jev_decided_run_reads_legacy_from_its_shadow_file(self) -> None:  # `jev+legacy`, #394
+        def jev_meta(topic: str, fit: int) -> Dict[str, Any]:
+            m = jx.JevMetaScore(topic=topic, fit=fit, fit_score=float(fit), news_p=0.1, promo_p=0.1, ok=True,
+                                conf={"topic": 0.95, "fit": 0.6, "news": 0.8, "promo": 0.8})
+            return dict(m.__dict__)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / "triage-2026-09-26_2026-10-03.md"
+            jx.write_shadow(jx.legacy_shadow_path(report), sc.legacy_shadow_rows(
+                ["m1:0"], [sc.MetaScore(topic=P, fit=1, reason="weak", ok=True)], model="claude_haiku"),
+                window=("2026-09-26", "2026-10-03"), engine="legacy")
+            store = _Store(report, stats={"stage_a_engine": "jev+legacy", "legacy_shadow": "x"})
+            cands = [{"cid": "m1:0", "message_id": "m1", "canonical": "u1", "url": "https://x.com/a", "title": "A",
+                      "domain": "x.com", "meta": jev_meta(L, 4)},
+                     {"cid": "m2:0", "message_id": "m2", "canonical": "u2", "url": "https://y.com/b", "title": "B",
+                      "domain": "y.com", "meta": jev_meta(I, 2)}]
+            patches = {"get_run": store.get_run, "get_review": lambda *_a: {"comment": ""},
+                       "emails": lambda _r: [{"message_id": "m1", "sender_name": "S1"}],
+                       "candidates": lambda _r: cands,
+                       "load_decisions": lambda *_a: [{"canonical": "u1", "pick": True, "topic": L}]}
+            with mock.patch.multiple(db, **patches):
+                result = jp.shadow([18])
+        run = result["runs"]["18"]
+        self.assertEqual(run["decided_by"], "jev")
+        first, second = run["_items"]
+        self.assertEqual((first["jev"]["topic"], first["jev"]["fit"], first["jev"]["topic_conf"]), (L, 4, 0.95))
+        self.assertEqual((first["legacy"]["ok"], first["legacy"]["topic"], first["legacy"]["fit"]), (True, P, 1))
+        self.assertFalse(second["legacy"]["ok"])                          # not in the legacy shadow file
+        oa = result["pooled"]["owner_agreement"]
+        self.assertEqual((oa["jev"]["recall_fit_ge3"], oa["legacy"]["recall_fit_ge3"]), (1.0, 0.0))
+
+    def test_jev_decided_run_without_shadow_file_is_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = _Store(Path(tmp) / "triage-2026-09-26_2026-10-03.md", stats={"stage_a_engine": "jev"})
+            with mock.patch.multiple(db, get_run=store.get_run, get_review=lambda *_a: {"comment": ""},
+                                     emails=lambda _r: [], candidates=lambda _r: [], load_decisions=lambda *_a: []):
+                result = jp.shadow([19])
+        self.assertEqual((result["runs"], result["pooled"]), ({}, None))
 
 
 class CallSinkTests(unittest.TestCase):
