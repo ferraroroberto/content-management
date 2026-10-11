@@ -131,6 +131,9 @@ class _Query:
         if self.op == "upsert":
             keys = [k.strip() for k in (self.on_conflict or "").split(",") if k.strip()]
             out = []
+            seen = [tuple(str(r.get(k)) for k in keys) for r in self.payload]
+            if keys and len(seen) != len(set(seen)):   # Postgres SQLSTATE 21000
+                raise RuntimeError("{'code': '21000', 'message': 'ON CONFLICT DO UPDATE command cannot affect row a second time'}")
             for r in self.payload:
                 r = dict(r)
                 hit = next((t for t in table if keys and all(str(t.get(k)) == str(r.get(k)) for k in keys)), None)
@@ -284,6 +287,27 @@ class StoreTests(unittest.TestCase):
         db.save_decisions("2026-08-08", "2026-08-15", [{"canonical": "https://site1.com/post-1", "topic": "–",
                                                         "sender_address": "fav@x.com", "pick": True}])
         self.assertEqual(rv.review_frame(run_id).set_index("cid").loc["m1:0", "topic"], "innovation")
+
+    def test_save_decisions_merges_rows_sharing_a_canonical(self) -> None:
+        """Two editor rows for one article (two emails / two topics) must not trip Postgres 21000, and a tick on
+        either copy survives (#400)."""
+        a = {"canonical": "https://site1.com/post-1", "cid": "m1:0", "sender_address": "A@x.com", "title": "",
+             "url": "", "topic": "innovation", "pick": False, "star": True}
+        b = {"canonical": "https://site1.com/post-1", "cid": "m2:0", "sender_address": "b@x.com", "title": "Post 1",
+             "url": "https://site1.com/post-1?x=1", "topic": "leadership", "pick": True, "must_read": True,
+             "note": "keep"}
+        other = {"canonical": "https://site2.com/post-2", "pick": False}
+        with self.assertLogs("newsletter_triage.db", level="INFO") as logs:
+            saved = db.save_decisions("2026-08-08", "2026-08-15", [a, b, other, {"pick": True}])
+        self.assertEqual(saved, 2)
+        self.assertTrue(any("merged 1 duplicate" in m for m in logs.output))
+        dec = {d["canonical"]: d for d in db.load_decisions("2026-08-08", "2026-08-15")}
+        self.assertEqual(len(dec), 2)
+        row = dec["https://site1.com/post-1"]
+        self.assertTrue(row["pick"] and row["star"] and row["must_read"])
+        self.assertEqual((row["cid"], row["sender_address"], row["topic"]), ("m1:0", "a@x.com", "innovation"))
+        self.assertEqual((row["title"], row["url"], row["note"]), ("Post 1", "https://site1.com/post-1?x=1", "keep"))
+        self.assertFalse(dec["https://site2.com/post-2"]["pick"])
 
     def test_feedback_cli_path_saves_to_store(self) -> None:
         self._store()
