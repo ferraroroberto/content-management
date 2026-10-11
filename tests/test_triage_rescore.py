@@ -127,6 +127,7 @@ class RescoreBodyTests(unittest.TestCase):
                 mock.patch.object(run, "load_notion_urls", return_value=(set(), {})) as notion, \
                 mock.patch.object(run, "store_ok", return_value=False), \
                 mock.patch.object(run.llm, "health_check", return_value=True), \
+                mock.patch.object(run.llm, "served_model", return_value="claude-haiku-5-5"), \
                 mock.patch.object(run.sc, "score_metadata", legacy), \
                 mock.patch.object(run.sc, "LLMCache", return_value=mock.MagicMock(misses=0)), \
                 mock.patch.object(run.sc, "Priors", return_value=_priors()), \
@@ -220,7 +221,8 @@ class RescoreStoreRoundTripTests(unittest.TestCase):
             self.addCleanup(p.stop)
 
     def _rescore(self, run_id: int, jev: mock.MagicMock) -> Any:
-        with mock.patch.object(jx, "score_metadata_jev", jev):
+        with mock.patch.object(jx, "score_metadata_jev", jev), \
+                mock.patch.object(run.llm, "served_model", return_value="claude-haiku-5-5"):
             return run.rescore(run_id, cfg={"llm_hub_base_url": "http://hub"}, criteria=CRITERIA, use_llm=True,
                                use_fetch=False, top_k=10, model="claude_haiku", out_dir=Path(self._tmp.name),
                                engine="jev")
@@ -300,6 +302,15 @@ class TabTests(unittest.TestCase):
         self.assertFalse(at.exception)
         cmd = launched.call_args.args[1]
         self.assertEqual(cmd[1:], ["-m", "newsletter.triage.run", "--stage-a-engine", "jev+legacy", "--rescore", "18"])
+
+    def test_fresh_switch_adds_the_flag_and_is_off_by_default(self) -> None:
+        at, launched = self._app()
+        at.toggle(key="triage-override").set_value(True).run()
+        self.assertFalse(at.toggle(key="triage-fresh").value)
+        at.toggle(key="triage-fresh").set_value(True).run()
+        at.button(key="triage-rescore").click().run()
+        self.assertFalse(at.exception)
+        self.assertEqual(launched.call_args.args[1][-3:], ["--rescore", "18", "--fresh"])
 
     def test_claude_haiku_passes_legacy(self) -> None:
         at, launched = self._app()

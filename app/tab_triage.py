@@ -178,9 +178,13 @@ def _render_run_controls(runs: list[dict]) -> None:
                                  help="This week is already stored. Re-scoring or re-running replaces its "
                                       "candidates; your applied decisions, review comment and lessons are kept and "
                                       "pre-fill the new table.")
+            fresh = st.toggle("fresh (ignore LLM cache)", value=False, key="triage-fresh",
+                              help="Re-score calls the model for every link instead of reusing cached answers "
+                                   "(both stages). Off: answers from the same model version are reused; answers "
+                                   "from an older version behind the alias never are. New answers are stored either way.")
             st.button(f"↻ Re-score with {review.ENGINE_LABELS[engine]} (no Gmail)", key="triage-rescore",
                       type="primary", disabled=running or not override,
-                      on_click=_launch, args=(base + ["--rescore", str(stored["id"])] + tail,),
+                      on_click=_launch, args=(base + ["--rescore", str(stored["id"])] + (["--fresh"] if fresh else []) + tail,),
                       help="Scores the run's stored links again with the chosen engine — no Gmail fetch. Only the "
                            "top links' pages are fetched, mostly from the local cache.")
             st.button("↻ Re-run week from Gmail", key="triage-rerun", disabled=running or not override,
