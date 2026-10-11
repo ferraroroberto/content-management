@@ -10,9 +10,11 @@ call to this project's `call()`/`health_check()` shape.
 from __future__ import annotations
 
 import logging
+import re
 from functools import lru_cache
 from typing import Optional
 
+import httpx
 from anthropic import Anthropic
 
 logger = logging.getLogger("newsletter_archive.llm")
@@ -69,6 +71,36 @@ def call_with_usage(*, base_url: str, model: str, prompt: str | list,
         if getattr(part, "type", None) == "text":
             return (part.text or "").strip(), usage
     raise RuntimeError(f"Unexpected /v1/messages response shape: {msg!r}")
+
+
+def _squash(text: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
+def served_model(*, base_url: str, model: str, timeout: int = 10) -> Optional[str]:
+    """The concrete model id the hub currently serves for ``model`` (e.g. ``claude_haiku`` → ``claude-haiku-5-5``).
+
+    The hub reports no alias → version mapping and echoes the alias in every response, but ``GET /v1/models``
+    lists each registry row as its alias, then the row's ``display_name`` (the version the hub passes to the
+    CLI), then any older aliases. So the id right after the alias, when it extends the alias's name, is the
+    served version. An id that already carries a version (``claude-haiku-5-5``) is its own answer. Returns ``None`` — never raises — when the version can't be established, so the caller
+    falls back to the alias and logs it (an unknown version is not a known one).
+    """
+    if re.search(r"-\d", model):
+        return model
+    try:
+        resp = httpx.get(f"{base_url.rstrip('/')}/v1/models", timeout=timeout)
+        resp.raise_for_status()
+        ids = [str(m.get("id", "")) for m in resp.json().get("data", []) if isinstance(m, dict)]
+    except Exception as exc:  # noqa: BLE001 — unknown, not fatal
+        logger.warning("⚠️ could not list hub models to resolve %r: %s", model, type(exc).__name__)
+        return None
+    if model not in ids:
+        return None
+    nxt = ids[ids.index(model) + 1] if ids.index(model) + 1 < len(ids) else ""
+    if nxt and nxt != model and _squash(nxt).startswith(_squash(model)):
+        return nxt
+    return None
 
 
 def health_check(*, base_url: str, model: str, timeout: int = 30) -> bool:

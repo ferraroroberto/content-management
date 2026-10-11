@@ -42,20 +42,36 @@ DEFAULT_LEGACY_BUDGET_S = 1200   # `jev+legacy`: the most the legacy shadow may 
 class LLMCache(JsonFileCache):
     """JSON cache for both stages, keyed by a hash of (model, prompt inputs).
 
-    Makes re-runs and backtest iterations free for unchanged items; entries carry
-    the model alias so a model switch invalidates naturally.
+    Makes re-runs and backtest iterations free for unchanged items. The model in the key is the *served*
+    version once ``use_version`` has recorded it (#398): an alias like ``claude_haiku`` is repointed by the hub
+    when a newer model ships, and answers from the old one must not be replayed for the new. ``fresh`` makes
+    every ``get`` a miss (a re-score that must call the model) while ``put`` still stores the new answers.
     """
 
-    def __init__(self, path: Path = LLM_CACHE_PATH) -> None:
+    def __init__(self, path: Path = LLM_CACHE_PATH, *, fresh: bool = False) -> None:
         super().__init__(path, label="llm cache")
         self.hits = self.misses = 0
+        self.fresh = fresh
+        self._served: Dict[str, str] = {}
 
     @staticmethod
     def key(model: str, *parts: str) -> str:
         return hashlib.sha1(("\x1f".join([model, *parts])).encode("utf-8", "ignore")).hexdigest()
 
+    def use_version(self, alias: str, version: Optional[str]) -> str:
+        """Record the version served for ``alias``; with none (couldn't be read) keep keying by the alias."""
+        if version and version != alias:
+            self._served[alias] = version
+        elif not version:
+            logger.warning("⚠️ served version of %r unknown — cache keyed by the alias, so answers from an older "
+                           "model behind it may be reused (use the fresh option to bypass)", alias)
+        return self._served.get(alias, alias)
+
+    def key_for(self, model: str, *parts: str) -> str:
+        return self.key(f"{model}@{self._served[model]}" if model in self._served else model, *parts)
+
     def get(self, k: str) -> Any:
-        v = self._data.get(k)
+        v = None if self.fresh else self._data.get(k)
         if v is None:
             self.misses += 1
         else:
@@ -214,8 +230,8 @@ class MetaScore:
     ok: bool = False
 
 
-def _meta_key(model: str, it: Dict[str, str]) -> str:
-    return LLMCache.key(model, "A", it.get("sender", ""), it.get("label", ""), it.get("domain", ""), it.get("path", ""))
+def _meta_key(cache: LLMCache, model: str, it: Dict[str, str]) -> str:
+    return cache.key_for(model, "A", it.get("sender", ""), it.get("label", ""), it.get("domain", ""), it.get("path", ""))
 
 
 def meta_request(brief: str, chunk: Sequence[Dict[str, str]]) -> Tuple[str, int]:
@@ -251,7 +267,7 @@ def score_metadata(items: Sequence[Dict[str, str]], criteria: Dict[str, Any], *,
     out: List[MetaScore] = results if results is not None else [MetaScore() for _ in items]
     todo_idx: List[int] = []
     for i, it in enumerate(items):
-        hit = cache.get(_meta_key(model, it)) if cache is not None else None
+        hit = cache.get(_meta_key(cache, model, it)) if cache is not None else None
         if hit:
             out[i] = MetaScore(**hit)
         else:
@@ -294,7 +310,7 @@ def score_metadata(items: Sequence[Dict[str, str]], criteria: Dict[str, Any], *,
             ms.news, ms.promo = bool(obj.get("news")), bool(obj.get("promo"))
             ms.reason, ms.ok = str(obj.get("reason") or "")[:160], ms.fit is not None
             if cache is not None and ms.ok:
-                cache.put(_meta_key(model, items[gi]), ms.__dict__)
+                cache.put(_meta_key(cache, model, items[gi]), ms.__dict__)
 
     if starts:
         with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
@@ -375,7 +391,7 @@ class ContentScore:
 
 def score_content(*, title: str, author: str, sender: str, domain: str, excerpt: str, criteria: Dict[str, Any],
                   base_url: str, model: str, timeout: int = 120, cache: Optional["LLMCache"] = None) -> ContentScore:
-    ck = LLMCache.key(model, "B", title, sender, domain, excerpt[:2500]) if cache is not None else ""
+    ck = cache.key_for(model, "B", title, sender, domain, excerpt[:2500]) if cache is not None else ""
     if cache is not None:
         hit = cache.get(ck)
         if hit:

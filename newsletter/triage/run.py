@@ -5,7 +5,7 @@
                                     [--model claude_haiku] [--stage-a-engine legacy|jev|both|jev+legacy]
                                     [--out DIR] [--debug]
     python -m newsletter.triage.run --backtest N226[,N227,…]   # offline, from the history cache
-    python -m newsletter.triage.run --rescore RUN_ID [--stage-a-engine jev]   # stored inputs, no Gmail
+    python -m newsletter.triage.run --rescore RUN_ID [--stage-a-engine jev] [--fresh]   # stored inputs, no Gmail
 
 Cadence (owner rule): a run covers the window from the last watermark (or
 ``--since``) to now and fills ONE edition (8/8/8); longer ranges are split into
@@ -34,6 +34,11 @@ priors are re-read, and the run is replaced like ``--force``. The owner's decisi
 review and lessons are keyed by window, so they survive. The inputs are snapshotted to
 ``results/newsletter/triage/inputs/`` first, so a re-score that fails after replacing
 the run can be retried from the snapshot.
+
+LLM cache (#398): answers are keyed by the model version the hub serves for the alias
+(``claude_haiku`` → ``claude-haiku-5-5``), so a repointed alias never replays the old
+model's answers; ``--fresh`` (with ``--rescore``) bypasses the cache entirely, both stages,
+and still stores the new answers.
 """
 
 from __future__ import annotations
@@ -318,10 +323,11 @@ def run_window(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[st
                edition_hint: Optional[str] = None, backtest: Optional[Dict[str, Any]] = None,
                limit_links: Optional[int] = None, force: bool = False,
                engine: str = jx.DEFAULT_ENGINE,
-               inputs: Optional[Dict[str, Any]] = None) -> Tuple[Path, rk.Selection, Dict[str, Any]]:
+               inputs: Optional[Dict[str, Any]] = None, fresh: bool = False) -> Tuple[Path, rk.Selection, Dict[str, Any]]:
     """One window → report + stored run. Refuses to replace a stored (window, kind) unless ``force``
     (:class:`RunExists`). Store failures after registration mark the run ``failed`` and re-raise.
-    ``inputs`` (:func:`stored_inputs`) replaces the e-mail read — the re-score path."""
+    ``inputs`` (:func:`stored_inputs`) replaces the e-mail read — the re-score path. ``fresh`` makes the
+    LLM cache answer nothing, so both stages call the model (#398)."""
     kind = "backtest" if backtest is not None else "live"
     run_id: Optional[int] = None
     if store_ok():
@@ -340,7 +346,7 @@ def run_window(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[st
         path, sel, stats, cands, emails_view = _run_window_body(
             start, end, cfg=cfg, criteria=criteria, source=source, use_llm=use_llm, use_fetch=use_fetch,
             top_k=top_k, model=model, out_dir=out_dir, edition_hint=edition_hint or "next free edition",
-            backtest=backtest, limit_links=limit_links, engine=engine, inputs=inputs)
+            backtest=backtest, limit_links=limit_links, engine=engine, inputs=inputs, fresh=fresh)
     except Exception as err:
         if run_id is not None:
             db.mark_run(run_id, status="failed", stats={"error": str(err)[:500]})
@@ -452,7 +458,7 @@ def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: D
                      use_llm: bool, use_fetch: bool, top_k: int, model: str, out_dir: Path,
                      edition_hint: str, backtest: Optional[Dict[str, Any]],
                      limit_links: Optional[int], engine: str = jx.DEFAULT_ENGINE,
-                     inputs: Optional[Dict[str, Any]] = None,
+                     inputs: Optional[Dict[str, Any]] = None, fresh: bool = False,
                      ) -> Tuple[Path, rk.Selection, Dict[str, Any], List[rk.Candidate], List[Dict[str, Any]]]:
     t0 = time.monotonic()
     base_url = cfg.get("llm_hub_base_url") or load_full_config().get("newsletter_archive", {}).get("llm_hub_base_url", "http://127.0.0.1:8000")
@@ -477,7 +483,10 @@ def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: D
     if inputs is not None:
         stats["rescored_from"] = inputs.get("run_id")
     llm_calls = 0
-    llm_cache = sc.LLMCache()
+    llm_cache = sc.LLMCache(fresh=fresh)
+    if fresh:
+        stats["llm_cache_fresh"] = True
+        logger.info("🔄 fresh: the LLM cache is bypassed — both stages call the model, answers are still stored")
 
     # stage A — metadata, for everything that can still be selected
     stage_a = [c for c in cands if not c.in_notion and c.sender_weight > 0]
@@ -485,6 +494,10 @@ def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: D
         if not llm.health_check(base_url=base_url, model=model):
             logger.error("❌ LLM hub unreachable at %s — producing a rule-only report", base_url)
             use_llm = False
+        else:
+            # key the cache by the model the hub serves *now*, so a repointed alias never replays old answers (#398)
+            stats["llm_model_served"] = llm_cache.use_version(model, llm.served_model(base_url=base_url, model=model))
+            logger.info("🤖 %s is served as %s", model, stats["llm_model_served"])
     shadow_rows: Optional[List[Dict[str, Any]]] = None
     legacy_shadow: Optional[sc.LegacyShadow] = None
     if use_llm and stage_a:
@@ -720,9 +733,10 @@ def backtest_edition(number: str, *, cfg: Dict[str, Any], criteria: Dict[str, An
 
 def rescore(run_id: int, *, cfg: Dict[str, Any], criteria: Dict[str, Any], use_llm: bool, use_fetch: bool,
             top_k: int, model: str, out_dir: Path, engine: str = jx.DEFAULT_ENGINE,
-            limit_links: Optional[int] = None) -> Tuple[Path, rk.Selection, Dict[str, Any]]:
+            limit_links: Optional[int] = None, fresh: bool = False) -> Tuple[Path, rk.Selection, Dict[str, Any]]:
     """Replace a stored live run's scoring from its stored inputs — no Gmail. Decisions, review and lessons
-    are keyed by window and survive; the run gets a new id (``stats.rescored_from`` = the old one)."""
+    are keyed by window and survive; the run gets a new id (``stats.rescored_from`` = the old one).
+    ``fresh`` bypasses the LLM cache (#398)."""
     run = db.get_run(run_id) if store_ok() else None
     if not run:
         raise NoStoredInputs(f"run {run_id} not found in the triage store")
@@ -734,7 +748,7 @@ def rescore(run_id: int, *, cfg: Dict[str, Any], criteria: Dict[str, Any], use_l
                 engine)
     return run_window(start, end, cfg=cfg, criteria=criteria, source="store", use_llm=use_llm, use_fetch=use_fetch,
                       top_k=top_k, model=model, out_dir=out_dir, limit_links=limit_links, force=True, engine=engine,
-                      inputs=doc)
+                      inputs=doc, fresh=fresh)
 
 
 # ---------------------------------------------------------------------------
@@ -772,8 +786,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--force", action="store_true", help="replace a run already stored for the same window")
     ap.add_argument("--rescore", type=int, metavar="RUN_ID",
                     help="replace a stored live run's scoring from its stored inputs (no Gmail)")
+    ap.add_argument("--fresh", action="store_true",
+                    help="with --rescore: ignore the LLM cache so both stages call the model again (answers are still stored)")
     ap.add_argument("--debug", action="store_true")
     args = ap.parse_args(argv)
+    if args.fresh and args.rescore is None:
+        ap.error("--fresh only applies to --rescore")
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout)
     for noisy in ("httpx", "httpcore", "hpack", "notion_client", "urllib3", "googleapiclient",
@@ -809,7 +827,7 @@ def _main_runs(args: argparse.Namespace, *, cfg: Dict[str, Any], criteria: Dict[
         # the window's watermark / state.json are untouched: a re-score covers a week already run
         path, sel, stats = rescore(args.rescore, cfg=cfg, criteria=criteria, use_llm=not args.no_llm,
                                    use_fetch=not args.no_fetch, top_k=top_k, model=model, out_dir=out_dir,
-                                   engine=engine, limit_links=args.limit_links)
+                                   engine=engine, limit_links=args.limit_links, fresh=args.fresh)
         print(f"re-scored run {args.rescore} → {stats.get('store')}: {stats['selected']} picks → {path}")
         return 0
     if args.backtest:

@@ -390,7 +390,7 @@ a run. Only link metadata
 | `python -m newsletter.triage.run --backtest N224,N225,N226,N227` | Offline replay from the history cache: precision of the shortlist vs real picks, recall of the edition's picks sourced in the window. |
 | `python -m newsletter.triage.run --no-llm` | Rule-only report (sender/domain priors) when the hub is down. |
 | `python -m newsletter.triage.run --force` | Replace a run already stored for the same window (without it the engine refuses with exit 3 — the control panel's replace toggle passes it). |
-| `python -m newsletter.triage.run --rescore <run id> [--stage-a-engine jev]` | Re-score a stored live run from its stored links — **no Gmail**: the inbox and candidates come from the store (anchor = the stored display title, as `jev_pilot` replays them), sender/domain priors are re-read, and the week is replaced like `--force` (new run id, `stats.rescored_from` = the old one). Decisions, review comment and lessons are keyed by window and survive. The inputs are snapshotted first to `results/newsletter/triage/inputs/`, so a re-score that fails after the replace can be retried from the snapshot. `state.json` is not touched; exit 4 when neither the store nor a snapshot holds the inputs. |
+| `python -m newsletter.triage.run --rescore <run id> [--stage-a-engine jev] [--fresh]` | Re-score a stored live run from its stored links — **no Gmail**: the inbox and candidates come from the store (anchor = the stored display title, as `jev_pilot` replays them), sender/domain priors are re-read, and the week is replaced like `--force` (new run id, `stats.rescored_from` = the old one). Decisions, review comment and lessons are keyed by window and survive. The inputs are snapshotted first to `results/newsletter/triage/inputs/`, so a re-score that fails after the replace can be retried from the snapshot. `state.json` is not touched; exit 4 when neither the store nor a snapshot holds the inputs. The LLM cache (`results/newsletter/triage/llm_cache.json`) is keyed by the model **version** the hub serves for the alias (`claude_haiku` → `claude-haiku-5-5`, read once per run from `GET /v1/models`; the run log says which), so when the hub repoints an alias the older model's answers simply stop matching — they stay in the file, unused. Same version → answers are reused; `--fresh` ignores the cache for both stages (every link goes to the model) and still stores the new answers. If the version can't be read the cache falls back to keying by the alias and logs a warning. |
 | `python -m newsletter.triage.feedback <report.md>` | Ingest a reviewed markdown report (tick = yes) for the window in its name → `triage_decisions` + sender tiers in `overrides.json`. The control panel's Apply is the same path. |
 
 First dry run (2026-08-21, `claude_haiku`, 2-week windows ending 7 days before
@@ -434,7 +434,8 @@ open week / custom dates) and the Stage A engine (**Jev + Claude Haiku shadow**
 = `jev+legacy` pre-selected, **Jev** alone for a faster pass, or **Claude
 Haiku** = `legacy`; passed as `--stage-a-engine` to everything the tab launches) → ▶ run with the live log (slot `triage`). A stored week shows which
 engine scored it and is only replaced behind the *replace stored run* toggle:
-**↻ Re-score** (`--rescore`, stored links, no Gmail) or **↻ Re-run week from
+**↻ Re-score** (`--rescore`, stored links, no Gmail; the *fresh (ignore LLM
+cache)* switch beside it adds `--fresh`, off by default) or **↻ Re-run week from
 Gmail** (`--force`). → choose a stored run (the list and header name its
 engine) → the
 editable table (`review.py`): suggestions pre-ticked (weak fills unticked),

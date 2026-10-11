@@ -191,12 +191,14 @@ class EngineSwitchTests(unittest.TestCase):
         by_email = {c.message_id: [c] for c in cands}
         legacy = mock.MagicMock(side_effect=patches.pop("legacy", _legacy_scores))
         cache = mock.MagicMock(misses=0)
+        cache.use_version.side_effect = lambda alias, version: version or alias
         with tempfile.TemporaryDirectory() as tmp, \
                 mock.patch.object(run, "emails_from_cache", return_value=[]), \
                 mock.patch.object(run, "load_notion_urls", return_value=(set(), {})), \
                 mock.patch.object(run, "store_ok", return_value=False), \
                 mock.patch.object(run, "build_candidates", return_value=(cands, by_email)), \
                 mock.patch.object(run.llm, "health_check", return_value=True), \
+                mock.patch.object(run.llm, "served_model", return_value="claude-haiku-5-5"), \
                 mock.patch.object(run.sc, "score_metadata", legacy), \
                 mock.patch.object(run.sc, "LLMCache", return_value=cache), \
                 mock.patch.object(run.sc, "Priors", return_value=mock.MagicMock(ranked={})):
@@ -225,7 +227,7 @@ class EngineSwitchTests(unittest.TestCase):
         self.assertIsNone(shadow)
         self.assertEqual(set(stats), {"emails", "links", "duplicates_in_notion", "duplicates_picked_earlier",
                                       "unresolved_links", "stage_a_scored", "scored", "llm_calls", "selected",
-                                      "verdicts"})
+                                      "verdicts", "llm_model_served"})
         self.assertEqual(rows[0]["meta"], {"topic": TOPICS[0], "fit": 5, "news": False, "promo": False,
                                            "reason": "r0", "ok": True})
 
