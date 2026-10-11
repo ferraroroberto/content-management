@@ -263,16 +263,32 @@ def save_decisions(start: Any, end: Any, rows: Sequence[Dict[str, Any]]) -> int:
     """Upsert decision rows for a window. Each row: canonical (required), cid, sender_address, title, url,
     topic, pick, star, must_read, note."""
     now = _now()
-    out = []
+    merged: Dict[str, Dict[str, Any]] = {}
+    n_dupes = 0
     for r in rows:
         if not r.get("canonical"):
             continue
-        out.append({"window_start": _d(start), "window_end": _d(end), "canonical": r["canonical"],
-                    "cid": r.get("cid"), "sender_address": (r.get("sender_address") or "").lower() or None,
-                    "title": r.get("title"), "url": r.get("url"), "topic": r.get("topic"),
-                    "pick": bool(r.get("pick")), "star": bool(r.get("star")), "must_read": bool(r.get("must_read")),
-                    "note": r.get("note") or None, "decided_at": now})
-    return _upsert("triage_decisions", out, on_conflict="window_start,window_end,canonical")
+        row = {"window_start": _d(start), "window_end": _d(end), "canonical": r["canonical"],
+               "cid": r.get("cid"), "sender_address": (r.get("sender_address") or "").lower() or None,
+               "title": r.get("title"), "url": r.get("url"), "topic": r.get("topic"),
+               "pick": bool(r.get("pick")), "star": bool(r.get("star")), "must_read": bool(r.get("must_read")),
+               "note": r.get("note") or None, "decided_at": now}
+        first = merged.get(row["canonical"])
+        if first is None:
+            merged[row["canonical"]] = row
+            continue
+        # one article reached twice (two emails, two topics): Postgres refuses to upsert one conflict target
+        # twice in a command (21000), so fold the copies — a tick on any copy survives, first non-empty text wins
+        n_dupes += 1
+        for flag in ("pick", "star", "must_read"):
+            first[flag] = first[flag] or row[flag]
+        for col in ("cid", "sender_address", "title", "url", "topic", "note"):
+            if not first[col]:
+                first[col] = row[col]
+    if n_dupes:
+        logger.info("🔀 merged %d duplicate canonical row(s) before saving decisions (%s → %s)",
+                    n_dupes, _d(start), _d(end))
+    return _upsert("triage_decisions", list(merged.values()), on_conflict="window_start,window_end,canonical")
 
 
 def decision_tally() -> Dict[str, Tuple[int, int]]:
