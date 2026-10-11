@@ -1,6 +1,7 @@
 """Review logic behind the control-panel tab — no Streamlit here (UI code lives in ``app/tab_triage.py``).
 
 * ``saturday_weeks()`` — the closed Saturday→Saturday windows the tab offers.
+* ``engine_label(stats)`` — the Stage A engine that scored a stored run, as the tab names it.
 * ``review_frame(run_id)`` — the editable table: engine suggestions (picks + runners-up per topic, or every
   scored candidate) pre-filled with the owner's stored decisions for that window.
 * ``apply_review(run_id, rows, comment)`` — the only write path: decisions → sender tiers → review row →
@@ -34,6 +35,20 @@ logger = logging.getLogger("newsletter_triage.review")
 TIERS = ("always", "usually", "review", "rarely", "never")
 EDITOR_COLUMNS = ["cid", "topic", "pick", "star", "must_read", "score", "title", "url", "sender", "summary", "why",
                   "note", "suggested", "canonical", "sender_address"]
+# Stage A engine (``run.py --stage-a-engine``) → the name the owner reads; legacy = the hub's ``claude_haiku``
+ENGINE_LABELS = {"jev": "Jev", "legacy": "Claude Haiku", "both": "Claude Haiku (Jev shadow)"}
+
+
+def engine_label(stats: Optional[Dict[str, Any]]) -> str:
+    """Which Stage A engine scored a stored run, from its ``stats``. ``legacy`` records no engine (the pre-#285
+    stats shape), so it is read off ``stage_a_scored``; no Stage A at all → ``rule-only``; no stats → ``""``."""
+    stats = stats or {}
+    engine = stats.get("stage_a_engine")
+    if engine:
+        return ENGINE_LABELS.get(engine, engine)
+    if "stage_a_scored" in stats:
+        return ENGINE_LABELS["legacy"]
+    return "rule-only" if "scored" in stats else ""
 
 
 # ---------------------------------------------------------------------------

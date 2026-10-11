@@ -5,6 +5,7 @@
                                     [--model claude_haiku] [--stage-a-engine legacy|jev|both]
                                     [--out DIR] [--debug]
     python -m newsletter.triage.run --backtest N226[,N227,…]   # offline, from the history cache
+    python -m newsletter.triage.run --rescore RUN_ID [--stage-a-engine jev]   # stored inputs, no Gmail
 
 Cadence (owner rule): a run covers the window from the last watermark (or
 ``--since``) to now and fills ONE edition (8/8/8); longer ranges are split into
@@ -22,6 +23,14 @@ Stage A engine (``newsletter_triage.stage_a_engine`` / ``--stage-a-engine``, #28
 Jev through the hub's ``/v1/systemone``; ``both`` lets legacy decide every verdict
 while Jev scores the same links in the background (bounded by ``jev_budget_s``) and
 its answers are written beside the report as ``<report>.jev-shadow.json``.
+
+Re-score (``--rescore RUN_ID``, #395): replace a stored live run's scoring without
+touching Gmail — Stage A inputs are rebuilt from the run's stored emails + candidates
+(anchor = the stored display title, as ``jev_pilot`` replays them), sender/domain
+priors are re-read, and the run is replaced like ``--force``. The owner's decisions,
+review and lessons are keyed by window, so they survive. The inputs are snapshotted to
+``results/newsletter/triage/inputs/`` first, so a re-score that fails after replacing
+the run can be retried from the snapshot.
 """
 
 from __future__ import annotations
@@ -61,6 +70,7 @@ from newsletter.triage.state import STATE_PATH, TRIAGE_DIR, load_state, save_sta
 logger = logging.getLogger("newsletter_triage.run")
 
 HISTORY_DIR = TRIAGE_DIR / "history"
+INPUTS_DIR = TRIAGE_DIR / "inputs"
 NOTION_URLS_CACHE = TRIAGE_DIR / "notion_urls.json"
 DEFAULT_MODEL = "claude_haiku"
 
@@ -69,6 +79,10 @@ _STORE_STATE: Dict[str, Any] = {"checked": False, "ok": False}
 
 class RunExists(RuntimeError):
     """A run for this (window, kind) is already stored — re-run with ``--force`` to replace it."""
+
+
+class NoStoredInputs(RuntimeError):
+    """``--rescore``: the run has no stored candidates and no snapshot — only a Gmail re-run can rebuild it."""
 
 
 def store_ok() -> bool:
@@ -225,6 +239,73 @@ def build_candidates(records: Sequence[gm.EmailRecord], priors: sc.Priors, notio
     return cands, by_email
 
 
+def stored_inputs(run: Dict[str, Any]) -> Dict[str, Any]:
+    """``--rescore``: a stored run's inbox + candidate rows, snapshotted to ``INPUTS_DIR`` before the run is
+    replaced. A run left without candidates (a re-score that failed after replacing it) falls back to the
+    window's snapshot; neither → :class:`NoStoredInputs`."""
+    run_id = int(run["id"])
+    path = INPUTS_DIR / f"triage-{run['window_start']}_{run['window_end']}.inputs.json"
+    cands = db.candidates(run_id)
+    if cands:
+        doc = {"run_id": run_id, "window": [run["window_start"], run["window_end"]],
+               "emails": db.emails(run_id), "candidates": cands}
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(doc, ensure_ascii=False, default=str), encoding="utf-8")
+        tmp.replace(path)
+        logger.info("📦 inputs of run %s: %d emails, %d links (snapshot %s)", run_id, len(doc["emails"]), len(cands),
+                    path.name)
+        return doc
+    if path.exists():
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        logger.warning("⚠️ run %s holds no candidates — re-scoring from the snapshot of run %s (%s)", run_id,
+                       doc.get("run_id"), path.name)
+        return doc
+    raise NoStoredInputs(f"run {run_id} ({run['window_start']} → {run['window_end']}) has no stored candidates and "
+                         f"no snapshot at {path} — re-run the week from Gmail instead")
+
+
+def candidates_from_store(doc: Dict[str, Any], priors: sc.Priors, picked_before: Optional[Dict[str, str]] = None,
+                          ) -> Tuple[List[gm.EmailRecord], List[rk.Candidate], Dict[str, List[rk.Candidate]]]:
+    """Stored rows (:func:`stored_inputs`) → ``(records, candidates, by_email)`` in inbox order, as
+    :func:`build_candidates` would have made them: sender/domain priors re-read, anchor = the stored display
+    title, ``in_notion`` as the original run judged it (a pick archived since must not become a duplicate of
+    itself), picks of earlier windows re-checked. Records carry no links — the candidates are the links."""
+    picked_before = picked_before or {}
+    emails = {e["message_id"]: e for e in doc["emails"]}
+    records = sorted((gm.EmailRecord(message_id=e["message_id"], thread_id=None, timestamp=str(e.get("ts") or ""),
+                                     sender_name=e.get("sender_name") or "",
+                                     sender_address=e.get("sender_address") or "", subject=e.get("subject") or "")
+                      for e in doc["emails"]), key=lambda r: r.timestamp)
+    order = {r.message_id: i for i, r in enumerate(records)}
+
+    def inbox_order(row: Dict[str, Any]) -> Tuple[int, str, int]:
+        mid, _, n = row["cid"].rpartition(":")
+        return order.get(mid, len(order)), mid, int(n) if n.isdigit() else 0
+
+    cands: List[rk.Candidate] = []
+    by_email: Dict[str, List[rk.Candidate]] = defaultdict(list)
+    for row in sorted(doc["candidates"], key=inbox_order):
+        mid = row.get("message_id") or row["cid"].rpartition(":")[0]
+        em = emails.get(mid, {})
+        addr = em.get("sender_address") or ""
+        weight, basis, is_new = priors.sender(addr)
+        dom = row.get("domain") or ""
+        bonus, _ = priors.domain(dom)
+        c = rk.Candidate(cid=row["cid"], message_id=mid, sender_name=em.get("sender_name") or "",
+                         sender_address=addr, subject=em.get("subject") or "", email_ts=str(em.get("ts") or ""),
+                         label=row.get("title") or "", url=row.get("url") or "", canonical=row.get("canonical") or "",
+                         domain=dom, sender_weight=weight, sender_basis=basis, is_new_sender=is_new,
+                         domain_bonus=bonus, topic=priors.topic_prior(addr, dom), in_notion=bool(row.get("in_notion")))
+        if c.canonical in picked_before:
+            c.in_notion, c.picked_earlier = True, picked_before[c.canonical]
+        if row.get("reason") == "redirect unresolved":
+            c.reason = "redirect unresolved"
+        cands.append(c)
+        by_email[mid].append(c)
+    return records, cands, by_email
+
+
 # ---------------------------------------------------------------------------
 # one window
 
@@ -233,9 +314,11 @@ def run_window(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[st
                use_llm: bool, use_fetch: bool, top_k: int, model: str, out_dir: Path,
                edition_hint: Optional[str] = None, backtest: Optional[Dict[str, Any]] = None,
                limit_links: Optional[int] = None, force: bool = False,
-               engine: str = jx.DEFAULT_ENGINE) -> Tuple[Path, rk.Selection, Dict[str, Any]]:
+               engine: str = jx.DEFAULT_ENGINE,
+               inputs: Optional[Dict[str, Any]] = None) -> Tuple[Path, rk.Selection, Dict[str, Any]]:
     """One window → report + stored run. Refuses to replace a stored (window, kind) unless ``force``
-    (:class:`RunExists`). Store failures after registration mark the run ``failed`` and re-raise."""
+    (:class:`RunExists`). Store failures after registration mark the run ``failed`` and re-raise.
+    ``inputs`` (:func:`stored_inputs`) replaces the e-mail read — the re-score path."""
     kind = "backtest" if backtest is not None else "live"
     run_id: Optional[int] = None
     if store_ok():
@@ -254,7 +337,7 @@ def run_window(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[st
         path, sel, stats, cands, emails_view = _run_window_body(
             start, end, cfg=cfg, criteria=criteria, source=source, use_llm=use_llm, use_fetch=use_fetch,
             top_k=top_k, model=model, out_dir=out_dir, edition_hint=edition_hint or "next free edition",
-            backtest=backtest, limit_links=limit_links, engine=engine)
+            backtest=backtest, limit_links=limit_links, engine=engine, inputs=inputs)
     except Exception as err:
         if run_id is not None:
             db.mark_run(run_id, status="failed", stats={"error": str(err)[:500]})
@@ -338,21 +421,30 @@ def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: D
                      use_llm: bool, use_fetch: bool, top_k: int, model: str, out_dir: Path,
                      edition_hint: str, backtest: Optional[Dict[str, Any]],
                      limit_links: Optional[int], engine: str = jx.DEFAULT_ENGINE,
+                     inputs: Optional[Dict[str, Any]] = None,
                      ) -> Tuple[Path, rk.Selection, Dict[str, Any], List[rk.Candidate], List[Dict[str, Any]]]:
     t0 = time.monotonic()
     base_url = cfg.get("llm_hub_base_url") or load_full_config().get("newsletter_archive", {}).get("llm_hub_base_url", "http://127.0.0.1:8000")
     priors = sc.Priors(criteria)
     rules = criteria.get("rules", {})
-    records = emails_from_cache(start, end) if source == "cache" else emails_from_gmail(start, end, cfg=cfg)
-    notion_urls, notion_titles = load_notion_urls(created_before=start.isoformat() if backtest is not None else None)
     picked_before = db.picked_before(start) if store_ok() else {}
-    cands, by_email = build_candidates(records, priors, notion_urls, notion_titles, picked_before)
+    if inputs is not None:
+        # re-score: Notion as of the window start (like a backtest) for the stage-B final-URL check, so the
+        # week's own picks, archived since the original run, never turn into duplicates
+        notion_urls, notion_titles = load_notion_urls(created_before=start.isoformat())
+        records, cands, by_email = candidates_from_store(inputs, priors, picked_before)
+    else:
+        records = emails_from_cache(start, end) if source == "cache" else emails_from_gmail(start, end, cfg=cfg)
+        notion_urls, notion_titles = load_notion_urls(created_before=start.isoformat() if backtest is not None else None)
+        cands, by_email = build_candidates(records, priors, notion_urls, notion_titles, picked_before)
     if limit_links:
         cands = cands[:limit_links]
     stats: Dict[str, Any] = {"emails": len(records), "links": len(cands),
                              "duplicates_in_notion": sum(1 for c in cands if c.in_notion and not c.picked_earlier),
                              "duplicates_picked_earlier": sum(1 for c in cands if c.picked_earlier),
                              "unresolved_links": sum(1 for c in cands if c.reason == "redirect unresolved")}
+    if inputs is not None:
+        stats["rescored_from"] = inputs.get("run_id")
     llm_calls = 0
     llm_cache = sc.LLMCache()
 
@@ -583,6 +675,29 @@ def backtest_edition(number: str, *, cfg: Dict[str, Any], criteria: Dict[str, An
 
 
 # ---------------------------------------------------------------------------
+# re-score (#395)
+
+
+def rescore(run_id: int, *, cfg: Dict[str, Any], criteria: Dict[str, Any], use_llm: bool, use_fetch: bool,
+            top_k: int, model: str, out_dir: Path, engine: str = jx.DEFAULT_ENGINE,
+            limit_links: Optional[int] = None) -> Tuple[Path, rk.Selection, Dict[str, Any]]:
+    """Replace a stored live run's scoring from its stored inputs — no Gmail. Decisions, review and lessons
+    are keyed by window and survive; the run gets a new id (``stats.rescored_from`` = the old one)."""
+    run = db.get_run(run_id) if store_ok() else None
+    if not run:
+        raise NoStoredInputs(f"run {run_id} not found in the triage store")
+    if run.get("kind") != "live":
+        raise NoStoredInputs(f"run {run_id} is a {run.get('kind')} run — replay a backtest with --backtest")
+    doc = stored_inputs(run)
+    start, end = date.fromisoformat(str(run["window_start"])[:10]), date.fromisoformat(str(run["window_end"])[:10])
+    logger.info("♻️ re-scoring run %s (%s → %s) from stored inputs, stage A engine %s — no Gmail", run_id, start, end,
+                engine)
+    return run_window(start, end, cfg=cfg, criteria=criteria, source="store", use_llm=use_llm, use_fetch=use_fetch,
+                      top_k=top_k, model=model, out_dir=out_dir, limit_links=limit_links, force=True, engine=engine,
+                      inputs=doc)
+
+
+# ---------------------------------------------------------------------------
 # CLI
 
 
@@ -615,6 +730,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--out", default=str(TRIAGE_DIR))
     ap.add_argument("--backtest", help="comma-separated edition numbers, e.g. N226,N227")
     ap.add_argument("--force", action="store_true", help="replace a run already stored for the same window")
+    ap.add_argument("--rescore", type=int, metavar="RUN_ID",
+                    help="replace a stored live run's scoring from its stored inputs (no Gmail)")
     ap.add_argument("--debug", action="store_true")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO,
@@ -641,10 +758,20 @@ def main(argv: Optional[List[str]] = None) -> int:
         logger.warning("⚠️ %s", err)
         print(f"⚠️ {err}")
         return 3
+    except NoStoredInputs as err:
+        logger.error("❌ %s", err)
+        return 4
 
 
 def _main_runs(args: argparse.Namespace, *, cfg: Dict[str, Any], criteria: Dict[str, Any], model: str,
                top_k: int, out_dir: Path, engine: str = jx.DEFAULT_ENGINE) -> int:
+    if args.rescore is not None:
+        # the window's watermark / state.json are untouched: a re-score covers a week already run
+        path, sel, stats = rescore(args.rescore, cfg=cfg, criteria=criteria, use_llm=not args.no_llm,
+                                   use_fetch=not args.no_fetch, top_k=top_k, model=model, out_dir=out_dir,
+                                   engine=engine, limit_links=args.limit_links)
+        print(f"re-scored run {args.rescore} → {stats.get('store')}: {stats['selected']} picks → {path}")
+        return 0
     if args.backtest:
         results = []
         for num in [n.strip() for n in args.backtest.split(",") if n.strip()]:
