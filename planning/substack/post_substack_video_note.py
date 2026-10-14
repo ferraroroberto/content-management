@@ -264,6 +264,7 @@ def _post_video_note_for_row(
         session=session,
     )
 
+
 def post_video_note_if_applicable(
     target_day: str,
     *,

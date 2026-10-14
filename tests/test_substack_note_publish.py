@@ -15,11 +15,13 @@ shared flow:
   labels, the dry-run screenshot names, each publisher's own Post click and
   dialog-close budget, the video-only Post-ready wait, and the link column
   each one writes.
-* ``DriftTests`` pin the one place the copies disagreed. The video copy
-  swallowed a failed link write and returned 0, so the row looked unposted,
-  and the next run posted the Note a second time with nobody alerted. The
-  image copy let the error raise, which the daily pipeline reports as rc 99.
-  The shared flow raises for both (fails on the old video copy).
+* ``DriftTests`` pin the one place the copies disagreed: a Note that posted
+  but whose link write failed. The video copy swallowed the error and
+  returned 0, so the row looked unposted and the next run posted the Note a
+  second time with nobody alerted. The image copy let the error raise, which
+  the daily pipeline reports as rc 99, the same as any crash. Both now return
+  ``RC_POSTED_LINK_NOT_WRITTEN`` (11) with their own log line: it alerts, and
+  it does not read as a failed post (fails on both old copies).
 
 No browser, no network, no Notion, no Substack.
 
@@ -240,19 +242,28 @@ class EquivalenceTests(unittest.TestCase):
             column = "post_url" if name == "image" else "post_url_sb"
             self.assertEqual(r.m["set_field"].call_args.args[2:4], (column, URL))
 
-    def test_image_link_write_failure_raises(self) -> None:
-        for source in ("native", "playwright"):
-            with self.subTest(source=source), self.assertRaisesRegex(RuntimeError, "notion down"):
-                run_image(source, write_err=RuntimeError("notion down"))
-
 
 class DriftTests(unittest.TestCase):
-    """A failed link write is no longer swallowed by the video Note (fails on the old copy)."""
+    """A posted Note whose link write failed returns its own exit code (fails on both old copies)."""
 
-    def test_video_link_write_failure_raises(self) -> None:
-        for source in ("native", "playwright"):
-            with self.subTest(source=source), self.assertRaisesRegex(RuntimeError, "notion down"):
-                run_video(source, write_err=RuntimeError("notion down"))
+    def test_link_write_failure_is_posted_link_not_written(self) -> None:
+        for name, run, _ in PUBLISHERS:
+            for source in ("native", "playwright"):
+                with self.subTest(publisher=name, source=source):
+                    with self.assertLogs("substack_post_note", "ERROR") as logs:
+                        r = run(source, write_err=RuntimeError("notion down"))
+                    self.assertEqual(r.rc, sn.RC_POSTED_LINK_NOT_WRITTEN)
+                    r.m["set_field"].assert_called_once()
+                    self.assertEqual(r.failure_shots(), [])
+                    line = logs.output[-1]
+                    self.assertIn("POSTED, LINK NOT WRITTEN", line)
+                    self.assertIn(URL, line)
+                    self.assertIn("notion down", line)
+
+    def test_posted_link_not_written_is_its_own_code(self) -> None:
+        # 0 is success, 2-10 are a failed or unconfirmed post, 99 is a branch
+        # that raised (daily_pipeline): 11 must collide with none of them.
+        self.assertNotIn(getattr(sn, "RC_POSTED_LINK_NOT_WRITTEN", 0), {0, *range(2, 11), 99})
 
     def test_video_publisher_reuses_the_shared_flow(self) -> None:
         self.assertIs(vn.publish_note_flow, sn.publish_note_flow)

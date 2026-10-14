@@ -34,7 +34,10 @@ from reporting.process.data_processor import main as run_data_processor, configu
 from reporting.process.profile_aggregator import main as run_profile_aggregator, configure_logger as configure_profile_logger
 from reporting.process.posts_consolidator import main as run_posts_consolidator, configure_logger as configure_posts_logger
 from reporting.notion.notion_update import main as run_notion_update, configure_logger as configure_notion_logger
-from planning.substack.daily_pipeline import main as run_substack_daily_pipeline
+from planning.substack.daily_pipeline import (
+    EXIT_CODE_NAMES as SUBSTACK_EXIT_CODE_NAMES,
+    main as run_substack_daily_pipeline,
+)
 
 # Set up logger. Module-scope default is a real (unconfigured) Logger —
 # never None — so every `logger.info(...)` call below is a plain Logger
@@ -377,7 +380,8 @@ def parse_arguments():
     parser.add_argument('--date', type=str, help='Reference date in YYYYMMDD format. Will process the day before this date.')
     return parser.parse_args()
 
-def run_module(module_func, module_name, debug_mode=False, extra_args=None, failures=None):
+def run_module(module_func, module_name, debug_mode=False, extra_args=None, failures=None,
+               exit_code_names=None):
     """
     Run a module with clean command line arguments.
 
@@ -389,6 +393,9 @@ def run_module(module_func, module_name, debug_mode=False, extra_args=None, fail
         failures: Optional PipelineFailures accumulator to record step
             exceptions, and step functions that return ``False`` instead of
             raising (issue #246).
+        exit_code_names: Optional ``{exit code: name}`` for an int-returning
+            step; a named code is recorded with its name, so the alert says
+            what happened instead of only the number (issue #371).
     """
     # Save original command line arguments
     original_argv = sys.argv.copy()
@@ -417,7 +424,9 @@ def run_module(module_func, module_name, debug_mode=False, extra_args=None, fail
         if result is False:
             reason = "step reported failure (returned False)"
         elif isinstance(result, int) and not isinstance(result, bool) and result != 0:
-            reason = f"step reported failure (exit code {result})"
+            name = (exit_code_names or {}).get(result)
+            reason = (f"step reported failure (exit code {result}: {name})" if name
+                      else f"step reported failure (exit code {result})")
         else:
             reason = None
         if reason is not None:
@@ -527,7 +536,8 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
     # Step 6: Publish Substack Note (follower scrape now happens in step 1 via reporting/scrape_client/substack.py)
     if not skip_substack:
         logger.info("📰 Step 6: Running Substack Daily Pipeline")
-        run_module(run_substack_daily_pipeline, "Substack Daily Pipeline", debug_mode, extra_args=date_args, failures=failures)
+        run_module(run_substack_daily_pipeline, "Substack Daily Pipeline", debug_mode, extra_args=date_args,
+                   failures=failures, exit_code_names=SUBSTACK_EXIT_CODE_NAMES)
     else:
         logger.info("⏭️ Skipping Substack Daily Pipeline step")
 

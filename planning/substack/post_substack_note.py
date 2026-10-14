@@ -58,6 +58,12 @@ from planning.substack.substack_session import (  # noqa: E402
 
 logger = logging.getLogger("substack_post_note")
 
+# Exit code: the Note is live on Substack but its link column is still empty.
+# Kept apart from a failed post (6–10) and from the daily pipeline's rc 99 (a
+# branch raised): nothing needs re-posting, but the link must be filled in by
+# hand, or the next run will post the Note a second time.
+RC_POSTED_LINK_NOT_WRITTEN = 11
+
 
 def _publish_native(cfg: dict, body_text: str, image_path: Path) -> str:
     """Publish the Note over the HTTP API; return its permalink.
@@ -317,6 +323,21 @@ def _click_post_button(page) -> None:
     ).first.click()
 
 
+def _write_link(note: NotePublish, note_url: str) -> int:
+    """Record a published Note's link; ``RC_POSTED_LINK_NOT_WRITTEN`` if that fails."""
+    try:
+        note.write_link(note_url)
+    except Exception as err:  # noqa: BLE001
+        logger.error(
+            "🔗❌ POSTED, LINK NOT WRITTEN: the %s is live at %s but its link "
+            "column could not be written (%s). Fill it in by hand, or the next "
+            "run will post it again.",
+            note.noun, note_url, err,
+        )
+        return RC_POSTED_LINK_NOT_WRITTEN
+    return 0
+
+
 def publish_note_flow(
     cfg: dict,
     note: NotePublish,
@@ -332,9 +353,10 @@ def publish_note_flow(
     resolve the URL → write the link column.
 
     ``session`` is opened here when not given, and only on the Playwright
-    path — the native backend never needs a browser. The link write is not
-    guarded: a Note that posted but could not record its link must fail
-    loudly, since an empty link column makes the next run post it again.
+    path — the native backend never needs a browser. A Note that posted but
+    could not record its link returns ``RC_POSTED_LINK_NOT_WRITTEN``: an empty
+    link column makes the next run post it again, so it must alert, but it is
+    not a failed post.
     """
     note_source = str(cfg.get("note_source", "playwright")).lower()
     if note_source not in ("playwright", "native"):
@@ -356,8 +378,7 @@ def publish_note_flow(
             logger.error("❌ Native %s publish failed: %s", note.noun.lower(), err)
             return 9
         logger.info("🔗 Published %s URL: %s", note.noun.lower(), note_url)
-        note.write_link(note_url)
-        return 0
+        return _write_link(note, note_url)
 
     owned_session = session is None
     s = session or SubstackSession(cfg)
@@ -418,9 +439,7 @@ def publish_note_flow(
             logger.warning("⚠️ %s appears published but URL could not be resolved.", note.noun)
             return 10
         logger.info("🔗 Published %s URL: %s", note.noun.lower(), note_url)
-
-        note.write_link(note_url)
-        return 0
+        return _write_link(note, note_url)
 
     finally:
         if owned_session:
