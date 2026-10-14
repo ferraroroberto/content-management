@@ -152,12 +152,23 @@ def fetch_wip_rows(
     return rows
 
 
-def resolve_image_path(folder: str, image_filename: str) -> Path:
-    """Resolve <folder>/<name>.png. Accepts a name with or without extension."""
-    if not image_filename:
-        raise FileNotFoundError("Illustration row has no filename.")
-    first = str(image_filename).split(",")[0].strip()
-    if first and not first.lower().endswith(".png"):
+def resolve_image_path(
+    folder: str,
+    image_filename: Optional[str],
+    *,
+    missing: str = "Illustration row has no filename.",
+) -> Path:
+    """Resolve <folder>/<name>.png. Accepts a name with or without extension.
+
+    The Notion formula output occasionally has comma-joined names — the first
+    wins. An empty or blank first name raises ``FileNotFoundError(missing)``
+    instead of resolving to ``folder`` itself; ``missing`` lets a caller keep
+    its own wording for that case.
+    """
+    first = str(image_filename or "").split(",")[0].strip()
+    if not first:
+        raise FileNotFoundError(missing)
+    if not first.lower().endswith(".png"):
         first = f"{first}.png"
     candidate = Path(folder) / first
     if not candidate.exists():

@@ -113,7 +113,7 @@ from planning._scheduler_main import (  # noqa: E402
     notion_or_none,
     resolve_scope,
 )
-from planning._wip_rows import iter_wip_pages  # noqa: E402
+from planning._wip_rows import iter_wip_pages, resolve_image_path  # noqa: E402
 from planning._captions import canonical_caption_from_publish_ig  # noqa: E402
 
 Route = Literal["ILL", "POST", "CAROUSEL"]
@@ -294,17 +294,6 @@ def fetch_illustration(notion, illustration_page_id: str, cfg: dict) -> Illustra
         alt_text=str(alt).strip(),
         caption_text=caption,
     )
-
-
-def resolve_image_path(illustrations_folder: str, image_filename: str) -> Path:
-    if not image_filename:
-        raise FileNotFoundError("Illustration row has no filename.")
-    # The formula output occasionally has comma-joined names — take the first.
-    first = str(image_filename).split(",")[0].strip()
-    candidate = Path(illustrations_folder) / first
-    if not candidate.exists():
-        raise FileNotFoundError(f"Illustration not found: {candidate}")
-    return candidate
 
 
 # ---------- LinkedIn UI flow ----------

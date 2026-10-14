@@ -44,6 +44,7 @@ from reporting.notion.editorial import (  # noqa: E402
     init_notion_client,
     set_field,
 )
+from planning._wip_rows import resolve_image_path  # noqa: E402
 from planning.substack.substack_session import (  # noqa: E402
     LoginRequiredError,
     SubstackSession,
@@ -87,18 +88,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--force", action="store_true", help="Post even if post_url is already populated.")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging.")
     return parser.parse_args()
-
-
-def _resolve_image_path(illustrations_folder: str, image_filename: str) -> Path:
-    """Join `illustrations_folder` with `image_filename`; tolerate the "a.png, b.png" formula output."""
-    if image_filename is None or str(image_filename).strip() == "":
-        raise FileNotFoundError("Notion editorial row has no image filename for this date.")
-    # The Notion 'ill (copy)' formula can yield ", "-joined names — take the first.
-    first = str(image_filename).split(",")[0].strip()
-    candidate = Path(illustrations_folder) / first
-    if not candidate.exists():
-        raise FileNotFoundError(f"Illustration not found: {candidate}")
-    return candidate
 
 
 def _open_note_composer(page) -> None:
@@ -318,7 +307,11 @@ def post_note(
         return 5
 
     image_filename = get_field(row, "image_filename", columns)
-    image_path = _resolve_image_path(cfg["illustrations_folder"], image_filename)
+    image_path = resolve_image_path(
+        cfg["illustrations_folder"],
+        image_filename,
+        missing="Notion editorial row has no image filename for this date.",
+    )
     logger.info("🖼️ Using image: %s", image_path)
     logger.info("📝 Body length: %d chars", len(str(body_text)))
 
