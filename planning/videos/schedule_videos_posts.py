@@ -414,6 +414,9 @@ def main() -> tuple[int, list[dict]]:
         # disappears during a videos run — which is exactly when we need
         # them. See issue #37.
         "instagram_schedule",
+        # The LinkedIn schedule dialog, finalize and upload wait log to
+        # "linkedin_composer"; without it their INFO lines are dropped.
+        "linkedin_composer",
     ):
         configure_logger(name, debug=args.debug)
     cfg = load_videos_config()

@@ -3,10 +3,11 @@
 Walks the LinkedIn feed's native ``Video`` composer for one clip:
 feed → Video → upload .mp4 → Next → caption (long body) → Schedule →
 date+time → Next → final Schedule. Mirrors the photo flow in
-``planning.linkedin.schedule_linkedin_posts`` and re-uses its schedule-dialog
-helpers; the photo flow's ALT step is intentionally skipped (videos have no
-ALT in LinkedIn's UI). The session, login check, and date/time helpers are
-all imported from the sister package — no duplication.
+``planning.linkedin.schedule_linkedin_posts`` and ends on the same
+``linkedin_composer.finalize_schedule``; the photo flow's ALT step is
+intentionally skipped (videos have no ALT in LinkedIn's UI). The session,
+login check, and schedule-dialog helpers are all imported from the sister
+package — no duplication.
 """
 
 from __future__ import annotations
@@ -21,27 +22,20 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from planning.linkedin.linkedin_composer import (  # noqa: E402
     FEED_ENTRY_CLICK_TIMEOUT_MS,
     FEED_ENTRY_EFFECT_TIMEOUT_MS,
+    button_is_enabled,
     click_feed_entry,
+    close_dialogs,
+    dialog_next_button,
     fill_caption_with_mentions,
-    schedule_pre_state,
-    wait_for_schedule_confirmation,
-    wait_for_upload_complete,
+    finalize_schedule,
+    open_schedule_dialog,
+    set_schedule_datetime,
 )
 from planning.linkedin.linkedin_labels import MEDIA_FILE_INPUT_SEL, VIDEO_TEXT_RE  # noqa: E402
 from planning.linkedin.linkedin_session import (  # noqa: E402
     LinkedInSession,
     LoginRequiredError,
     load_linkedin_config,
-)
-from planning.linkedin.schedule_linkedin_posts import (  # noqa: E402
-    _button_is_enabled,
-    _click_final_schedule,
-    _click_schedule_confirm,
-    _close_dialogs,
-    _composer_dialog,
-    _dialog_next_button,
-    _open_schedule_dialog,
-    _set_schedule_datetime,
 )
 from planning.videos.videos_session import VideoRow  # noqa: E402
 from planning._waits import wait_for_first_ready  # noqa: E402
@@ -58,7 +52,6 @@ VIDEO_INPUT_TIMEOUT_MS = 45000
 # names from videos_linkedin in the past. New code should import directly
 # from ``planning.linkedin.linkedin_composer``.
 _fill_caption_with_mentions = fill_caption_with_mentions
-_wait_for_upload_complete = wait_for_upload_complete
 
 
 def _click_video_button(page: Page) -> None:
@@ -149,12 +142,12 @@ def _wait_for_video_ready(page: Page, timeout_ms: int = 180000) -> None:
     """
     deadline = page.evaluate("() => Date.now()") + timeout_ms
     while page.evaluate("() => Date.now()") < deadline:
-        next_btn = _dialog_next_button(page).first
+        next_btn = dialog_next_button(page).first
         try:
-            # ``_button_is_enabled`` because get_attribute("disabled") returns
+            # ``button_is_enabled`` because get_attribute("disabled") returns
             # "" — falsy — for a disabled button, so the naive truthiness test
             # this used to run reported a still-transcoding editor as ready.
-            ready = next_btn.count() and _button_is_enabled(next_btn)
+            ready = next_btn.count() and button_is_enabled(next_btn)
         except Exception:
             ready = False
         if ready:
@@ -166,7 +159,7 @@ def _wait_for_video_ready(page: Page, timeout_ms: int = 180000) -> None:
 def _click_video_next(page: Page) -> None:
     """Click 'Next' in the video editor → goes to the composer."""
     try:
-        _dialog_next_button(page).first.click(timeout=10000)
+        dialog_next_button(page).first.click(timeout=10000)
     except Exception as err:
         raise RuntimeError(f"Could not click 'Next' in the video editor: {err}")
 
@@ -196,9 +189,9 @@ def schedule_one_video(
     _fill_caption_with_mentions(page, row.payload.caption_long)
     page.wait_for_timeout(800)
 
-    _open_schedule_dialog(page)
+    open_schedule_dialog(page)
     page.wait_for_timeout(1500)
-    _set_schedule_datetime(
+    set_schedule_datetime(
         page, row.day,
         video_cfg["post_hour_local"], video_cfg["post_minute_local"],
     )
@@ -210,34 +203,12 @@ def schedule_one_video(
         shot = out_dir / f"{label}-li-dryrun.png"
         page.screenshot(path=str(shot), full_page=False)
         logger.info("✅ DRY-RUN %s LI: schedule dialog ready, screenshot → %s", label, shot)
-        _close_dialogs(page)
+        close_dialogs(page)
         return "LI:DRY"
 
-    _click_schedule_confirm(page)
-    page.wait_for_timeout(1500)
-
-    composer_locator = _composer_dialog(page)
-    pre_state = schedule_pre_state(page, composer_locator)
-
-    _click_final_schedule(page)
-
-    try:
-        signal = wait_for_schedule_confirmation(
-            page, composer_locator, pre_state, label=label,
-        )
-    except RuntimeError as err:
-        shot = out_dir / f"{label}-li-FAIL.png"
-        page.screenshot(path=str(shot), full_page=False)
-        raise RuntimeError(f"{err} See {shot}")
-    logger.info("🔔 %s LI: schedule confirmed via %s", label, signal)
-
-    page.wait_for_timeout(1500)
-    # CRITICAL: wait for LI's background video upload to finish before letting
-    # the Playwright session close. Without this, LinkedIn creates the
-    # scheduled post but the .mp4 never finishes uploading -> opening the
-    # scheduled post shows "Something went wrong, please try reloading".
-    _wait_for_upload_complete(page)
-    logger.info("✅ LIVE %s LI video scheduled (upload settled)", label)
+    # wait_for_upload is CRITICAL here: LinkedIn creates the scheduled post
+    # but the .mp4 never finishes uploading if the session closes early.
+    finalize_schedule(page, out_dir, f"{label}-li", log_label=f"{label} LI", wait_for_upload=True)
     return "LI:LIVE"
 
 
@@ -285,7 +256,7 @@ def run(
                     "detail": f"{err} (screenshot {shot})",
                 })
                 try:
-                    _close_dialogs(session.page)
+                    close_dialogs(session.page)
                 except Exception:
                     pass
     return results

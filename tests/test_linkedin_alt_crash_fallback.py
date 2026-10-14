@@ -65,7 +65,7 @@ class AltCommitCrashDetectionTests(unittest.TestCase):
     def _crashed(self, *, next_at, crash_at) -> tuple[bool, float]:
         page = _FakePage(crash_at)
         editor_next = _FakeLocator(page, next_at)
-        with mock.patch.object(sl, "_dialog_next_button", return_value=editor_next):
+        with mock.patch.object(sl, "dialog_next_button", return_value=editor_next):
             return sl._alt_commit_crashed(page), page.now
 
     def test_editor_back_is_not_a_crash(self):
@@ -95,8 +95,8 @@ class AltCommitCrashDetectionTests(unittest.TestCase):
 class SetAltTextRaisesOnCrashTests(unittest.TestCase):
 
     def _run(self, crashed: bool) -> None:
-        with mock.patch.object(sl, "_dialog_button"), \
-             mock.patch.object(sl, "_dialog"), \
+        with mock.patch.object(sl, "dialog_button"), \
+             mock.patch.object(sl, "dialog_locator"), \
              mock.patch.object(sl, "_alt_commit_crashed", return_value=crashed):
             sl._set_alt_text(object(), "a chart of you outgrowing your job title")
 
