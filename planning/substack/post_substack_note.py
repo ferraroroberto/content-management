@@ -21,7 +21,9 @@ Everything either side of publishing — the Notion read, the idempotence guard,
 the empty-body refusal, the image resolution and the ``post_url`` write-back —
 is shared, so the two backends differ only in how the Note reaches Substack.
 Video notes (see ``post_substack_video_note.py``) support the same
-``note_source`` flag (issue #189).
+``note_source`` flag (issue #189) and publish through the same
+``publish_note_flow``: each publisher passes a ``NotePublish`` with its own
+fill step, Post-ready wait and link column (issue #371).
 """
 
 from __future__ import annotations
@@ -30,9 +32,10 @@ import argparse
 import logging
 import re
 import sys
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from playwright.sync_api import TimeoutError as PWTimeoutError
 
@@ -55,6 +58,12 @@ from planning.substack.substack_session import (  # noqa: E402
 )
 
 logger = logging.getLogger("substack_post_note")
+
+# Exit code: the Note is live on Substack but its link column is still empty.
+# Kept apart from a failed post (6–10) and from the daily pipeline's rc 99 (a
+# branch raised): nothing needs re-posting, but the link must be filled in by
+# hand, or the next run will post the Note a second time.
+RC_POSTED_LINK_NOT_WRITTEN = 11
 
 
 def _publish_native(cfg: dict, body_text: str, image_path: Path) -> str:
@@ -275,6 +284,157 @@ def _resolve_published_note_url(page, profile_url: str) -> Optional[str]:
         return None
 
 
+@dataclass(frozen=True)
+class NotePublish:
+    """What differs between the image Note and the video Note publish.
+
+    ``publish_note_flow`` owns the sequence; each publisher supplies only its
+    payload-specific steps. ``noun`` ("Note" / "video Note") words the log
+    lines; ``failure_label`` prefixes the failure screenshots.
+    """
+
+    noun: str
+    failure_label: str
+    dry_run_shot: str
+    native_dry_run: str
+    publish_native: Callable[[], str]
+    fill: Callable[[Any], None]
+    click_post: Callable[[Any], None]
+    write_link: Callable[[str], None]
+    wait_post_ready: Optional[Callable[[Any], None]] = None
+    close_timeout_ms: int = 30000
+
+
+def _click_post_button(page) -> None:
+    """Click the image Note composer's 'Post' button, anchored on its name."""
+    page.get_by_role("dialog").first.get_by_role(
+        "button", name=re.compile(r"^post$", re.I)
+    ).first.click()
+
+
+def _write_link(note: NotePublish, note_url: str) -> int:
+    """Record a published Note's link; ``RC_POSTED_LINK_NOT_WRITTEN`` if that fails."""
+    try:
+        note.write_link(note_url)
+    except Exception as err:  # noqa: BLE001
+        logger.error(
+            "🔗❌ POSTED, LINK NOT WRITTEN: the %s is live at %s but its link "
+            "column could not be written (%s). Fill it in by hand, or the next "
+            "run will post it again.",
+            note.noun, note_url, err,
+        )
+        return RC_POSTED_LINK_NOT_WRITTEN
+    return 0
+
+
+def publish_note_flow(
+    cfg: dict,
+    note: NotePublish,
+    *,
+    dry_run: bool,
+    session: Optional[SubstackSession] = None,
+) -> int:
+    """Publish one Note through the configured backend; return an exit code.
+
+    The one publish sequence behind both the image Note and the video Note
+    (issue #371): backend check, native dry run / publish, or open composer →
+    fill → dry-run screenshot → optional Post-ready wait → click Post →
+    resolve the URL → write the link column.
+
+    ``session`` is opened here when not given, and only on the Playwright
+    path — the native backend never needs a browser. A Note that posted but
+    could not record its link returns ``RC_POSTED_LINK_NOT_WRITTEN``: an empty
+    link column makes the next run post it again, so it must alert, but it is
+    not a failed post.
+    """
+    note_source = str(cfg.get("note_source", "playwright")).lower()
+    if note_source not in ("playwright", "native"):
+        logger.error(
+            "❌ Unknown substack.note_source %r — expected 'playwright' or 'native'.",
+            note_source,
+        )
+        return 2
+
+    if note_source == "native":
+        if dry_run:
+            logger.info("✅ DRY-RUN (native): would publish %s — nothing was posted.",
+                        note.native_dry_run)
+            return 0
+        logger.info("🔌 Publishing the %s via the native HTTP API (no browser).", note.noun)
+        try:
+            note_url = note.publish_native()
+        except Exception as err:  # noqa: BLE001
+            logger.error("❌ Native %s publish failed: %s", note.noun.lower(), err)
+            return 9
+        logger.info("🔗 Published %s URL: %s", note.noun.lower(), note_url)
+        return _write_link(note, note_url)
+
+    owned_session = session is None
+    s = session or SubstackSession(cfg)
+    if owned_session:
+        s.__enter__()
+
+    try:
+        try:
+            s.goto_with_login_check(cfg["profile_url"])
+        except LoginRequiredError as err:
+            logger.error("❌ %s", err)
+            return 6
+
+        try:
+            _open_note_composer(s.page)
+        except Exception as err:
+            s.screenshot_failure(f"{note.failure_label}-selector-fail")
+            logger.error("❌ Could not open Note composer: %s", err)
+            return 7
+
+        try:
+            note.fill(s.page)
+        except Exception as err:
+            s.screenshot_failure(f"{note.failure_label}-fill-fail")
+            logger.error("❌ Could not fill the %s dialog: %s", note.noun, err)
+            return 8
+
+        if dry_run:
+            out_dir = Path(__file__).resolve().parent.parent.parent / "results" / "substack"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            # Tight viewport-only shot of the composer (full_page=False so we see what the user sees).
+            shot = out_dir / note.dry_run_shot
+            s.page.screenshot(path=str(shot), full_page=False)
+            logger.info("✅ DRY-RUN: %s composer screenshot saved → %s (no post was published)",
+                        note.noun, shot)
+            return 0
+
+        if note.wait_post_ready is not None:
+            try:
+                note.wait_post_ready(s.page)
+            except PWTimeoutError:
+                s.screenshot_failure(f"{note.failure_label}-post-disabled")
+                logger.error("❌ Substack Post button never enabled — the upload "
+                             "likely did not finish in time.")
+                return 9
+
+        try:
+            note.click_post(s.page)
+            s.page.get_by_role("dialog").first.wait_for(state="hidden", timeout=note.close_timeout_ms)
+            logger.info("✅ Note dialog closed — %s submitted.", note.noun)
+        except Exception as err:
+            s.screenshot_failure(f"{note.failure_label}-post-fail")
+            logger.error("❌ Could not click Post / dialog did not close: %s", err)
+            return 9
+
+        note_url = _resolve_published_note_url(s.page, cfg["profile_url"])
+        if not note_url:
+            logger.warning("⚠️ %s appears published but URL could not be resolved.", note.noun)
+            return 10
+        logger.info("🔗 Published %s URL: %s", note.noun.lower(), note_url)
+        return _write_link(note, note_url)
+
+    finally:
+        if owned_session:
+            s.__exit__(None, None, None)
+
+
 def post_note(
     cfg: dict,
     target_day: str,
@@ -315,94 +475,27 @@ def post_note(
     logger.info("🖼️ Using image: %s", image_path)
     logger.info("📝 Body length: %d chars", len(str(body_text)))
 
-    note_source = str(cfg.get("note_source", "playwright")).lower()
-    if note_source not in ("playwright", "native"):
-        logger.error(
-            "❌ Unknown substack.note_source %r — expected 'playwright' or 'native'.",
-            note_source,
-        )
-        return 2
-
-    if note_source == "native":
-        if dry_run:
-            logger.info(
-                "✅ DRY-RUN (native): would publish %d chars + %s — nothing was posted.",
-                len(str(body_text)), image_path.name,
-            )
-            return 0
-        logger.info("🔌 Publishing the Note via the native HTTP API (no browser).")
-        try:
-            note_url = _publish_native(cfg, str(body_text), image_path)
-        except Exception as err:  # noqa: BLE001
-            logger.error("❌ Native note publish failed: %s", err)
-            return 9
-        logger.info("🔗 Published note URL: %s", note_url)
+    def write_link(note_url: str) -> None:
         prop_type = get_property_type(row, "post_url", columns)
         set_field(notion, page_id, "post_url", note_url, columns, prop_type)
         logger.info("✅ Wrote post_url to Notion editorial row.")
-        return 0
 
-    owned_session = session is None
-    s = session or SubstackSession(cfg)
-    if owned_session:
-        s.__enter__()
-
-    try:
-        try:
-            s.goto_with_login_check(cfg["profile_url"])
-        except LoginRequiredError as err:
-            logger.error("❌ %s", err)
-            return 6
-
-        try:
-            _open_note_composer(s.page)
-        except Exception as err:
-            s.screenshot_failure(f"{target_day}-selector-fail")
-            logger.error("❌ Could not open Note composer: %s", err)
-            return 7
-
-        try:
-            _fill_note_dialog(s.page, str(body_text), image_path)
-        except Exception as err:
-            s.screenshot_failure(f"{target_day}-fill-fail")
-            logger.error("❌ Could not fill the Note dialog: %s", err)
-            return 8
-
-        if dry_run:
-            out_dir = Path(__file__).resolve().parent.parent.parent / "results" / "substack"
-            out_dir.mkdir(parents=True, exist_ok=True)
-            # Tight viewport-only shot of the composer (full_page=False so we see what the user sees).
-            shot = out_dir / f"{target_day}-dryrun.png"
-            s.page.screenshot(path=str(shot), full_page=False)
-            logger.info("✅ DRY-RUN: composer screenshot saved → %s (no post was published)", shot)
-            return 0
-
-        try:
-            s.page.get_by_role("dialog").first.get_by_role(
-                "button", name=re.compile(r"^post$", re.I)
-            ).first.click()
-            s.page.get_by_role("dialog").first.wait_for(state="hidden", timeout=30000)
-            logger.info("✅ Note dialog closed — post submitted.")
-        except Exception as err:
-            s.screenshot_failure(f"{target_day}-post-fail")
-            logger.error("❌ Could not click Post / dialog did not close: %s", err)
-            return 9
-
-        note_url = _resolve_published_note_url(s.page, cfg["profile_url"])
-        if not note_url:
-            logger.warning("⚠️ Note appears published but URL could not be resolved.")
-            return 10
-        logger.info("🔗 Published note URL: %s", note_url)
-
-        prop_type = get_property_type(row, "post_url", columns)
-        set_field(notion, page_id, "post_url", note_url, columns, prop_type)
-        logger.info("✅ Wrote post_url to Notion editorial row.")
-        return 0
-
-    finally:
-        if owned_session:
-            s.__exit__(None, None, None)
-
+    body = str(body_text)
+    return publish_note_flow(
+        cfg,
+        NotePublish(
+            noun="Note",
+            failure_label=target_day,
+            dry_run_shot=f"{target_day}-dryrun.png",
+            native_dry_run=f"{len(body)} chars + {image_path.name}",
+            publish_native=lambda: _publish_native(cfg, body, image_path),
+            fill=lambda page: _fill_note_dialog(page, body, image_path),
+            click_post=_click_post_button,
+            write_link=write_link,
+        ),
+        dry_run=dry_run,
+        session=session,
+    )
 
 def main() -> int:
     args = parse_args()

@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from planning.substack.post_substack_note import post_note  # noqa: E402
+from planning.substack.post_substack_note import RC_POSTED_LINK_NOT_WRITTEN, post_note  # noqa: E402
 from planning.substack.post_substack_video_note import post_video_note_if_applicable  # noqa: E402
 from planning.substack.substack_session import (  # noqa: E402
     SubstackSession,
@@ -29,6 +29,23 @@ from planning.substack.substack_session import (  # noqa: E402
 )
 
 logger = logging.getLogger("substack_daily_pipeline")
+
+# A Note branch raised; the traceback is in the log.
+RC_BRANCH_RAISED = 99
+
+# Exit codes with a name of their own. The reporting pipeline puts the name in
+# its failure alert, so a Note that posted without its link reads differently
+# from a branch that raised and from a failed post (any other non-zero code).
+EXIT_CODE_NAMES: dict[int, str] = {
+    RC_POSTED_LINK_NOT_WRITTEN: "Note posted, link not written: fill it in by hand",
+    RC_BRANCH_RAISED: "a Note branch raised",
+}
+
+
+def describe_exit_code(rc: int) -> str:
+    """``rc`` followed by its name when it has one, e.g. ``"99 (a Note branch raised)"``."""
+    name = EXIT_CODE_NAMES.get(rc)
+    return f"{rc} ({name})" if name else str(rc)
 
 
 def parse_args() -> argparse.Namespace:
@@ -84,7 +101,7 @@ def main() -> int:
                 )
             except Exception as err:
                 logger.exception("❌ Image Note branch raised: %s", err)
-                rc_image = 99
+                rc_image = RC_BRANCH_RAISED
 
             try:
                 video_rc = post_video_note_if_applicable(
@@ -93,16 +110,18 @@ def main() -> int:
                 )
             except Exception as err:
                 logger.exception("❌ Video-day branch raised: %s", err)
-                video_rc = 99
+                video_rc = RC_BRANCH_RAISED
 
             if video_rc is None:
-                logger.info("🖼️ Not a video day — only image Note ran (rc=%d).", rc_image)
+                logger.info("🖼️ Not a video day — only image Note ran (rc=%s).",
+                            describe_exit_code(rc_image))
                 rc_post = rc_image
             else:
-                logger.info("📹 Video day — image rc=%d, video rc=%d.", rc_image, video_rc)
+                logger.info("📹 Video day — image rc=%s, video rc=%s.",
+                            describe_exit_code(rc_image), describe_exit_code(video_rc))
                 rc_post = rc_image or video_rc
 
-    logger.info("📊 Pipeline result: post=%d", rc_post)
+    logger.info("📊 Pipeline result: post=%s", describe_exit_code(rc_post))
     return rc_post
 
 

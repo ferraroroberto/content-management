@@ -2,10 +2,10 @@
 
 Triggered from the daily Substack pipeline on video days (rows where
 ``Work in Progress Video`` is checked AND ``clip SB(v)`` is populated).
-Resolves the shared clip page once, then either publishes natively or drives
-the same Note composer used by ``post_substack_note`` (the camera/video
-toolbar icon instead of the image icon), uploading the .mp4 from the clip's
-``clipPC``/``filePC`` properties. On success, writes ``link SB(v)`` on the
+Resolves the shared clip page once, then hands ``post_substack_note``'s
+``publish_note_flow`` the video-specific steps: it either publishes natively
+or drives the same Note composer (the video file input instead of the image
+one), uploading the .mp4 from the clip's ``clipPC``/``filePC`` properties. On success, writes ``link SB(v)`` on the
 editorial row so the videos orchestrator's next run can untick the shared
 ``Work in Progress Video`` checkbox.
 
@@ -45,12 +45,11 @@ from playwright.sync_api import TimeoutError as PWTimeoutError
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from planning.substack.post_substack_note import (  # noqa: E402
     COMPOSER_SCOPE_XPATH,
+    NotePublish,
     _locate_note_editor,
-    _open_note_composer,
-    _resolve_published_note_url,
+    publish_note_flow,
 )
 from planning.substack.substack_session import (  # noqa: E402
-    LoginRequiredError,
     SubstackSession,
     configure_logger,
     load_notion_token,
@@ -175,6 +174,31 @@ def _fill_video_note_dialog(page, body_text: str, video_path: Path) -> None:
         logger.warning("⚠️ Video preview did not render within 180s — Post may still be disabled.")
 
 
+def _wait_for_post_enabled(page) -> None:
+    """Block until the composer's Post button is enabled; PWTimeoutError if never.
+
+    The Post button stays ``disabled`` until the clip finishes uploading
+    server-side; for a large video that runs well past the click's own retry
+    window, so wait for it to enable before clicking (issue #106).
+    """
+    page.wait_for_function(
+        """() => {
+            const b = document.querySelector('[role="dialog"] button[data-testid="composer-post"]')
+                      || document.querySelector('button[data-testid="composer-post"]');
+            return !!b && !b.disabled;
+        }""",
+        timeout=VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS,
+    )
+
+
+def _click_composer_post(page) -> None:
+    """Click the video Note composer's Post button, anchored on its test id."""
+    page.locator(
+        '[role="dialog"] button[data-testid="composer-post"], '
+        'button[data-testid="composer-post"]'
+    ).first.click()
+
+
 def _post_video_note_for_row(
     cfg: dict,
     videos_cfg: dict,
@@ -217,109 +241,28 @@ def _post_video_note_for_row(
         logger.error("❌ Clip page has empty 'Text' caption — refusing to post empty Note.")
         return 5
 
-    note_source = str(cfg.get("note_source", "playwright")).lower()
-    if note_source not in ("playwright", "native"):
-        logger.error(
-            "❌ Unknown substack.note_source %r — expected 'playwright' or 'native'.",
-            note_source,
-        )
-        return 2
-
-    if note_source == "native":
-        if dry_run:
-            logger.info(
-                "✅ DRY-RUN (native): would publish video %s (%d chars caption) — nothing was posted.",
-                payload.video_path.name, len(payload.caption_short),
-            )
-            return 0
-        logger.info("🔌 Publishing the video Note via the native HTTP API (no browser).")
-        try:
-            note_url = _publish_native(cfg, payload.caption_short, payload.video_path)
-        except Exception as err:  # noqa: BLE001
-            logger.error("❌ Native video note publish failed: %s", err)
-            return 9
-        logger.info("🔗 Published video note URL: %s", note_url)
-        try:
-            set_field(notion, page_id, "post_url_sb", note_url, video_cols, "url")
-            sb_col = video_cols.get("post_url_sb", "link SB")
-            logger.info("✅ Wrote %s on editorial row.", sb_col)
-        except Exception as err:
-            logger.warning("⚠️ Posted OK but failed to write SB post URL: %s", err)
-        return 0
-
-    try:
-        session.goto_with_login_check(cfg["profile_url"])
-    except LoginRequiredError as err:
-        logger.error("❌ %s", err)
-        return 6
-
-    try:
-        _open_note_composer(session.page)
-    except Exception as err:
-        session.screenshot_failure(f"{payload.title or 'video'}-selector-fail")
-        logger.error("❌ Could not open Note composer: %s", err)
-        return 7
-
-    try:
-        _fill_video_note_dialog(session.page, payload.caption_short, payload.video_path)
-    except Exception as err:
-        session.screenshot_failure(f"{payload.title or 'video'}-fill-fail")
-        logger.error("❌ Could not fill the video Note dialog: %s", err)
-        return 8
-
-    if dry_run:
-        out_dir = Path(__file__).resolve().parent.parent.parent / "results" / "substack"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-        shot = out_dir / f"{ts}-video-dryrun.png"
-        session.page.screenshot(path=str(shot), full_page=False)
-        logger.info("✅ DRY-RUN: video composer screenshot → %s (no post was published)", shot)
-        return 0
-
-    # The Post button stays `disabled` until the clip finishes uploading
-    # server-side; for a large video that runs well past the click's own retry
-    # window, so wait for it to enable before clicking (issue #106).
-    try:
-        session.page.wait_for_function(
-            """() => {
-                const b = document.querySelector('[role="dialog"] button[data-testid="composer-post"]')
-                          || document.querySelector('button[data-testid="composer-post"]');
-                return !!b && !b.disabled;
-            }""",
-            timeout=VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS,
-        )
-    except PWTimeoutError:
-        session.screenshot_failure(f"{payload.title or 'video'}-post-disabled")
-        logger.error("❌ Substack Post button never enabled — the video upload "
-                     "likely did not finish in time.")
-        return 9
-
-    try:
-        session.page.locator(
-            '[role="dialog"] button[data-testid="composer-post"], '
-            'button[data-testid="composer-post"]'
-        ).first.click()
-        session.page.get_by_role("dialog").first.wait_for(state="hidden", timeout=120000)
-        logger.info("✅ Note dialog closed — video post submitted.")
-    except Exception as err:
-        session.screenshot_failure(f"{payload.title or 'video'}-post-fail")
-        logger.error("❌ Could not click Post / dialog did not close: %s", err)
-        return 9
-
-    note_url = _resolve_published_note_url(session.page, cfg["profile_url"])
-    if not note_url:
-        logger.warning("⚠️ Video note appears published but URL could not be resolved.")
-        return 10
-    logger.info("🔗 Published video note URL: %s", note_url)
-
-    try:
+    def write_link(note_url: str) -> None:
         set_field(notion, page_id, "post_url_sb", note_url, video_cols, "url")
-        sb_col = video_cols.get("post_url_sb", "link SB")
-        logger.info("✅ Wrote %s on editorial row.", sb_col)
-    except Exception as err:
-        logger.warning("⚠️ Posted OK but failed to write SB post URL: %s", err)
+        logger.info("✅ Wrote %s on editorial row.", video_cols.get("post_url_sb", "link SB"))
 
-    return 0
+    caption, video_path = payload.caption_short, payload.video_path
+    return publish_note_flow(
+        cfg,
+        NotePublish(
+            noun="video Note",
+            failure_label=payload.title or "video",
+            dry_run_shot=f"{datetime.now():%Y%m%d-%H%M%S}-video-dryrun.png",
+            native_dry_run=f"video {video_path.name} ({len(caption)} chars caption)",
+            publish_native=lambda: _publish_native(cfg, caption, video_path),
+            fill=lambda page: _fill_video_note_dialog(page, caption, video_path),
+            click_post=_click_composer_post,
+            write_link=write_link,
+            wait_post_ready=_wait_for_post_enabled,
+            close_timeout_ms=120000,
+        ),
+        dry_run=dry_run,
+        session=session,
+    )
 
 
 def post_video_note_if_applicable(
