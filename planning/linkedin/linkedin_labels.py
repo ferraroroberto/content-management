@@ -50,7 +50,7 @@ from datetime import date
 # IMPORTANT: this is a comma-separated selector *list*. Never interpolate it
 # into a larger selector — ``f'{DIALOG_SEL} button'`` parses as
 # ``[role="dialog"]`` OR ``dialog[open] button``, silently matching the hidden
-# video.js modals. Chain off the locator instead: ``_dialog(page).locator(…)``.
+# video.js modals. Chain off the locator instead: ``dialog_locator(page).locator(…)``.
 DIALOG_SEL = '[role="dialog"], dialog[open]'
 
 

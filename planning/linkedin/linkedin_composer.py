@@ -19,6 +19,12 @@ copy of it and the copies have to agree: they encode when a row counts as
 scheduled, and a driver that disagreed would either drop a post or duplicate
 one (issue #178).
 
+For the same reason it owns the dialog locators, the Schedule dialog's
+date/time setters, and ``finalize_schedule`` — the Confirm → final Schedule →
+confirmed tail every route (photo, POST, carousel, video) ends on. The video
+driver used to import them as private names from the photo scheduler and keep
+its own copy of the tail (issue #371).
+
 All are pure Playwright drivers; nothing in here is route-specific.
 Living in ``planning/linkedin`` (instead of ``planning/videos``) reflects
 that these are LI-composer concerns, not video-only ones.
@@ -29,11 +35,27 @@ from __future__ import annotations
 import logging
 import re
 import time
+from datetime import date
+from pathlib import Path
 from typing import Optional
 
 from playwright.sync_api import Page
 
-from planning.linkedin.linkedin_labels import POST_SCHEDULED_TOAST_RE
+from planning.linkedin.linkedin_labels import (
+    CONFIRM_BTN_RE,
+    DATE_INPUT_SEL,
+    DIALOG_SEL,
+    DISCARD_BTN_RE,
+    FINAL_SCHEDULE_BTN_RE,
+    POST_SCHEDULED_TOAST_RE,
+    SCHEDULE_CLOCK_SEL,
+    SCHEDULE_SUMMARY_SEL,
+    TIME_INPUT_SEL,
+    TIME_MENU_SEL,
+    month_token_candidates,
+    schedule_date_candidates,
+    time_picker_candidates,
+)
 
 logger = logging.getLogger("linkedin_composer")
 
@@ -606,8 +628,481 @@ def wait_for_schedule_confirmation(
     )
 
 
+# ---------- Composer dialogs and the Schedule dialog ----------
+
+def dialog_locator(page: Page):
+    """Locator for whatever modal container LinkedIn currently renders.
+
+    Scoping matters: the feed leaves carousel arrow buttons (aria-label="Next")
+    visible behind the modal, and those would otherwise win resolution and
+    cause spurious clicks.
+
+    ``DIALOG_SEL`` matches both the legacy ``<div role="dialog">`` and the
+    native ``<dialog open>`` LinkedIn's 2026 rebuild replaced it with — see
+    ``linkedin_labels.DIALOG_SEL`` for the full account (issue #178).
+
+    Always chain off this locator (``dialog_locator(page).locator("button…")``)
+    rather than interpolating ``DIALOG_SEL`` into a bigger selector string:
+    the constant is a comma-separated selector list, so ``f'{DIALOG_SEL}
+    button'`` would parse as ``[role="dialog"]`` OR ``dialog[open] button``
+    and silently match the hidden video.js modals left in the feed.
+    """
+    return page.locator(DIALOG_SEL)
+
+
+def dialog_button(page: Page, name_re: re.Pattern):
+    """Find a button matching `name_re` scoped to any open dialog."""
+    return dialog_locator(page).get_by_role("button", name=name_re)
+
+
+def composer_dialog(page: Page):
+    """The post-composer modal, identified by the caption editor it contains.
+
+    Both the photo/carousel and the video flows watch this locator's count
+    drop to confirm the composer actually closed after the final Schedule
+    click — a post-scheduled signal that doesn't depend on any copy string.
+    Expressed as a ``filter(has=…)`` rather than a ``:has()`` CSS suffix so it
+    composes with the two-branch ``DIALOG_SEL`` without re-parsing it.
+    """
+    return dialog_locator(page).filter(
+        has=page.locator('div[role="textbox"][contenteditable="true"]')
+    )
+
+
+def dialog_next_button(page: Page):
+    """The dialog's primary 'Next' / 'Siguiente' button, matched by visible text.
+
+    Not by accessible name: the feed's carousel arrow also carries
+    aria-label="Next" but renders no visible text, so ``:has-text``
+    disambiguates correctly across locales.
+    """
+    return dialog_locator(page).locator(
+        'button:has-text("Next"), button:has-text("Siguiente")'
+    )
+
+
+def button_is_enabled(btn) -> bool:
+    """True when a located button is actually clickable.
+
+    ``get_attribute("disabled")`` returns ``""`` for ``<button disabled>`` —
+    an *empty string*, which is falsy — so the obvious ``if not disabled``
+    test reports every disabled button as ready. That is why the carousel's
+    PDF wait (``schedule_linkedin_posts._wait_for_pdf_upload``) used to return
+    instantly and hand a still-processing dialog to the next step. Presence,
+    not truthiness, is the test.
+    """
+    try:
+        if btn.get_attribute("disabled") is not None:
+            return False
+        aria_dis = btn.get_attribute("aria-disabled")
+        return aria_dis is None or aria_dis.lower() == "false"
+    except Exception:
+        return False
+
+
+def open_schedule_dialog(page: Page) -> None:
+    """Click the composer's clock affordance to open the Schedule dialog."""
+    # Matched structurally by the icon it wraps — its accessible name is a
+    # live counter ("Scheduled (2)"), see ``SCHEDULE_CLOCK_SEL``.
+    try:
+        dialog_locator(page).locator(SCHEDULE_CLOCK_SEL).first.click(timeout=10000)
+    except Exception as err:
+        raise RuntimeError(f"Could not open the Schedule dialog: {err}")
+
+
+def _schedule_summary(page: Page) -> str:
+    """LinkedIn's own "Posting at Tue, Jul 28, 6:30 AM" line, or ''.
+
+    Empty means LinkedIn has not accepted the current date+time pair — it is
+    the authoritative signal, since the raw input keeps whatever string was
+    typed whether or not it parsed.
+    """
+    try:
+        loc = page.locator(SCHEDULE_SUMMARY_SEL).first
+        if loc.count() == 0:
+            return ""
+        return (loc.inner_text(timeout=2000) or "").strip()
+    except Exception:
+        return ""
+
+
+def _summary_matches(summary: str, target: date) -> bool:
+    """True when LinkedIn's summary line describes ``target``.
+
+    Guards the one case a non-empty summary alone would not: a date like 8/7
+    parses under both M/D and D/M orderings, so "it parsed" does not mean "it
+    parsed as the day we meant". Requires the day number as a standalone token
+    AND a month name from either supported locale.
+    """
+    if not summary:
+        return False
+    low = summary.lower()
+    if not re.search(rf"\b{target.day}\b", low):
+        return False
+    return any(tok.lower() in low for tok in month_token_candidates(target))
+
+
+def _summary_has_time(summary: str, hour: int, minute: int) -> bool:
+    """True when LinkedIn's summary line shows ``hour:minute``.
+
+    Accepts the 12-hour form with an AM/PM marker in either locale ("6:30 AM",
+    "6:30 a. m.") or a 24-hour form with no marker ("06:30", "18:30"). The
+    digit guards keep 6:30 from matching 16:30, and the marker guard keeps a
+    24-hour 6:30 from matching "6:30 PM".
+    """
+    low = summary.lower()
+    marker = r"a\.?\s*m\.?" if hour < 12 else r"p\.?\s*m\.?"
+    h12 = hour % 12 or 12
+    if re.search(rf"(?<!\d){h12}:{minute:02d}\s*{marker}", low):
+        return True
+    return re.search(rf"(?<!\d)0?{hour}:{minute:02d}(?!\d)(?!\s*[ap]\.?\s*m)", low) is not None
+
+
+def _wait_for_summary_match(
+    page: Page,
+    target: date,
+    *,
+    time: Optional[tuple[int, int]] = None,
+    timeout_ms: int = 4000,
+) -> bool:
+    """Poll the summary line until it describes ``target`` (and ``time``, if
+    given), or give up.
+
+    Polled rather than slept: the summary is re-rendered asynchronously after
+    the field changes, and a single fixed wait is a coin flip — a 700 ms sleep
+    passed for five rows in a row and then failed on a date LinkedIn was in
+    fact accepting. Polling also returns as soon as it lands, so the happy path
+    is faster than the sleep it replaces.
+    """
+    deadline = page.evaluate("() => Date.now()") + timeout_ms
+    while True:
+        summary = _schedule_summary(page)
+        if _summary_matches(summary, target) and (
+            time is None or _summary_has_time(summary, *time)
+        ):
+            return True
+        if page.evaluate("() => Date.now()") >= deadline:
+            return False
+        page.wait_for_timeout(200)
+
+
+def _set_schedule_date(page: Page, target: date) -> None:
+    """Type the date into the rebuilt Schedule dialog's free-text date field.
+
+    The field's accepted format is locale-dependent (en-US ``M/D/YYYY``, es-ES
+    ``D/M/YYYY``) and LinkedIn exposes the active locale nowhere reliable, so
+    we try each candidate rendering and keep the first that LinkedIn itself
+    confirms in the summary line. A wrong-but-parseable ordering is rejected by
+    ``_summary_matches``, so this converges on the right day rather than
+    silently scheduling a post three weeks off.
+
+    ``fill()``, not ``type()``: the field normalizes keystrokes as they arrive
+    (typing "6:30 AM" into the sibling time field yields "6:30AM"), and
+    ``fill()`` sets the value atomically and fires the input event React wants.
+    """
+    di = page.locator(DATE_INPUT_SEL).first
+    try:
+        di.wait_for(state="visible", timeout=10000)
+    except Exception as err:
+        raise RuntimeError(f"Schedule dialog has no date input: {err}")
+
+    candidates = schedule_date_candidates(target)
+    for cand in candidates:
+        try:
+            di.fill("")
+            # Let the controlled input settle before the real value: two
+            # back-to-back fills can coalesce and swallow the parse.
+            page.wait_for_timeout(150)
+            di.fill(cand)
+        except Exception:
+            continue
+        if _wait_for_summary_match(page, target):
+            logger.debug("📅 date accepted as %s", cand)
+            return
+    raise RuntimeError(
+        f"Could not set Date {target:%Y-%m-%d}: LinkedIn rejected every "
+        f"candidate format {candidates} (summary={_schedule_summary(page)!r})"
+    )
+
+
+# How long to wait, per menu opening, for the wanted slot to render (issue
+# #390). The menu's slot list trails the date field: opened right after a date
+# change it can still show the previous date's list, which for today is only
+# the slots after now (an evening run sees 7:45 PM … 11:45 PM, no morning).
+# The live probe saw it refresh to the full 96 slots within ~100 ms.
+TIME_SLOT_WAIT_MS = 4000
+
+# Opening attempts before giving up — the second one re-renders the menu
+# against the committed date in case the open list never refreshed.
+TIME_MENU_OPENS = 2
+
+# How long to wait for the picker to report the clicked slot as its value.
+TIME_SELECTED_WAIT_MS = 2000
+
+
+def _open_time_menu(page: Page):
+    """Click the time field and return the visible slot menu."""
+    try:
+        page.locator(TIME_INPUT_SEL).first.click(timeout=10000)
+        menu = page.locator(TIME_MENU_SEL).first
+        menu.wait_for(state="visible", timeout=10000)
+    except Exception as err:
+        raise RuntimeError(f"Could not open the time picker: {err}")
+    return menu
+
+
+def _wait_for_time_slot(page: Page, menu, candidates: tuple[str, ...]):
+    """Poll ``menu`` until a slot labelled with any candidate renders, or None."""
+    patterns = [re.compile(rf"^\s*{re.escape(c)}\s*$", re.I) for c in candidates]
+    deadline = page.evaluate("() => Date.now()") + TIME_SLOT_WAIT_MS
+    while True:
+        for pattern in patterns:
+            entry = menu.get_by_text(pattern)
+            if entry.count() > 0:
+                return entry.first
+        if page.evaluate("() => Date.now()") >= deadline:
+            return None
+        page.wait_for_timeout(200)
+
+
+def _time_menu_labels(menu) -> list[str]:
+    """The slot labels the open menu currently renders, top to bottom."""
+    try:
+        return [ln.strip() for ln in menu.inner_text(timeout=2000).splitlines() if ln.strip()]
+    except Exception:
+        return []
+
+
+def _describe_time_labels(labels: list[str], *, edge: int = 6) -> str:
+    """Compact rendering of the menu's labels for a failure message."""
+    if not labels:
+        return "no slots"
+    if len(labels) <= 2 * edge:
+        return f"{len(labels)} slot(s): {', '.join(labels)}"
+    return (f"{len(labels)} slot(s): {', '.join(labels[:edge])} … "
+            f"{', '.join(labels[-edge:])}")
+
+
+def _time_selected(page: Page, target_minutes: int, candidates: tuple[str, ...]) -> bool:
+    """Poll until the time field holds the wanted slot; False if it never does.
+
+    ``data-time-picker-value`` is the picker's own minutes-since-midnight value
+    (6:30 AM → ``390``) — locale-proof, so it is authoritative when present.
+    The displayed text is the fallback should LinkedIn drop the attribute.
+    """
+    ti = page.locator(TIME_INPUT_SEL).first
+    wanted = {c.lower() for c in candidates}
+    deadline = page.evaluate("() => Date.now()") + TIME_SELECTED_WAIT_MS
+    while True:
+        raw = ti.get_attribute("data-time-picker-value")
+        if raw is not None:
+            if raw.strip() == str(target_minutes):
+                return True
+        elif " ".join(ti.input_value().split()).lower() in wanted:
+            return True
+        if page.evaluate("() => Date.now()") >= deadline:
+            return False
+        page.wait_for_timeout(200)
+
+
+def _set_schedule_time(page: Page, hour: int, minute: int) -> None:
+    """Pick the time from the dialog's 15-minute-slot menu.
+
+    Typed input is unreliable here — the field re-formats each keystroke and
+    ends up rejecting even the exact string it displays by default — so we open
+    the menu and click the slot, which is also locale-proof.
+
+    The slot is polled for rather than looked up once (issue #390): the menu
+    can open still holding the previous date's slot list. If it never shows
+    up, the menu is closed (focusing the date field dismisses it; Escape would
+    close the whole Schedule dialog) and reopened once. After the click the
+    picker's own value must equal the wanted time, so a wrong slot is an error.
+    """
+    candidates = time_picker_candidates(hour, minute)
+    entry = None
+    labels: list[str] = []
+    for attempt in range(1, TIME_MENU_OPENS + 1):
+        menu = _open_time_menu(page)
+        entry = _wait_for_time_slot(page, menu, candidates)
+        if entry is not None:
+            break
+        labels = _time_menu_labels(menu)
+        logger.info("ℹ️ time menu open %d/%d has no %02d:%02d slot (%s)",
+                    attempt, TIME_MENU_OPENS, hour, minute, _describe_time_labels(labels))
+        if attempt < TIME_MENU_OPENS:
+            try:
+                page.locator(DATE_INPUT_SEL).first.click(timeout=5000)
+                page.wait_for_timeout(300)
+            except Exception:
+                pass
+    if entry is None:
+        raise RuntimeError(
+            f"No time-picker slot matched any locale candidate {candidates} after "
+            f"{TIME_MENU_OPENS} menu openings; the menu showed {_describe_time_labels(labels)}"
+        )
+
+    try:
+        entry.scroll_into_view_if_needed(timeout=5000)
+        entry.click(timeout=5000)
+    except Exception as err:
+        raise RuntimeError(f"Could not click the {hour:02d}:{minute:02d} time slot: {err}")
+
+    if not _time_selected(page, hour * 60 + minute, candidates):
+        ti = page.locator(TIME_INPUT_SEL).first
+        raise RuntimeError(
+            f"Time picker did not take {hour:02d}:{minute:02d}: field reads "
+            f"{ti.input_value()!r} (picker value "
+            f"{ti.get_attribute('data-time-picker-value')!r})"
+        )
+
+
+def set_schedule_datetime(page: Page, target: date, hour: int, minute: int) -> None:
+    """Set Date and Time in the rebuilt Schedule dialog, then verify both.
+
+    Date first: the time menu offers only future slots, so a stale date can
+    hide the slot we want. The summary is checked for the time too: it
+    re-renders a beat after the picker takes the click (issue #390).
+    """
+    _set_schedule_date(page, target)
+    _set_schedule_time(page, hour, minute)
+
+    if not _wait_for_summary_match(page, target, time=(hour, minute)):
+        raise RuntimeError(
+            f"Schedule did not stick for {target:%Y-%m-%d} {hour:02d}:{minute:02d} — "
+            f"LinkedIn summary reads {_schedule_summary(page)!r}"
+        )
+    logger.info("🗓️ %s", _schedule_summary(page))
+
+
+def click_schedule_confirm(page: Page) -> None:
+    """Commit the date+time and return to the composer.
+
+    The Schedule dialog's primary action is 'Confirm' since the rebuild ('Next'
+    before it); ``CONFIRM_BTN_RE`` carries both. It stays ``disabled`` until
+    LinkedIn has parsed both fields, so a click that finds it disabled means
+    ``set_schedule_datetime`` did not actually take.
+    """
+    try:
+        dialog_button(page, CONFIRM_BTN_RE).first.click(timeout=10000)
+    except Exception as err:
+        raise RuntimeError(f"Could not click 'Confirm' in Schedule dialog: {err}")
+
+
+def click_final_schedule(page: Page) -> None:
+    """Click the final 'Schedule' / 'Programar' button in the composer (live mode).
+
+    Once a schedule is attached, the composer's primary action flips from
+    'Post' to exactly 'Schedule' (or 'Programar'). ``FINAL_SCHEDULE_BTN_RE`` is
+    anchored on ``^...$`` so it matches that standalone button and not the
+    'Schedule post' tab inside the Schedule dialog.
+    """
+    try:
+        dialog_button(page, FINAL_SCHEDULE_BTN_RE).first.click(timeout=10000)
+    except Exception as err:
+        raise RuntimeError(f"Could not click final 'Schedule' button: {err}")
+
+
+def close_dialogs(page: Page) -> None:
+    """Best-effort attempt to close any open dialogs (for dry-run cleanup).
+
+    The post composer has unsaved changes — Escape triggers a discard prompt.
+    """
+    try:
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(500)
+    except Exception:
+        return
+    # A discard-confirmation dialog may appear; accept it.
+    try:
+        discard = dialog_button(page, DISCARD_BTN_RE)
+        if discard.count() > 0:
+            discard.first.click(timeout=2000)
+            page.wait_for_timeout(500)
+    except Exception:
+        pass
+    # Repeat in case a second dialog remains.
+    try:
+        page.keyboard.press("Escape")
+    except Exception:
+        pass
+
+
+def finalize_schedule(
+    page: Page,
+    out_dir: Path,
+    shot_stem: str,
+    *,
+    log_label: str,
+    wait_for_upload: bool = False,
+) -> None:
+    """Shared tail of every LinkedIn route: Confirm → final Schedule → confirmed.
+
+    The photo, POST, carousel and video flows all end here once the Schedule
+    dialog holds the right date and time. Screenshots land in ``out_dir`` as
+    ``<shot_stem>-pre.png`` / ``-after.png`` (best effort) and
+    ``<shot_stem>-FAIL.png`` when no confirmation arrives; ``log_label``
+    prefixes the log lines.
+
+    ``wait_for_upload`` adds the background-upload wait media posts need
+    (carousel PDFs, videos): LinkedIn closes the composer at once but keeps
+    uploading, and tearing the session down early leaves a scheduled post with
+    no media ("Something went wrong, please try reloading"). That wait runs
+    after the post is confirmed scheduled, so an error inside it is logged and
+    swallowed: raising would report a scheduled row as FAIL, leave it
+    Work-in-Progress and schedule it again on the next run (issue #178).
+    """
+    click_schedule_confirm(page)
+    page.wait_for_timeout(1500)
+
+    pre_shot = out_dir / f"{shot_stem}-pre.png"
+    try:
+        page.screenshot(path=str(pre_shot), full_page=False)
+    except Exception:
+        pass
+
+    composer_locator = composer_dialog(page)
+    pre_state = schedule_pre_state(page, composer_locator)
+
+    click_final_schedule(page)
+
+    try:
+        signal = wait_for_schedule_confirmation(
+            page, composer_locator, pre_state, label=log_label,
+        )
+    except RuntimeError as err:
+        shot = out_dir / f"{shot_stem}-FAIL.png"
+        page.screenshot(path=str(shot), full_page=False)
+        raise RuntimeError(f"{err} See {shot}")
+    logger.info("🔔 %s: schedule confirmed via %s", log_label, signal)
+
+    page.wait_for_timeout(1500)
+    if wait_for_upload:
+        try:
+            wait_for_upload_complete(page)
+        except Exception as err:
+            logger.warning("⚠️ %s: upload-complete wait raised %s — continuing.", log_label, err)
+
+    shot = out_dir / f"{shot_stem}-after.png"
+    try:
+        page.screenshot(path=str(shot), full_page=False)
+    except Exception:
+        pass
+    logger.info("✅ LIVE %s: scheduled (composer closed). Screenshot → %s", log_label, shot)
+
+
 __all__ = [
+    "button_is_enabled",
     "click_feed_entry",
+    "click_final_schedule",
+    "click_schedule_confirm",
+    "close_dialogs",
+    "composer_dialog",
+    "dialog_button",
+    "dialog_locator",
+    "dialog_next_button",
+    "finalize_schedule",
+    "open_schedule_dialog",
+    "set_schedule_datetime",
     "fill_caption_with_mentions",
     "wait_for_upload_complete",
     "schedule_pre_state",
