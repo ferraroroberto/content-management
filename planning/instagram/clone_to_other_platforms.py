@@ -37,7 +37,7 @@ has either an illustration relation OR a non-empty caption — use ``--force``
 to overwrite.
 
 CLI:
-    python -m instagram.clone_to_other_platforms \
+    python -m planning.instagram.clone_to_other_platforms \
         [--week-start YYYY-MM-DD]   # default: next Monday
         [--date YYYYMMDD]           # single-day mode
         [--dry-run | --live]        # default: dry-run

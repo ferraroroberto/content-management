@@ -13,25 +13,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
-from config.loader import load_full_config
+from config.loader import load_full_config  # noqa: F401  (re-exported for per-platform modules)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 class ScrapeError(RuntimeError):
     """Raised when a required field cannot be extracted from the page."""
-
-
-def load_platform_block(platform: str) -> dict:
-    """Return the platform's own config block (e.g. ``config['linkedin']``)."""
-    cfg = load_full_config()
-    block = cfg.get(platform)
-    if not block:
-        raise ScrapeError(
-            f"Missing '{platform}' config block in config.json — needed for "
-            "user_data_dir + handle/profile URL."
-        )
-    return block
 
 
 _INT_RE = re.compile(r"-?\d[\d,.  \s]*")

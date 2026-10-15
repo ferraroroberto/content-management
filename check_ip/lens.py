@@ -29,8 +29,6 @@ from check_ip import db  # noqa: E402
 
 logger = logging.getLogger("check_ip.lens")
 
-SEARCH_TYPES = ("exact_matches", "visual_matches")
-
 
 class LensClient:
     """One SerpAPI Google Lens search per call, logged to the store."""

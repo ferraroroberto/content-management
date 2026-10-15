@@ -1,7 +1,7 @@
 """One-time interactive login that prepares a dedicated Chrome profile for the Meta planner.
 
 Usage:
-    python -m instagram.bootstrap_session [--debug]
+    python -m planning.instagram.bootstrap_session [--debug]
 
 See ``planning._bootstrap.run_bootstrap`` for the shared implementation
 (mirror of ``linkedin/bootstrap_session.py``, ``twitter/bootstrap_session.py``,

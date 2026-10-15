@@ -1,7 +1,7 @@
 """One-time interactive login that prepares a dedicated Chrome profile for Substack.
 
 Usage:
-    python -m substack.bootstrap_session [--debug]
+    python -m planning.substack.bootstrap_session [--debug]
 
 After login the dedicated profile retains the session, so subsequent runs of
 ``post_substack_note`` (and ``reporting/scrape_client/substack.py``) reuse it

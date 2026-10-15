@@ -70,11 +70,6 @@ from check_ip import db, process  # noqa: E402
 DEFAULT_SOURCE = "LinkedIn"
 DEFAULT_LIMIT = 10  # one worker batch; the skill fans out N/10 of them
 
-# Fields the queue hands the skill. Deliberately excludes the owner columns:
-# the skill should judge the page, not be primed by a past decision.
-QUEUE_FIELDS = ("id", "local_image", "found_link", "title", "source", "post_date",
-                "match_type", "search_date", "linkedin_count", "poster_pending")
-
 # Added to those on a re-screen serve only (``next_batch(unassessed=True)``).
 # The owner columns stay excluded on every path — this is the *screening*
 # opinion being replaced, which a worker re-judging the row needs to see and a

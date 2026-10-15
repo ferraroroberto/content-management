@@ -319,7 +319,7 @@ def met_sql(alias: str = "r") -> str:
 
     ``col = 1`` is NULL for an unassessed condition and false for a ``2``, and
     an ``and`` chain with a NULL in it is never true — so neither state can
-    reach the ``acceptable`` branch of ``verdict_sql`` or the tab's compliant
+    reach the ``acceptable`` branch of ``verdict_for`` or the tab's compliant
     filter. Rendered here once rather than hand-written at each call site,
     which is how ``assessed_sql`` came to be standing in for it.
     """
@@ -368,12 +368,6 @@ def verdict_for(credit_ok: object = None, noncommercial_ok: object = None,
     if severity(*conditions):
         return "infringement"
     return "acceptable" if all_conditions_met(*conditions) else "unclear"
-
-
-def verdict_sql(alias: str = "r") -> str:
-    """``verdict_for()`` as an SQL expression, composed of the two above."""
-    return (f"case when ({severity_sql(alias)}) > 0 then 'infringement' "
-            f"when ({met_sql(alias)}) then 'acceptable' else 'unclear' end")
 
 
 def permanent_sql(alias: str = "r") -> str:
@@ -516,11 +510,6 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
 
 # ---------------------------------------------------------------------------
 # small helpers shared by migrate / run / screen / review
-
-
-def get_meta(conn: sqlite3.Connection, key: str) -> Optional[str]:
-    row = conn.execute("select value from meta where key = ?", (key,)).fetchone()
-    return row["value"] if row else None
 
 
 def set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:

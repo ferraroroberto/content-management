@@ -141,7 +141,7 @@ class CheckIpStoreTests(unittest.TestCase):
         indistinguishable from a met one, which is exactly how a credited but
         plainly commercial post came to be stored as compliant. Asserted on
         severity, on the assessed predicate, on the derived verdict and on the
-        SQL renderings of all three.
+        SQL renderings of severity and the assessed predicate.
         """
         # Nothing violated, but nothing established either.
         self.assertEqual(db.severity(None, None, None), 0)
@@ -165,11 +165,10 @@ class CheckIpStoreTests(unittest.TestCase):
                               outcome=db.OUTCOME_AMBIGUOUS, credit_ok=1)
         row = self.conn.execute(
             f"""select ({db.severity_sql('results')}) as sev,
-                       case when {db.assessed_sql('results')} then 1 else 0 end as assessed,
-                       ({db.verdict_sql('results')}) as derived
+                       case when {db.assessed_sql('results')} then 1 else 0 end as assessed
                   from results where id = ?""", (row_id,)
         ).fetchone()
-        self.assertEqual((row["sev"], row["assessed"], row["derived"]), (0, 0, "unclear"))
+        self.assertEqual((row["sev"], row["assessed"]), (0, 0))
 
         # The tab counts it as not-fully-assessed rather than as compliant.
         stats = screen.stats(self.conn, source="LinkedIn")
@@ -185,8 +184,8 @@ class CheckIpStoreTests(unittest.TestCase):
                          "an unassessed condition must render as words, not a blank cell")
         self.assertEqual(list(frame["assessed"]), [False])
 
-    def test_severity_and_verdict_sql_agree_with_python(self):
-        """Two renderings of one rule, compared across all 64 combinations.
+    def test_severity_and_sql_predicates_agree_with_python(self):
+        """Four SQL predicates, each compared against all 64 combinations.
 
         There is a Python implementation for reporting and an SQL one for
         sorting and counting; only comparing them everywhere proves neither
@@ -215,8 +214,7 @@ class CheckIpStoreTests(unittest.TestCase):
                                    case when {db.assessed_sql('results')} then 1 else 0 end as ass,
                                    case when ({db.met_sql('results')}) then 1 else 0 end as met,
                                    case when ({db.indeterminate_sql('results')})
-                                        then 1 else 0 end as indet,
-                                   ({db.verdict_sql('results')}) as verdict
+                                        then 1 else 0 end as indet
                               from results where id = ?""", (row_id,)
                     ).fetchone()
                     conditions = (credit, noncommercial, unmodified)
@@ -226,12 +224,11 @@ class CheckIpStoreTests(unittest.TestCase):
                         self.assertEqual(bool(row["ass"]), db.fully_assessed(*conditions))
                         self.assertEqual(bool(row["met"]), db.all_conditions_met(*conditions))
                         self.assertEqual(bool(row["indet"]), db.indeterminate(*conditions))
-                        self.assertEqual(row["verdict"], db.verdict_for(*conditions))
                         # The two states that are not answers to "did it pass"
                         # must never reach the compliant branch, in either
                         # rendering (issues #295, #305).
                         if None in conditions or 2 in conditions:
-                            self.assertNotEqual(row["verdict"], "acceptable")
+                            self.assertNotEqual(db.verdict_for(*conditions), "acceptable")
                             self.assertFalse(row["met"])
                         # Severity is the count of 0s and nothing else, so #305
                         # cannot have moved any existing row's severity.

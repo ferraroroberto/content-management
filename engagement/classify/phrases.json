@@ -49,8 +49,6 @@
         "crucial point"
     ],
     "rules": {
-        "blacklist_weight": 1.0,
-        "whitelist_weight": -1.0,
         "generic_praise_threshold_hits": 1,
         "generic_praise_weight": 0.35,
         "short_comment_max_chars": 60,
