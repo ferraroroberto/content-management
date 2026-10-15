@@ -186,16 +186,16 @@ Lists and manages all Notion databases, creating a comprehensive database invent
 
 **Usage:**
 ```bash
-python -m reporting.notion.notion_database_list [--config CONFIG_PATH] [--debug]
+python -m reporting.notion.notion_database_list [--config CONFIG_PATH] [--output OUTPUT_PATH]
 ```
 
 **Arguments:**
 - `--config`: Path to custom configuration file
-- `--debug`: Enable debug logging
+- `--output`: Output JSON file path (default: `notion_database_list.json`)
 
 **Example:**
 ```bash
-python -m reporting.notion.notion_database_list --debug
+python -m reporting.notion.notion_database_list --output notion_database_list.json
 ```
 
 **Features:**

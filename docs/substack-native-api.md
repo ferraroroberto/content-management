@@ -310,28 +310,3 @@ Article titles are emitted as **literal text nodes**, never run through
   exactly as many parts as URLs the server returns), but is worth knowing if
   upload timing shifts unexpectedly.
 
-## Scope today vs. follow-ups
-
-Shipped: native follower count (daily default) + manual archive pull + manual
-draft create/edit/prepublish/publish (issue #91), and the weekly newsletter's
-`substack-draft` step (issue #184) — `newsletter/substack_draft.py` builds a
-private draft edition from the Notion articles DB, never publishing.
-
-Note that the *editorial* database was the wrong source for an edition: it has no
-newsletter/edition columns (its Substack columns drive the daily short-form
-Note). The newsletter's own articles + newsletter DBs are the real source, which
-is why the step lives in `newsletter/` rather than `planning/substack/`.
-
-Also shipped (#185): native **note engagement**
-(`substack_posts.source = "native"` → `substack_native.fetch_posts`) and native
-**Note posting** (`substack.note_source = "native"` → `post_substack_note.py`).
-Both keep Playwright as a one-key rollback.
-
-Also shipped (#186): native **"like" support** — `react_to_note` /
-`unreact_to_note` in `api_client.py`, exposed as the manual `api_like.py` CLI.
-
-Also shipped (#189): native **video** Note posting — chunked multipart
-upload + Mux transcode, wired into `post_substack_video_note.py` behind the
-same `substack.note_source` flag, Playwright kept as the rollback.
-
-Nothing deferred from the #91/#185/#186/#189 spike chain remains outstanding.

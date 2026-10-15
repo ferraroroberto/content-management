@@ -300,12 +300,14 @@ never inventing people.
 - `results/newsletter/triage/criteria.json` — machine-readable selection criteria (twin of `docs/newsletter-triage-criteria.md`), rebuilt by `python -m newsletter.triage.criteria`. Gitignored — a build artifact merging the hand-written `RULES` in `triage/criteria.py` with data priors that carry real sender addresses.
 - `results/newsletter/triage/overrides.json` — owner-maintained sender decisions (tier `never|rarely|usually|always|review`, e.g. paywalled publications); applied before the data priors, updated by the feedback loop. Gitignored for the same reason as `triage/lessons.json` — regenerated/appended locally, carries real sender addresses.
 
-## Triage — Gmail history + criteria (issue #210, Step 1/4)
+## Triage — Gmail history + criteria (issue #210)
 
-The weekly inbox review (label `newsletters`, ~80 emails/week) is being
-automated in four steps (#210 history + criteria, #211 engine + report, #217
-store + control-panel tab, #212 Chrome hand-off + watermark). Step 1 builds the
-**ground truth** the later ranker is scored against, under `newsletter/triage/`:
+The weekly inbox review (label `newsletters`, ~80 emails/week) is automated
+end to end: this section's Gmail history + criteria build (#210) is the
+**ground truth** the weekly engine (#211, below) scores and shortlists
+against; the store + control-panel tab (#217, below) holds every run and
+owner decision and also carries the Chrome hand-off + watermark step (#212).
+The ground-truth build lives under `newsletter/triage/`:
 
 - `gmail.py` — read-only Gmail adapter over the vendored `gmail_readonly/` +
   `google_oauth_common/` packages (byte-for-byte from whatsapp-radar — never
@@ -333,13 +335,13 @@ store + control-panel tab, #212 Chrome hand-off + watermark). Step 1 builds the
 | `python -m newsletter.triage.history --limit 150 --budget 100` | Smoke test. |
 | `python -m newsletter.triage.criteria` | Rebuild `criteria.json` from `stats.json` + `overrides.json`. |
 
-### Weekly engine (Step 2/4, issue #211)
+### Weekly engine (issue #211)
 
 `run.py` turns one review window into one edition-sized shortlist — the owner's
 cadence rule: the run covers last watermark → now (normally Saturday → Friday)
 and fills **one** edition (8/8/8); a backlog of N weeks is split into N 7-day
 windows, oldest first, one report each. Nothing is written to Notion, Gmail or
-Chrome (that is Step 3).
+Chrome (that happens in the store + control-panel tab, below).
 
 Pipeline per window: emails → non-noise links (decoded / resolved) → drop
 already-in-Notion → sender/domain priors (`criteria.json` + `overrides.json`) →
@@ -393,15 +395,6 @@ a run. Only link metadata
 | `python -m newsletter.triage.run --rescore <run id> [--stage-a-engine jev] [--fresh]` | Re-score a stored live run from its stored links — **no Gmail**: the inbox and candidates come from the store (anchor = the stored display title, as `jev_pilot` replays them), sender/domain priors are re-read, and the week is replaced like `--force` (new run id, `stats.rescored_from` = the old one). Decisions, review comment and lessons are keyed by window and survive. The inputs are snapshotted first to `results/newsletter/triage/inputs/`, so a re-score that fails after the replace can be retried from the snapshot. `state.json` is not touched; exit 4 when neither the store nor a snapshot holds the inputs. The LLM cache (`results/newsletter/triage/llm_cache.json`) is keyed by the model **version** the hub serves for the alias (`claude_haiku` → `claude-haiku-5-5`, read once per run from `GET /v1/models`; the run log says which), so when the hub repoints an alias the older model's answers simply stop matching — they stay in the file, unused. Same version → answers are reused; `--fresh` ignores the cache for both stages (every link goes to the model) and still stores the new answers. If the version can't be read the cache falls back to keying by the alias and logs a warning. |
 | `python -m newsletter.triage.feedback <report.md>` | Ingest a reviewed markdown report (tick = yes) for the window in its name → `triage_decisions` + sender tiers in `overrides.json`. The control panel's Apply is the same path. |
 
-First dry run (2026-08-21, `claude_haiku`, 2-week windows ending 7 days before
-each edition): N224 precision 54 % / recall 16 %, N225 54 % / 26 %, N226 62 % /
-50 %, N227 42 % / 29 % (+runners-up 21–56 %). Precision = share of the 24
-suggestions that were real picks in some edition; recall = share of the
-edition's picks sourced in the window that made the shortlist. Misses are mostly
-caps doing their job (HBR ≤ 3 where the edition had 4, author ≤ 2) and picks
-ranked just below the fold — the feedback loop and wider stage-B depth are the
-levers.
-
 The report is the review surface: shortlist per topic with checkboxes (ticked =
 suggested), runners-up, a "new senders — set a tier" list, then every email in
 inbox order with every link and its verdict (`selected / runner-up / candidate /
@@ -409,7 +402,7 @@ low / vetoed / duplicate / unknown`) — an unfetchable or unscorable link is
 `unknown`, never "skipped". Skill: `/newsletter-triage`
 (`.claude/skills/newsletter-triage/SKILL.md`, mirrored in `.agents/skills/`).
 
-### Store + control-panel tab (Step 3/4, issue #217)
+### Store + control-panel tab (issue #217)
 
 Every run and every owner decision lives in Supabase — the repo's store, same
 project DB as reporting + engagement — in `triage_*` tables

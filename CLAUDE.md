@@ -15,9 +15,13 @@ Canonical instructions for AI coding agents working in this repository. Claude C
 - **App layout:** main file (e.g. `app.py`) handles only page config, shared state, sidebar, and tab/radio routing. Each tab/mode lives in its own file exposing a `main(...)` (or `render_*`) function. Default to `st.tabs()`; use a sidebar radio only when asked.
 
 ## This repository
-Python automation suite that collects social media metrics across platforms, stores them in Postgres/Supabase, and syncs to Notion for reporting.
+Python automation suite spanning social media reporting and content planning,
+the weekly newsletter (with Gmail-history triage), comment-engagement
+defense, illustration copyright checks (check IP), podcast production, demo
+video capture, and a recorder + self-healing scheduler layer — metrics and
+pipeline state live in Postgres/Supabase, synced to Notion where relevant.
 See `README.md` for setup, layout, and usage.
 
 ## Internal architecture
 
-[`docs/architecture.mmd`](docs/architecture.mmd) is a hand-authored Mermaid diagram of this repo's own internal structure (the four pipelines — reporting/planning/newsletter/engagement — the shared `config/` layer, the Streamlit control panel, and the external dependencies each talks to). Update it in the same PR as any material structural change (a pipeline split, a module moved, a new external dependency) — same anti-staleness contract as this repo's own `.fleet.toml` `description` field. It is not auto-generated and not covered by any test suite.
+[`docs/architecture.mmd`](docs/architecture.mmd) is a hand-authored Mermaid diagram of this repo's own internal structure (the pipelines — reporting/planning/newsletter/engagement/check_ip/podcast/demo_video — the shared `config/` layer, the Streamlit control panel, and the external dependencies each talks to). Update it in the same PR as any material structural change (a pipeline split, a module moved, a new external dependency) — same anti-staleness contract as this repo's own `.fleet.toml` `description` field. It is not auto-generated and not covered by any test suite.
