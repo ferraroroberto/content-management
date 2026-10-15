@@ -5,13 +5,9 @@ description: Run a planning scheduler unattended and self-heal selector breakage
 
 # schedule-autoheal
 
-Make the weekly planning run *set-and-forget*. Run the scheduler; if it just works, say
-so and stop (minimal tokens). If a step fails because a platform's DOM drifted,
-**self-heal in place** — no human relaunch — and either land the fix end-to-end or
-escalate cleanly.
+Run the scheduler; if it just works, say so and stop (minimal tokens). If a step fails because a platform's DOM drifted, **self-heal in place** and either land the fix end-to-end or escalate cleanly.
 
-Invoking this skill is explicit authorization to run the scheduler and, **only when
-the confidence gate below is met**, to commit/push/PR/merge a selector-only fix.
+Invoking this skill authorizes running the scheduler and, **only when the confidence gate below is met**, committing/pushing/PR/merging a selector-only fix.
 
 This is a **public repo** — never put secrets, internal identifiers, or private
 project references in issues, PRs, commit messages, or pings.
@@ -22,8 +18,7 @@ project references in issues, PRs, commit messages, or pings.
 
 - `platform` ∈ `linkedin|instagram|twitter|threads|all`. `all` runs the full pipeline.
 - Mode defaults to `--dry-run`. `--live` actually schedules.
-- `--from-result <path>` skips the run and heals from an existing
-  `results/planning/<ts>-result.json` (used when the planning tab already ran it).
+- `--from-result <path>` skips the run and heals from an existing `results/planning/<ts>-result.json`.
 
 ## Step 1 — run (unless `--from-result`)
 
@@ -48,8 +43,7 @@ Heal at most **one platform per invocation cycle**; re-run to pick up the next.
    `screenshot` path. Read the screenshot if helpful.
 2. **Probe the live DOM:** `& .\.venv\Scripts\python.exe -m planning._probe <platform>`
    (`--url <page>` targets a specific page). It opens the platform's real-Chrome session
-   through the existing session helper — stealth + shared-profile lock-wait are handled
-   there, **never re-inline launch args** — and prints ranked `role + accessible name`
+   through the existing session helper (stealth + shared-profile lock-wait handled there, **never re-inline launch args**) and prints ranked `role + accessible name`
    candidates.
 3. **Locate the broken selector:**
    - Every platform centralises its accessible-name labels in its own
@@ -60,8 +54,7 @@ Heal at most **one platform per invocation cycle**; re-run to pick up the next.
      structural selector still inline there (`data-testid`, `role="dialog"`,
      CSS/`text=` engine selectors) — those deliberately stay out of the registry.
 4. **Apply a selector-only edit.** Re-anchor the role/text selector on the new accessible
-   name from the probe. Prefer role + name anchors; **never** anchor on a class (class
-   names rotate — the READMEs warn). The diff MUST be a pure selector-string change — no
+   name from the probe. Prefer role + name anchors; **never** anchor on a class (names rotate). The diff MUST be a pure selector-string change — no
    control-flow, scheduling-logic, or unrelated edits.
 5. **Re-validate:** re-run that platform `--dry-run`. Bounded retries — **max 2** heal
    attempts per row; if still failing, **escalate** (Step 5).
@@ -92,7 +85,7 @@ Mirror the repo's issue/PR conventions. One **separate issue per drift**.
 
 ### Not confident → escalate (Step 5)
 
-Leave the working tree clean (or the branch un-pushed) and hand off to a human.
+Leave the working tree clean (or the branch un-pushed) and hand off.
 
 ## Step 5 — escalate via Telegram, then stop
 
@@ -103,17 +96,15 @@ install at `~/.claude/hooks/notify_send.py`):
 & E:/automation/fleet-config/.venv/Scripts/python.exe "$HOME/.claude/hooks/notify_send.py" --category attention --text "<message>"
 ```
 
-- Do **not** pass a chat id. The fleet's `hooks/projects.toml` owns which chat that is, so
-  this repo never holds a destination that can go stale. `--category attention` is the
-  whole point: a stuck scheduler is come-look.
+- Do **not** pass a chat id; the fleet's `hooks/projects.toml` owns the destination. `--category attention` is the
+  point: a stuck scheduler is come-look.
 - The message must contain: platform, failing step, the screenshot path, the probe's top
   candidates, and exactly what you need decided.
 - Use this helper, **not** an MCP chat connector — a connector posts **as the user**, so
-  the escalation notifies nobody; the bot posts as a separate identity that actually
-  notifies. Its token lives in `~/.claude/settings.json` env (`TELEGRAM_BOT_TOKEN`), never
+  nobody is notified. Its token lives in `~/.claude/settings.json` env (`TELEGRAM_BOT_TOKEN`), never
   in this repo; see `fleet-config/docs/telegram-workflow.md`.
 - If the helper reports a failure (missing token, no chat configured, API error), surface
-  that plainly in the run output and still **stop**. Either way: do not commit, push, or
+  it in the run output and still **stop**. Either way: do not commit, push, or
   merge anything ambiguous.
 
 ## Guardrails (non-negotiable)
@@ -127,7 +118,7 @@ install at `~/.claude/hooks/notify_send.py`):
   `planning/<platform>/<platform>_session.py` helpers (real Chrome, stealth, profile
   lock-wait). Never re-inline launch args.
 - **Human-reviewable trail.** Every landed fix has an issue + PR with before/after selector
-  and probe evidence. Never a silent push to `main` without an issue+PR.
+  and probe evidence; never a silent push to `main`.
 - **Public repo hygiene.** No secrets / internal refs in any issue, PR, commit, or ping.
 
 ## Verification gate (before declaring done)
