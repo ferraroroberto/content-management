@@ -1,7 +1,7 @@
 """Daily Substack orchestrator: post the Note (image + optional video).
 
 CLI:
-    python -m substack.daily_pipeline [--date YYYYMMDD] [--dry-run]
+    python -m planning.substack.daily_pipeline [--date YYYYMMDD] [--dry-run]
                                       [--skip-post] [--force] [--debug]
 
 Follower-count scraping was folded into

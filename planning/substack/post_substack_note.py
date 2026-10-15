@@ -1,7 +1,7 @@
 """Publish a Substack Note from a Notion editorial row.
 
 CLI:
-    python -m substack.post_substack_note [--date YYYYMMDD] [--dry-run] [--force] [--debug]
+    python -m planning.substack.post_substack_note [--date YYYYMMDD] [--dry-run] [--force] [--debug]
 
 Default date is today (local). The script is idempotent: if the editorial
 row's ``post_url`` column is already populated, it exits 0 unless ``--force``

@@ -11,9 +11,9 @@ This is a planner, not a bot. No likes, comments, follows, or DMs are
 automated. The script only places pre-written, already-illustrated content
 into the Threads native scheduler.
 
-CLI mirrors ``instagram.schedule_instagram_posts``:
+CLI mirrors ``planning.instagram.schedule_instagram_posts``:
 
-    python -m threads.schedule_threads_posts \
+    python -m planning.threads.schedule_threads_posts \
         [--week-start YYYY-MM-DD]
         [--date YYYYMMDD]
         [--all-wip]              # schedule every WIP-TH row, no date filter

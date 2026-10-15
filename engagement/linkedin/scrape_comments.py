@@ -59,10 +59,6 @@ logger = logging.getLogger("engagement.linkedin.scrape")
 
 # ---------- Notion side: pull my recent post URLs ----------
 
-def _yyyymmdd(d: datetime) -> str:
-    return d.strftime("%Y%m%d")
-
-
 def fetch_recent_li_posts(days: int) -> list[dict]:
     """Return [{post_url, posted_at, day_yyyymmdd}, ...] for the last `days`
     calendar days **including today** where `link LI` is set. `days=1` means
@@ -341,17 +337,6 @@ _JS_EXTRACT_COMMENTS = r"""
     return { error: null, records: out };
 }
 """
-
-
-def _first_locator(scope, selectors: list[str]):
-    for sel in selectors:
-        loc = scope.locator(sel).first
-        try:
-            if loc.count() > 0:
-                return loc
-        except Exception:
-            continue
-    return None
 
 
 def _try_switch_to_most_recent(page: Page) -> bool:

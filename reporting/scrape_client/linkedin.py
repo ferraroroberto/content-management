@@ -84,11 +84,6 @@ def _get_handle_url() -> str:
     return url.rstrip("/")
 
 
-def _extract_followers(text: str) -> Optional[int]:
-    m = _FOLLOWERS_RE.search(text or "")
-    return parse_int(m.group(1)) if m else None
-
-
 def _raise_if_logged_out(s: LinkedInSession) -> None:
     """Report a late client-side login redirect as login-required (issue #310).
 

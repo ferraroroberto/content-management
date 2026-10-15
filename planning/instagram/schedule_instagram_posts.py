@@ -13,9 +13,9 @@ This is a planner, not a bot. No likes, comments, follows, or DMs are
 automated. The script only places pre-written, already-illustrated content
 into Meta's native scheduler.
 
-CLI mirrors ``linkedin.schedule_linkedin_posts``:
+CLI mirrors ``planning.linkedin.schedule_linkedin_posts``:
 
-    python -m instagram.schedule_instagram_posts \
+    python -m planning.instagram.schedule_instagram_posts \
         [--week-start YYYY-MM-DD]
         [--date YYYYMMDD]
         [--all-wip]              # schedule every WIP-IG row, no date filter

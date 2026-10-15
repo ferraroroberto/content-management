@@ -1,7 +1,7 @@
 """One-time interactive login that prepares a dedicated Chrome profile for X.
 
 Usage:
-    python -m twitter.bootstrap_session [--debug]
+    python -m planning.twitter.bootstrap_session [--debug]
 
 See ``planning._bootstrap.run_bootstrap`` for the shared implementation
 (mirror of ``instagram/bootstrap_session.py``, ``threads/bootstrap_session.py``,

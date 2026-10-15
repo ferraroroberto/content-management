@@ -113,20 +113,6 @@ def search_by_current_date(notion, database_id, target_date):
         logger.error(f"❌ Error searching by current date: {e}")
         return None
 
-def get_page_by_id(notion, page_id):
-    """Retrieve a page by its ID."""
-    try:
-        logger.debug(f"📄 Retrieving page with ID: {page_id}")
-        
-        page = notion.pages.retrieve(page_id=page_id)
-        
-        logger.info(f"✅ Retrieved page: {page_id}")
-        return page
-    
-    except Exception as e:
-        logger.error(f"❌ Error retrieving page: {e}")
-        return None
-
 def extract_fields(page, fields_to_extract):
     """Extract specified fields from a page."""
     extracted = {}

@@ -25,7 +25,7 @@ no likes, no comments, no follows. The script only places my own pre-written
 posts into LinkedIn's native ``Schedule for later`` flow.
 
 CLI:
-    python -m linkedin.schedule_linkedin_posts \
+    python -m planning.linkedin.schedule_linkedin_posts \
         [--week-start YYYY-MM-DD]   # default: next Monday
         [--date YYYYMMDD]           # single-day mode
         [--all-wip]                 # schedule every WIP-LI row, no date filter

@@ -22,9 +22,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from planning._session_base import (  # noqa: E402
@@ -41,22 +39,11 @@ __all__ = [
     "LinkedInSession",
     "LoginRequiredError",
     "configure_logger",
-    "normalize_day",
     "load_linkedin_config",
     "load_notion_token",
     "_resolve_user_data_dir",
     "_user_data_dir_initialized",
 ]
-
-
-def normalize_day(date_str: Optional[str]) -> str:
-    """Accept 'YYYYMMDD' or 'YYYY-MM-DD' (or None) and return 'YYYYMMDD'."""
-    if not date_str:
-        return datetime.now().strftime("%Y%m%d")
-    s = date_str.strip()
-    if "-" in s:
-        return datetime.strptime(s, "%Y-%m-%d").strftime("%Y%m%d")
-    return datetime.strptime(s, "%Y%m%d").strftime("%Y%m%d")
 
 
 def configure_logger(name: str = "linkedin", debug: bool = False) -> logging.Logger:

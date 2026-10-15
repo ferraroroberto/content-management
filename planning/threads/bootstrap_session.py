@@ -1,7 +1,7 @@
 """One-time interactive login that prepares a dedicated Chrome profile for Threads.
 
 Usage:
-    python -m threads.bootstrap_session [--debug]
+    python -m planning.threads.bootstrap_session [--debug]
 
 See ``planning._bootstrap.run_bootstrap`` for the shared implementation
 (mirror of ``instagram/bootstrap_session.py``, ``twitter/bootstrap_session.py``,
