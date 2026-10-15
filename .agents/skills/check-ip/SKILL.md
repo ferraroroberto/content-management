@@ -29,7 +29,7 @@ The illustrations are published under **CC BY-NC-ND 4.0**. Three conditions, and
 
 **Each is recorded on its own, with three possible answers: `met`, `violated`, or `unknown`.** `unknown` is a real answer — it means you looked and the post did not let you establish that condition. It is *not* a pass, and the store, the counters and the review tab all keep it apart from one. Never guess a condition to `met` to finish a row: an honest `unknown` hands the row to the owner to judge, while a wrong `met` retires it as compliant forever.
 
-**Answer all three on every row.** A condition you leave out is stored as *never assessed*, which is a different state from `unknown`: it says nobody has looked yet, so the row stays in the re-screen queue and will be served to another worker. That is right only when you truly could not open the post; if you looked and could not tell, say `unknown`, or a second batch is burned on a post you already read (issue #305).
+**Answer all three on every row.** A condition left out is stored as *never assessed* (distinct from `unknown`): the row stays in the re-screen queue and goes to another worker. Right only if you truly could not open the post; if you looked and could not tell, say `unknown` (issue #305).
 
 The verdict follows from the three conditions and the CLI refuses a combination that contradicts them:
 
@@ -41,19 +41,19 @@ The verdict follows from the three conditions and the CLI refuses a combination 
 
 ### The mistakes that have actually happened
 
-Corrections from live runs; they live here rather than in a dispatch prompt.
+Live-run corrections.
 
 - **A visible `ROBERTOFERRARO.ART` watermark is not credit.** An intact watermark with no mention anywhere is still a **BY violation**. The watermark's *absence* counts against a post (ND violation); its presence does not help.
 - **Credit and commercial use are independent.** A post that credits him but is a company page's marketing or a paid training, workshop or conference deck is an **infringement on NC** — `--credit met --noncommercial violated`. No call to action is required, but the paid context must be visible in the post.
-- **NC is judged from the post, not the profile.** A worker once marked NC violated on ten promo-free posts from a poster's services page, follower count and "top content creator" badge, moving every row from severity 1 to 3. Owner's ruling: *use only the evidence of the post.* NC is violated only by something **in the post** — a call to action for the poster's own following, product, course, newsletter or service; a visible paid or sponsored context; a training, workshop or conference deck; or a post published by a company or agency page. Occupation, services page, follower count or personal-brand positioning is not evidence. If the post shows nothing, NC is `unknown`, not `violated`: `unknown` costs a re-screen, a wrong `violated` puts a person atop the worst-first list on unestablished evidence.
+- **NC is judged from the post, not the profile.** Owner's ruling: *use only the evidence of the post* (a worker once marked ten promo-free posts NC violated from the poster's services page and follower count, inflating severity 1 to 3). NC is violated only by something **in the post** — a call to action for the poster's own following, product, course, newsletter or service; a visible paid or sponsored context; a training, workshop or conference deck; or a post published by a company or agency page. Occupation, services page, follower count or personal-brand positioning is not evidence. If the post shows nothing, NC is `unknown`, not `violated`: `unknown` costs a re-screen, a wrong `violated` puts a person atop the worst-first list on unestablished evidence.
 - **ND is broader than "the watermark was removed".** Any crop, filter, added logo or text block, redraw or translation breaks it, even with the signature untouched.
-- **ND is substantial editing, not any difference.** A worker once recorded ND violated on two intact-watermark posts over a one-word in-image caption difference. The owner keeps alternate caption versions of the same composition, so a wording difference is likely his own version. Ruling: *editing is substantial editing or translation.* Different wording on an otherwise untouched image is ND `met`.
+- **ND is substantial editing, not any difference.** Ruling: *editing is substantial editing or translation.* He keeps alternate caption versions of the same composition, so different wording on an otherwise untouched image is ND `met`.
 - **Authorship has exactly two routes.** The post shows the same image as `local_image` (same composition *and* same in-image text), **or** visibly carries the `ROBERTOFERRARO.ART` watermark. Anything else is not assessable. Never reason from artistic style, "the same series", or the same idea or wording — another artist can illustrate the same concept with the same caption.
 - **Someone else's name or watermark on the image settles nothing by itself.** Compare against the file on record: composition and in-image text match → his work with the credit replaced, an **ND violation** as well as BY. No match → probably that artist's own work. Both errors have occurred, in opposite directions.
 - **Never revise an earlier verdict — or judge a condition — on a theory about the poster.** A poster who credited him on nine posts earns no presumption on the tenth, and who the poster is does not make a post commercial.
 - **A bare source hint is not credit.** "Pic from IG", "credit: unknown", "seen somewhere" — BY violated.
 - **Posts are often carousels.** The matched illustration may be any slide, not the cover.
-- **He reuses his own compositions with different in-image captions.** Same template plus different wording is not a file match, but the post usually still carries the watermark; if wording is the only difference from the file on record, it is one of his versions unmodified — ND `met`.
+- **He reuses compositions with different in-image captions.** Not a file match, but the post usually still carries the watermark; wording as the only difference = his version unmodified, ND `met`.
 
 ## Arguments
 
@@ -73,13 +73,13 @@ Corrections from live runs; they live here rather than in a dispatch prompt.
 
 No store → say so: nothing to screen until a search run (`check_ip.run`) has created it. Don't start a search run unasked — it costs money.
 
-Report the queue depth before starting, so the owner knows what fraction of the backlog this run covers. Report `not_fully_assessed` too — those are rows that look screened but are not, and they are a second backlog behind the first. At roughly 15-20s per link, 100 links is about half an hour and 500 is 2-3 hours — say which, so nobody is surprised by a long quiet stretch.
+Report the queue depth before starting, so the owner knows what fraction of the backlog this run covers. Report `not_fully_assessed` too — those are rows that look screened but are not, and they are a second backlog behind the first. At roughly 15-20s per link, 100 links is about half an hour and 500 is 2-3 hours — say which.
 
 ## Step 2 — dispatch workers, one at a time
 
 You are the **orchestrator**. You do not open a browser yourself. Split `N` into batches of **10** and run them **strictly one after another**, each in its own subagent:
 
-- **Model: Sonnet.** Never Opus for a worker — this is repetitive classification, not reasoning-heavy work, and a 500-link run is 50 of them. You, the orchestrator, stay on whatever model the owner is already sitting in; that is deliberate.
+- **Model: Sonnet.** Never Opus for a worker — repetitive classification, and a 500-link run is 50 of them. The orchestrator stays on the owner's current model.
 - **Never in parallel.** There is one browser and one LinkedIn account, and it is the owner's. Concurrent workers break the shared tab group outright, and concurrent browsing is the bot signature that puts a real account at risk. One at a time is a safety requirement, not a throughput preference.
 - Wait for each worker to return before dispatching the next.
 
@@ -126,7 +126,7 @@ Pull the *next* batch only after the previous worker has finished, so screened r
 > ```
 > The verdict must agree with the conditions or the command refuses the write and exits non-zero: `infringement` if any condition is `violated`, `acceptable` only if all three are `met`, `unclear` otherwise — and `unclear` needs `--outcome`. If it refuses, fix your own answer; never soften a condition to make a verdict fit.
 >
-> A condition you omit is recorded as *never assessed* — the safe default, because it claims nothing, but it also leaves the row in the re-screen queue for another worker. **Pass all three explicitly on every row**, using `unknown` where you looked and could not tell, so the record says what you actually looked at and the row does not come back.
+> A condition you omit is recorded as *never assessed*: it claims nothing but leaves the row in the re-screen queue. **Pass all three explicitly on every row**, using `unknown` where you looked and could not tell.
 >
 > The reason is one plain sentence saying *what you saw*, not a restatement of the verdict. "Credited in the caption, but the account is an agency selling the same workshop the post advertises" beats "appears to be an infringement".
 >
@@ -140,13 +140,13 @@ Pull the *next* batch only after the previous worker has finished, so screened r
 
 ## Step 3 — report progress after every batch
 
-The owner is watching a terminal. After each worker returns, print one line so the run never goes quiet:
+After each worker returns, print one line so the run never goes quiet:
 
 ```
 batch 3/10 · screened 30 · infringement 18 (4 worst) · acceptable 6 · unclear 6 · 9 left unassessed · queue 13,207
 ```
 
-Keep only these counts in your own context. **Never pull the worker's page text or screenshots into the orchestrator** — that is the whole reason the work is fanned out, and a 500-link run will not fit otherwise.
+Keep only these counts in your own context. **Never pull the worker's page text or screenshots into the orchestrator** — a 500-link run will not fit otherwise.
 
 ## Step 4 — hand back
 
@@ -160,4 +160,4 @@ Summarise and stop:
 
 Then point the owner at the **⚖️ check IP** tab, ordered *worst first*, to make the actual calls. Do not offer to contact anyone, and do not offer to set the verdicts yourself.
 
-**If the run was interrupted**, say so plainly and say how many rows were completed. Nothing is lost: every verdict is written as it is made, and re-invoking `/check-ip N` picks up where this left off.
+**If the run was interrupted**, say so and how many rows completed. Every verdict is written as made; re-invoking `/check-ip N` resumes.
