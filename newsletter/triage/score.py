@@ -220,6 +220,8 @@ def _clamp(v: Any, lo: int = 0, hi: int = 5) -> Optional[int]:
 # ---------------------------------------------------------------------------
 # stage A — metadata, batched
 
+STAGE_A_BATCH = 25    # links per Stage A hub call; ``run`` sizes its call estimate from it
+
 
 @dataclass
 class MetaScore:
@@ -250,7 +252,7 @@ def meta_request(brief: str, chunk: Sequence[Dict[str, str]]) -> Tuple[str, int]
 
 
 def score_metadata(items: Sequence[Dict[str, str]], criteria: Dict[str, Any], *, base_url: str, model: str,
-                   batch: int = 25, timeout: int = 180, workers: int = 4,
+                   batch: int = STAGE_A_BATCH, timeout: int = 180, workers: int = 4,
                    cache: Optional["LLMCache"] = None, calls: Optional[List[Dict[str, Any]]] = None,
                    stop: Optional[threading.Event] = None,
                    results: Optional[List[MetaScore]] = None) -> List[MetaScore]:

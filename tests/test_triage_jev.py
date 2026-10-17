@@ -190,7 +190,7 @@ class EngineSwitchTests(unittest.TestCase):
         cands = _cands()
         by_email = {c.message_id: [c] for c in cands}
         legacy = mock.MagicMock(side_effect=patches.pop("legacy", _legacy_scores))
-        cache = mock.MagicMock(misses=0)
+        cache = mock.MagicMock(misses=patches.pop("misses", 0))
         cache.use_version.side_effect = lambda alias, version: version or alias
         with tempfile.TemporaryDirectory() as tmp, \
                 mock.patch.object(run, "emails_from_cache", return_value=[]), \
@@ -221,7 +221,8 @@ class EngineSwitchTests(unittest.TestCase):
             legacy, stats, rows, shadow = self._body("legacy")
         legacy.assert_called_once()
         args, kwargs = legacy.call_args
-        self.assertEqual(kwargs, {"base_url": "http://hub", "model": "claude_haiku", "workers": 4, "cache": mock.ANY})
+        self.assertEqual(kwargs, {"base_url": "http://hub", "model": "claude_haiku", "batch": sc.STAGE_A_BATCH, "workers": 4,
+                                  "cache": mock.ANY})
         shadow_cls.assert_not_called()
         jev_score.assert_not_called()
         self.assertIsNone(shadow)
@@ -230,6 +231,18 @@ class EngineSwitchTests(unittest.TestCase):
                                       "verdicts", "llm_model_served"})
         self.assertEqual(rows[0]["meta"], {"topic": TOPICS[0], "fit": 5, "news": False, "promo": False,
                                            "reason": "r0", "ok": True})
+
+    def test_legacy_call_estimate_is_one_per_started_batch(self) -> None:
+        for misses, calls in ((0, 0), (1, 1), (25, 1), (26, 2), (50, 2), (51, 3)):
+            with self.subTest(misses=misses):
+                _l, stats, _rows, _s = self._body("legacy", misses=misses)
+                self.assertEqual(stats["llm_calls"], calls)
+
+    def test_legacy_call_estimate_follows_the_batch_constant(self) -> None:
+        with mock.patch.object(sc, "STAGE_A_BATCH", 10):
+            legacy, stats, _rows, _s = self._body("legacy", misses=21)
+        self.assertEqual(legacy.call_args.kwargs["batch"], 10)
+        self.assertEqual(stats["llm_calls"], 3)
 
     def test_both_keeps_legacy_verdicts_when_jev_fails(self) -> None:
         _l, _s, legacy_rows, _ = self._body("legacy")

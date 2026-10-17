@@ -50,6 +50,7 @@ import sys
 import time
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -441,60 +442,38 @@ def _truth_decisions(cands: List[rk.Candidate], sel: rk.Selection, bt: Dict[str,
     return rows
 
 
-def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[str, Any], source: str,
-                     use_llm: bool, use_fetch: bool, top_k: int, model: str, out_dir: Path,
-                     edition_hint: str, backtest: Optional[Dict[str, Any]],
-                     limit_links: Optional[int], engine: str = jx.DEFAULT_ENGINE,
-                     inputs: Optional[Dict[str, Any]] = None, fresh: bool = False,
-                     ) -> Tuple[Path, rk.Selection, Dict[str, Any], List[rk.Candidate], List[Dict[str, Any]]]:
-    t0 = time.monotonic()
-    base_url = cfg.get("llm_hub_base_url") or load_full_config().get("newsletter_archive", {}).get("llm_hub_base_url", "http://127.0.0.1:8000")
-    priors = sc.Priors(criteria)
-    rules = criteria.get("rules", {})
-    picked_before = db.picked_before(start) if store_ok() else {}
-    if inputs is not None:
-        # re-score: Notion as of the window start (like a backtest) for the stage-B final-URL check, so the
-        # week's own picks, archived since the original run, never turn into duplicates
-        notion_urls, notion_titles = load_notion_urls(created_before=start.isoformat())
-        records, cands, by_email = candidates_from_store(inputs, priors, picked_before)
-    else:
-        records = emails_from_cache(start, end) if source == "cache" else emails_from_gmail(start, end, cfg=cfg)
-        notion_urls, notion_titles = load_notion_urls(created_before=start.isoformat() if backtest is not None else None)
-        cands, by_email = build_candidates(records, priors, notion_urls, notion_titles, picked_before)
-    if limit_links:
-        cands = cands[:limit_links]
-    stats: Dict[str, Any] = {"emails": len(records), "links": len(cands),
-                             "duplicates_in_notion": sum(1 for c in cands if c.in_notion and not c.picked_earlier),
-                             "duplicates_picked_earlier": sum(1 for c in cands if c.picked_earlier),
-                             "unresolved_links": sum(1 for c in cands if c.reason == "redirect unresolved")}
-    if inputs is not None:
-        stats["rescored_from"] = inputs.get("run_id")
-    llm_calls = 0
-    llm_cache = sc.LLMCache(fresh=fresh)
-    if fresh:
-        stats["llm_cache_fresh"] = True
-        logger.info("🔄 fresh: the LLM cache is bypassed — both stages call the model, answers are still stored")
+@dataclass
+class _StageA:
+    """What Stage A leaves for the rest of the window: whether the LLM is still in play, its call estimate
+    and the shadow engine's pending / collected rows."""
+    use_llm: bool
+    llm_calls: int = 0
+    shadow_rows: Optional[List[Dict[str, Any]]] = None
+    legacy_shadow: Optional[sc.ShadowPass] = None
 
-    # stage A — metadata, for everything that can still be selected
-    stage_a = [c for c in cands if not c.in_notion and c.sender_weight > 0]
-    if use_llm and stage_a:
+
+def _stage_a(stage_a: List[rk.Candidate], *, use_llm: bool, engine: str, cfg: Dict[str, Any],
+             criteria: Dict[str, Any], base_url: str, model: str, llm_cache: sc.LLMCache,
+             stats: Dict[str, Any]) -> _StageA:
+    """Stage A — metadata for everything that can still be selected. Every engine dispatch lives here and in
+    ``_collect_legacy_shadow``."""
+    out = _StageA(use_llm=use_llm)
+    if out.use_llm and stage_a:
         if not llm.health_check(base_url=base_url, model=model):
             logger.error("❌ LLM hub unreachable at %s — producing a rule-only report", base_url)
-            use_llm = False
+            out.use_llm = False
         else:
             # key the cache by the model the hub serves *now*, so a repointed alias never replays old answers (#398)
             stats["llm_model_served"] = llm_cache.use_version(model, llm.served_model(base_url=base_url, model=model))
             logger.info("🤖 %s is served as %s", model, stats["llm_model_served"])
-    shadow_rows: Optional[List[Dict[str, Any]]] = None
-    legacy_shadow: Optional[sc.ShadowPass] = None
-    if use_llm and stage_a:
+    if out.use_llm and stage_a:
         items = [{"sender": c.sender_name, "label": c.label or c.url, "domain": c.domain,
                   "path": urlsplit(c.url).path} for c in stage_a]
         if engine in jx.JEV_DECIDES:
-            # `jev+legacy` (#394): legacy keeps scoring in the background through stage B, collected below
+            # `jev+legacy` (#394): legacy keeps scoring in the background through stage B, collected after it
             if engine == "jev+legacy":
-                legacy_shadow = _start_shadow("legacy", items, criteria, base_url=base_url, model=model, cfg=cfg,
-                                              cache=llm_cache)
+                out.legacy_shadow = _start_shadow("legacy", items, criteria, base_url=base_url, model=model, cfg=cfg,
+                                                  cache=llm_cache)
             metas = jx.score_metadata_jev(items, criteria, base_url=base_url,
                                           model=cfg.get("jev_model", jx.DEFAULT_MODEL),
                                           workers=int(cfg.get("jev_workers", jx.DEFAULT_WORKERS)))
@@ -502,13 +481,13 @@ def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: D
         else:
             shadow = (_start_shadow("jev", items, criteria, base_url=base_url, model=model, cfg=cfg, cache=llm_cache)
                       if engine == "both" else None)
-            metas = sc.score_metadata(items, criteria, base_url=base_url, model=model,
+            metas = sc.score_metadata(items, criteria, base_url=base_url, model=model, batch=sc.STAGE_A_BATCH,
                                       workers=int(cfg.get("llm_workers", 3)) + 1, cache=llm_cache)
-            llm_calls += (llm_cache.misses + 24) // 25
+            out.llm_calls += (llm_cache.misses + sc.STAGE_A_BATCH - 1) // sc.STAGE_A_BATCH
             if engine == "both":
                 stats["stage_a_engine"] = engine
-                shadow_rows = _collect_shadow("jev", shadow, [c.cid for c in stage_a], model=jx.DEFAULT_MODEL,
-                                              stats=stats)
+                out.shadow_rows = _collect_shadow("jev", shadow, [c.cid for c in stage_a], model=jx.DEFAULT_MODEL,
+                                                  stats=stats)
         for c, m in zip(stage_a, metas):
             c.meta = m
             c.score = sc.combine(sender_weight=c.sender_weight, domain_bonus=c.domain_bonus, meta=m, content=None)
@@ -517,11 +496,25 @@ def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: D
         for c in stage_a:   # rule-only: sender weight + domain prior as a weak score
             c.score = round(min(10.0, c.sender_weight * (1 + c.domain_bonus) * 4.0), 2) if len(c.label) >= 25 else None
             c.reason = "rule-only score (no LLM)" if c.score is not None else "short anchor, no LLM"
+    return out
 
-    # stage B — fetch + content for the top-K
+
+def _collect_legacy_shadow(a: _StageA, stage_a: List[rk.Candidate], *, engine: str, model: str,
+                           llm_cache: sc.LLMCache, stats: Dict[str, Any]) -> None:
+    """`jev+legacy`: gather the legacy pass that kept scoring in the background through stage B."""
+    if engine == "jev+legacy" and a.use_llm and stage_a:
+        a.shadow_rows = _collect_shadow("legacy", a.legacy_shadow, [c.cid for c in stage_a], model=model, stats=stats)
+        llm_cache.flush()
+
+
+def _stage_b(stage_a: List[rk.Candidate], *, use_llm: bool, use_fetch: bool, top_k: int, cfg: Dict[str, Any],
+             criteria: Dict[str, Any], base_url: str, model: str, llm_cache: sc.LLMCache,
+             picked_before: Dict[str, str], notion_urls: set, notion_titles: Any, stats: Dict[str, Any]) -> int:
+    """Stage B — fetch + content scoring for the top-K. Returns the LLM-call estimate it added."""
     ranked = sorted([c for c in stage_a if c.score is not None], key=lambda c: -(c.score or 0))
     depth = max(top_k, len(stage_a) // 12)          # a 2-week backlog window gets proportionally more depth
     stage_b = ranked[:depth]
+    llm_calls = 0
     fetched_ok = 0
     if use_fetch and stage_b:
         cache = fx.FetchCache()
@@ -568,19 +561,15 @@ def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: D
                 if c.content and c.content.ok:
                     c.summary = c.content.summary
             stats["stage_b_scored"] = sum(1 for c in todo if c.content and c.content.ok)
-    if engine == "jev+legacy" and use_llm and stage_a:
-        shadow_rows = _collect_shadow("legacy", legacy_shadow, [c.cid for c in stage_a], model=model, stats=stats)
-        llm_cache.flush()
-    stats["scored"] = sum(1 for c in cands if c.score is not None)
-    stats["llm_calls"] = llm_calls
+    return llm_calls
 
-    multi = {a for a in priors.ranked if priors.multi_pick(a)}
-    sel = rk.select(cands, rules, multi_pick_addrs=multi)
-    stats["selected"] = len(sel.all_picks())
-    stats["verdicts"] = dict(Counter(c.verdict for c in cands))
-    stats["elapsed_s"] = round(time.monotonic() - t0, 1)
 
-    # senders bookkeeping
+def _write_window_report(start: date, end: date, *, records: List[gm.EmailRecord], priors: sc.Priors,
+                         sel: rk.Selection, cands: List[rk.Candidate], by_email: Dict[str, List[rk.Candidate]],
+                         stats: Dict[str, Any], backtest: Optional[Dict[str, Any]], edition_hint: str, out_dir: Path,
+                         shadow_rows: Optional[List[Dict[str, Any]]], engine: str,
+                         ) -> Tuple[Path, List[Dict[str, Any]]]:
+    """Sender bookkeeping, then the report (and the shadow file, when there is one) on disk."""
     new_senders: Dict[str, Tuple[str, str, int]] = {}
     floor: Counter = Counter()
     emails_view: List[Dict[str, Any]] = []
@@ -609,6 +598,63 @@ def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: D
     if shadow_rows is not None:
         _write_shadow(path, shadow_rows, start=start, end=end, stats=stats,
                       engine="legacy" if engine == "jev+legacy" else "jev")
+    return path, emails_view
+
+
+def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[str, Any], source: str,
+                     use_llm: bool, use_fetch: bool, top_k: int, model: str, out_dir: Path,
+                     edition_hint: str, backtest: Optional[Dict[str, Any]],
+                     limit_links: Optional[int], engine: str = jx.DEFAULT_ENGINE,
+                     inputs: Optional[Dict[str, Any]] = None, fresh: bool = False,
+                     ) -> Tuple[Path, rk.Selection, Dict[str, Any], List[rk.Candidate], List[Dict[str, Any]]]:
+    t0 = time.monotonic()
+    base_url = cfg.get("llm_hub_base_url") or load_full_config().get("newsletter_archive", {}).get("llm_hub_base_url", "http://127.0.0.1:8000")
+    priors = sc.Priors(criteria)
+    rules = criteria.get("rules", {})
+    picked_before = db.picked_before(start) if store_ok() else {}
+    if inputs is not None:
+        # re-score: Notion as of the window start (like a backtest) for the stage-B final-URL check, so the
+        # week's own picks, archived since the original run, never turn into duplicates
+        notion_urls, notion_titles = load_notion_urls(created_before=start.isoformat())
+        records, cands, by_email = candidates_from_store(inputs, priors, picked_before)
+    else:
+        records = emails_from_cache(start, end) if source == "cache" else emails_from_gmail(start, end, cfg=cfg)
+        notion_urls, notion_titles = load_notion_urls(created_before=start.isoformat() if backtest is not None else None)
+        cands, by_email = build_candidates(records, priors, notion_urls, notion_titles, picked_before)
+    if limit_links:
+        cands = cands[:limit_links]
+    stats: Dict[str, Any] = {"emails": len(records), "links": len(cands),
+                             "duplicates_in_notion": sum(1 for c in cands if c.in_notion and not c.picked_earlier),
+                             "duplicates_picked_earlier": sum(1 for c in cands if c.picked_earlier),
+                             "unresolved_links": sum(1 for c in cands if c.reason == "redirect unresolved")}
+    if inputs is not None:
+        stats["rescored_from"] = inputs.get("run_id")
+    llm_cache = sc.LLMCache(fresh=fresh)
+    if fresh:
+        stats["llm_cache_fresh"] = True
+        logger.info("🔄 fresh: the LLM cache is bypassed — both stages call the model, answers are still stored")
+
+    stage_a = [c for c in cands if not c.in_notion and c.sender_weight > 0]
+    a = _stage_a(stage_a, use_llm=use_llm, engine=engine, cfg=cfg, criteria=criteria, base_url=base_url,
+                 model=model, llm_cache=llm_cache, stats=stats)
+    llm_calls = a.llm_calls + _stage_b(stage_a, use_llm=a.use_llm, use_fetch=use_fetch, top_k=top_k, cfg=cfg,
+                                       criteria=criteria, base_url=base_url, model=model, llm_cache=llm_cache,
+                                       picked_before=picked_before, notion_urls=notion_urls,
+                                       notion_titles=notion_titles, stats=stats)
+    _collect_legacy_shadow(a, stage_a, engine=engine, model=model, llm_cache=llm_cache, stats=stats)
+    stats["scored"] = sum(1 for c in cands if c.score is not None)
+    stats["llm_calls"] = llm_calls
+
+    multi = {x for x in priors.ranked if priors.multi_pick(x)}
+    sel = rk.select(cands, rules, multi_pick_addrs=multi)
+    stats["selected"] = len(sel.all_picks())
+    stats["verdicts"] = dict(Counter(c.verdict for c in cands))
+    stats["elapsed_s"] = round(time.monotonic() - t0, 1)
+
+    path, emails_view = _write_window_report(start, end, records=records, priors=priors, sel=sel, cands=cands,
+                                             by_email=by_email, stats=stats, backtest=backtest,
+                                             edition_hint=edition_hint, out_dir=out_dir,
+                                             shadow_rows=a.shadow_rows, engine=engine)
     logger.info("📝 report: %s — %d picks (%s) in %.0fs", path, stats["selected"],
                 ", ".join(f"{t[:6]} {len(sel.picks[t])}" for t in rk.TOPICS), stats["elapsed_s"])
     return path, sel, stats, cands, emails_view
