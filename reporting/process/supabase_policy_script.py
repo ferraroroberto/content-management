@@ -12,7 +12,9 @@ from pathlib import Path
 import sys
 import psycopg2
 from psycopg2 import sql
+from psycopg2.extensions import connection as PgConnection
 import argparse
+from typing import Any, Optional
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -26,7 +28,7 @@ if not logger.handlers:
     # Only set up if no handlers exist (i.e., not already configured)
     logger = setup_logger("supabase_policy_script", file_logging=False)
 
-def get_all_tables(connection):
+def get_all_tables(connection: PgConnection) -> list[str]:
     """
     Get all tables in the public schema.
     
@@ -53,7 +55,7 @@ def get_all_tables(connection):
         logger.error(f"❌ Error getting tables: {e}")
         return []
 
-def get_all_views(connection):
+def get_all_views(connection: PgConnection) -> list[str]:
     """
     Get all views in the public schema.
     
@@ -82,7 +84,7 @@ def get_all_views(connection):
         logger.error(f"❌ Error getting views: {e}")
         return []
 
-def check_table_policies(connection, table_name):
+def check_table_policies(connection: PgConnection, table_name: str) -> Optional[dict[str, Any]]:
     """
     Check if a table already has the required policies.
     
@@ -128,7 +130,7 @@ def check_table_policies(connection, table_name):
         logger.error(f"❌ Error checking policies for table {table_name}: {e}")
         return None
 
-def check_view_security_invoker(connection, view_name):
+def check_view_security_invoker(connection: PgConnection, view_name: str) -> Optional[bool]:
     """
     Check whether a view runs with security_invoker enabled.
 
@@ -167,7 +169,7 @@ def check_view_security_invoker(connection, view_name):
         logger.error(f"❌ Error checking security_invoker for view {view_name}: {e}")
         return None
 
-def check_policy_drift(connection):
+def check_policy_drift(connection: PgConnection) -> dict[str, Any]:
     """
     Detect RLS / policy / view-security drift across the public schema.
 
@@ -221,7 +223,7 @@ def check_policy_drift(connection):
         'total_views': len(views),
     }
 
-def summarize_drift(result):
+def summarize_drift(result: dict[str, Any]) -> list[tuple[str, str]]:
     """
     Flatten a ``check_policy_drift`` result into human-readable drift lines.
 
@@ -250,7 +252,7 @@ def summarize_drift(result):
         items.append(('view', f"{issue['name']} ({reason})"))
     return items
 
-def apply_table_policies(connection, table_name, force=False):
+def apply_table_policies(connection: PgConnection, table_name: str, force: bool = False) -> bool:
     """
     Apply Row Level Security (RLS) policies to a table.
     
@@ -309,7 +311,7 @@ def apply_table_policies(connection, table_name, force=False):
         logger.error(f"❌ Error applying policies to table {table_name}: {e}")
         return False
 
-def apply_policies_to_all_tables(connection, force=False):
+def apply_policies_to_all_tables(connection: PgConnection, force: bool = False) -> dict[str, Any]:
     """
     Apply RLS policies to all tables in the public schema.
     
@@ -366,7 +368,7 @@ def apply_policies_to_all_tables(connection, force=False):
         logger.error(f"❌ Error applying policies to all tables: {e}")
         return {'success': False, 'error': str(e)}
 
-def apply_security_invoker_to_all_views(connection):
+def apply_security_invoker_to_all_views(connection: PgConnection) -> dict[str, Any]:
     """
     Apply security_invoker = on to all views in the public schema.
     
@@ -417,7 +419,7 @@ def apply_security_invoker_to_all_views(connection):
         logger.error(f"❌ Error applying security_invoker to all views: {e}")
         return {'success': False, 'error': str(e)}
 
-def dry_run_policy_application(connection):
+def dry_run_policy_application(connection: PgConnection) -> dict[str, Any]:
     """
     Show what policies would be applied without actually applying them.
     
@@ -491,7 +493,7 @@ def dry_run_policy_application(connection):
         logger.error(f"❌ Error in dry run: {e}")
         return {'success': False, 'error': str(e)}
 
-def main():
+def main() -> None:
     """Main function for running the policy script."""
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Apply RLS policies to all tables in Supabase")
