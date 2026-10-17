@@ -174,8 +174,8 @@ def _run_carousel(page: _FakePage) -> str:
 
 def _run_video(page: _FakePage) -> str:
     payload = ClipPayload(
-        clip_page_id="clip", title="clip", video_path=Path("clip.mp4"),
-        thumb_path=Path("clip.png"), caption_short="short", caption_long="long caption",
+        title="clip", video_path=Path("clip.mp4"),
+        caption_short="short", caption_long="long caption",
     )
     row = VideoRow(page_id="row", day=DAY, payload=payload, existing_post_url=None)
     with contextlib.ExitStack() as stack:

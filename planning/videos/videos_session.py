@@ -72,12 +72,11 @@ VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS = 180000
 class ClipPayload:
     """Everything the per-platform video drivers need for a single weekly clip.
 
-    ``video_path`` and ``thumb_path`` are derived from the clip page's
-    ``clipPC`` (folder, already terminated with a slash) and ``filePC``
-    (bare filename without extension): video = ``<clipPC><filePC>.mp4``,
-    thumb = ``<clipPC><filePC>.png``. When ``filePC`` carries characters
-    Windows can't store, the Windows-safe form of the name is used instead
-    (issue #317).
+    ``video_path`` is derived from the clip page's ``clipPC`` (folder,
+    already terminated with a slash) and ``filePC`` (bare filename without
+    extension): video = ``<clipPC><filePC>.mp4``. When ``filePC`` carries
+    characters Windows can't store, the Windows-safe form of the name is
+    used instead (issue #317).
 
     ``caption_short`` is the clip page's ``Text`` property — used by IG,
     TW, TH, and SB.
@@ -87,10 +86,8 @@ class ClipPayload:
     upstream so the LI driver always receives a non-empty string.
     """
 
-    clip_page_id: str
     title: str
     video_path: Path
-    thumb_path: Path
     caption_short: str
     caption_long: str
 
@@ -583,7 +580,6 @@ def load_clip_payload(notion, editorial_row: dict, video_cols: dict, clip_cols: 
     if not folder.endswith(("\\", "/")):
         folder = folder + sep
     video_path = _resolve_clip_file(folder, fname, ".mp4")
-    thumb_path = _resolve_clip_file(folder, fname, ".png")
 
     if not video_path.exists():
         safe = windows_safe_filename(fname)
@@ -598,11 +594,6 @@ def load_clip_payload(notion, editorial_row: dict, video_cols: dict, clip_cols: 
     # consumers feed off this one ``video_path``, so doing it here covers every
     # platform uniformly; the OneDrive master is never modified.
     video_path = ensure_platform_safe_clip(video_path)
-    if not thumb_path.exists():
-        # Thumb is optional — some platforms auto-generate one. Log but don't fail.
-        logger.warning("⚠️ Thumb not found (continuing without): %s", thumb_path)
-    else:
-        ensure_local_file(thumb_path)
 
     caption_short = _clip_string_property(clip_page, clip_cols, "caption_text")
 
@@ -643,10 +634,8 @@ def load_clip_payload(notion, editorial_row: dict, video_cols: dict, clip_cols: 
         title, video_path.name, len(caption_short), len(caption_long),
     )
     return ClipPayload(
-        clip_page_id=rel_id,
         title=title,
         video_path=video_path,
-        thumb_path=thumb_path,
         caption_short=caption_short,
         caption_long=caption_long,
     )

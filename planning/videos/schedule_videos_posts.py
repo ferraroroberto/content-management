@@ -161,10 +161,8 @@ def fetch_wip_video_rows(notion, db_id: str, video_cols: dict,
             state = _RowState(
                 page_id=r["id"], day=row_day,
                 payload=ClipPayload(
-                    clip_page_id="",
                     title="(unresolved)",
                     video_path=Path(""),
-                    thumb_path=Path(""),
                     caption_short="",
                     caption_long="",
                 ),
