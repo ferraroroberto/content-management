@@ -265,6 +265,10 @@ def overview(conn: sqlite3.Connection) -> dict:
     still judgeable, and ``retired`` says how much the difference is, so the
     header adds up instead of quietly losing 115k rows.
 
+    The screening figures (``screened`` through ``nothing_to_assess``) are over
+    the workable rows only — canonical and not retired, as in ``screen.stats``
+    and the queue — so the header cannot show rows no re-screen will ever serve.
+
     ``not_fully_assessed`` is the honest half of ``screened``: rows a screening
     pass touched without looking at all three licence conditions. They are
     counted here rather than left to look compliant, which is what the
@@ -277,6 +281,7 @@ def overview(conn: sqlite3.Connection) -> dict:
     re-screen backlog unable to drain.
     """
     permanent = db.permanent_sql("")
+    workable = "duplicate in (0, 2) and retired = 0"      # what screen.stats() and the queue see
     row = conn.execute(
         f"""
         select
@@ -286,14 +291,16 @@ def overview(conn: sqlite3.Connection) -> dict:
             (select count(*) from results where retired = 1)         as retired,
             (select count(*) from results where ok is not null)      as decided,
             (select count(*) from results where ok = 0)              as infringements,
-            (select count(*) from results where screened_at is not null) as screened,
+            (select count(*) from results
+              where screened_at is not null and {workable})        as screened,
             (select count(*) from results
               where screened_at is not null and not ({db.assessed_sql('')})
-                and not {permanent})                                 as not_fully_assessed,
+                and not {permanent} and {workable})   as not_fully_assessed,
             (select count(*) from results
               where screened_at is not null and ({db.indeterminate_sql('')})
-                and not {permanent})                                 as indeterminate,
-            (select count(*) from results where {permanent})          as nothing_to_assess,
+                and not {permanent} and {workable})   as indeterminate,
+            (select count(*) from results
+              where {permanent} and {workable})                    as nothing_to_assess,
             (select max(last_processed_date) from images)            as last_search
         """
     ).fetchone()

@@ -933,6 +933,32 @@ class CheckIpStoreTests(unittest.TestCase):
         self.assertEqual(review.overview(self.conn)["results"], 2,
                          "the search history must not shrink")
 
+    def test_overview_counts_only_what_the_queue_can_serve(self):
+        """The header and the queue line must not drift apart (the retired and
+        secondary-duplicate rows are screened too, but no re-screen reaches them)."""
+        live, retired, dup, retired_ind, dup_dead = _seed(self.conn, [
+            {"found_link": f"https://example.test/{name}"}
+            for name in ("live", "retired", "dup", "retired-ind", "dup-dead")
+        ])
+        for row_id in (live, retired, dup):
+            screen.record_verdict(self.conn, row_id, verdict="unclear",
+                                  outcome=db.OUTCOME_AMBIGUOUS, credit_ok=1)
+        screen.record_verdict(self.conn, retired_ind, verdict="unclear", outcome=db.OUTCOME_AMBIGUOUS,
+                              credit_ok=1, noncommercial_ok=2, unmodified_ok=1)
+        screen.record_verdict(self.conn, dup_dead, verdict="unclear", outcome=db.OUTCOME_NOTHING_TO_ASSESS)
+        self.conn.execute("update results set retired = 1 where id in (?, ?)", (retired, retired_ind))
+        self.conn.execute("update results set duplicate = 1 where id in (?, ?)", (dup, dup_dead))
+        self.conn.commit()
+
+        queue = screen.stats(self.conn)
+        overview = review.overview(self.conn)
+        self.assertEqual((queue["screened"], queue["not_fully_assessed"],
+                          queue["indeterminate"], queue["nothing_to_assess"]), (1, 1, 0, 0))
+        for key in ("screened", "not_fully_assessed", "indeterminate", "nothing_to_assess"):
+            self.assertEqual(overview[key], queue[key], key)
+        served = screen.next_batch(self.conn, limit=10, unassessed=True)
+        self.assertEqual([r["id"] for r in served], [live])
+
     def test_queue_ranks_most_reused_image_first(self):
         self.conn.executemany(
             "insert into images (filename, linkedin_count) values (?, ?)",
