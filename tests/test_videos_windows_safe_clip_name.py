@@ -46,7 +46,7 @@ class LoadClipPayloadPathTests(unittest.TestCase):
         self.folder = self._tmp.name + "\\"
         self.addCleanup(self._tmp.cleanup)
 
-    def _load(self, file_pc: str):
+    def _load(self, file_pc: str, hydrate_effect=None):
         props = {"clip_pc": self.folder, "file_pc": file_pc}
         with mock.patch.object(vs, "first_clip_relation_id", return_value="rel"), \
              mock.patch.object(vs, "retrieve_page", return_value={}), \
@@ -54,7 +54,7 @@ class LoadClipPayloadPathTests(unittest.TestCase):
              mock.patch.object(vs, "_clip_string_property",
                                side_effect=lambda _p, _c, role: props.get(role, "short")), \
              mock.patch.object(vs, "get_page_body_text", return_value="long"), \
-             mock.patch.object(vs, "ensure_local_file"), \
+             mock.patch.object(vs, "ensure_local_file", side_effect=hydrate_effect) as self.hydrate, \
              mock.patch.object(vs, "ensure_platform_safe_clip", side_effect=lambda p: p):
             return vs.load_clip_payload(None, {}, {}, {})
 
@@ -65,14 +65,29 @@ class LoadClipPayloadPathTests(unittest.TestCase):
 
     def test_illegal_char_name_resolves_to_windows_safe_file(self) -> None:
         video = self._touch(ON_DISK_STEM, ".mp4")
-        thumb = self._touch(ON_DISK_STEM, ".png")
         payload = self._load(LIVE_FILE_PC)
         self.assertEqual(payload.video_path, video)
-        self.assertEqual(payload.thumb_path, thumb)
 
     def test_clean_name_resolves_verbatim(self) -> None:
         video = self._touch("first build then earn", ".mp4")
         payload = self._load("first build then earn")
+        self.assertEqual(payload.video_path, video)
+
+    def test_clip_without_png_thumb_still_loads(self) -> None:
+        video = self._touch("first build then earn", ".mp4")
+        payload = self._load("first build then earn")
+        self.assertEqual(payload.video_path, video)
+        self.hydrate.assert_called_once_with(video)
+
+    def test_unhydratable_png_thumb_is_never_touched(self) -> None:
+        video = self._touch("first build then earn", ".mp4")
+        thumb = self._touch("first build then earn", ".png")
+
+        def hydrate(path, **_kwargs):
+            if path == thumb:
+                raise RuntimeError("thumb stuck online-only")
+
+        payload = self._load("first build then earn", hydrate_effect=hydrate)
         self.assertEqual(payload.video_path, video)
 
     def test_missing_clip_raises_naming_both_candidates(self) -> None:

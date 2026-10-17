@@ -120,8 +120,8 @@ def run_video(source: str = "playwright", *, dry_run: bool = False, native_err=N
     run = _Run()
     _configure(run, login_err=login_err, close_err=close_err, ready_err=ready_err)
     payload = ClipPayload(
-        clip_page_id="clip", title="clip", video_path=Path("clip.mp4"),
-        thumb_path=Path("clip.png"), caption_short="short", caption_long="long",
+        title="clip", video_path=Path("clip.mp4"),
+        caption_short="short", caption_long="long",
     )
     cfg = {"note_source": source, "profile_url": "https://example.invalid/profile"}
     with contextlib.ExitStack() as stack:
