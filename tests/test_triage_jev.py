@@ -293,6 +293,56 @@ class EngineSwitchTests(unittest.TestCase):
         self.assertEqual({r["status"] for r in shadow}, {jx.NOT_EVALUATED})
 
 
+class ShadowLifecycleTests(unittest.TestCase):
+    """A shadow that never starts or cannot be collected never touches the deciding engine (#406)."""
+
+    _body = EngineSwitchTests._body
+
+    def _ok(self) -> mock.MagicMock:
+        return mock.MagicMock(side_effect=lambda *a, **k: jx.parse_answers(ANSWER))
+
+    def test_both_with_a_jev_shadow_that_never_starts(self) -> None:
+        _l, _s, legacy_rows, _ = self._body("legacy")
+        with self.assertLogs("newsletter_triage.run", level="WARNING") as logs:
+            _l, stats, rows, shadow = self._body("both", Shadow=mock.MagicMock(side_effect=RuntimeError("no")))
+        self.assertEqual(rows, legacy_rows)
+        self.assertTrue(any("jev shadow not started: RuntimeError" in line for line in logs.output), logs.output)
+        self.assertEqual((stats["jev_evaluated"], stats["jev_not_evaluated"]), (0, 4))
+        self.assertEqual({(r["status"], r["error"], r["model"]) for r in shadow},
+                         {(jx.NOT_EVALUATED, "shadow not started", jx.DEFAULT_MODEL)})
+
+    def test_both_with_a_jev_shadow_that_cannot_be_collected(self) -> None:
+        broken = mock.MagicMock(model="jev-other")
+        broken.collect.side_effect = RuntimeError("no")
+        with self.assertLogs("newsletter_triage.run", level="WARNING") as logs:
+            _l, stats, _rows, shadow = self._body("both", Shadow=mock.MagicMock(return_value=broken))
+        self.assertTrue(any("jev shadow not collected: RuntimeError" in line for line in logs.output), logs.output)
+        self.assertEqual((stats["jev_evaluated"], stats["jev_not_evaluated"]), (0, 4))
+        self.assertEqual({(r["status"], r["error"], r["model"]) for r in shadow},
+                         {(jx.NOT_EVALUATED, "shadow not started", jx.DEFAULT_MODEL)})
+
+    def test_jev_plus_legacy_with_a_legacy_shadow_that_never_starts(self) -> None:
+        _l, _s, jev_rows, _ = self._body("jev", evaluate=self._ok())
+        with mock.patch.object(sc, "LegacyShadow", side_effect=RuntimeError("no")), \
+                self.assertLogs("newsletter_triage.run", level="WARNING") as logs:
+            _l, stats, rows, shadow = self._body("jev+legacy", evaluate=self._ok())
+        self.assertEqual(rows, jev_rows)
+        self.assertTrue(any("legacy shadow not started: RuntimeError" in line for line in logs.output), logs.output)
+        self.assertEqual((stats["legacy_evaluated"], stats["legacy_not_evaluated"]), (0, 4))
+        self.assertEqual({(r["status"], r["error"], r["model"]) for r in shadow},
+                         {(jx.NOT_EVALUATED, jx.NOT_EVALUATED, "claude_haiku")})
+
+    def test_jev_plus_legacy_with_a_legacy_shadow_that_cannot_be_collected(self) -> None:
+        broken = mock.MagicMock(model="claude_haiku")
+        broken.collect.side_effect = RuntimeError("no")
+        with mock.patch.object(sc, "LegacyShadow", return_value=broken), \
+                self.assertLogs("newsletter_triage.run", level="WARNING") as logs:
+            _l, stats, _rows, shadow = self._body("jev+legacy", evaluate=self._ok())
+        self.assertTrue(any("legacy shadow not collected: RuntimeError" in line for line in logs.output), logs.output)
+        self.assertEqual((stats["legacy_evaluated"], stats["legacy_not_evaluated"]), (0, 4))
+        self.assertEqual({r["status"] for r in shadow}, {jx.NOT_EVALUATED})
+
+
 class LegacyShadowTests(unittest.TestCase):
     def test_budget_bounds_a_hanging_legacy_pass(self) -> None:
         release = threading.Event()
@@ -322,6 +372,83 @@ class LegacyShadowTests(unittest.TestCase):
             out = sc.score_metadata([ITEM] * 3, CRITERIA, base_url="http://hub", model="m", batch=1, stop=stop)
         call.assert_not_called()
         self.assertFalse(any(m.ok for m in out))
+
+
+class ShadowPassBehaviourTests(unittest.TestCase):
+    """Both background passes (#406): a crashing scorer, the over-budget breadcrumb and the snapshot."""
+
+    def _hang(self) -> threading.Event:
+        release = threading.Event()
+        self.addCleanup(release.set)
+        return release
+
+    def test_jev_scorer_crash_is_contained(self) -> None:
+        with mock.patch.object(jx, "score_metadata_jev", side_effect=RuntimeError("boom")), \
+                self.assertLogs("newsletter_triage.jev", level="WARNING") as logs:
+            shadow = jx.Shadow([ITEM] * 2, CRITERIA, base_url="http://hub", budget_s=2)
+            out = shadow.collect()
+        self.assertTrue(any("jev shadow pass failed: RuntimeError" in line for line in logs.output), logs.output)
+        self.assertEqual([(m.ok, m.error) for m in out], [(False, jx.NOT_EVALUATED)] * 2)
+
+    def test_legacy_scorer_crash_is_contained(self) -> None:
+        with mock.patch.object(sc, "score_metadata", side_effect=RuntimeError("boom")), \
+                self.assertLogs("newsletter_triage.score", level="WARNING") as logs:
+            shadow = sc.LegacyShadow([ITEM] * 2, CRITERIA, base_url="http://hub", model="claude_haiku", budget_s=2)
+            out = shadow.collect()
+        self.assertTrue(any("legacy shadow pass failed: RuntimeError" in line for line in logs.output), logs.output)
+        self.assertEqual([m.ok for m in out], [False, False])
+
+    def test_jev_over_budget_logs_and_stops(self) -> None:
+        release = self._hang()
+        seen: Dict[str, Any] = {}
+
+        def hang(*_a: Any, stop: Any = None, **_k: Any) -> None:
+            seen["stop"] = stop
+            release.wait(5)
+
+        with mock.patch.object(jx, "score_metadata_jev", side_effect=hang), \
+                self.assertLogs("newsletter_triage.jev", level="WARNING") as logs:
+            jx.Shadow([ITEM], CRITERIA, base_url="http://hub", budget_s=0.1).collect()
+        self.assertTrue(seen["stop"].is_set())
+        self.assertTrue(any("jev shadow over its 0s budget" in line for line in logs.output), logs.output)
+
+    def test_legacy_over_budget_logs_and_stops(self) -> None:
+        release = self._hang()
+        seen: Dict[str, Any] = {}
+
+        def hang(*_a: Any, stop: Any = None, **_k: Any) -> None:
+            seen["stop"] = stop
+            release.wait(5)
+
+        with mock.patch.object(sc, "score_metadata", side_effect=hang), \
+                self.assertLogs("newsletter_triage.score", level="WARNING") as logs:
+            sc.LegacyShadow([ITEM], CRITERIA, base_url="http://hub", model="m", budget_s=0.1).collect()
+        self.assertTrue(seen["stop"].is_set())
+        self.assertTrue(any("legacy shadow over its 0s budget" in line for line in logs.output), logs.output)
+
+    def test_jev_snapshot_keeps_answers_and_errors(self) -> None:
+        good = jx.parse_answers(ANSWER)
+
+        def fill(*_a: Any, results: Any = None, **_k: Any) -> None:
+            results[0] = good
+            results[1] = jx.JevMetaScore(error="http 502")
+
+        with mock.patch.object(jx, "score_metadata_jev", side_effect=fill):
+            out = jx.Shadow([ITEM] * 3, CRITERIA, base_url="http://hub", budget_s=2).collect()
+        self.assertIs(out[0], good)
+        self.assertEqual([(m.ok, m.error) for m in out[1:]], [(False, "http 502"), (False, jx.NOT_EVALUATED)])
+
+    def test_legacy_snapshot_is_a_copy(self) -> None:
+        def fill(*_a: Any, results: Any = None, **_k: Any) -> None:
+            results[0] = sc.MetaScore(topic=TOPICS[0], fit=4, ok=True)
+
+        with mock.patch.object(sc, "score_metadata", side_effect=fill):
+            shadow = sc.LegacyShadow([ITEM] * 2, CRITERIA, base_url="http://hub", model="m", budget_s=2)
+            out = shadow.collect()
+        self.assertEqual((out[0].topic, out[0].fit, out[0].ok, out[1].ok), (TOPICS[0], 4, True, False))
+        self.assertIsNot(out[0], shadow.results[0])
+        shadow.results[0].fit = 1                      # a batch still in flight cannot rewrite the snapshot
+        self.assertEqual(out[0].fit, 4)
 
 
 class ShadowFileTests(unittest.TestCase):

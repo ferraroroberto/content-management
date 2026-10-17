@@ -23,9 +23,10 @@ import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from newsletter import llm
 from newsletter.topics import TOPICS, match_topic
@@ -323,43 +324,55 @@ def score_metadata(items: Sequence[Dict[str, str]], criteria: Dict[str, Any], *,
     return out
 
 
-class LegacyShadow:
-    """``jev+legacy`` mode (#394): legacy scores the same Stage A items on a background thread while Jev
-    decides — the mirror of ``jev.Shadow``.
+class ShadowPass:
+    """One Stage A engine scoring on a background thread while the other decides (``both``: ``jev.Shadow``;
+    ``jev+legacy``: ``LegacyShadow``).
 
-    ``collect()`` waits at most until ``budget_s`` after start, then stops the pass and returns copies of
-    what finished — every other item has ``ok=False``. Nothing here can raise into the Jev run.
+    ``score(stop=, results=)`` fills the pre-built ``results`` in place and checks ``stop`` between batches.
+    ``collect()`` waits at most until ``budget_s`` after start, then stops the pass and returns
+    ``snapshot(result)`` for every item — anything unfinished keeps its empty value. Nothing here can raise
+    into the deciding run.
     """
 
-    def __init__(self, items: Sequence[Dict[str, str]], criteria: Dict[str, Any], *, base_url: str, model: str,
-                 workers: int = 4, cache: Optional["LLMCache"] = None,
-                 budget_s: float = DEFAULT_LEGACY_BUDGET_S) -> None:
+    def __init__(self, engine: str, score: Callable[..., Any], results: List[Any], *, model: str,
+                 budget_s: float, snapshot: Callable[[Any], Any], log: logging.Logger) -> None:
+        self.engine = engine
         self.model = model
         self.budget_s = budget_s
-        self.results: List[MetaScore] = [MetaScore() for _ in items]
+        self.results = results
+        self._score, self._snapshot, self._log = score, snapshot, log
         self._stop = threading.Event()
         self._t0 = time.monotonic()
-        self._thread = threading.Thread(target=self._run, name="legacy-shadow", daemon=True,
-                                        args=(items, criteria, base_url, workers, cache))
+        self._thread = threading.Thread(target=self._run, name=f"{engine}-shadow", daemon=True)
         self._thread.start()
 
-    def _run(self, items: Sequence[Dict[str, str]], criteria: Dict[str, Any], base_url: str, workers: int,
-             cache: Optional["LLMCache"]) -> None:
+    def _run(self) -> None:
         try:
-            score_metadata(items, criteria, base_url=base_url, model=self.model, workers=workers, cache=cache,
-                           stop=self._stop, results=self.results)
-        except Exception as exc:  # noqa: BLE001 — the shadow must never surface into the Jev run
-            logger.warning("⚠️ legacy shadow pass failed: %s", type(exc).__name__)
+            self._score(stop=self._stop, results=self.results)
+        except Exception as exc:  # noqa: BLE001 — the shadow must never surface into the deciding run
+            self._log.warning("⚠️ %s shadow pass failed: %s", self.engine, type(exc).__name__)
 
-    def collect(self) -> List[MetaScore]:
+    def collect(self) -> List[Any]:
         remaining = self.budget_s - (time.monotonic() - self._t0)
         self._thread.join(timeout=max(0.0, remaining))
         if self._thread.is_alive():
             self._stop.set()
-            logger.warning("⚠️ legacy shadow over its %.0fs budget — unfinished links recorded as not evaluated",
-                           self.budget_s)
-        # copies: a batch still in flight keeps writing into ``results`` after the budget
-        return [MetaScore(**m.__dict__) for m in list(self.results)]
+            self._log.warning("⚠️ %s shadow over its %.0fs budget — unfinished links recorded as not evaluated",
+                              self.engine, self.budget_s)
+        return [self._snapshot(m) for m in list(self.results)]
+
+
+class LegacyShadow(ShadowPass):
+    """``jev+legacy`` mode (#394): legacy scores the same Stage A items in the background while Jev decides."""
+
+    def __init__(self, items: Sequence[Dict[str, str]], criteria: Dict[str, Any], *, base_url: str, model: str,
+                 workers: int = 4, cache: Optional["LLMCache"] = None,
+                 budget_s: float = DEFAULT_LEGACY_BUDGET_S) -> None:
+        # snapshot copies: a batch still in flight keeps writing into ``results`` after the budget
+        super().__init__("legacy", partial(score_metadata, items, criteria, base_url=base_url, model=model,
+                                           workers=workers, cache=cache),
+                         [MetaScore() for _ in items], model=model, budget_s=budget_s,
+                         snapshot=lambda m: MetaScore(**m.__dict__), log=logger)
 
 
 def legacy_shadow_rows(cids: Sequence[str], scores: Sequence[MetaScore], *, model: str,
