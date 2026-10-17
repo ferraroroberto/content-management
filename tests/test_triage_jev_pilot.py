@@ -302,5 +302,37 @@ class LegacyReplayTests(unittest.TestCase):
         self.assertIn("pooled_fresh_legacy", result)
 
 
+class PlainReplayTests(unittest.TestCase):
+    def test_replay_without_legacy_writes_its_artefact(self) -> None:
+        cands = [{"cid": f"m{i}:0", "message_id": f"m{i}", "canonical": f"u{i}", "url": f"https://x.com/{i}",
+                  "title": f"T{i}", "domain": "x.com", "sender_weight": 1.0, "fetched_ok": True,
+                  "meta": {"ok": True, "topic": L, "fit": 4, "news": False, "promo": False}} for i in range(2)]
+        patches = {"get_run": lambda rid: {"id": rid, "window_start": "2026-09-26", "window_end": "2026-10-03",
+                                           "model": "claude_haiku", "report_path": None},
+                   "get_review": lambda *_a: None, "emails": lambda _r: [], "candidates": lambda _r: cands,
+                   "load_decisions": lambda *_a: []}
+
+        def jev(items: Any, _crit: Any, **_kw: Any) -> List[jx.JevMetaScore]:
+            return [jx.JevMetaScore(topic=L, fit=3, ok=True, conf={"topic": 0.9, "fit": 0.5}) for _ in items]
+
+        saved = {k: getattr(db, k) for k in patches}
+        try:
+            for k, v in patches.items():
+                setattr(db, k, v)
+            with mock.patch.object(jx, "score_metadata_jev", jev), mock.patch.object(jp, "RingRecorder"):
+                result = jp.replay([17], base_url="http://hub", model="jev-latest", workers=2, repeat=False,
+                                   criteria={}, require_review=False)       # legacy=None: the plain `--run 17`
+        finally:
+            for k, v in saved.items():
+                setattr(db, k, v)
+        self.assertEqual(result["mode"], "replay")
+        self.assertNotIn("engines", result["runs"]["17"])
+        with tempfile.TemporaryDirectory() as tmp:
+            result["generated_at"] = "2026-10-17T00:00:00Z"
+            out = jp.write_artefact(result, Path(tmp))
+            self.assertTrue((out / "summary.json").is_file())
+            self.assertTrue((out / "items-run-17.json").is_file())
+
+
 if __name__ == "__main__":
     unittest.main()

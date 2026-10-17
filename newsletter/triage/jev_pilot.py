@@ -467,7 +467,7 @@ def replay(run_ids: Sequence[int], *, base_url: str, model: str, workers: int, r
                     run["window_end"], run.get("model"), len(items), sum(it["owner"]["pick"] for it in items))
         inputs = [it["input"] for it in items]
         engines: Dict[str, Any] = {}
-        order = ("jev", "legacy") if not legacy else (("legacy", "jev") if n_run % 2 == 0 else ("jev", "legacy"))
+        order = ("jev",) if not legacy else (("legacy", "jev") if n_run % 2 == 0 else ("jev", "legacy"))
         for engine in order:
             calls: List[Dict[str, Any]] = []
             t0 = time.monotonic()
