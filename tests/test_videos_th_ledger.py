@@ -29,6 +29,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from planning import _scheduler_main as sm  # noqa: E402
 from planning.videos import schedule_videos_posts as svp  # noqa: E402
 from planning.videos.videos_ledger import TagAlongLedger  # noqa: E402
 
@@ -163,7 +164,7 @@ class UntickDecisionTests(_LedgerTestCase):
     def _decide(self, state, ledger):
         """Run the decision with the Notion write stubbed; returns the stub too."""
         cols = {"wip_checkbox": "Work in Progress Video"}
-        with mock.patch.object(svp, "set_field") as set_field:
+        with mock.patch.object(sm, "set_field") as set_field:
             action, reason = svp._maybe_untick_wip(
                 mock.MagicMock(), cols, state, False, ledger,
             )

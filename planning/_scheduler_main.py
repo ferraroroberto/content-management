@@ -11,7 +11,8 @@ platform label and the "return to start page" callback.
 ``drop_already_scheduled`` are the shared prelude every scheduler calls. ``run_single_post_scheduler`` is the
 complete ``main()`` body for the one-post-per-row platforms (Twitter, Threads);
 the multi-leg schedulers (Instagram story+post, LinkedIn routes, Videos
-drivers) keep their own per-row loop and reuse only the prelude.
+drivers) keep their own per-row loop and reuse the prelude plus ``untick_wip``,
+the shared WIP-checkbox write behind each scheduler's own "day is done" gate.
 """
 
 from __future__ import annotations
@@ -135,6 +136,30 @@ def drop_already_scheduled(
     return kept
 
 
+def untick_wip(
+    notion: Any,
+    page_id: str,
+    columns: dict,
+    *,
+    day_title: str,
+    wip_label: str,
+    log: logging.Logger,
+) -> Optional[Exception]:
+    """Clear a scheduled row's WIP checkbox so the next run skips it.
+
+    The caller owns the "is this day done?" gate. A failed Notion write is
+    logged and returned, never raised: the post is already scheduled, so it
+    must not turn the row into a failure.
+    """
+    try:
+        set_field(notion, page_id, "wip_checkbox", False, columns, "checkbox")
+    except Exception as err:  # noqa: BLE001 — a failed untick must not fail the row
+        log.warning("⚠️ %s: scheduled OK but failed to untick %s: %s", day_title, wip_label, err)
+        return err
+    log.info("☑️ %s: %s unticked in Notion", day_title, wip_label)
+    return None
+
+
 def run_single_post_scheduler(
     args: argparse.Namespace,
     *,
@@ -251,17 +276,8 @@ def run_single_post_scheduler(
 
             # Untick the WIP checkbox only on a fully-successful LIVE day.
             if not dry_run and "LIVE" in status:
-                try:
-                    set_field(
-                        notion, row.page_id, "wip_checkbox", False,
-                        cfg["editorial_columns"], "checkbox",
-                    )
-                    log.info("☑️ %s: %s unticked in Notion", row.day_title, wip_label)
-                except Exception as err:
-                    log.warning(
-                        "⚠️ %s: scheduled OK but failed to untick %s: %s",
-                        row.day_title, wip_label, err,
-                    )
+                untick_wip(notion, row.page_id, cfg["editorial_columns"],
+                           day_title=row.day_title, wip_label=wip_label, log=log)
 
     log.info("══════════ Summary ══════════")
     for s in statuses:

@@ -96,7 +96,6 @@ from reporting.notion.editorial import (  # noqa: E402
     get_field,
     get_property_type,
     retrieve_page,
-    set_field,
 )
 from reporting.notion.notion_update import format_database_id  # noqa: E402
 from planning._dates import date_to_day_title  # noqa: E402
@@ -105,6 +104,7 @@ from planning._scheduler_main import (  # noqa: E402
     drop_already_scheduled,
     notion_or_none,
     resolve_scope,
+    untick_wip,
 )
 from planning._wip_rows import iter_wip_pages, resolve_image_path  # noqa: E402
 from planning._captions import canonical_caption_from_publish_ig  # noqa: E402
@@ -928,21 +928,8 @@ def main() -> tuple[int, list[dict]]:
                 # On successful live schedule, untick "Work in Progress LI" on
                 # the editorial row so the next run doesn't re-schedule it.
                 if not dry_run and "LIVE scheduled" in status:
-                    try:
-                        set_field(
-                            notion,
-                            row.page_id,
-                            "wip_checkbox",
-                            False,
-                            cfg["editorial_columns"],
-                            "checkbox",
-                        )
-                        logger.info("☑️ %s: WIP-LI unticked in Notion", row.day_title)
-                    except Exception as err:
-                        logger.warning(
-                            "⚠️ %s: scheduled OK but failed to untick WIP-LI in Notion: %s",
-                            row.day_title, err,
-                        )
+                    untick_wip(notion, row.page_id, cfg["editorial_columns"],
+                               day_title=row.day_title, wip_label="WIP-LI", log=logger)
             except LoginRequiredError as err:
                 logger.error("❌ %s", err)
                 statuses.append(f"{row.day_title}: LOGIN-REQUIRED")

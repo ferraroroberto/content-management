@@ -59,6 +59,7 @@ from planning._scheduler_main import (  # noqa: E402
     build_scheduler_parser,
     notion_or_none,
     resolve_scope,
+    untick_wip,
 )
 from planning._wip_rows import iter_wip_pages  # noqa: E402
 
@@ -340,19 +341,11 @@ def _maybe_untick_wip(notion, video_cols: dict, state: _RowState, dry_run: bool,
         )
         return "kept-checked", "link SB(v) empty — waiting for daily Substack pipeline"
 
-    try:
-        set_field(
-            notion, state.page_id, "wip_checkbox", False,
-            video_cols, "checkbox",
-        )
-        logger.info("☑️ %s: Work-in-Progress-Video unticked in Notion.", state.day_title)
-        return "unticked", "all platforms OK and link SB(v) populated"
-    except Exception as err:
-        logger.warning(
-            "⚠️ %s: scheduled OK but failed to untick WIP-Video: %s",
-            state.day_title, err,
-        )
+    err = untick_wip(notion, state.page_id, video_cols,
+                     day_title=state.day_title, wip_label="WIP-Video", log=logger)
+    if err is not None:
         return "untick-failed", f"Notion write raised: {err}"
+    return "unticked", "all platforms OK and link SB(v) populated"
 
 
 def _set_post_url(notion, page_id: str, video_cols: dict, platform: str,

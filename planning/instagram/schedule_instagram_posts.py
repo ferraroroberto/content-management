@@ -57,10 +57,7 @@ from planning.instagram.instagram_session import (  # noqa: E402
     load_instagram_config,
     load_notion_token,
 )
-from reporting.notion.editorial import (  # noqa: E402
-    retrieve_page,
-    set_field,
-)
+from reporting.notion.editorial import retrieve_page  # noqa: E402
 from reporting.notion.notion_update import format_database_id  # noqa: E402
 from planning._dates import date_to_day_title  # noqa: E402
 from planning._scheduler_main import (  # noqa: E402
@@ -68,6 +65,7 @@ from planning._scheduler_main import (  # noqa: E402
     drop_already_scheduled,
     notion_or_none,
     resolve_scope,
+    untick_wip,
 )
 from planning._wip_rows import (  # noqa: E402
     illustration_filename,
@@ -981,17 +979,8 @@ def main() -> tuple[int, list[dict]]:
 
             # Untick WIP IG only on a fully-successful LIVE day (both story+post).
             if not dry_run and all_live:
-                try:
-                    set_field(
-                        notion, row.page_id, "wip_checkbox", False,
-                        cfg["editorial_columns"], "checkbox",
-                    )
-                    logger.info("☑️ %s: WIP-IG unticked in Notion", row.day_title)
-                except Exception as err:
-                    logger.warning(
-                        "⚠️ %s: scheduled OK but failed to untick WIP-IG: %s",
-                        row.day_title, err,
-                    )
+                untick_wip(notion, row.page_id, cfg["editorial_columns"],
+                           day_title=row.day_title, wip_label="WIP-IG", log=logger)
 
     logger.info("══════════ Summary ══════════")
     for s in statuses:
