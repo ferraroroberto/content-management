@@ -131,42 +131,19 @@ def _build_clone_args(args: argparse.Namespace) -> list[str]:
     return out
 
 
+def _clone_step() -> tuple[int, list[dict]]:
+    """Adapt clone's exit-code-only ``main()`` to the schedulers' ``(rc, rows)`` shape."""
+    return run_clone(), []
+
+
 def _run_clone(args: argparse.Namespace) -> PlatformResult:
     """Run the IG → TW/TH/SB clone as step 0. Failures do NOT block schedulers."""
-    assert logger is not None
-    if args.skip_clone:
-        logger.info("⏭️  Skipping Clone (per --skip-clone).")
-        return PlatformResult(name="Clone", skipped=True)
-
-    logger.info("━━━━━━━━━━ Clone (IG → TW/TH/SB) ━━━━━━━━━━")
-    clone_args = _build_clone_args(args)
-    orig_argv = sys.argv.copy()
-    sys.argv = [orig_argv[0]] + clone_args
-    start = time.monotonic()
-    try:
-        exit_code = run_clone()
-    except SystemExit as exc:
-        code = exc.code if isinstance(exc.code, int) else 99
-        duration = time.monotonic() - start
-        logger.error("❌ Clone exited via SystemExit(%s) — continuing to schedulers.", code)
-        return PlatformResult(name="Clone", exit_code=code, rows=[], duration_s=duration,
-                              error=f"SystemExit({code})")
-    except Exception as exc:  # noqa: BLE001 — orchestrator MUST swallow
-        duration = time.monotonic() - start
-        logger.exception("❌ Clone raised — continuing to schedulers.")
-        return PlatformResult(name="Clone", exit_code=99, rows=[], duration_s=duration,
-                              error=str(exc))
-    finally:
-        sys.argv = orig_argv
-
-    duration = time.monotonic() - start
-    if exit_code == 0:
-        logger.info("✅ Clone finished in %s.", _fmt_duration(duration))
-        return PlatformResult(name="Clone", exit_code=0, rows=[], duration_s=duration)
-    logger.error("❌ Clone finished with exit code %s in %s — continuing to schedulers.",
-                 exit_code, _fmt_duration(duration))
-    return PlatformResult(name="Clone", exit_code=exit_code, rows=[], duration_s=duration,
-                          error=f"exit code {exit_code}")
+    result = _run_platform("Clone", _clone_step, _build_clone_args(args), args.skip_clone)
+    # Clone has no rows, so its exit code is the only failure signal the
+    # summary can show — surface it as the platform-level error.
+    if result.exit_code and not result.error:
+        result.error = f"exit code {result.exit_code}"
+    return result
 
 
 def _run_platform(
@@ -204,8 +181,12 @@ def _run_platform(
         sys.argv = orig_argv
 
     duration = time.monotonic() - start
-    logger.info("✅ %s finished in %s with %d row(s).",
-                name, _fmt_duration(duration), len(rows))
+    if exit_code == 0:
+        logger.info("✅ %s finished in %s with %d row(s).",
+                    name, _fmt_duration(duration), len(rows))
+    else:
+        logger.error("❌ %s finished with exit code %s in %s with %d row(s).",
+                     name, exit_code, _fmt_duration(duration), len(rows))
     return PlatformResult(name=name, exit_code=exit_code, rows=rows, duration_s=duration)
 
 
