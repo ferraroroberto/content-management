@@ -19,7 +19,7 @@ live, 2026-06.
 Split out of ``schedule_instagram_posts.py`` (issue #198): the Reels wizard
 is a self-contained flow with its own dozen-function lifecycle that shares
 nothing with the feed-post/story driver beyond the page session and a couple
-of low-level helpers (``_fill_input``, the module logger) reused from there.
+of low-level helpers (``fill_input``, the module logger) reused from there.
 Consumed by ``planning/videos/videos_instagram.py`` (the weekly-video
 orchestrator schedules every clip as a reel, never as a feed post) — mirrors
 how ``planning/linkedin/linkedin_composer.py`` splits composer mechanics out
@@ -37,7 +37,7 @@ from typing import Optional
 from playwright.sync_api import Page
 
 from planning.instagram.instagram_labels import NEXT_MONTH_BTN_RE
-from planning.instagram.schedule_instagram_posts import _fill_input
+from planning.instagram.instagram_composer import fill_input
 
 # Shares the "instagram_schedule" logger (rather than a module-local
 # "instagram_reels" one) so planning/videos/schedule_videos_posts.py's
@@ -84,7 +84,7 @@ _REEL_SCHEDULE_OPTION_JS = r"""
 """
 
 
-def _wait_reels_composer_ready(page: Page, *, timeout_ms: int = 30000) -> None:
+def wait_reels_composer_ready(page: Page, *, timeout_ms: int = 30000) -> None:
     """Wait for the Reels composer page to load and its 'Add Video' button.
 
     "Create reel" is a full-page navigation to /latest/reels_composer/, so we
@@ -106,7 +106,7 @@ def _wait_reels_composer_ready(page: Page, *, timeout_ms: int = 30000) -> None:
     )
 
 
-def _reel_add_video(page: Page, video_path: Path) -> None:
+def reel_add_video(page: Page, video_path: Path) -> None:
     """Click 'Add Video' and push the clip via the file chooser.
 
     Mirrors ``_upload_files`` Leg 1 (Playwright click → JS-native retry) because
@@ -137,7 +137,7 @@ def _reel_add_video(page: Page, video_path: Path) -> None:
     page.wait_for_timeout(2500)
 
 
-def _wait_reel_footer_enabled(
+def wait_reel_footer_enabled(
     page: Page, label: str, *, timeout_ms: int = 120000, poll_ms: int = 1000,
 ) -> None:
     """Poll until the reels footer ``label`` button is present and enabled.
@@ -162,14 +162,14 @@ def _wait_reel_footer_enabled(
     )
 
 
-def _click_reel_footer(page: Page, label: str) -> None:
+def click_reel_footer(page: Page, label: str) -> None:
     """JS-native click the bottom-most reels footer button named ``label``."""
     if not page.evaluate(_REEL_FOOTER_CLICK_JS, label):
         raise RuntimeError(f"Reels footer '{label}' button not found.")
     page.wait_for_timeout(1500)
 
 
-def _select_reel_schedule_option(page: Page) -> None:
+def select_reel_schedule_option(page: Page) -> None:
     """On the Scheduling-options step, pick 'Schedule' (vs 'Share now').
 
     Selecting it reveals the date/time inputs and flips the footer action from
@@ -216,7 +216,7 @@ def _click_reel_calendar_day(page: Page, target: date) -> None:
     page.wait_for_timeout(600)
 
 
-def _set_reel_schedule_datetime(page: Page, target: date, hour: int, minute: int) -> None:
+def set_reel_schedule_datetime(page: Page, target: date, hour: int, minute: int) -> None:
     """Set the reel's scheduled date + time on the Scheduling-options step.
 
     The reels date field is a segmented editor pre-set to today; *typing* into
@@ -233,9 +233,9 @@ def _set_reel_schedule_datetime(page: Page, target: date, hour: int, minute: int
     h12 = hour % 12 or 12
     mer = "AM" if hour < 12 else "PM"
     try:
-        _fill_input(page, page.locator('input[aria-label="hours"]').first, str(h12))
-        _fill_input(page, page.locator('input[aria-label="minutes"]').first, f"{minute:02d}")
-        _fill_input(page, page.locator('input[aria-label="meridiem"]').first, mer)
+        fill_input(page, page.locator('input[aria-label="hours"]').first, str(h12))
+        fill_input(page, page.locator('input[aria-label="minutes"]').first, f"{minute:02d}")
+        fill_input(page, page.locator('input[aria-label="meridiem"]').first, mer)
         page.keyboard.press("Tab")
         page.wait_for_timeout(300)
     except Exception as err:
@@ -257,7 +257,7 @@ def _reel_scheduled_dialog_visible(page: Page) -> bool:
         return False
 
 
-def _dismiss_reel_success_dialog(page: Page) -> None:
+def dismiss_reel_success_dialog(page: Page) -> None:
     """Best-effort click 'Done' on the 'Reel scheduled' confirmation dialog so
     the next day starts from a clean planner state."""
     try:
@@ -269,7 +269,7 @@ def _dismiss_reel_success_dialog(page: Page) -> None:
         pass
 
 
-def _wait_reel_composer_closes(page: Page, *, timeout_ms: int = 30000) -> bool:
+def wait_reel_composer_closes(page: Page, *, timeout_ms: int = 30000) -> bool:
     """Wait for either success signal that means the reel was scheduled.
 
     Two outcomes count as success, either of which ends the wait:

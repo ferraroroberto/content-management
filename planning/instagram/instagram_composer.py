@@ -6,7 +6,9 @@ This module owns the planner-calendar steps that ``schedule_instagram_posts``
 both drive identically — dismiss the "Get Meta Verified" upsell modal,
 navigate the week view to a target day, open that day's Schedule ▾ menu and
 click "Schedule post" / "Schedule story" / "Create reel", fill the composer's
-caption field, and best-effort cancel an open composer. Living here (instead
+caption field, best-effort cancel an open composer, type into a Meta text
+input (``fill_input``) and navigate back to the planner between days
+(``return_to_planner``). Living here (instead
 of inside the scheduler module) means a rename or signature change to any of
 these is a visible public-API change instead of an invisible break of the
 video path, which used to import them as ``_private`` names straight out of
@@ -335,3 +337,30 @@ __all__ = [
     "fill_post_text",
     "cancel_composer",
 ]
+
+
+def return_to_planner(page: Page, planner_url: str) -> None:
+    """Navigate explicitly back to the calendar view between days."""
+    try:
+        if "/composer" in (page.url or "").lower() or "/content_calendar" not in (page.url or "").lower():
+            page.goto(planner_url, wait_until="domcontentloaded", timeout=30000)
+            page.wait_for_timeout(2500)
+            dismiss_meta_verified_modal(page)
+            page.wait_for_timeout(500)
+    except Exception as err:
+        # The schedulers' "instagram_schedule" logger, not this module's: the
+        # drivers only configure that one (issue #37), so a warning here would
+        # otherwise vanish from their run logs.
+        logging.getLogger("instagram_schedule").warning("⚠️ Could not return to planner: %s", err)
+
+
+def fill_input(page: Page, locator, value: str) -> None:
+    """Click, clear, and type into a Meta composer text input."""
+    locator.click(timeout=4000)
+    page.wait_for_timeout(150)
+    # Meta inputs honor select-all + type; .fill() sometimes leaves the old
+    # value (Meta's React onChange handler is picky).
+    page.keyboard.press("Control+A")
+    page.keyboard.press("Delete")
+    page.keyboard.type(value, delay=8)
+    page.wait_for_timeout(150)

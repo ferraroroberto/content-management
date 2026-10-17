@@ -26,21 +26,21 @@ from planning.instagram.instagram_session import (  # noqa: E402
     load_instagram_config,
 )
 from planning.instagram.instagram_reels import (  # noqa: E402
-    _click_reel_footer,
-    _dismiss_reel_success_dialog,
-    _reel_add_video,
-    _select_reel_schedule_option,
-    _set_reel_schedule_datetime,
-    _wait_reel_composer_closes,
-    _wait_reel_footer_enabled,
-    _wait_reels_composer_ready,
+    click_reel_footer,
+    dismiss_reel_success_dialog,
+    reel_add_video,
+    select_reel_schedule_option,
+    set_reel_schedule_datetime,
+    wait_reel_composer_closes,
+    wait_reel_footer_enabled,
+    wait_reels_composer_ready,
 )
-from planning.instagram.schedule_instagram_posts import return_to_planner  # noqa: E402
 from planning.instagram.instagram_composer import (  # noqa: E402
     cancel_composer,
     dismiss_meta_verified_modal,
     fill_post_text,
     open_day_schedule_menu,
+    return_to_planner,
 )
 from planning.videos.videos_session import VideoRow, run_video_driver  # noqa: E402
 
@@ -66,9 +66,9 @@ def schedule_one_video(
     # duplicate-attach). See the Reels-composer section in
     # ``schedule_instagram_posts`` for the verified-live selectors.
     open_day_schedule_menu(page, row.day, "Create reel")
-    _wait_reels_composer_ready(page)
+    wait_reels_composer_ready(page)
 
-    _reel_add_video(page, row.payload.video_path)
+    reel_add_video(page, row.payload.video_path)
     # Caption lives on the reel-details step (fillable before the upload
     # finishes processing).
     fill_post_text(page, row.payload.caption_short)
@@ -76,15 +76,15 @@ def schedule_one_video(
     # Footer "Next" stays aria-disabled until Meta finishes processing the
     # upload (the left rail counts up to 100%). A multi-MB clip can take a
     # while, so wait generously before advancing.
-    _wait_reel_footer_enabled(page, "Next", timeout_ms=120000)
-    _click_reel_footer(page, "Next")
+    wait_reel_footer_enabled(page, "Next", timeout_ms=120000)
+    click_reel_footer(page, "Next")
 
     # Scheduling-options step: choose "Schedule" (vs "Share now") to reveal the
     # date/time inputs, then set them. The reels date field is a segmented
     # editor that must be set via its calendar popup (typing corrupts it) — see
-    # _set_reel_schedule_datetime.
-    _select_reel_schedule_option(page)
-    _set_reel_schedule_datetime(
+    # set_reel_schedule_datetime.
+    select_reel_schedule_option(page)
+    set_reel_schedule_datetime(
         page, row.day,
         video_cfg["post_hour_local"], video_cfg["post_minute_local"],
     )
@@ -101,16 +101,16 @@ def schedule_one_video(
 
     # Footer flips to "Schedule" once the Schedule option is selected; it stays
     # aria-disabled until the date/time are valid and the upload is done.
-    _wait_reel_footer_enabled(page, "Schedule", timeout_ms=120000)
-    _click_reel_footer(page, "Schedule")
-    if not _wait_reel_composer_closes(page, timeout_ms=30000):
+    wait_reel_footer_enabled(page, "Schedule", timeout_ms=120000)
+    click_reel_footer(page, "Schedule")
+    if not wait_reel_composer_closes(page, timeout_ms=30000):
         shot = out_dir / f"{label}-ig-FAIL.png"
         page.screenshot(path=str(shot), full_page=False)
         raise RuntimeError(f"IG reel composer did not close — see {shot}")
     # On success Meta may stay on /reels_composer/ behind a "Reel scheduled"
     # confirmation dialog rather than navigating back — dismiss it so the next
     # day starts from a clean planner state (issue #125).
-    _dismiss_reel_success_dialog(page)
+    dismiss_reel_success_dialog(page)
     page.wait_for_timeout(1500)
     logger.info("✅ LIVE %s IG video scheduled as reel", label)
     return "IG:LIVE"

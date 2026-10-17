@@ -42,8 +42,10 @@ from planning._session_base import results_dir  # noqa: E402
 from planning.instagram.instagram_composer import (  # noqa: E402
     cancel_composer,
     dismiss_meta_verified_modal,
+    fill_input,
     fill_post_text,
     open_day_schedule_menu,
+    return_to_planner,
 )
 from planning.instagram.instagram_labels import (  # noqa: E402
     ADD_MEDIA_BTN_SELECTOR,
@@ -608,19 +610,6 @@ def _wait_composer_closes(page: Page, planner_url: str, *, timeout_ms: int = 250
     return False
 
 
-def return_to_planner(page: Page, planner_url: str) -> None:
-    """Navigate explicitly back to the calendar view between days."""
-    try:
-        if "/composer" in (page.url or "").lower() or "/content_calendar" not in (page.url or "").lower():
-            page.goto(planner_url, wait_until="domcontentloaded", timeout=30000)
-            page.wait_for_timeout(2500)
-            dismiss_meta_verified_modal(page)
-            page.wait_for_timeout(500)
-    except Exception as err:
-        logger.warning("⚠️ Could not return to planner: %s", err)
-
-
-
 # ---------- High-level per-action drivers ----------
 
 def _dismiss_initial_schedule_submodal(page: Page) -> None:
@@ -698,18 +687,6 @@ def _dismiss_initial_schedule_submodal(page: Page) -> None:
     logger.warning("⚠️ Schedule sub-modal still present after dismissal attempt.")
 
 
-def _fill_input(page: Page, locator, value: str) -> None:
-    """Click, clear, and type into a Meta composer text input."""
-    locator.click(timeout=4000)
-    page.wait_for_timeout(150)
-    # Meta inputs honor select-all + type; .fill() sometimes leaves the old
-    # value (Meta's React onChange handler is picky).
-    page.keyboard.press("Control+A")
-    page.keyboard.press("Delete")
-    page.keyboard.type(value, delay=8)
-    page.wait_for_timeout(150)
-
-
 def _set_all_visible_date_time(
     page: Page,
     target: date,
@@ -740,7 +717,7 @@ def _set_all_visible_date_time(
     date_str = f"{target.month:02d}/{target.day:02d}/{target.year}"
     for i in range(n_dates):
         try:
-            _fill_input(page, date_inputs.nth(i), date_str)
+            fill_input(page, date_inputs.nth(i), date_str)
             page.keyboard.press("Tab")  # confirm value
             page.wait_for_timeout(200)
         except Exception as err:
@@ -755,9 +732,9 @@ def _set_all_visible_date_time(
     mer = "AM" if hour < 12 else "PM"
     for i in range(n_hours):
         try:
-            _fill_input(page, hours.nth(i), str(h12))
-            _fill_input(page, minutes.nth(i), f"{minute:02d}")
-            _fill_input(page, meridiems.nth(i), mer)
+            fill_input(page, hours.nth(i), str(h12))
+            fill_input(page, minutes.nth(i), f"{minute:02d}")
+            fill_input(page, meridiems.nth(i), mer)
             page.keyboard.press("Tab")
             page.wait_for_timeout(200)
         except Exception as err:
@@ -775,7 +752,7 @@ def _set_all_visible_date_time(
 # Schedule ▾ menu, the only path that accepts vertical 9:16 video) lives in
 # ``instagram_reels.py`` (issue #198): it is a self-contained full-page
 # wizard flow with its own dozen-function lifecycle that shares nothing with
-# the feed-post/story driver below beyond the page session and ``_fill_input``.
+# the feed-post/story driver below beyond the page session and ``fill_input``.
 # Consumed by ``planning/videos/videos_instagram.py``, not by this module.
 
 
