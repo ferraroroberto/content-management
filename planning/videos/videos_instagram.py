@@ -19,12 +19,9 @@ import logging
 import sys
 from pathlib import Path
 
-from playwright.sync_api import TimeoutError as PWTimeoutError
-
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from planning.instagram.instagram_session import (  # noqa: E402
     InstagramSession,
-    LoginRequiredError,
     load_instagram_config,
 )
 from planning.instagram.instagram_reels import (  # noqa: E402
@@ -44,7 +41,7 @@ from planning.instagram.instagram_composer import (  # noqa: E402
     fill_post_text,
     open_day_schedule_menu,
 )
-from planning.videos.videos_session import VideoRow  # noqa: E402
+from planning.videos.videos_session import VideoRow, run_video_driver  # noqa: E402
 
 logger = logging.getLogger("videos_instagram")
 
@@ -118,40 +115,16 @@ def schedule_one_video(
     return "IG:LIVE"
 
 
-def run(rows: list[VideoRow], video_cfg: dict, *, dry_run: bool) -> list[dict]:
-    if not rows:
-        return []
-    ig_cfg = load_instagram_config()
-    results: list[dict] = []
-    with InstagramSession(ig_cfg) as session:
-        try:
-            session.goto_with_login_check(ig_cfg["feed_url"])
-        except LoginRequiredError as err:
-            logger.error("❌ IG login required: %s", err)
-            for row in rows:
-                results.append({"day": row.day_title, "status": "LOGIN-REQUIRED", "detail": str(err)})
-            return results
-        session.page.wait_for_timeout(4500)
-        dismiss_meta_verified_modal(session.page)
-        session.page.wait_for_timeout(500)
+def _after_login(page) -> None:
+    # Let the planner SPA mount, then dismiss any first-load upsell modal.
+    dismiss_meta_verified_modal(page)
+    page.wait_for_timeout(500)
 
-        for row in rows:
-            return_to_planner(session.page, ig_cfg["feed_url"])
-            try:
-                status = schedule_one_video(session, ig_cfg, video_cfg, row, dry_run=dry_run)
-                results.append({
-                    "day": row.day_title,
-                    "status": "DRY" if dry_run else "LIVE",
-                    "detail": status,
-                })
-            except (RuntimeError, PWTimeoutError) as err:
-                shot = session.screenshot_failure(f"{row.day_title}-ig-video-error")
-                logger.error("❌ IG %s failed: %s (screenshot %s)", row.day_title, err, shot)
-                cancel_composer(session.page)
-                return_to_planner(session.page, ig_cfg["feed_url"])
-                results.append({
-                    "day": row.day_title,
-                    "status": "FAIL",
-                    "detail": f"{err} (screenshot {shot})",
-                })
-    return results
+
+def run(rows: list[VideoRow], video_cfg: dict, *, dry_run: bool) -> list[dict]:
+    return run_video_driver(
+        rows, video_cfg, dry_run=dry_run, platform="IG", log=logger,
+        load_cfg=load_instagram_config, session_cls=InstagramSession, schedule_one=schedule_one_video,
+        return_home=return_to_planner, cancel_composer=cancel_composer, login_settle_ms=4500,
+        after_login=_after_login,
+    )

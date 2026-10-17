@@ -13,11 +13,8 @@ import logging
 import sys
 from pathlib import Path
 
-from playwright.sync_api import TimeoutError as PWTimeoutError
-
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from planning.threads.threads_session import (  # noqa: E402
-    LoginRequiredError,
     ThreadsSession,
     load_threads_config,
 )
@@ -40,6 +37,7 @@ from planning.threads.threads_labels import DISCARD_BTN_RE  # noqa: E402
 from planning.videos.videos_session import (  # noqa: E402
     VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS,
     VideoRow,
+    run_video_driver,
 )
 
 logger = logging.getLogger("videos_threads")
@@ -103,37 +101,8 @@ def schedule_one_video(
 
 
 def run(rows: list[VideoRow], video_cfg: dict, *, dry_run: bool) -> list[dict]:
-    if not rows:
-        return []
-    th_cfg = load_threads_config()
-    results: list[dict] = []
-    with ThreadsSession(th_cfg) as session:
-        try:
-            session.goto_with_login_check(th_cfg["feed_url"])
-        except LoginRequiredError as err:
-            logger.error("❌ TH login required: %s", err)
-            for row in rows:
-                results.append({"day": row.day_title, "status": "LOGIN-REQUIRED", "detail": str(err)})
-            return results
-        session.page.wait_for_timeout(3500)
-
-        for row in rows:
-            return_to_profile(session.page, th_cfg["feed_url"])
-            try:
-                status = schedule_one_video(session, th_cfg, video_cfg, row, dry_run=dry_run)
-                results.append({
-                    "day": row.day_title,
-                    "status": "DRY" if dry_run else "LIVE",
-                    "detail": status,
-                })
-            except (RuntimeError, PWTimeoutError) as err:
-                shot = session.screenshot_failure(f"{row.day_title}-th-video-error")
-                logger.error("❌ TH %s failed: %s (screenshot %s)", row.day_title, err, shot)
-                cancel_composer(session.page)
-                return_to_profile(session.page, th_cfg["feed_url"])
-                results.append({
-                    "day": row.day_title,
-                    "status": "FAIL",
-                    "detail": f"{err} (screenshot {shot})",
-                })
-    return results
+    return run_video_driver(
+        rows, video_cfg, dry_run=dry_run, platform="TH", log=logger,
+        load_cfg=load_threads_config, session_cls=ThreadsSession, schedule_one=schedule_one_video,
+        return_home=return_to_profile, cancel_composer=cancel_composer, login_settle_ms=3500,
+    )

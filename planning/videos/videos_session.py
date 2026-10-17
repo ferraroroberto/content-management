@@ -17,6 +17,9 @@ What lives here:
   DB, and returns a ``ClipPayload`` with everything four drivers need
   (short caption, LI long caption from the page body, video path, thumb
   path).
+* ``run_video_driver(...)`` — the session + login check + per-row loop the
+  Threads, Twitter and Instagram drivers share; each passes only its own
+  session class, config loader and composer callbacks.
 """
 
 from __future__ import annotations
@@ -34,12 +37,14 @@ import time
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
+
+from playwright.sync_api import TimeoutError as PWTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.no_window import NO_WINDOW  # noqa: E402
 from planning._session_base import configure_logger as _configure_logger  # noqa: E402
-from planning._session_base import load_config_block, load_notion_token  # noqa: E402
+from planning._session_base import LoginRequiredError, load_config_block, load_notion_token  # noqa: E402
 from reporting.notion.editorial import (  # noqa: E402
     get_field,
     get_page_body_text,
@@ -647,6 +652,59 @@ def load_clip_payload(notion, editorial_row: dict, video_cols: dict, clip_cols: 
     )
 
 
+def run_video_driver(
+    rows: list[VideoRow],
+    video_cfg: dict,
+    *,
+    dry_run: bool,
+    platform: str,
+    log: logging.Logger,
+    load_cfg: Callable[[], dict],
+    session_cls: Callable[[dict], Any],
+    schedule_one: Callable[..., str],
+    return_home: Callable[[Any, str], None],
+    cancel_composer: Callable[[Any], None],
+    login_settle_ms: int,
+    after_login: Optional[Callable[[Any], None]] = None,
+) -> list[dict]:
+    """Drive every row through one platform session; per-row ``{"day", "status", "detail"}`` dicts.
+
+    ``platform`` is the two-letter label (``"TH"`` / ``"TW"`` / ``"IG"``) in log lines and failure
+    screenshots. A failed login check marks every row LOGIN-REQUIRED; a row raising ``RuntimeError`` or a
+    Playwright timeout is FAIL (screenshot, cancel the composer, return home) and the loop moves on.
+    ``schedule_one(session, cfg, video_cfg, row, dry_run=)`` returns the row's status text;
+    ``after_login(page)`` runs once after the post-login settle.
+    """
+    if not rows:
+        return []
+    cfg = load_cfg()
+    results: list[dict] = []
+    with session_cls(cfg) as session:
+        try:
+            session.goto_with_login_check(cfg["feed_url"])
+        except LoginRequiredError as err:
+            log.error("❌ %s login required: %s", platform, err)
+            for row in rows:
+                results.append({"day": row.day_title, "status": "LOGIN-REQUIRED", "detail": str(err)})
+            return results
+        session.page.wait_for_timeout(login_settle_ms)
+        if after_login is not None:
+            after_login(session.page)
+
+        for row in rows:
+            return_home(session.page, cfg["feed_url"])
+            try:
+                status = schedule_one(session, cfg, video_cfg, row, dry_run=dry_run)
+                results.append({"day": row.day_title, "status": "DRY" if dry_run else "LIVE", "detail": status})
+            except (RuntimeError, PWTimeoutError) as err:
+                shot = session.screenshot_failure(f"{row.day_title}-{platform.lower()}-video-error")
+                log.error("❌ %s %s failed: %s (screenshot %s)", platform, row.day_title, err, shot)
+                cancel_composer(session.page)
+                return_home(session.page, cfg["feed_url"])
+                results.append({"day": row.day_title, "status": "FAIL", "detail": f"{err} (screenshot {shot})"})
+    return results
+
+
 __all__ = [
     "PLATFORMS",
     "VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS",
@@ -660,4 +718,5 @@ __all__ = [
     "load_notion_token",
     "load_videos_config",
     "probe_duration_seconds",
+    "run_video_driver",
 ]

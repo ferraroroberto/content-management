@@ -14,11 +14,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from playwright.sync_api import TimeoutError as PWTimeoutError
-
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from planning.twitter.twitter_session import (  # noqa: E402
-    LoginRequiredError,
     TwitterSession,
     load_twitter_config,
 )
@@ -39,6 +36,7 @@ from planning.twitter.twitter_labels import CANCEL_CLOSE_BTN_RES  # noqa: E402
 from planning.videos.videos_session import (  # noqa: E402
     VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS,
     VideoRow,
+    run_video_driver,
 )
 
 logger = logging.getLogger("videos_twitter")
@@ -224,40 +222,15 @@ def schedule_one_video(
     return "TW:LIVE"
 
 
-def run(rows: list[VideoRow], video_cfg: dict, *, dry_run: bool) -> list[dict]:
-    if not rows:
-        return []
-    tw_cfg = load_twitter_config()
-    results: list[dict] = []
-    with TwitterSession(tw_cfg) as session:
-        try:
-            session.goto_with_login_check(tw_cfg["feed_url"])
-        except LoginRequiredError as err:
-            logger.error("❌ TW login required: %s", err)
-            for row in rows:
-                results.append({"day": row.day_title, "status": "LOGIN-REQUIRED", "detail": str(err)})
-            return results
-        session.page.wait_for_timeout(3500)
-        dismiss_blocking_modals(session.page)
-        session.page.wait_for_timeout(400)
+def _after_login(page) -> None:
+    dismiss_blocking_modals(page)
+    page.wait_for_timeout(400)
 
-        for row in rows:
-            return_to_home(session.page, tw_cfg["feed_url"])
-            try:
-                status = schedule_one_video(session, tw_cfg, video_cfg, row, dry_run=dry_run)
-                results.append({
-                    "day": row.day_title,
-                    "status": "DRY" if dry_run else "LIVE",
-                    "detail": status,
-                })
-            except (RuntimeError, PWTimeoutError) as err:
-                shot = session.screenshot_failure(f"{row.day_title}-tw-video-error")
-                logger.error("❌ TW %s failed: %s (screenshot %s)", row.day_title, err, shot)
-                cancel_composer(session.page)
-                return_to_home(session.page, tw_cfg["feed_url"])
-                results.append({
-                    "day": row.day_title,
-                    "status": "FAIL",
-                    "detail": f"{err} (screenshot {shot})",
-                })
-    return results
+
+def run(rows: list[VideoRow], video_cfg: dict, *, dry_run: bool) -> list[dict]:
+    return run_video_driver(
+        rows, video_cfg, dry_run=dry_run, platform="TW", log=logger,
+        load_cfg=load_twitter_config, session_cls=TwitterSession, schedule_one=schedule_one_video,
+        return_home=return_to_home, cancel_composer=cancel_composer, login_settle_ms=3500,
+        after_login=_after_login,
+    )
