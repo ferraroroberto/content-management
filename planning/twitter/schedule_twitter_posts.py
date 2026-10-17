@@ -33,6 +33,7 @@ from typing import Optional
 from playwright.sync_api import Page
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from planning._session_base import results_dir  # noqa: E402
 from planning.twitter.twitter_composer import (  # noqa: E402
     cancel_composer,
     click_compose_area,
@@ -126,7 +127,7 @@ def schedule_post(
         page, row.day, cfg["post_hour_local"], cfg["post_minute_local"]
     )
 
-    out_dir = Path(__file__).resolve().parent.parent.parent / "results" / "twitter"
+    out_dir = results_dir("twitter")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if dry_run:

@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from planning._session_base import results_dir  # noqa: E402
 from planning.threads.threads_session import (  # noqa: E402
     ThreadsSession,
     load_threads_config,
@@ -67,7 +68,7 @@ def schedule_one_video(
         page, video_cfg["post_hour_local"], video_cfg["post_minute_local"],
     )
 
-    out_dir = Path(__file__).resolve().parent.parent.parent / "results" / "videos"
+    out_dir = results_dir("videos")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if dry_run:

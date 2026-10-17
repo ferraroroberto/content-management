@@ -18,10 +18,9 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from planning._session_base import results_dir
 from planning.substack.api_client import SubstackAPI
 from planning.substack.substack_session import configure_logger, load_substack_config
-
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def parse_args() -> argparse.Namespace:
@@ -41,7 +40,7 @@ def main() -> int:
     out_path = (
         Path(args.out)
         if args.out
-        else REPO_ROOT / "results" / "substack" / f"archive_{datetime.now():%Y%m%d}.json"
+        else results_dir("substack") / f"archive_{datetime.now():%Y%m%d}.json"
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
 

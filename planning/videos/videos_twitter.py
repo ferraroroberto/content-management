@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from planning._session_base import results_dir  # noqa: E402
 from planning.twitter.twitter_session import (  # noqa: E402
     TwitterSession,
     load_twitter_config,
@@ -186,7 +187,7 @@ def schedule_one_video(
         video_cfg["post_hour_local"], video_cfg["post_minute_local"],
     )
 
-    out_dir = Path(__file__).resolve().parent.parent.parent / "results" / "videos"
+    out_dir = results_dir("videos")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if dry_run:

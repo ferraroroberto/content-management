@@ -41,12 +41,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from planning._session_base import results_dir
+
 logger = logging.getLogger("videos_schedule")
 
-DEFAULT_LEDGER_PATH = (
-    Path(__file__).resolve().parent.parent.parent
-    / "results" / "videos" / "tag_along_scheduled.json"
-)
+DEFAULT_LEDGER_PATH = results_dir("videos") / "tag_along_scheduled.json"
 LEDGER_VERSION = 1
 
 

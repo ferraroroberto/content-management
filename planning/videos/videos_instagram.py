@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from planning._session_base import results_dir  # noqa: E402
 from planning.instagram.instagram_session import (  # noqa: E402
     InstagramSession,
     load_instagram_config,
@@ -88,7 +89,7 @@ def schedule_one_video(
         video_cfg["post_hour_local"], video_cfg["post_minute_local"],
     )
 
-    out_dir = Path(__file__).resolve().parent.parent.parent / "results" / "videos"
+    out_dir = results_dir("videos")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if dry_run:

@@ -49,6 +49,7 @@ from notion_client.errors import HTTPResponseError
 from playwright.sync_api import Page, TimeoutError as PWTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from planning._session_base import results_dir  # noqa: E402
 from planning.linkedin.linkedin_session import (  # noqa: E402
     LinkedInSession,
     LoginRequiredError,
@@ -733,7 +734,7 @@ def _drive_photo_row(
     hour, minute = _resolve_schedule_time(cfg, row.day)
     set_schedule_datetime(page, row.day, hour, minute)
 
-    out_dir = Path(__file__).resolve().parent.parent.parent / "results" / "linkedin"
+    out_dir = results_dir("linkedin")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if dry_run:
@@ -790,7 +791,7 @@ def schedule_one_carousel_row(
     hour, minute = _resolve_schedule_time(cfg, row.day)
     set_schedule_datetime(page, row.day, hour, minute)
 
-    out_dir = Path(__file__).resolve().parent.parent.parent / "results" / "linkedin"
+    out_dir = results_dir("linkedin")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if dry_run:
