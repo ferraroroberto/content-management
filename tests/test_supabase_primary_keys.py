@@ -36,5 +36,21 @@ class PrimaryKeyTests(unittest.TestCase):
         self.assertEqual([c.args[1] for c in upload.call_args_list], ["x_profile"])
 
 
+class UpsertTests(unittest.TestCase):
+    """The upload is a plain upsert: no primary-key scan of the existing table (issue #410)."""
+
+    def test_existing_table_runs_no_pk_select(self) -> None:
+        connection = MagicMock()
+        cursor = connection.cursor.return_value.__enter__.return_value
+        df = pd.DataFrame({"date": ["2026-10-07", "2026-10-08"], "platform": ["x", "x"], "followers": [1, 2]})
+        with patch.object(su, "table_exists", return_value=True),                 patch.object(su.psycopg2.extras, "execute_batch") as execute_batch:
+            ok = su.upload_dataframe_to_db(df, "x_profile", ["date", "platform"], connection=connection)
+        self.assertTrue(ok)
+        cursor.execute.assert_not_called()
+        cursor.fetchall.assert_not_called()
+        execute_batch.assert_called_once()
+        self.assertEqual(len(execute_batch.call_args.args[2]), 2)
+
+
 if __name__ == "__main__":
     unittest.main()
