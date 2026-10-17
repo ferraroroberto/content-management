@@ -54,7 +54,7 @@ Heal at most **one platform per invocation cycle**; re-run to pick up the next.
      structural selector still inline there (`data-testid`, `role="dialog"`,
      CSS/`text=` engine selectors) — those deliberately stay out of the registry.
 4. **Apply a selector-only edit.** Re-anchor the role/text selector on the new accessible
-   name from the probe. Prefer role + name anchors; **never** anchor on a class (names rotate). The diff MUST be a pure selector-string change — no
+   name from the probe. Prefer role + name anchors; **never** anchor on a class (names rotate). The diff must be a pure selector-string change — no
    control-flow, scheduling-logic, or unrelated edits.
 5. **Re-validate:** re-run that platform `--dry-run`. Bounded retries — **max 2** heal
    attempts per row; if still failing, **escalate** (Step 5).

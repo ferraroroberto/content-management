@@ -1,6 +1,6 @@
 ---
 name: check-ip
-description: Screen where my illustrations are being reused — pull ranked un-judged LinkedIn links from the check_ip store and fan them out to Sonnet workers that open each post in the browser and judge it against the three conditions of my licence (credit / non-commercial / unmodified). Proposes only; never contacts anyone and never sets my decision. E.g. "/check-ip", "/check-ip 100", "/check-ip 500", "/check-ip --image 'books pile - learn from mistakes.png'", "screen the next batch of IP matches".
+description: Screens reuse of the owner's illustrations — Sonnet workers judge LinkedIn links from the check_ip store against the licence's credit, non-commercial and unmodified conditions. Proposes only; never contacts anyone. E.g. "/check-ip", "/check-ip 100", "/check-ip 500", "/check-ip --image 'books pile - learn from mistakes.png'", "screen the next batch of IP matches".
 ---
 
 # check-ip
