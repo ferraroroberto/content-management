@@ -205,32 +205,6 @@ def upload_dataframe_to_db(df, table_name, primary_keys, connection=None):
                 logger.error(f"❌ Failed to create table {table_name}. Cannot upload data.")
                 return False
         
-        num_inserted = len(df)
-        num_updated = 0
-        
-        if table_already_exists:
-            with connection.cursor() as cursor:
-                pk_columns_str_db = ', '.join([f'"{pk}"' for pk in primary_keys])
-                select_pks_sql = f'SELECT {pk_columns_str_db} FROM "{table_name}"'
-                cursor.execute(select_pks_sql)
-                existing_pks = {tuple(map(str, row)) for row in cursor.fetchall()}
-
-            df_pks = df[primary_keys].astype(str)
-            df_pk_tuples_list = [tuple(row) for row in df_pks.to_numpy()]
-            
-            all_pks = set(existing_pks)
-            inserted_count = 0
-            updated_count = 0
-            for pk_tuple in df_pk_tuples_list:
-                if pk_tuple in all_pks:
-                    updated_count += 1
-                else:
-                    inserted_count += 1
-                    all_pks.add(pk_tuple)
-            
-            num_inserted = inserted_count
-            num_updated = updated_count
-        
         # Clean the DataFrame to ensure compatibility with PostgreSQL
         df = df.copy()
         
@@ -284,10 +258,7 @@ def upload_dataframe_to_db(df, table_name, primary_keys, connection=None):
                     success = False
         
         if success:
-            if table_already_exists:
-                logger.info(f"✅ Data upload to {table_name} complete. New records: {num_inserted}. Records skipped (PK existed): {num_updated}.")
-            else:
-                logger.info(f"✅ Successfully uploaded all data to {table_name}")
+            logger.info(f"✅ Upserted {len(records)} rows into {table_name}")
         return success
     
     except Exception as e:
