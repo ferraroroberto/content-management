@@ -1,13 +1,12 @@
 """Media prep for demo videos: transcode, loudness, contact sheets, output checks.
 
 Every ffmpeg/ffprobe call goes through ``podcast.media`` (``probe``,
-``run_ffmpeg``, ``ffmpeg_pipe``, ``frame_at``, ``extract_wav``) — this module
-only composes them.
+``ffprobe_json``, ``run_ffmpeg``, ``ffmpeg_pipe``, ``frame_at``,
+``extract_wav``) — this module only composes them.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import math
 import subprocess
@@ -18,8 +17,7 @@ from typing import Literal, Optional
 
 import numpy as np
 
-from config.no_window import NO_WINDOW
-from podcast.media import _tool, extract_wav, frame_at, probe, read_wav, run_ffmpeg
+from podcast.media import extract_wav, ffprobe_json, frame_at, probe, read_wav, run_ffmpeg
 
 logger = logging.getLogger("demo_video.media")
 
@@ -107,12 +105,10 @@ def contact_sheet(video: Path, times: list[float], dst: Path, *, cols: int = 4, 
 def has_audio(path: Path) -> Optional[bool]:
     """True/False, or None when ffprobe cannot read the file."""
     try:
-        out = subprocess.run([_tool("ffprobe"), "-v", "error", "-select_streams", "a", "-show_entries",
-                              "stream=codec_type", "-of", "json", str(path)],
-                             check=True, capture_output=True, timeout=120, creationflags=NO_WINDOW)
+        data = ffprobe_json(path, "stream=codec_type", streams="a")
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, RuntimeError):
         return None
-    return bool(json.loads(out.stdout or b"{}").get("streams"))
+    return bool(data.get("streams"))
 
 
 def verify_output(mp4: Path, *, width: int, height: int, fps: int, duration: float, tolerance_s: float = 1.0) -> Result:

@@ -24,15 +24,24 @@ def _tool(name: str) -> str:
     return path
 
 
+def ffprobe_json(path: Path, entries: str, *, streams: Optional[str] = None, timeout: int = 120) -> dict:
+    """``ffprobe -show_entries <entries> -of json`` of ``path``, parsed.
+
+    ``streams`` is an optional ``-select_streams`` specifier (``"v:0"``, ``"a"``).
+    Raises ``CalledProcessError`` when ffprobe cannot read the file and
+    ``TimeoutExpired`` past ``timeout`` seconds.
+    """
+    cmd = [_tool("ffprobe"), "-v", "error"]
+    if streams is not None:
+        cmd += ["-select_streams", streams]
+    cmd += ["-show_entries", entries, "-of", "json", str(path)]
+    out = subprocess.run(cmd, check=True, capture_output=True, timeout=timeout, creationflags=NO_WINDOW)
+    return json.loads(out.stdout or b"{}")
+
+
 def probe(path: Path) -> dict:
     """Return ``{width, height, fps, duration}`` of a video file's first video stream."""
-    out = subprocess.run(
-        [_tool("ffprobe"), "-v", "error", "-select_streams", "v:0",
-         "-show_entries", "stream=width,height,r_frame_rate:format=duration",
-         "-of", "json", str(path)],
-        check=True, capture_output=True, timeout=120, creationflags=NO_WINDOW,
-    )
-    data = json.loads(out.stdout or b"{}")
+    data = ffprobe_json(path, "stream=width,height,r_frame_rate:format=duration", streams="v:0")
     stream = (data.get("streams") or [{}])[0]
     num, _, den = (stream.get("r_frame_rate") or "0/1").partition("/")
     return {

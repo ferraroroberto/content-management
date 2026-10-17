@@ -200,6 +200,7 @@ browser page (MediaRecorder, IndexedDB),
 P2P call + WebSocket signalling,
 chunk upload, join + remux"]
   RECSRV -->|"host + guest tracks"| EPVID[["<episode>/video editing/"]]
+  RECSRV -.->|"ffmpeg helpers"| podcast_mod
   EPVID --> PINIT
   PINIT -->|"episode.json"| PODPIPE
   EPVID --> PODPIPE

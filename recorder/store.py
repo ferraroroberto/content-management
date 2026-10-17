@@ -22,12 +22,11 @@ import logging
 import os
 import re
 import shutil
-import subprocess
 import time
 from pathlib import Path
 from typing import Optional
 
-from config.no_window import NO_WINDOW
+from podcast.media import ffprobe_json, run_ffmpeg
 
 logger = logging.getLogger("recorder.store")
 
@@ -128,13 +127,9 @@ class ChunkStore:
 
 def remux(src: Path, dst: Path) -> None:
     """Rewrite the container with a proper index (no re-encode)."""
-    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-fflags", "+genpts", "-i", str(src),
-                    "-c", "copy", "-map", "0", "-movflags", "+faststart", str(dst)],
-                   check=True, capture_output=True, creationflags=NO_WINDOW)
+    run_ffmpeg(["-fflags", "+genpts", "-i", str(src), "-c", "copy", "-map", "0", "-movflags", "+faststart", str(dst)])
 
 
 def probe_duration(path: Path) -> float:
-    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of",
-                          "default=nw=1:nk=1", str(path)], check=True, capture_output=True, text=True,
-                         creationflags=NO_WINDOW).stdout.strip()
-    return round(float(out), 2) if out and out != "N/A" else 0.0
+    raw = (ffprobe_json(path, "format=duration").get("format") or {}).get("duration")
+    return round(float(raw), 2) if raw and raw != "N/A" else 0.0
