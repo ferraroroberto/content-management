@@ -39,13 +39,14 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import requests
 
 from newsletter.topics import TOPICS
-from newsletter.triage.score import MetaScore, load_lessons
+from newsletter.triage.score import MetaScore, ShadowPass, load_lessons
 
 logger = logging.getLogger("newsletter_triage.jev")
 
@@ -240,43 +241,17 @@ def score_metadata_jev(items: Sequence[Dict[str, str]], criteria: Dict[str, Any]
     return out
 
 
-class Shadow:
-    """``both`` mode: Jev scores the same Stage A items on a background thread while legacy decides.
-
-    ``collect()`` waits at most until ``budget_s`` after start, then stops the pass and returns what
-    finished — everything else is ``not evaluated``. Nothing here can raise into the legacy run.
-    """
+class Shadow(ShadowPass):
+    """``both`` mode: Jev scores the same Stage A items in the background while legacy decides; anything
+    unfinished at the budget is ``not evaluated``."""
 
     def __init__(self, items: Sequence[Dict[str, str]], criteria: Dict[str, Any], *, base_url: str,
                  model: str = DEFAULT_MODEL, workers: int = DEFAULT_WORKERS, timeout: float = DEFAULT_TIMEOUT_S,
                  budget_s: float = DEFAULT_BUDGET_S) -> None:
-        self.n = len(items)
-        self.model = model
-        self.budget_s = budget_s
-        self.results: List[JevMetaScore] = [JevMetaScore(error=NOT_EVALUATED) for _ in items]
-        self._stop = threading.Event()
-        self._t0 = time.monotonic()
-        self._thread = threading.Thread(target=self._run, name="jev-shadow", daemon=True,
-                                        args=(items, criteria, base_url, workers, timeout))
-        self._thread.start()
-
-    def _run(self, items: Sequence[Dict[str, str]], criteria: Dict[str, Any], base_url: str, workers: int,
-             timeout: float) -> None:
-        try:
-            score_metadata_jev(items, criteria, base_url=base_url, model=self.model, workers=workers, timeout=timeout,
-                               stop=self._stop, results=self.results)
-        except Exception as exc:  # noqa: BLE001 — the shadow must never surface into the legacy run
-            logger.warning("⚠️ jev shadow pass failed: %s", type(exc).__name__)
-
-    def collect(self) -> List[JevMetaScore]:
-        remaining = self.budget_s - (time.monotonic() - self._t0)
-        self._thread.join(timeout=max(0.0, remaining))
-        if self._thread.is_alive():
-            self._stop.set()
-            logger.warning("⚠️ jev shadow over its %.0fs budget — unfinished links recorded as not evaluated",
-                           self.budget_s)
-        snapshot = list(self.results)
-        return [m if m.ok else JevMetaScore(error=m.error or NOT_EVALUATED) for m in snapshot]
+        super().__init__("jev", partial(score_metadata_jev, items, criteria, base_url=base_url, model=model,
+                                        workers=workers, timeout=timeout),
+                         [JevMetaScore(error=NOT_EVALUATED) for _ in items], model=model, budget_s=budget_s,
+                         snapshot=lambda m: m if m.ok else JevMetaScore(error=m.error or NOT_EVALUATED), log=logger)
 
 
 def shadow_rows(cids: Sequence[str], scores: Sequence[JevMetaScore], *, model: str) -> List[Dict[str, Any]]:

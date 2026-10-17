@@ -364,55 +364,42 @@ def run_window(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[st
     return path, sel, stats
 
 
-def _start_shadow(items: List[Dict[str, str]], criteria: Dict[str, Any], *, base_url: str,
-                  cfg: Dict[str, Any]) -> Optional[jx.Shadow]:
+def _start_shadow(engine: str, items: List[Dict[str, str]], criteria: Dict[str, Any], *, base_url: str,
+                  model: str, cfg: Dict[str, Any], cache: sc.LLMCache) -> Optional[sc.ShadowPass]:
+    """Start the background pass of the engine that does not decide: ``"jev"`` for ``both``, ``"legacy"``
+    for ``jev+legacy``. ``model`` is the run's legacy model; Jev's comes from ``cfg``."""
     try:
-        return jx.Shadow(items, criteria, base_url=base_url, model=cfg.get("jev_model", jx.DEFAULT_MODEL),
-                         workers=int(cfg.get("jev_workers", jx.DEFAULT_WORKERS)),
-                         budget_s=float(cfg.get("jev_budget_s", jx.DEFAULT_BUDGET_S)))
-    except Exception as err:  # noqa: BLE001 — the shadow must never fail the legacy run
-        logger.warning("⚠️ jev shadow not started: %s", type(err).__name__)
+        if engine == "jev":
+            return jx.Shadow(items, criteria, base_url=base_url, model=cfg.get("jev_model", jx.DEFAULT_MODEL),
+                             workers=int(cfg.get("jev_workers", jx.DEFAULT_WORKERS)),
+                             budget_s=float(cfg.get("jev_budget_s", jx.DEFAULT_BUDGET_S)))
+        return sc.LegacyShadow(items, criteria, base_url=base_url, model=model,
+                               workers=int(cfg.get("llm_workers", 3)) + 1, cache=cache,
+                               budget_s=float(cfg.get("legacy_budget_s", sc.DEFAULT_LEGACY_BUDGET_S)))
+    except Exception as err:  # noqa: BLE001 — the shadow must never fail the deciding run
+        logger.warning("⚠️ %s shadow not started: %s", engine, type(err).__name__)
         return None
 
 
-def _collect_shadow(shadow: Optional[jx.Shadow], cids: List[str], stats: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Shadow answers as rows; a shadow that never started → every item ``not evaluated``."""
-    scores = [jx.JevMetaScore(error="shadow not started") for _ in cids]
-    model = jx.DEFAULT_MODEL
+def _collect_shadow(engine: str, shadow: Optional[sc.ShadowPass], cids: List[str], *, model: str,
+                    stats: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The shadow engine's answers as rows; a shadow that never started (or cannot be collected) → every
+    item ``not evaluated``, labelled with ``model``."""
+    if engine == "jev":
+        scores: List[Any] = [jx.JevMetaScore(error="shadow not started") for _ in cids]
+    else:
+        scores = [sc.MetaScore() for _ in cids]
     if shadow is not None:
         try:
             scores, model = shadow.collect(), shadow.model
         except Exception as err:  # noqa: BLE001
-            logger.warning("⚠️ jev shadow not collected: %s", type(err).__name__)
-    rows = jx.shadow_rows(cids, scores, model=model)
-    stats["jev_evaluated"] = sum(1 for r in rows if r["status"] == "ok")
-    stats["jev_not_evaluated"] = len(rows) - stats["jev_evaluated"]
-    return rows
-
-
-def _start_legacy_shadow(items: List[Dict[str, str]], criteria: Dict[str, Any], *, base_url: str, model: str,
-                         cfg: Dict[str, Any], cache: sc.LLMCache) -> Optional[sc.LegacyShadow]:
-    try:
-        return sc.LegacyShadow(items, criteria, base_url=base_url, model=model,
-                               workers=int(cfg.get("llm_workers", 3)) + 1, cache=cache,
-                               budget_s=float(cfg.get("legacy_budget_s", sc.DEFAULT_LEGACY_BUDGET_S)))
-    except Exception as err:  # noqa: BLE001 — the shadow must never fail the Jev run
-        logger.warning("⚠️ legacy shadow not started: %s", type(err).__name__)
-        return None
-
-
-def _collect_legacy_shadow(shadow: Optional[sc.LegacyShadow], cids: List[str], model: str,
-                           stats: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """``jev+legacy``: legacy's answers as rows; a shadow that never started → every item ``not evaluated``."""
-    scores = [sc.MetaScore() for _ in cids]
-    if shadow is not None:
-        try:
-            scores = shadow.collect()
-        except Exception as err:  # noqa: BLE001
-            logger.warning("⚠️ legacy shadow not collected: %s", type(err).__name__)
-    rows = sc.legacy_shadow_rows(cids, scores, model=model, not_evaluated=jx.NOT_EVALUATED)
-    stats["legacy_evaluated"] = sum(1 for r in rows if r["status"] == "ok")
-    stats["legacy_not_evaluated"] = len(rows) - stats["legacy_evaluated"]
+            logger.warning("⚠️ %s shadow not collected: %s", engine, type(err).__name__)
+    if engine == "jev":
+        rows = jx.shadow_rows(cids, scores, model=model)
+    else:
+        rows = sc.legacy_shadow_rows(cids, scores, model=model, not_evaluated=jx.NOT_EVALUATED)
+    stats[f"{engine}_evaluated"] = sum(1 for r in rows if r["status"] == "ok")
+    stats[f"{engine}_not_evaluated"] = len(rows) - stats[f"{engine}_evaluated"]
     return rows
 
 
@@ -499,27 +486,29 @@ def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: D
             stats["llm_model_served"] = llm_cache.use_version(model, llm.served_model(base_url=base_url, model=model))
             logger.info("🤖 %s is served as %s", model, stats["llm_model_served"])
     shadow_rows: Optional[List[Dict[str, Any]]] = None
-    legacy_shadow: Optional[sc.LegacyShadow] = None
+    legacy_shadow: Optional[sc.ShadowPass] = None
     if use_llm and stage_a:
         items = [{"sender": c.sender_name, "label": c.label or c.url, "domain": c.domain,
                   "path": urlsplit(c.url).path} for c in stage_a]
         if engine in jx.JEV_DECIDES:
             # `jev+legacy` (#394): legacy keeps scoring in the background through stage B, collected below
             if engine == "jev+legacy":
-                legacy_shadow = _start_legacy_shadow(items, criteria, base_url=base_url, model=model, cfg=cfg,
-                                                     cache=llm_cache)
+                legacy_shadow = _start_shadow("legacy", items, criteria, base_url=base_url, model=model, cfg=cfg,
+                                              cache=llm_cache)
             metas = jx.score_metadata_jev(items, criteria, base_url=base_url,
                                           model=cfg.get("jev_model", jx.DEFAULT_MODEL),
                                           workers=int(cfg.get("jev_workers", jx.DEFAULT_WORKERS)))
             stats["stage_a_engine"], stats["jev_calls"] = engine, len(items)
         else:
-            shadow = _start_shadow(items, criteria, base_url=base_url, cfg=cfg) if engine == "both" else None
+            shadow = (_start_shadow("jev", items, criteria, base_url=base_url, model=model, cfg=cfg, cache=llm_cache)
+                      if engine == "both" else None)
             metas = sc.score_metadata(items, criteria, base_url=base_url, model=model,
                                       workers=int(cfg.get("llm_workers", 3)) + 1, cache=llm_cache)
             llm_calls += (llm_cache.misses + 24) // 25
             if engine == "both":
                 stats["stage_a_engine"] = engine
-                shadow_rows = _collect_shadow(shadow, [c.cid for c in stage_a], stats)
+                shadow_rows = _collect_shadow("jev", shadow, [c.cid for c in stage_a], model=jx.DEFAULT_MODEL,
+                                              stats=stats)
         for c, m in zip(stage_a, metas):
             c.meta = m
             c.score = sc.combine(sender_weight=c.sender_weight, domain_bonus=c.domain_bonus, meta=m, content=None)
@@ -580,7 +569,7 @@ def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: D
                     c.summary = c.content.summary
             stats["stage_b_scored"] = sum(1 for c in todo if c.content and c.content.ok)
     if engine == "jev+legacy" and use_llm and stage_a:
-        shadow_rows = _collect_legacy_shadow(legacy_shadow, [c.cid for c in stage_a], model, stats)
+        shadow_rows = _collect_shadow("legacy", legacy_shadow, [c.cid for c in stage_a], model=model, stats=stats)
         llm_cache.flush()
     stats["scored"] = sum(1 for c in cands if c.score is not None)
     stats["llm_calls"] = llm_calls
