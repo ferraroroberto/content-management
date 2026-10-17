@@ -87,7 +87,6 @@ class LLMCache(JsonFileCache):
 TIER_WEIGHT = {"never": 0.0, "rarely": 0.35, "review": 1.0, "usually": 1.25, "always": 1.5}
 NEW_SENDER_WEIGHT = 0.85
 FLOOR_WEIGHT = 0.25
-MULTI_PICK_SENDERS = ("readwise.io", "hbr.org")   # digests where >1 pick per email is normal
 
 
 # ---------------------------------------------------------------------------
@@ -150,9 +149,6 @@ class Priors:
             if mix:
                 return max(mix, key=mix.get)
         return None
-
-    def multi_pick(self, address: str) -> bool:
-        return any(h in (address or "") for h in MULTI_PICK_SENDERS)
 
 
 # ---------------------------------------------------------------------------

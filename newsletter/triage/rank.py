@@ -136,13 +136,11 @@ def apply_vetoes(c: Candidate) -> None:
         c.reason = (c.content.reason if c.content and c.content.ok else (c.meta.reason if c.meta and c.meta.ok else "")) or "below threshold"
 
 
-def select(cands: List[Candidate], rules: Dict[str, Any], *, per_topic: int = 8, runners_n: int = 6,
-           multi_pick_addrs: Optional[set] = None) -> Selection:
+def select(cands: List[Candidate], rules: Dict[str, Any], *, per_topic: int = 8, runners_n: int = 6) -> Selection:
     caps = rules.get("caps", {})
     hbr_cap = int(caps.get("hbr_per_edition", {}).get("target", 3))
     author_cap = int(caps.get("same_author_per_edition", {}).get("target", 2))
     domain_cap = int(caps.get("same_domain_per_edition", {}).get("target", 3))
-    multi = multi_pick_addrs or set()
 
     for c in cands:
         if c.verdict == "pending":
@@ -174,7 +172,7 @@ def select(cands: List[Candidate], rules: Dict[str, Any], *, per_topic: int = 8,
         if domain_n[c.domain] >= domain_cap:
             c.reason = f"domain cap {domain_cap}"
             continue
-        per_email_cap = 3 if c.sender_address in multi or any(h in c.sender_address for h in DIGEST_SENDER_HINTS) else 1
+        per_email_cap = 3 if any(h in c.sender_address for h in DIGEST_SENDER_HINTS) else 1
         if email_n[c.message_id] >= per_email_cap:
             c.reason = "one pick per email"
             continue
