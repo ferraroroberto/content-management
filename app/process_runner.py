@@ -37,6 +37,8 @@ from typing import Optional
 
 import streamlit as st
 
+from config.no_window import NO_WINDOW
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 VENV_PY = REPO_ROOT / ".venv" / "Scripts" / "python.exe"
 LOG_TAIL_MAX = 800  # lines kept in memory per pipeline
@@ -106,8 +108,8 @@ def start_pipeline(name: str, cmd: list[str], *, cwd: Optional[Path] = None) -> 
     creationflags = 0
     if sys.platform == "win32":
         # CREATE_NEW_PROCESS_GROUP so we can send CTRL_BREAK_EVENT for graceful stop;
-        # CREATE_NO_WINDOW so the console-less Streamlit host doesn't flash a window.
-        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
+        # NO_WINDOW so the console-less Streamlit host doesn't flash a window.
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | NO_WINDOW
 
     proc = subprocess.Popen(
         cmd,
@@ -243,7 +245,7 @@ def stop_pipeline(name: str) -> None:
             # process tree instead.
             subprocess.run(
                 ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
-                creationflags=subprocess.CREATE_NO_WINDOW,
+                creationflags=NO_WINDOW,
                 capture_output=True,
                 text=True,
                 check=True,
