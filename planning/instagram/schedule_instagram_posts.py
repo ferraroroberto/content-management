@@ -271,6 +271,15 @@ def _dump_upload_debug(page: Page, tag: str) -> Path:
     return shot
 
 
+def _upload_settle_ms(n_files: int) -> int:
+    """Settle time after an upload, so Meta can render the preview thumbnails.
+
+    A stated guess from the first scheduler commit (a flat 3 s plus 1.5 s per
+    file), never measured.
+    """
+    return 3000 + 1500 * n_files
+
+
 def _upload_files(page: Page, paths: list[Path], *, is_video: bool = False) -> None:
     """Get files into the Meta composer.
 
@@ -337,7 +346,7 @@ def _upload_files(page: Page, paths: list[Path], *, is_video: bool = False) -> N
                 "pre-mounted input[type=file] (no Add-photo/video click needed).",
                 leg0_selector, leg0_n_inputs, len(file_paths),
             )
-            page.wait_for_timeout(3000 + 1500 * len(paths))
+            page.wait_for_timeout(_upload_settle_ms(len(paths)))
             return
         except Exception as err:
             logger.warning(
@@ -360,7 +369,7 @@ def _upload_files(page: Page, paths: list[Path], *, is_video: bool = False) -> N
                     "(probe sees %d media tile(s)) — not falling through.",
                     leg0_selector, already_attached,
                 )
-                page.wait_for_timeout(3000 + 1500 * len(paths))
+                page.wait_for_timeout(_upload_settle_ms(len(paths)))
                 return
 
     # --- Leg 1: click 'Add photo/video' and hope for a direct file chooser ---
@@ -402,7 +411,7 @@ def _upload_files(page: Page, paths: list[Path], *, is_video: bool = False) -> N
     if leg1_chooser is not None:
         leg1_chooser.set_files(file_paths)
         logger.info("📤 Leg 1: %d file(s) sent via direct FileChooser.", len(file_paths))
-        page.wait_for_timeout(3000 + 1500 * len(paths))
+        page.wait_for_timeout(_upload_settle_ms(len(paths)))
         return
 
     # --- Leg 2: intermediate dialog — click 'Upload from computer' inside it ---
@@ -429,7 +438,7 @@ def _upload_files(page: Page, paths: list[Path], *, is_video: bool = False) -> N
             "📤 Leg 2: %d file(s) sent via FileChooser after intermediate dialog.",
             len(file_paths),
         )
-        page.wait_for_timeout(3000 + 1500 * len(paths))
+        page.wait_for_timeout(_upload_settle_ms(len(paths)))
         return
 
     # --- Leg 3: an input[type=file] is already attached somewhere ---
@@ -438,7 +447,7 @@ def _upload_files(page: Page, paths: list[Path], *, is_video: bool = False) -> N
         inp.wait_for(state="attached", timeout=8000)
         inp.set_input_files(file_paths)
         logger.debug("📤 Leg 3: %d file(s) sent via attached input[type=file].", len(file_paths))
-        page.wait_for_timeout(3000 + 1500 * len(paths))
+        page.wait_for_timeout(_upload_settle_ms(len(paths)))
         return
     except Exception as err:
         logger.debug("Leg 3 (attached input[type=file]): %s", err)
