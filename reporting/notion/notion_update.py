@@ -3,8 +3,11 @@ import sys
 import argparse
 from pathlib import Path
 from datetime import datetime, timedelta
+from typing import Any, Optional
 import psycopg2
 from dotenv import load_dotenv
+from notion_client import Client
+from psycopg2.extensions import connection as PgConnection
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -28,14 +31,14 @@ from reporting.notion._client import (
 # with the fully-configured (handlers + formatter) instance.
 logger = logging.getLogger("notion_update")
 
-def configure_logger(debug_mode=False):
+def configure_logger(debug_mode: bool = False) -> logging.Logger:
     """Set up logger with appropriate level based on debug mode."""
     global logger
     log_level = logging.DEBUG if debug_mode else logging.INFO
     logger = setup_logger("notion_update", file_logging=False, level=log_level)
     return logger
 
-def parse_date(date_str):
+def parse_date(date_str: str) -> datetime:
     """Parse date string in either YYYY-MM-DD or YYYYMMDD format."""
     try:
         if '-' in date_str:
@@ -46,7 +49,7 @@ def parse_date(date_str):
         logger.error(f"❌ Error parsing date '{date_str}': {e}")
         raise
 
-def find_row_for_date(notion, database_id, iso_date):
+def find_row_for_date(notion: Client, database_id: str, iso_date: str) -> Optional[dict[str, Any]]:
     """Query the database for the row whose 'date' field equals `iso_date`
     (YYYY-MM-DD). Single-source lookup shared by `search_by_date`,
     `search_by_current_date`, and the next-day 'next' relation lookup below —
@@ -79,7 +82,7 @@ def find_row_for_date(notion, database_id, iso_date):
         logger.error(f"❌ Error searching by date: {e}")
         return None
 
-def search_by_date(notion, database_id, target_date):
+def search_by_date(notion: Client, database_id: str, target_date: str) -> Optional[dict[str, Any]]:
     """Search for a row in the database where the 'date' field matches the day before target date."""
     try:
         # Convert the input date to a datetime object
@@ -97,7 +100,7 @@ def search_by_date(notion, database_id, target_date):
         logger.error(f"❌ Error searching by date: {e}")
         return None
 
-def search_by_current_date(notion, database_id, target_date):
+def search_by_current_date(notion: Client, database_id: str, target_date: str) -> Optional[dict[str, Any]]:
     """Search for a row in the database where the 'date' field matches the target date."""
     try:
         # Convert the input date to a datetime object
@@ -113,7 +116,7 @@ def search_by_current_date(notion, database_id, target_date):
         logger.error(f"❌ Error searching by current date: {e}")
         return None
 
-def extract_fields(page, fields_to_extract):
+def extract_fields(page: dict[str, Any], fields_to_extract: list[str]) -> dict[str, Any]:
     """Extract specified fields from a page."""
     extracted = {}
     properties = page.get('properties', {})
@@ -128,7 +131,10 @@ def extract_fields(page, fields_to_extract):
     
     return extracted
 
-def load_notion_config():
+def load_notion_config() -> tuple[
+    Optional[str], list[dict[str, Any]], list[str], list[str],
+    dict[str, Optional[str]], dict[str, Optional[str]], str, str,
+]:
     """Load Notion parameters from config.json."""
     notion_cfg = load_notion_block()
     api_token = notion_cfg.get("api_token")
@@ -149,7 +155,7 @@ def load_notion_config():
             update_field_mapping_followers, update_field_mapping_posts, 
             posts_table, profile_table)
 
-def parse_arguments():
+def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description='Search and update Notion database entries by date.')
     
@@ -161,7 +167,9 @@ def parse_arguments():
 
     return parser.parse_args()
 
-def get_supabase_data(connection, date_str, posts_table, profile_table):
+def get_supabase_data(
+    connection: PgConnection, date_str: str, posts_table: str, profile_table: str,
+) -> tuple[Optional[dict[str, Any]], Optional[dict[str, Any]]]:
     """Get data from Supabase for the specified date."""
     try:
         # Convert date format
@@ -204,7 +212,11 @@ def get_supabase_data(connection, date_str, posts_table, profile_table):
         logger.error(f"❌ Error getting Supabase data: {e}")
         return None, None
 
-def map_supabase_to_notion_fields(posts_data, profile_data, field_mapping):
+def map_supabase_to_notion_fields(
+    posts_data: Optional[dict[str, Any]],
+    profile_data: Optional[dict[str, Any]],
+    field_mapping: dict[str, Optional[str]],
+) -> dict[str, Any]:
     """Map Supabase fields to Notion fields based on the mapping configuration."""
     mapped_data = {}
     
@@ -230,7 +242,7 @@ def map_supabase_to_notion_fields(posts_data, profile_data, field_mapping):
     
     return mapped_data
 
-def update_notion_page(notion, page_id, updates):
+def update_notion_page(notion: Client, page_id: str, updates: dict[str, Any]) -> Optional[dict[str, Any]]:
     """Update a Notion page with the provided field updates."""
     try:
         logger.debug(f"📝 Updating Notion page: {page_id}")
@@ -254,7 +266,7 @@ def update_notion_page(notion, page_id, updates):
         logger.error(f"❌ Error updating Notion page: {e}")
         return None
 
-def create_tracking_table(connection):
+def create_tracking_table(connection: PgConnection) -> bool:
     """Create the notion_tracking table if it doesn't exist."""
     try:
         cursor = connection.cursor()
@@ -282,7 +294,7 @@ def create_tracking_table(connection):
         connection.rollback()
         return False
 
-def log_field_changes(connection, page_id, changes):
+def log_field_changes(connection: PgConnection, page_id: str, changes: list[dict[str, Any]]) -> bool:
     """Log field changes to the tracking table."""
     try:
         cursor = connection.cursor()
@@ -358,7 +370,9 @@ def _log_row_summaries(date_str, previous_day_row, current_day_row, update_field
         logger.info("  - %s: %s", field_name, value)
 
 
-def build_updates(fields, mapped, extracted, props):
+def build_updates(
+    fields: list[str], mapped: dict[str, Any], extracted: dict[str, Any], props: dict[str, Any],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Build one row's Notion payload and change log.
 
     ``fields`` are the configured field names, ``mapped`` the Supabase values keyed by Notion field,

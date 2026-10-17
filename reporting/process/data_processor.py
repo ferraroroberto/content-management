@@ -5,6 +5,7 @@ import os
 import logging
 import sys
 import argparse
+from typing import Any, Optional
 from pathlib import Path
 import glob
 
@@ -20,14 +21,14 @@ from reporting.process.supabase_uploader import upload_all_dataframes
 # with the fully-configured (handlers + formatter) instance.
 logger = logging.getLogger("data_processor")
 
-def configure_logger(debug_mode=False):
+def configure_logger(debug_mode: bool = False) -> logging.Logger:
     """Set up logger with appropriate level based on debug mode."""
     global logger
     log_level = logging.DEBUG if debug_mode else logging.INFO
     logger = setup_logger("data_processor", file_logging=False, level=log_level)
     return logger
 
-def load_mapping_config():
+def load_mapping_config() -> Optional[dict[str, Any]]:
     """Load mapping configuration from mapping.json file."""
     logger.debug("📂 Loading mapping configuration file")
     config_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config')
@@ -44,7 +45,7 @@ def load_mapping_config():
         logger.error(f"❌ Error: Invalid JSON in mapping configuration file at {config_path}")
         return None
 
-def get_nested_value(data, path):
+def get_nested_value(data: Any, path: str) -> Any:
     """Extract value from nested dictionary using dot notation path."""
     try:
         keys = path.split('.')
@@ -69,13 +70,13 @@ def get_nested_value(data, path):
         logger.debug(f"Error accessing path {path}: {str(e)}")
         return None
 
-def convert_boolean_to_integer(value):
+def convert_boolean_to_integer(value: Any) -> Any:
     """Convert boolean values to integers (1 for True, 0 for False)."""
     if isinstance(value, bool):
         return 1 if value else 0
     return value
 
-def convert_to_date_string(value):
+def convert_to_date_string(value: Any) -> Any:
     """Convert various date/time representations to 'YYYY-MM-DD' string."""
     if value is None:
         return None
@@ -98,7 +99,7 @@ def convert_to_date_string(value):
     except Exception:
         return value
 
-def extract_field_value(data, field_config, field_name=None):
+def extract_field_value(data: Any, field_config: dict[str, Any], field_name: Optional[str] = None) -> Any:
     """Extract field value based on configuration."""
     path = field_config.get('path')
     field_type = field_config.get('type', 'string')
@@ -144,7 +145,7 @@ def extract_field_value(data, field_config, field_name=None):
             return convert_to_date_string(value)
         return convert_boolean_to_integer(value)  # Convert any boolean values
 
-def extract_date_from_filename(file_path):
+def extract_date_from_filename(file_path: str) -> Optional[str]:
     """Extract date from filename like 'linkedin_posts_2025-06-25.json'."""
     filename = os.path.basename(file_path)
     # Try to find date pattern YYYY-MM-DD in filename
@@ -154,7 +155,7 @@ def extract_date_from_filename(file_path):
         return date_match.group(1)
     return None
 
-def process_array_data(data, mapping_config, file_date=None):
+def process_array_data(data: Any, mapping_config: dict[str, Any], file_date: Optional[str] = None) -> list[dict[str, Any]]:
     """Process array data type (like LinkedIn posts)."""
     array_path = mapping_config.get('array_path', 'data')
     array_data = get_nested_value(data, array_path)
@@ -258,7 +259,7 @@ def process_array_data(data, mapping_config, file_date=None):
     
     return results
 
-def get_alternative_mapping_keys(platform_key, mapping_config):
+def get_alternative_mapping_keys(platform_key: str, mapping_config: dict[str, Any]) -> list[str]:
     """Get a list of mapping keys to try, including alternatives with suffixes."""
     alternatives = []
     
@@ -273,7 +274,7 @@ def get_alternative_mapping_keys(platform_key, mapping_config):
     
     return alternatives
 
-def process_json_file(file_path, mapping_config):
+def process_json_file(file_path: str, mapping_config: dict[str, Any]) -> Optional[list[dict[str, Any]]]:
     """Process a single JSON file and extract mapped fields."""
     logger.debug(f"📄 Processing file: {file_path}")
     
@@ -375,14 +376,14 @@ def process_json_file(file_path, mapping_config):
         logger.error(f"❌ Error processing file {file_path}: {e}")
         return None
 
-def get_json_files(results_dir):
+def get_json_files(results_dir: str) -> list[str]:
     """Get all JSON files from the results directory."""
     json_pattern = os.path.join(results_dir, '*.json')
     files = glob.glob(json_pattern)
     logger.info(f"🔍 Found {len(files)} JSON files in results directory")
     return sorted(files)
 
-def order_dataframe_columns(df, mapping_config):
+def order_dataframe_columns(df: pd.DataFrame, mapping_config: dict[str, Any]) -> pd.DataFrame:
     """Order DataFrame columns based on mapping configuration."""
     # Start with required columns in specific order
     ordered_columns = ['date', 'platform', 'data_type']
@@ -402,7 +403,7 @@ def order_dataframe_columns(df, mapping_config):
     # Reorder DataFrame columns
     return df[ordered_columns]
 
-def process_all_files(mapping_config, main_config=None, debug_mode=False, target_date=None):
+def process_all_files(mapping_config: dict[str, Any], main_config: Optional[dict[str, Any]] = None, debug_mode: bool = False, target_date: Optional[str] = None) -> dict[str, pd.DataFrame]:
     """Process all JSON files in the results directory and create separate DataFrames by data type."""
     if main_config is None:
         main_config = load_config()
@@ -505,7 +506,7 @@ def process_all_files(mapping_config, main_config=None, debug_mode=False, target
     
     return dataframes
 
-def save_dataframes(dataframes, main_config=None, output_format='csv'):
+def save_dataframes(dataframes: dict[str, pd.DataFrame], main_config: Optional[dict[str, Any]] = None, output_format: str = 'csv') -> list[str]:
     """Save multiple DataFrames to files in specified format."""
     if main_config is None:
         main_config = load_config()
@@ -537,7 +538,7 @@ def save_dataframes(dataframes, main_config=None, output_format='csv'):
     
     return saved_files
 
-def parse_arguments():
+def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description='Process data from JSON files and create DataFrames.')
     
@@ -551,7 +552,7 @@ def parse_arguments():
     
     return parser.parse_args()
 
-def main(args=None) -> bool:
+def main(args: Optional[argparse.Namespace] = None) -> bool:
     """Main function to execute the data processor.
 
     Returns ``True``/``False`` so ``reporting_pipeline.run_module`` can record

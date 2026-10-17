@@ -6,7 +6,9 @@ from pathlib import Path
 import sys
 import psycopg2
 import psycopg2.extras
+from psycopg2.extensions import connection as PgConnection
 import argparse
+from typing import Any, Optional, Union
 from dotenv import load_dotenv
 
 # Add the parent directory to sys.path to allow importing from sibling packages
@@ -19,7 +21,7 @@ if not logger.handlers:
     # Only set up if no handlers exist (i.e., not already configured)
     logger = setup_logger("supabase_uploader", file_logging=False)
 
-def load_db_config(environment="cloud"):
+def load_db_config(environment: str = "cloud") -> Optional[dict[str, str]]:
     """
     Load database configuration from environment variables.
     
@@ -50,7 +52,7 @@ def load_db_config(environment="cloud"):
     logger.info(f"✅ Database configuration loaded successfully for {environment} environment")
     return db_config
 
-def get_db_connection(db_config=None, environment="cloud"):
+def get_db_connection(db_config: Optional[dict[str, str]] = None, environment: str = "cloud") -> Optional[PgConnection]:
     """
     Get a PostgreSQL database connection.
     
@@ -79,7 +81,7 @@ def get_db_connection(db_config=None, environment="cloud"):
         logger.error(f"❌ Error connecting to database: {e}")
         return None
 
-def execute_sql(connection, sql_content, logger=logger):
+def execute_sql(connection: PgConnection, sql_content: str, logger: logging.Logger = logger) -> bool:
     """Execute a SQL string against ``connection``; commit on success, rollback on error.
 
     Single-source for the "execute SQL, commit / rollback+log" body that was
@@ -100,7 +102,7 @@ def execute_sql(connection, sql_content, logger=logger):
         return False
 
 
-def run_sql_file(connection, path, logger=logger):
+def run_sql_file(connection: PgConnection, path: Union[str, os.PathLike], logger: logging.Logger = logger) -> bool:
     """Read the SQL file at ``path`` and execute it against ``connection``.
 
     Single-source for "read a .sql file next to the caller, then execute it"
@@ -116,7 +118,7 @@ def run_sql_file(connection, path, logger=logger):
 
     return execute_sql(connection, sql_content, logger=logger)
 
-def map_pandas_to_postgres_type(dtype):
+def map_pandas_to_postgres_type(dtype: Any) -> str:
     """Map pandas data types to PostgreSQL data types for table creation."""
     if pd.api.types.is_integer_dtype(dtype):
         return "integer"
@@ -130,7 +132,7 @@ def map_pandas_to_postgres_type(dtype):
         # Default to text for strings and other types
         return "text"
 
-def table_exists(connection, table_name):
+def table_exists(connection: PgConnection, table_name: str) -> bool:
     """Check if a table exists in the database."""
     try:
         with connection.cursor() as cursor:
@@ -145,7 +147,7 @@ def table_exists(connection, table_name):
         logger.error(f"❌ Error checking if table {table_name} exists: {e}")
         return False
 
-def get_table_creation_sql(table_name, df, primary_keys):
+def get_table_creation_sql(table_name: str, df: pd.DataFrame, primary_keys: list[str]) -> str:
     """Generate SQL statement for table creation."""
     column_defs = []
     for col_name, dtype in df.dtypes.items():
@@ -162,7 +164,7 @@ def get_table_creation_sql(table_name, df, primary_keys):
     create_table_sql = f'CREATE TABLE IF NOT EXISTS "{table_name}" ({", ".join(column_defs)}{pk_constraint});'
     return create_table_sql
 
-def create_table(connection, table_name, df, primary_keys):
+def create_table(connection: PgConnection, table_name: str, df: pd.DataFrame, primary_keys: list[str]) -> bool:
     """Create a new table in the database based on DataFrame structure."""
     try:
         # Generate CREATE TABLE SQL
@@ -179,7 +181,7 @@ def create_table(connection, table_name, df, primary_keys):
         logger.error(f"❌ Error creating table {table_name}: {e}")
         return False
 
-def upload_dataframe_to_db(df, table_name, primary_keys, connection=None):
+def upload_dataframe_to_db(df: pd.DataFrame, table_name: str, primary_keys: list[str], connection: Optional[PgConnection] = None) -> bool:
     """Upload DataFrame to database, creating table if it doesn't exist."""
     connection_created = False
     if connection is None:
@@ -278,7 +280,7 @@ PRIMARY_KEYS = {
 }
 
 
-def get_primary_keys(data_type):
+def get_primary_keys(data_type: str) -> list[str]:
     """Primary key columns for a ``posts`` or ``profile`` table.
 
     Raises ``ValueError`` for any other data type rather than guessing a column.
@@ -289,7 +291,7 @@ def get_primary_keys(data_type):
         raise ValueError(f"No primary key defined for data type '{data_type}'") from None
 
 
-def upload_all_dataframes(dataframes, environment="cloud", db_config=None):
+def upload_all_dataframes(dataframes: dict[str, pd.DataFrame], environment: str = "cloud", db_config: Optional[dict[str, str]] = None) -> bool:
     """
     Upload all DataFrames to the database.
     
@@ -351,7 +353,7 @@ def upload_all_dataframes(dataframes, environment="cloud", db_config=None):
             connection.close()
             logger.debug("Database connection closed")
 
-def main():
+def main() -> None:
     """Main function for testing the module independently."""
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Upload data to Supabase database")

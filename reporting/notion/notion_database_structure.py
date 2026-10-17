@@ -5,7 +5,9 @@ import argparse
 from pathlib import Path
 import os
 import pandas as pd
+from notion_client import Client
 from datetime import datetime
+from typing import Any, Optional
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -23,14 +25,14 @@ from reporting.notion._client import (
 # with the fully-configured (handlers + formatter) instance.
 logger = logging.getLogger("notion_database_structure")
 
-def configure_logger(debug_mode=False):
+def configure_logger(debug_mode: bool = False) -> logging.Logger:
     """Set up logger with appropriate level based on debug mode."""
     global logger
     log_level = logging.DEBUG if debug_mode else logging.INFO
     logger = setup_logger("notion_database_structure", file_logging=False, level=log_level)
     return logger
 
-def get_database_structure(notion, database_id):
+def get_database_structure(notion: Client, database_id: str) -> Optional[dict[str, Any]]:
     """Retrieve the structure of a Notion database."""
     try:
         logger.debug(f"📊 Retrieving database structure for ID: {database_id}")
@@ -95,7 +97,7 @@ def get_database_structure(notion, database_id):
         logger.error(f"❌ Error retrieving database structure: {e}")
         return None
 
-def get_database_content(notion, database_id, max_pages=1):
+def get_database_content(notion: Client, database_id: str, max_pages: int = 1) -> Optional[list[dict[str, Any]]]:
     """Retrieve the content of a Notion database (limited to 100 records for sampling)."""
     try:
         logger.debug(f"📋 Retrieving sample database content for ID: {database_id} (100 records max)")
@@ -122,7 +124,9 @@ def get_database_content(notion, database_id, max_pages=1):
         logger.error(f"❌ Error retrieving database content: {e}")
         return None
 
-def create_dataframe_from_content(database_content, database_structure):
+def create_dataframe_from_content(
+    database_content: Optional[list[dict[str, Any]]], database_structure: Optional[dict[str, Any]],
+) -> Optional[pd.DataFrame]:
     """Convert database content to a pandas DataFrame."""
     if not database_content or not database_structure:
         logger.warning("⚠️ Cannot create DataFrame: Missing database content or structure")
@@ -152,7 +156,9 @@ def create_dataframe_from_content(database_content, database_structure):
     logger.info(f"✅ Created DataFrame with {len(df)} rows and {len(df.columns)} columns")
     return df
 
-def save_database_info(database_structure, database_df, output_dir=None):
+def save_database_info(
+    database_structure: dict[str, Any], database_df: Optional[pd.DataFrame], output_dir: Optional[str] = None,
+) -> str:
     """Save database structure and content to files."""
     if output_dir is None:
         # Create output directory
@@ -185,11 +191,11 @@ def save_database_info(database_structure, database_df, output_dir=None):
 
 DATABASE_LIST_PATH = os.path.join(os.path.dirname(__file__), "notion_database_list.json")
 
-def load_notion_config():
+def load_notion_config() -> Optional[str]:
     """Load Notion API token from config.json."""
     return load_notion_block().get("api_token")
 
-def load_databases_for_replication():
+def load_databases_for_replication() -> list[dict[str, Any]]:
     """Load databases marked for replication from notion_database_list.json."""
     try:
         with open(DATABASE_LIST_PATH, "r") as f:
@@ -207,7 +213,7 @@ def load_databases_for_replication():
         logger.error(f"❌ Error parsing database list JSON: {e}")
         return []
 
-def parse_arguments():
+def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description='Retrieve Notion database structure and sample content.')
     
@@ -216,7 +222,7 @@ def parse_arguments():
     
     return parser.parse_args()
 
-def main(args=None):
+def main(args: Optional[argparse.Namespace] = None) -> None:
     """Main function to execute the Notion database structure retrieval."""
     if args is None:
         # Use command-line arguments if available, otherwise parse them

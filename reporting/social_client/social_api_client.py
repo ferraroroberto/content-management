@@ -8,6 +8,7 @@ import sys
 import time
 import argparse
 import msvcrt
+from typing import Any, Optional
 from pathlib import Path
 
 # Add the parent directory to sys.path to allow importing from sibling packages
@@ -30,14 +31,14 @@ def interruptible_sleep(seconds: int) -> bool:
         time.sleep(0.1)
     return False
 
-def configure_logger(debug_mode=False):
+def configure_logger(debug_mode: bool = False) -> logging.Logger:
     """Set up logger with appropriate level based on debug mode."""
     global logger
     log_level = logging.DEBUG if debug_mode else logging.INFO
     logger = setup_logger("social_api_client", file_logging=False, level=log_level)
     return logger
 
-def check_file_exists_for_date(platform_key, config, date_str):
+def check_file_exists_for_date(platform_key: str, config: dict[str, Any], date_str: str) -> tuple[bool, str]:
     """Check if a file already exists for the specified date for this platform."""
     # Determine platform and data type from platform_key
     parts = platform_key.split('_')
@@ -140,7 +141,7 @@ def _fetch_scrape_with_retries(fetch_fn, platform_key, reference_date):
     return None
 
 
-def get_api_data(platform_key, config, reference_date=None):
+def get_api_data(platform_key: str, config: Optional[dict[str, Any]], reference_date: Optional[str] = None) -> Optional[Any]:
     """Fetch data for the specified platform with retries and exponential backoff.
 
     Dispatches on ``api_config['source']``:
@@ -209,7 +210,7 @@ def get_api_data(platform_key, config, reference_date=None):
                 logger.error(f"❌ All {retries} attempts failed for {platform_key}")
                 return None
 
-def save_results(platform_key, data, config, date_str):
+def save_results(platform_key: str, data: Any, config: dict[str, Any], date_str: str) -> Optional[str]:
     """Save the results to a JSON file in the results directory."""
     if not data:
         logger.warning(f"⚠️ No data to save for {platform_key}")
@@ -256,7 +257,13 @@ def save_results(platform_key, data, config, date_str):
     logger.info(f"✅ Results saved to {file_path}")
     return file_path
 
-def process_all_endpoints(config, debug_mode=False, specific_platform=None, skip_existing=True, reference_date=None):
+def process_all_endpoints(
+    config: Optional[dict[str, Any]],
+    debug_mode: bool = False,
+    specific_platform: Optional[str] = None,
+    skip_existing: bool = True,
+    reference_date: Optional[str] = None,
+) -> None:
     """Process all API endpoints defined in the config file or a specific one if provided."""
     if not config:
         logger.error("❌ Failed to load configuration")
@@ -324,7 +331,7 @@ def process_all_endpoints(config, debug_mode=False, specific_platform=None, skip
         logger.info(f"🔄 {skipped} endpoints were skipped - data already collected for {reference_date}")
     logger.info(f"📈 {completed} new data collections performed")
 
-def parse_arguments():
+def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description='Social API Client to fetch data from various platforms.')
     
@@ -341,7 +348,7 @@ def parse_arguments():
     
     return parser.parse_args()
 
-def main(args=None):
+def main(args: Optional[argparse.Namespace] = None) -> None:
     """Main function to execute the social API client."""
     if args is None:
         # Use command-line arguments if available, otherwise parse them
