@@ -47,6 +47,7 @@ from reporting.notion.editorial import (  # noqa: E402
     init_notion_client,
     set_field,
 )
+from planning._session_base import results_dir  # noqa: E402
 from planning._wip_rows import resolve_image_path  # noqa: E402
 from planning.substack.substack_session import (  # noqa: E402
     LoginRequiredError,
@@ -396,7 +397,7 @@ def publish_note_flow(
             return 8
 
         if dry_run:
-            out_dir = Path(__file__).resolve().parent.parent.parent / "results" / "substack"
+            out_dir = results_dir("substack")
             out_dir.mkdir(parents=True, exist_ok=True)
             # Tight viewport-only shot of the composer (full_page=False so we see what the user sees).
             shot = out_dir / note.dry_run_shot

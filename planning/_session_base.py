@@ -43,6 +43,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = REPO_ROOT / "config" / "config.json"
 
 
+def results_dir(name: str) -> Path:
+    """Return ``<repo>/results/<name>`` — the one place that derives it from ``REPO_ROOT``."""
+    return REPO_ROOT / "results" / name
+
+
 class LoginRequiredError(RuntimeError):
     """Raised when a saved platform session is no longer valid.
 
@@ -225,7 +230,7 @@ class PlatformSession:
 
     def screenshot_failure(self, label: str) -> Path:
         """Save a debug screenshot under ``results/<platform_name>/``."""
-        out_dir = REPO_ROOT / "results" / self.platform_name
+        out_dir = results_dir(self.platform_name)
         out_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
         path = out_dir / f"{ts}-{label}.png"
@@ -245,6 +250,7 @@ __all__ = [
     "configure_logger",
     "load_config_block",
     "load_notion_token",
+    "results_dir",
     "_resolve_user_data_dir",
     "_user_data_dir_initialized",
 ]

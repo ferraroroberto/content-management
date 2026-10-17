@@ -34,6 +34,7 @@ from typing import Optional
 from playwright.sync_api import Page
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from planning._session_base import results_dir  # noqa: E402
 from planning.threads.threads_composer import (  # noqa: E402
     cancel_composer,
     click_calendar_day,
@@ -119,7 +120,7 @@ def schedule_post(
     click_calendar_day(page, row.day)
     set_calendar_time(page, cfg["post_hour_local"], cfg["post_minute_local"])
 
-    out_dir = Path(__file__).resolve().parent.parent.parent / "results" / "threads"
+    out_dir = results_dir("threads")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if dry_run:

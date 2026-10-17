@@ -38,6 +38,7 @@ from typing import Optional
 from playwright.sync_api import Page, TimeoutError as PWTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from planning._session_base import results_dir  # noqa: E402
 from planning.instagram.instagram_composer import (  # noqa: E402
     cancel_composer,
     dismiss_meta_verified_modal,
@@ -233,7 +234,7 @@ def _dump_upload_debug(page: Page, tag: str) -> Path:
     triage doesn't need a live debug session. The returned path is included
     in the raised exception message.
     """
-    out_dir = Path(__file__).resolve().parent.parent.parent / "results" / "instagram"
+    out_dir = results_dir("instagram")
     out_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     shot = out_dir / f"{ts}-upload-debug-{tag}.png"
@@ -801,7 +802,7 @@ def schedule_story(
         page, row.day, cfg["story_hour_local"], cfg["story_minute_local"]
     )
 
-    out_dir = Path(__file__).resolve().parent.parent.parent / "results" / "instagram"
+    out_dir = results_dir("instagram")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if dry_run:
@@ -846,7 +847,7 @@ def schedule_post(
         page, row.day, cfg["post_hour_local"], cfg["post_minute_local"]
     )
 
-    out_dir = Path(__file__).resolve().parent.parent.parent / "results" / "instagram"
+    out_dir = results_dir("instagram")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if dry_run:
