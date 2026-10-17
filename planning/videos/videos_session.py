@@ -25,7 +25,6 @@ What lives here:
 from __future__ import annotations
 
 import ctypes
-import json
 import logging
 import os
 import re
@@ -45,6 +44,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.no_window import NO_WINDOW  # noqa: E402
 from planning._session_base import configure_logger as _configure_logger  # noqa: E402
 from planning._session_base import LoginRequiredError, load_config_block, load_notion_token  # noqa: E402
+from podcast.media import ffprobe_json, run_ffmpeg  # noqa: E402
 from reporting.notion.editorial import (  # noqa: E402
     get_field,
     get_page_body_text,
@@ -347,18 +347,9 @@ def _probe_video(path: Path) -> Optional[dict]:
     None means we could not probe (ffprobe missing or errored); callers then skip
     transcoding and log a warning rather than guess.
     """
-    ffprobe = shutil.which("ffprobe")
-    if not ffprobe:
-        return None
     try:
-        proc = subprocess.run(
-            [ffprobe, "-v", "error", "-show_format", "-show_streams",
-             "-of", "json", str(path)],
-            check=True, capture_output=True, timeout=120,
-            creationflags=NO_WINDOW,
-        )
-        data = json.loads(proc.stdout or b"{}")
-    except (OSError, subprocess.SubprocessError, ValueError) as err:
+        data = ffprobe_json(path, "format=size,bit_rate:stream=codec_type")
+    except (OSError, RuntimeError, subprocess.SubprocessError, ValueError) as err:
         logger.warning("⚠️ ffprobe failed on %s: %s", path.name, err)
         return None
 
@@ -386,15 +377,7 @@ def probe_duration_seconds(path: Path) -> float:
     ``/video/upload/{id}/transcode`` call requires the source duration
     up front, before Mux has transcoded anything to derive it from.
     """
-    ffprobe = shutil.which("ffprobe")
-    if not ffprobe:
-        raise RuntimeError("ffprobe not found on PATH — required to read the clip's duration.")
-    proc = subprocess.run(
-        [ffprobe, "-v", "error", "-show_entries", "format=duration", "-of", "json", str(path)],
-        check=True, capture_output=True, timeout=60,
-        creationflags=NO_WINDOW,
-    )
-    data = json.loads(proc.stdout or b"{}")
+    data = ffprobe_json(path, "format=duration")
     duration = (data.get("format") or {}).get("duration")
     if duration is None:
         raise RuntimeError(f"ffprobe returned no duration for {path}.")
@@ -433,13 +416,10 @@ def _run_ffmpeg_transcode(src: Path, dst: Path, tcfg: dict) -> bool:
     audio, and writes ``+faststart`` for streaming. On any failure the partial
     output is removed and False is returned so the caller falls back to the master.
     """
-    ffmpeg = shutil.which("ffmpeg")
-    if not ffmpeg:
-        return False
     target = tcfg["target_bitrate_mbps"]
     dst.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
-        ffmpeg, "-y", "-i", str(src),
+        "-i", str(src),
         "-map", "0:v:0", "-map", "0:a:0?",
         "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p",
         "-b:v", f"{target}M", "-maxrate", f"{target}M", "-bufsize", f"{target * 2}M",
@@ -449,13 +429,9 @@ def _run_ffmpeg_transcode(src: Path, dst: Path, tcfg: dict) -> bool:
     ]
     logger.info("🎞️ Transcoding %s → platform-safe (%d Mbps cap)…", src.name, target)
     try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=1800, creationflags=NO_WINDOW)
-    except (OSError, subprocess.SubprocessError) as err:
-        stderr = getattr(err, "stderr", b"") or b""
-        logger.error(
-            "❌ ffmpeg transcode failed for %s: %s — falling back to master.",
-            src.name, stderr.decode("utf-8", "replace")[-500:] or err,
-        )
+        run_ffmpeg(cmd, timeout=1800)
+    except (OSError, RuntimeError, subprocess.SubprocessError) as err:
+        logger.error("❌ ffmpeg transcode failed for %s: %s — falling back to master.", src.name, err)
         try:
             dst.unlink(missing_ok=True)
         except OSError:
