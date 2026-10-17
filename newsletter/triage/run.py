@@ -645,8 +645,7 @@ def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: D
     stats["scored"] = sum(1 for c in cands if c.score is not None)
     stats["llm_calls"] = llm_calls
 
-    multi = {x for x in priors.ranked if priors.multi_pick(x)}
-    sel = rk.select(cands, rules, multi_pick_addrs=multi)
+    sel = rk.select(cands, rules)
     stats["selected"] = len(sel.all_picks())
     stats["verdicts"] = dict(Counter(c.verdict for c in cands))
     stats["elapsed_s"] = round(time.monotonic() - t0, 1)
