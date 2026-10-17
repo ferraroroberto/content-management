@@ -124,12 +124,9 @@ def discover(folder: Path, host_first: str, overrides: dict[str, Optional[str]])
 
 
 def _ffprobe_format(path: Path) -> dict:
-    from podcast.media import NO_WINDOW, _tool  # noqa: PLC0415
+    from podcast.media import ffprobe_json  # noqa: PLC0415
 
-    out = subprocess.run([_tool("ffprobe"), "-v", "error", "-show_entries", "format=duration:format_tags=creation_time",
-                          "-of", "json", str(path)], check=True, capture_output=True, timeout=120,
-                         creationflags=NO_WINDOW)
-    return json.loads(out.stdout or b"{}").get("format") or {}
+    return ffprobe_json(path, "format=duration:format_tags=creation_time").get("format") or {}
 
 
 def duration(path: Path) -> float:

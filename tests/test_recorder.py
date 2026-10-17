@@ -19,6 +19,7 @@ if str(REPO_ROOT) not in sys.path:
 from starlette.testclient import TestClient  # noqa: E402
 from starlette.websockets import WebSocketDisconnect  # noqa: E402
 
+from config.no_window import NO_WINDOW  # noqa: E402
 from recorder import server, store  # noqa: E402
 from recorder.store import ChunkStore, MissingChunks  # noqa: E402
 
@@ -84,7 +85,7 @@ class StoreTests(unittest.TestCase):
         subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
                         "testsrc=size=320x180:rate=30:duration=3", "-f", "lavfi", "-i",
                         "sine=frequency=440:duration=3", "-c:v", "libx264", "-c:a", audio, "-shortest",
-                        *fmt, str(src)], check=True, creationflags=store.NO_WINDOW)
+                        *fmt, str(src)], check=True, creationflags=NO_WINDOW)
         data = src.read_bytes()
         cuts = [0, 1000, 7777, len(data) // 2, len(data)]
         rid = _rid()

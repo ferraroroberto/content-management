@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import json
 import logging
+import subprocess
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Optional
@@ -45,7 +46,7 @@ from typing import Optional
 import numpy as np
 
 from podcast.episode import SYNC_FILE, VIDEO_DIR, Episode, episode_path, work_dir
-from podcast.media import read_wav, run_ffmpeg
+from podcast.media import ffprobe_json, read_wav, run_ffmpeg
 from podcast.metrics import StageRecord
 
 logger = logging.getLogger("podcast.sync")
@@ -273,12 +274,13 @@ def references(ep: Episode) -> dict[str, Reference]:
 
 
 def video_fps(path: Path) -> float:
-    from podcast.media import _tool, NO_WINDOW  # noqa: PLC0415
-    import subprocess  # noqa: PLC0415
-    out = subprocess.run([_tool("ffprobe"), "-v", "error", "-select_streams", "v:0", "-show_entries",
-                          "stream=avg_frame_rate", "-of", "default=nw=1:nk=1", str(path)],
-                         capture_output=True, text=True, creationflags=NO_WINDOW).stdout.strip()
-    num, _, den = out.partition("/")
+    """Average frame rate of the first video stream; 30 when ffprobe cannot read it."""
+    try:
+        streams = ffprobe_json(path, "stream=avg_frame_rate", streams="v:0").get("streams") or [{}]
+        rate = streams[0].get("avg_frame_rate") or ""
+    except subprocess.CalledProcessError:
+        rate = ""
+    num, _, den = rate.partition("/")
     try:
         fps = float(num) / float(den or 1)
     except ValueError:
