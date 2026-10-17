@@ -28,7 +28,8 @@ if str(REPO_ROOT) not in sys.path:
 import uvicorn  # noqa: E402
 
 from recorder import server  # noqa: E402
-from recorder.store import NO_WINDOW, ChunkStore  # noqa: E402
+from config.no_window import NO_WINDOW  # noqa: E402
+from recorder.store import ChunkStore  # noqa: E402
 
 FFMPEG = shutil.which("ffmpeg") and shutil.which("ffprobe")
 CHROME_ARGS = [
