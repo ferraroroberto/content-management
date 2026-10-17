@@ -96,14 +96,14 @@ attach helper. See:
   tile per file. `Create reel` opens a full-page wizard at
   `/latest/reels_composer/`: `Add Video` → fill caption → footer `Next` (which
   stays `aria-disabled` until the upload hits 100%, polled via
-  `_wait_reel_footer_enabled`) → `Scheduling options` → pick `Schedule` → set
+  `wait_reel_footer_enabled`) → `Scheduling options` → pick `Schedule` → set
   date/time → footer `Schedule`. The date field is a segmented editor pre-set to
   today — *typing* corrupts it and unmounts the form, so the date is set by
-  clicking the target day in its calendar popup (`_set_reel_schedule_datetime`);
+  clicking the target day in its calendar popup (`set_reel_schedule_datetime`);
   the hours/minutes/meridiem triplet is typed as usual. **Success signal:** after
   the final `Schedule` click Meta does *not* always navigate back to the planner —
   it often stays on `/latest/reels_composer/` behind an in-place `Reel scheduled`
-  confirmation dialog, so `_wait_reel_composer_closes` treats *either* the URL
+  confirmation dialog, so `wait_reel_composer_closes` treats *either* the URL
   leaving the composer *or* that dialog appearing as success, then clicks its
   `Done` button (issue #125). A URL-only check false-FAILs an already-scheduled
   reel.
