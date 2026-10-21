@@ -6,3 +6,19 @@ layer       = "working-pipe"
 icon        = "📝"
 description = "Content surfaces: reporting, planning, newsletter, podcast and video."
 tag         = ["→", "Notion"]
+
+# Vendored byte-for-byte from project-scaffolding. sha = the source repo commit
+# the copy was taken from; /propagate-vendored hash-verifies + bumps.
+[vendored]
+static_ratchet = { src = "scripts/static_ratchet.py", sha = "2f1e2f7c81b9a91a062271881fc87830104808ae", dest = "scripts/static_ratchet.py" }
+
+# Static-analysis ratchet (project-scaffolding docs/static-ratchet.md): fails the
+# pre-ship gate on a new duplicate block or unused import/variable, never on the
+# baselined debt. gmail_readonly/ and google_oauth_common/ are vendored copies
+# (duplicates of their source repo by design), so they cannot be fixed here.
+[static_ratchet]
+enabled    = true
+baseline   = ".static-ratchet-baseline.json"
+min_lines  = 10
+min_tokens = 100
+exclude    = ["gmail_readonly/**", "google_oauth_common/**"]
