@@ -716,6 +716,23 @@ instead, which understands both styles:
 & .\.venv\Scripts\python.exe -m pytest tests -v
 ```
 
+The gate's second stage is the static-analysis ratchet. It compares the repo's
+unused imports, unused variables and duplicated blocks with the committed
+baseline (`.static-ratchet-baseline.json`) and fails on any **new** one, so the
+debt can only shrink. It needs Node (`npx` runs `jscpd`; the first run downloads
+it) and `ruff` in the venv (`pip install -r requirements.txt`). Run it through
+the wrapper, which reports a detector that could not run as **NOT CONFIRMED**
+(a failure, never a pass or a skip):
+
+```powershell
+& .\.venv\Scripts\python.exe -m scripts.static_ratchet_gate
+```
+
+After removing baselined debt, shrink the baseline in the same PR with
+`& .\.venv\Scripts\python.exe scripts/static_ratchet.py --update-baseline`.
+`gmail_readonly/` and `google_oauth_common/` are excluded: they are vendored
+copies. See the scaffold's `docs/static-ratchet.md` for the exit codes and keys.
+
 ## 📝 License and contact
 
 This project is free software for personal use from Roberto Ferraro 😇

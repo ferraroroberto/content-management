@@ -66,3 +66,7 @@ google-auth-oauthlib>=1.2
 numpy
 Pillow
 python-docx
+# Dev-only: the static-analysis ratchet's unused-import/variable detector
+# (scripts/static_ratchet.py runs it as `python -m ruff`; exact pin so a new
+# release can't change what the baseline counts).
+ruff==0.17.1
