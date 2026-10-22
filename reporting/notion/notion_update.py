@@ -170,14 +170,19 @@ def parse_arguments() -> argparse.Namespace:
 def get_supabase_data(
     connection: PgConnection, date_str: str, posts_table: str, profile_table: str,
 ) -> tuple[Optional[dict[str, Any]], Optional[dict[str, Any]]]:
-    """Get data from Supabase for the specified date."""
+    """Get data from Supabase for the specified date.
+
+    Raises on a connection/query failure instead of swallowing it — ``(None,
+    None)`` already means "queries ran, no row for this date", a distinct,
+    successful outcome from "the read itself failed" (issue #445). Callers
+    that want a graceful pipeline-step failure catch around this call.
+    """
+    # Convert date format
+    date_obj = parse_date(date_str)
+    formatted_date = date_obj.strftime("%Y-%m-%d")
+
+    cursor = connection.cursor()
     try:
-        # Convert date format
-        date_obj = parse_date(date_str)
-        formatted_date = date_obj.strftime("%Y-%m-%d")
-        
-        cursor = connection.cursor()
-        
         # Get posts data from the CURRENT day (no lag)
         logger.debug(f"🔍 Querying {posts_table} for current date: {formatted_date}")
         posts_query = f"SELECT * FROM {posts_table} WHERE date = %s LIMIT 1"
@@ -185,7 +190,7 @@ def get_supabase_data(
         posts_columns = [desc[0] for desc in cursor.description]
         posts_row = cursor.fetchone()
         posts_data = dict(zip(posts_columns, posts_row)) if posts_row else None
-        
+
         # Get profile data from the CURRENT day
         logger.debug(f"🔍 Querying {profile_table} for current date: {formatted_date}")
         profile_query = f"SELECT * FROM {profile_table} WHERE date = %s LIMIT 1"
@@ -193,24 +198,20 @@ def get_supabase_data(
         profile_columns = [desc[0] for desc in cursor.description]
         profile_row = cursor.fetchone()
         profile_data = dict(zip(profile_columns, profile_row)) if profile_row else None
-        
+    finally:
         cursor.close()
-        
-        if posts_data:
-            logger.info(f"✅ Found posts data for current date: {formatted_date}")
-        else:
-            logger.warning(f"⚠️ No posts data found for current date: {formatted_date}")
-            
-        if profile_data:
-            logger.info(f"✅ Found profile data for current date: {formatted_date}")
-        else:
-            logger.warning(f"⚠️ No profile data found for current date: {formatted_date}")
-        
-        return posts_data, profile_data
-        
-    except Exception as e:
-        logger.error(f"❌ Error getting Supabase data: {e}")
-        return None, None
+
+    if posts_data:
+        logger.info(f"✅ Found posts data for current date: {formatted_date}")
+    else:
+        logger.warning(f"⚠️ No posts data found for current date: {formatted_date}")
+
+    if profile_data:
+        logger.info(f"✅ Found profile data for current date: {formatted_date}")
+    else:
+        logger.warning(f"⚠️ No profile data found for current date: {formatted_date}")
+
+    return posts_data, profile_data
 
 def map_supabase_to_notion_fields(
     posts_data: Optional[dict[str, Any]],
@@ -566,7 +567,15 @@ def main() -> bool:
 
     # Get data from Supabase
     logger.info("📊 Fetching data from Supabase")
-    posts_data, profile_data = get_supabase_data(supabase_connection, args.date, posts_table, profile_table)
+    try:
+        posts_data, profile_data = get_supabase_data(supabase_connection, args.date, posts_table, profile_table)
+    except Exception as e:
+        # Distinct from "query ran, no row for this date" (logged as a warning
+        # below, in get_supabase_data): the read itself failed, so this step
+        # must not report green (issue #445).
+        logger.error(f"❌ Failed to read Supabase data for {args.date}: {e}")
+        supabase_connection.close()
+        return False
 
     # Map Supabase fields to Notion fields for both types
     mapped_posts_data = map_supabase_to_notion_fields(posts_data, profile_data, update_field_mapping_posts)
