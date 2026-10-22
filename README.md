@@ -748,6 +748,21 @@ After rewording a marker away, shrink the baseline in the same PR with
 `& .\.venv\Scripts\python.exe scripts/docs_ratchet.py --update-baseline`. See the
 scaffold's `docs/docs-ratchet.md` for the exit codes and keys.
 
+The fourth stage is the comment ratchet. It counts `#NNN` issue references
+inside product-code comments per file (a comment states the present-tense why;
+history lives in git, PRs and issues) and fails when a file's count rises above
+`.comment-ratchet-baseline.json`. The wrapper reports a file it could not scan
+as **NOT CONFIRMED** (a failure, never a pass or a skip):
+
+```powershell
+& .\.venv\Scripts\python.exe -m scripts.comment_ratchet_gate
+```
+
+After rewording a reference away, shrink the baseline in the same PR with
+`& .\.venv\Scripts\python.exe scripts/comment_ratchet.py --update-baseline`.
+`gmail_readonly/` and `google_oauth_common/` are excluded: they are vendored
+copies. See the scaffold's `docs/comment-ratchet.md` for the exit codes and keys.
+
 ## 📝 License and contact
 
 This project is free software for personal use from Roberto Ferraro 😇
