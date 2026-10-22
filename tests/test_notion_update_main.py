@@ -53,6 +53,12 @@ class MainTests(unittest.TestCase):
                        FOLLOWER_MAP, POSTS_MAP, "posts", "profile")
         self.posts_data = {"impressions": 25, "likes": 1}
         self.profile_data = {"followers": 130}
+        self.supabase_read_error: Exception | None = None
+
+    def _get_supabase_data(self, *_a):
+        if self.supabase_read_error is not None:
+            raise self.supabase_read_error
+        return self.posts_data, self.profile_data
 
     def _update(self, notion, page_id, updates):
         self.update_calls.append((page_id, updates))
@@ -69,7 +75,7 @@ class MainTests(unittest.TestCase):
             "search_by_date": lambda *a: self.previous,
             "search_by_current_date": lambda *a: self.current,
             "get_db_connection": lambda: self.conn,
-            "get_supabase_data": lambda *a: (self.posts_data, self.profile_data),
+            "get_supabase_data": self._get_supabase_data,
             "find_row_for_date": lambda *a: self.next_row,
             "update_notion_page": self._update,
             "create_tracking_table": lambda conn: self.logged.append(("tracking",)),
@@ -143,6 +149,50 @@ class MainTests(unittest.TestCase):
         self.current = _row("cur-1", {})
         self.conn = None
         self.assertFalse(self._run())
+
+    def test_a_failed_supabase_read_returns_false_without_writing(self) -> None:
+        # issue #445: a query error must not be folded into "no row found"
+        # (which still returns True) — it is a distinct, reported failure.
+        self.supabase_read_error = RuntimeError('relation "posts" does not exist')
+        self.assertFalse(self._run())
+        self.assertEqual(self.update_calls, [])
+        self.assertEqual(self.logged, [])
+        self.conn.close.assert_called_once_with()
+
+
+class GetSupabaseDataTests(unittest.TestCase):
+    """Direct tests of ``get_supabase_data``'s success/no-row/error distinction."""
+
+    def _connection(self, posts_row, profile_row, *, execute_error=None):
+        cursor = mock.Mock(name="cursor")
+        cursor.description = [("col",)]
+        if execute_error is not None:
+            cursor.execute.side_effect = execute_error
+        else:
+            cursor.fetchone.side_effect = [posts_row, profile_row]
+        connection = mock.Mock(name="connection")
+        connection.cursor.return_value = cursor
+        return connection, cursor
+
+    def test_successful_query_with_no_rows_returns_none_none(self) -> None:
+        connection, cursor = self._connection(None, None)
+        result = nu.get_supabase_data(connection, "2026-01-05", "posts", "profile")
+        self.assertEqual(result, (None, None))
+        cursor.close.assert_called_once_with()
+
+    def test_successful_query_maps_rows_to_dicts(self) -> None:
+        connection, cursor = self._connection((1,), (2,))
+        self.assertEqual(
+            nu.get_supabase_data(connection, "2026-01-05", "posts", "profile"),
+            ({"col": 1}, {"col": 2}),
+        )
+
+    def test_query_failure_propagates_instead_of_returning_none_none(self) -> None:
+        connection, cursor = self._connection(None, None, execute_error=RuntimeError("boom"))
+        with self.assertRaises(RuntimeError):
+            nu.get_supabase_data(connection, "2026-01-05", "posts", "profile")
+        # Cursor is still closed on the failure path.
+        cursor.close.assert_called_once_with()
 
 
 if __name__ == "__main__":
