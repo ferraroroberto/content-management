@@ -2,6 +2,7 @@
   "version": 1,
   "tools": {"jscpd": "5.4.0", "ruff": "0.17.1"},
   "entries": [
+    {"key": "dup:4306bb086600:scripts/docs_ratchet.py|scripts/static_ratchet.py", "files": ["scripts/docs_ratchet.py", "scripts/static_ratchet.py"]},
     {"key": "dup:9758e925d0c5:tests/test_newsletter_classifier_unclassified.py|tests/test_newsletter_classifier_unclassified.py", "files": ["tests/test_newsletter_classifier_unclassified.py", "tests/test_newsletter_classifier_unclassified.py"]},
     {"key": "unused:F401:app/tab_triage.py:datetime.date", "files": ["app/tab_triage.py"]},
     {"key": "unused:F401:app/tab_triage.py:datetime.timedelta", "files": ["app/tab_triage.py"]},

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "entries": [
+    {"key": "README.md", "markers": 3},
+    {"key": "docs/data-schema.md", "markers": 1},
+    {"key": "docs/newsletter-triage-criteria.md", "markers": 1},
+    {"key": "docs/playwright-social-scraping.md", "markers": 2},
+    {"key": "docs/substack-native-api.md", "markers": 5}
+  ]
+}
