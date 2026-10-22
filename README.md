@@ -733,6 +733,21 @@ After removing baselined debt, shrink the baseline in the same PR with
 `gmail_readonly/` and `google_oauth_common/` are excluded: they are vendored
 copies. See the scaffold's `docs/static-ratchet.md` for the exit codes and keys.
 
+The third stage is the docs ratchet. It fails when `README.md` grows past 40 KiB
+or past its baselined size, or when `README.md` or a `docs/**/*.md` file gains a
+history marker (an issue reference, a dated heading or a changelog heading) above
+its count in `.docs-ratchet-baseline.json`. Docs state what is true and why, in
+the present tense; history lives in git, PRs and issues. The wrapper reports a
+doc it could not read as **NOT CONFIRMED** (a failure, never a pass or a skip):
+
+```powershell
+& .\.venv\Scripts\python.exe -m scripts.docs_ratchet_gate
+```
+
+After rewording a marker away, shrink the baseline in the same PR with
+`& .\.venv\Scripts\python.exe scripts/docs_ratchet.py --update-baseline`. See the
+scaffold's `docs/docs-ratchet.md` for the exit codes and keys.
+
 ## 📝 License and contact
 
 This project is free software for personal use from Roberto Ferraro 😇
