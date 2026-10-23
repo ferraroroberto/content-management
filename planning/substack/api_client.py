@@ -724,10 +724,6 @@ class SubstackAPI:
         )
         return self._api.post_draft(post.get_draft())
 
-    def update_draft(self, draft_id: int, **fields) -> dict:
-        """Edit an existing draft (e.g. ``draft_subtitle=...``)."""
-        return self._api.put_draft(draft_id, **fields)
-
     def prepublish(self, draft_id: int) -> dict:
         """Run Substack's own pre-publish validation. Does NOT publish."""
         return self._api.prepublish_draft(draft_id)

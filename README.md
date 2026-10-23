@@ -541,6 +541,9 @@ instead, which understands both styles:
 & .\.venv\Scripts\python.exe -m pytest tests -v
 ```
 
+`tests/test_no_uncalled_functions.py` fails on any function or method whose name
+appears nowhere else in the tracked files, so dead code cannot land unnoticed.
+
 The gate's second stage is the static-analysis ratchet. It compares the repo's
 unused imports, unused variables and duplicated blocks with the committed
 baseline (`.static-ratchet-baseline.json`) and fails on any **new** one, so the
