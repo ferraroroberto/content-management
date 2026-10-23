@@ -61,7 +61,7 @@ successful live run).
 
 ---
 
-## Validated selectors (verified 2026-05-17 against `x.com/home`)
+## Validated selectors (verified against `x.com/home`)
 
 > **Centralised labels:** every user-facing accessible name (dialog dismissals, the Schedule toolbar, Confirm, the final Schedule action, the discard / cancel prompts) is defined as a compiled regex in [`twitter_labels.py`](twitter_labels.py) — `DISMISS_DIALOG_BTN_RES`, `SCHEDULE_TOOLBAR_BTN_RE`, `CONFIRM_BTN_RE`, `FINAL_SCHEDULE_BTN_RE`, `DISCARD_BTN_RES`, `CANCEL_CLOSE_BTN_RES`. When X relabels a button or A/Bs a wording, extend the alternation there — do **not** re-inline a `re.compile` at the call site. The structural `data-testid` hooks below stay inline in the driver.
 
@@ -79,7 +79,7 @@ successful live run).
 
 ---
 
-## Gotchas (hard-won on first live run, 2026-05-17)
+## Gotchas (hard-won on first live run)
 
 1. **Don't trust the inline composer.** `/home` shows a `What's happening?`
    textbox at the top of the feed but it can carry stale draft state across
@@ -123,7 +123,7 @@ successful live run).
    label. Use `.last` to avoid ambiguity with the inline composer's button
    on the underlying feed.
 
-9. **Never use `count()` as a readiness test** (issue #235). `Locator.count()`
+9. **Never use `count()` as a readiness test.** `Locator.count()`
    returns immediately — it asks "is it there *right now*", not "wait for it".
    A row that arrives while X is still showing its black splash screen finds
    nothing mounted, burns through every candidate selector in milliseconds and

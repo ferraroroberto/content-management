@@ -50,8 +50,8 @@ Each platform config entry carries a `"source"` key (`"rapidapi"`, `"playwright"
 or — Substack only — `"native"`) that the client dispatches on: `"rapidapi"`
 makes the HTTP call directly, `"playwright"` delegates to the matching
 `planning.<platform>` scraper, `"native"` delegates to
-`reporting.scrape_client.<platform>_native.fetch_<data_type>`. See the root
-[`README.md`'s "Choosing the data source"](../../README.md#choosing-the-data-source-rapidapi-vs-playwright)
+`reporting.scrape_client.<platform>_native.fetch_<data_type>`. See
+[`docs/data-source-selection.md`](../../docs/data-source-selection.md)
 for the full trade-offs and how to flip a platform.
 
 ## Usage

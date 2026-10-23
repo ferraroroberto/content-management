@@ -73,7 +73,7 @@ same `{"num_followers": N}` envelope as the Playwright scraper. Flip back to
 `"playwright"` to use the browser scrape.
 
 The same flag on `substack_posts` routes the daily **note engagement** through
-`substack_native.py::fetch_posts` (issue #185), returning the identical
+`substack_native.py::fetch_posts`, returning the identical
 `{"posts": [...]}` envelope. Verified by running both paths back-to-back against
 the live account: 10/10 records identical on every field, 0.9 s vs 37.0 s. Same
 one-flag rollback.
@@ -92,7 +92,7 @@ Because a Note has no draft state, publishing is immediate and public;
 `--dry-run` is enforced before the publish call, so it never reaches Substack.
 
 **Video** notes (`post_substack_video_note.py`) support the same
-`note_source` flag (issue #189): `"native"` does a chunked multipart upload
+`note_source` flag: `"native"` does a chunked multipart upload
 + Mux transcode over the HTTP API — no browser at request time — via the
 same `POST /comment/feed` publish step once the upload transcodes. The
 video's duration is probed with ffprobe
@@ -121,7 +121,7 @@ without `--confirm`; it is never wired into the daily cron.
 & .\.venv\Scripts\python.exe -m planning.substack.api_like --note NOTE_ID_OR_URL --unlike
 ```
 
-No existing "like" workflow to slot into (issue #186), so this is a standalone
+No existing "like" workflow exists to slot into, so this is a standalone
 manual tool, not wired into any pipeline. Both calls are idempotent.
 
 ## Module layout
@@ -172,7 +172,7 @@ above.
 | `illustrations_folder` | Absolute folder containing the daily image. Joined with `image_filename`. |
 | `editorial_db_id` | Notion editorial database id. |
 | `notion_columns` | Role-to-column map. Roles: `title_day`, `text_body`, `image_filename`, `post_url`. The `follow SB` follower column is **not** in this map — it is populated by the reporting pipeline (`reporting/scrape_client/substack.py::fetch_profile` → `data_processor` → `notion_update`, mapped from `profile.num_followers_substack`) like every other platform's follower count. |
-| `note_source` | Optional, `"playwright"` (default) or `"native"`. Which backend publishes the daily Note — the Chrome composer, or the HTTP API with the harvested cookie. Video notes (issue #189) support the same flag. |
+| `note_source` | Optional, `"playwright"` (default) or `"native"`. Which backend publishes the daily Note — the Chrome composer, or the HTTP API with the harvested cookie. Video notes support the same flag. |
 | `headless` | Optional bool (default `false`). |
 | `dry_run_default` | Optional bool (default `false`). When `true`, step 1 always runs as a dry-run unless `--force` is passed. |
 

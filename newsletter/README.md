@@ -5,9 +5,6 @@ tabs in your real Chrome into Notion, normalise article titles to
 sentence case, strip tracking params from URLs, then build the
 ready-to-paste HTML for a specific newsletter number.
 
-Tracks issues: ferraroroberto/content-management#17 (archive step) and
-ferraroroberto/content-management#18 (full pipeline + monorepo migration).
-
 ## Workflow
 
 ```mermaid
@@ -112,8 +109,8 @@ launch_newsletter.bat --days 7              # tighter normalise window
 
 ## Running steps in isolation
 
-The pipeline is split into independent, non-interactive subcommands (issue #59)
-— the same ones the Streamlit app drives, so nothing is app-only:
+The pipeline is split into independent, non-interactive subcommands — the
+same ones the Streamlit app drives, so nothing is app-only:
 
 | Command | What it does |
 |---|---|
@@ -145,7 +142,7 @@ Add `--debug` to any of the above for verbose logs. All runs append to
 `logs/newsletter_archive.log` (archive entry points) or stdout (the
 others).
 
-## Scheduling future editions (issue #230)
+## Scheduling future editions
 
 `archive` files each article against the first **future** newsletter row that
 still has room for its topic (`notion_io.pick_newsletter`, which filters
@@ -245,8 +242,7 @@ never inventing people.
   against the default profile dir (security policy change to block
   session-stealing extensions). Bootstrap always launches with
   `--user-data-dir=newsletter\chrome_user_data\` to work around this.
-- Bootstrap is **targeted and idempotent** (issue #59, supersedes #57; wait
-  semantics fixed in #244): it reuses an existing `:9222` if one is up, and
+- Bootstrap is **targeted and idempotent**: it reuses an existing `:9222` if one is up, and
   otherwise checks for a Chrome whose command line carries
   `--user-data-dir=<newsletter profile>` (via
   `config.chrome_profile_lock.pids_holding_profile`) — never `taskkill /IM
@@ -300,13 +296,13 @@ never inventing people.
 - `results/newsletter/triage/criteria.json` — machine-readable selection criteria (twin of `docs/newsletter-triage-criteria.md`), rebuilt by `python -m newsletter.triage.criteria`. Gitignored — a build artifact merging the hand-written `RULES` in `triage/criteria.py` with data priors that carry real sender addresses.
 - `results/newsletter/triage/overrides.json` — owner-maintained sender decisions (tier `never|rarely|usually|always|review`, e.g. paywalled publications); applied before the data priors, updated by the feedback loop. Gitignored for the same reason as `triage/lessons.json` — regenerated/appended locally, carries real sender addresses.
 
-## Triage — Gmail history + criteria (issue #210)
+## Triage — Gmail history + criteria
 
 The weekly inbox review (label `newsletters`, ~80 emails/week) is automated
-end to end: this section's Gmail history + criteria build (#210) is the
-**ground truth** the weekly engine (#211, below) scores and shortlists
-against; the store + control-panel tab (#217, below) holds every run and
-owner decision and also carries the Chrome hand-off + watermark step (#212).
+end to end: this section's Gmail history + criteria build is the
+**ground truth** the weekly engine (below) scores and shortlists
+against; the store + control-panel tab (below) holds every run and
+owner decision and also carries the Chrome hand-off + watermark step.
 The ground-truth build lives under `newsletter/triage/`:
 
 - `gmail.py` — read-only Gmail adapter over the vendored `gmail_readonly/` +
@@ -335,7 +331,7 @@ The ground-truth build lives under `newsletter/triage/`:
 | `python -m newsletter.triage.history --limit 150 --budget 100` | Smoke test. |
 | `python -m newsletter.triage.criteria` | Rebuild `criteria.json` from `stats.json` + `overrides.json`. |
 
-### Weekly engine (issue #211)
+### Weekly engine
 
 `run.py` turns one review window into one edition-sized shortlist — the owner's
 cadence rule: the run covers last watermark → now (normally Saturday → Friday)
@@ -360,9 +356,9 @@ is unset) uses the hub model alias, `jev` uses TypeSafe Jev through the hub's
 scores the same links in the background and its answers (with their
 confidences) are written beside the report as
 `triage-<window>.jev-shadow.json` for comparison — never into the stored
-candidates. **`jev+legacy` is the recommended setting** (#394, after the #392
-benchmark found a fresh legacy pass no better than Jev against the owner's
-picks, far less repeatable and ~18× slower): the mirror of `both` — Jev
+candidates. **`jev+legacy` is the recommended setting** — a fresh legacy pass
+scores no better than Jev against the owner's picks, far less repeatable and
+~18× slower: the mirror of `both` — Jev
 decides every verdict while legacy scores the same links in the background
 through Stage B, bounded by `legacy_budget_s` (default 1200 s; unfinished
 links are `not evaluated`), and its answers go beside the report as
@@ -402,7 +398,7 @@ low / vetoed / duplicate / unknown`) — an unfetchable or unscorable link is
 `unknown`, never "skipped". Skill: `/newsletter-triage`
 (`.claude/skills/newsletter-triage/SKILL.md`, mirrored in `.agents/skills/`).
 
-### Store + control-panel tab (issue #217)
+### Store + control-panel tab
 
 Every run and every owner decision lives in Supabase — the repo's store, same
 project DB as reporting + engagement — in `triage_*` tables
@@ -446,7 +442,7 @@ markdown report renders in an expander (one source, no second copy).
 | `python -m newsletter.triage.db import-history` | Load `triage_editions` + `triage_picks` from `results/newsletter/triage/history/`. |
 | `python -m newsletter.triage.run --backtest N224,N225,N226,N227 --force` | Store the four backtests with the real picks as decisions (the first knowledge base). |
 | `python -m newsletter.triage.lessons --run <id>` / `--accept 1,2` / `--list` | Distil / accept / list lessons from the CLI. |
-| `python -m newsletter.triage.handoff --run <id>` | Hand-off preview (issue #212): the ticked URLs + the `until <newest e-mail> > included` watermark line — no writes. |
+| `python -m newsletter.triage.handoff --run <id>` | Hand-off preview: the ticked URLs + the `until <newest e-mail> > included` watermark line — no writes. |
 | `python -m newsletter.triage.handoff --run <id> --open` | `ensure_chrome()` then one tab per ticked URL in the `:9222` Chrome (already-open tabs skipped) → run ② Archive as usual. |
 | `python -m newsletter.triage.handoff --run <id> --mark-reviewed` | Exactly one watermark comment on the `newsletters processing` task page (`notion_task_page_id`) + `state.json → reviewed_until`. |
 

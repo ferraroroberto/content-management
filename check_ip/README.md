@@ -9,9 +9,8 @@ tab is where each match gets judged — legitimate share, or my work with the
 credit stripped off — and the `/check-ip` skill does the boring first pass in a
 browser so judging a match is a yes/no rather than an investigation.
 
-Folded in from the sibling `automation` repo's `linkedin/check_ip/`
-(issue [#286](https://github.com/ferraroroberto/content-management/issues/286)),
-which wrote three Excel workbooks instead.
+Replaces the sibling `automation` repo's `linkedin/check_ip/`, which wrote
+three Excel workbooks instead.
 
 ```mermaid
 flowchart TB
@@ -52,17 +51,17 @@ a queue of 13,000 links: the worst it can do is propose something wrong.
 & .\.venv\Scripts\python.exe -m check_ip.run                 # everything that is due
 & .\.venv\Scripts\python.exe -m check_ip.run --force         # ignore re-search windows
 
-# re-elect the canonical row of every group (issue #291) — writes only `duplicate`
+# re-elect the canonical row of every group — writes only `duplicate`
 & .\.venv\Scripts\python.exe -m check_ip.migrate --recompute-duplicates
 
 # the screening queue
 & .\.venv\Scripts\python.exe -m check_ip.screen stats
 & .\.venv\Scripts\python.exe -m check_ip.screen next --limit 10
 
-# the re-screen backlog only — the rows `stats` counts as not_fully_assessed
-# (issue #300). `--include-screened` does not select them: it just stops
+# the re-screen backlog only — the rows `stats` counts as not_fully_assessed.
+# `--include-screened` does not select them: it just stops
 # excluding screened rows, so they compete with every pending one. Screening a
-# row removes it from here even if a condition came back `unknown` (#305).
+# row removes it from here even if a condition came back `unknown`.
 & .\.venv\Scripts\python.exe -m check_ip.screen next --limit 10 --unassessed
 
 # no credit, nothing else wrong → severity 1
@@ -79,7 +78,7 @@ a queue of 13,000 links: the worst it can do is propose something wrong.
 
 # looked at all three, but the post cannot say whether the use is commercial —
 # `unknown` stores a 2: an answer, never a pass, and the row leaves the
-# --unassessed queue instead of being served again forever (issue #305)
+# --unassessed queue instead of being served again forever
 & .\.venv\Scripts\python.exe -m check_ip.screen verdict --id 123 --verdict unclear `
     --outcome ambiguous --credit met --noncommercial unknown --unmodified met --reason "…"
 ```
@@ -96,8 +95,7 @@ on a similar match, and every one the skill ever screened came back `unclear`.
 Worse, the category is actively dangerous. Handed ten lookalikes from one
 illustrator, the screener built a theory of a serial infringer and re-read its
 own earlier verdicts to fit it — nine severity-3 accusations against a peer,
-all reverted. Removing the category removes the exposure
-([#292](https://github.com/ferraroroberto/content-management/issues/292)).
+all reverted. Removing the category removes the exposure entirely.
 
 So: `MATCH_TYPES` no longer maps the `visual_matches` section, a live run skips
 that search rather than paying for it, `next_batch` filters on
@@ -116,8 +114,7 @@ from the tab — there are none today, and the guard is what keeps it that way.
 LinkedIn serves the same post under a host per country — `www.`, `tn.`, `my.`,
 `rs.`, … — and X under `?lang=`. Those are different strings for one page, so
 the duplicate flag never fired on them and the queue served the post once per
-mirror: one live batch of ten rows held five distinct posts
-([#291](https://github.com/ferraroroberto/content-management/issues/291)).
+mirror: one live batch of ten rows held five distinct posts.
 
 `db.canonical_link_for()` builds the dedupe key `mark_duplicates` groups on:
 lowercase host and path, a LinkedIn locale host folded onto `www.`, no
@@ -166,8 +163,7 @@ positively established. A severity of 0 alone says nothing was proven wrong,
 not that the post is compliant; the tab prints both and the `not fully
 assessed` metric is the gap between them. Any `coalesce(col, 1)` here would
 silently undo the whole model, which is why `tests/test_check_ip_store.py`
-asserts it in Python, in SQL, in the queue stats and in the tab's frame
-([#295](https://github.com/ferraroroberto/content-management/issues/295)).
+asserts it in Python, in SQL, in the queue stats and in the tab's frame.
 
 **`2` is an answer; `NULL` is the absence of one.** A worker that opens a post
 and cannot establish a condition from it — most often NC, which a single post
@@ -178,8 +174,7 @@ honest `unknown` re-queued the row forever and two live batches were served the
 identical ten rows. `db.fully_assessed()` (has anyone looked?) counts a `2`;
 `db.all_conditions_met()` (did it pass?) does not, so the row leaves the queue
 while staying `unclear`. The split is purely additive — no stored row changed
-value, severity or verdict, and no migration was needed
-([#305](https://github.com/ferraroroberto/content-management/issues/305)).
+value, severity or verdict, and no migration was needed.
 
 `screen stats` and the tab report the two separately, because they ask for
 different things: a `not_fully_assessed` row wants another screening pass, an
@@ -204,7 +199,7 @@ out rather than parking it in a re-screen pile forever).
 
 ### What the old credit-only pass left behind
 
-Before #295 the screener asked one question — "was he mentioned?" — and
+Before the three-condition model, the screener asked one question — "was he mentioned?" — and
 recorded commercial use and edits only as *aggravators on top of* a failed
 credit check, clearing both whenever the verdict was not `infringement`. So a
 post that credited me properly and was plainly a company's marketing scored
@@ -233,8 +228,7 @@ rows get re-answered under a question their previous answer never addressed.
 Two verdicts have already been recorded, found wrong and reverted, and
 reconstructing either meant reading chat scrollback.
 
-`screen_history` (issue
-[#301](https://github.com/ferraroroberto/content-management/issues/301)) is the
+`screen_history` is the
 append-only record of every opinion that has been replaced: `result_id`, all
 nine screening columns exactly as they stood, and `recorded_at`. It is written
 by `record_verdict` **in the same transaction as the update**, so a failed write
@@ -292,7 +286,7 @@ A `check_ip` block in `config/config.json` (gitignored — see
 | `store_folder` | defaults to `results/check_ip` |
 | `api_keys` | `serpapi_key`, `imgur_client_id`, `imgur_access_token` — a `${VAR}` placeholder falls back to that environment variable |
 | `processing_thresholds` | re-search windows (see below) |
-| `search_settings` | `do_exact_search` / `do_similar_search` — leave the latter `false`; a run warns and skips it rather than paying for results it would discard (#292) |
+| `search_settings` | `do_exact_search` / `do_similar_search` — leave the latter `false`; a run warns and skips it rather than paying for results it would discard |
 | `screen_queue` | default platform, batch size, and `exclude_posters` (accounts that are my own) |
 
 **Credentials live in the repo-root `.env`**, which is gitignored (as is any

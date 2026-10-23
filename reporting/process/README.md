@@ -15,7 +15,7 @@ This module contains several components:
 Notion relation/junction-table creation now lives entirely in the SQL
 auto-detector system (`reporting/notion/setup_notion_relations_system.{py,sql,md}`).
 The Python relations creator and the ad hoc DB test scripts that used to live
-in this module were removed as stale/broken (issue #196).
+in this module are removed as stale/broken.
 
 ## 📊 Components
 

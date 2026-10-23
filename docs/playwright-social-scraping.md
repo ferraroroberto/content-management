@@ -6,9 +6,9 @@ Playwright-based alternative to the paid RapidAPI fetcher
 per-platform DOM tricks that took the longest to find so a future reader
 (or LLM) re-fixing a broken scraper has somewhere to start.
 
-For the *user-facing* "how do I switch" docs see the
-"[Choosing the data source](../README.md#choosing-the-data-source--rapidapi-vs-playwright)"
-section in the main README. This document is the *implementation* memory.
+For the *user-facing* "how do I switch" docs see
+[`data-source-selection.md`](data-source-selection.md). This document is
+the *implementation* memory.
 
 ## Architecture in one paragraph
 
@@ -85,18 +85,6 @@ not look like a bot" rule in `~/.claude/CLAUDE.md` reinforces it.
 * **Posts — permalink walk:** same reason as Threads. The feed view crams multiple notes' engagement bars into the page; scoping each anchor to its own toolbar via ancestor xpath is brittle. Visit each permalink for a clean read.
 * **Permalink engagement structure — `text_content()` vs `inner_text()`:** each engagement slot is a `<button aria-label="Like|Comment|Restack|Share">` containing the icon SVG and the count nested in a child element. **Playwright's `Locator.inner_text()` returns empty** because Substack styles the count container in a way that excludes it from the CSS-visible-text accounting. `Locator.text_content()` returns the DOM text content (including the count) — use that. This was the single longest dead-end of the integration; the diagnostic that revealed it is at `tmp/debug_sb_btn.py` if you need to re-verify.
 * **Feed view DOM is different from permalink view:** on the feed, each engagement icon's count is a *next-sibling* `<button>` (not nested inside). The current code uses the permalink-walk for posts, so the feed structure is no longer load-bearing — but if you ever switch back to feed parsing, remember the layouts diverge.
-
-## Pre-existing bug worth knowing about
-
-`reporting/social_client/social_api_client.py::save_results` originally
-had a duplicate file-existence check at the top that silently dropped
-freshly-fetched data when a file already existed on disk — even with
-`--no-skip`. The `process_all_endpoints` loop's own skip-existing logic
-already handles the day-already-collected case upstream, so the inner
-check was redundant *and* broken. It was removed as part of the
-Playwright integration but predates it; any forward debugging of "I
-re-ran with `--no-skip` and the JSON didn't change" should not point at
-the new code.
 
 ## Validation pattern
 

@@ -2,7 +2,7 @@
 
 Turns screen recordings of an app plus music into a finished, animated demo video (16:9, 1:1 or 4:5), from one `demo.json` storyboard. The renderer is a [Remotion](https://www.remotion.dev/) template driven entirely by data: a new video is a new `demo.json`, not new code. Nothing is published, posted or uploaded.
 
-To make a demo, run the **`/demo-video` skill** in Claude Code from this repo. It follows [`docs/demo-video-runbook.md`](../docs/demo-video-runbook.md) with you, from the message brief to the MP4s. The control panel's 🎬 demo video section shows the same runbook and runs the deterministic stages. This page is the module reference. Built in four steps: #359 renderer, #360 prep and checks, #361 recorder, #362 skill, runbook and tab.
+To make a demo, run the **`/demo-video` skill** in Claude Code from this repo. It follows [`docs/demo-video-runbook.md`](../docs/demo-video-runbook.md) with you, from the message brief to the MP4s. The control panel's 🎬 demo video section shows the same runbook and runs the deterministic stages. This page is the module reference, covering the renderer, the prep/checks stage, the recorder, and the skill + runbook + tab.
 
 ```mermaid
 flowchart LR
@@ -80,7 +80,7 @@ A final 1080p render takes about 2½–3 min per 83 s cut on this PC.
 ```
 <demo folder>/              (outside the repo — OneDrive is fine for this part)
   demo.json                 the storyboard
-  marks.json                {video: {beat: [start_s, end_s]}, "_states": {...}} — beats from the recorder (#361), states from prep
+  marks.json                {video: {beat: [start_s, end_s]}, "_states": {...}} — beats from the recorder, states from prep
   media/                    clips (CFR H.264 .mp4) and music; the `media_dir` field renames it
   out/                      renders, plus out/.props/<cut>.json (the resolved props)
 ```
@@ -118,7 +118,7 @@ The worked example is [`examples/facilitation-suite/`](examples/facilitation-sui
 ```
 
 - `align_end_tail_s` trims the track's start so it ends that many seconds before its own end, exactly when its window ends. This is how a second track takes the climax to the video's end.
-- `licence` is read by the licence check (#360): a `public` cut must not use a `private-only` track.
+- `licence` is read by the licence check: a `public` cut must not use a `private-only` track.
 
 ### recording
 
@@ -173,7 +173,7 @@ A `caption` is `{kicker?, title, sub?, color?, size?, width?}`. Colours are a pa
 
 ## Gotchas
 
-- **Clips must be constant-frame-rate H.264.** Playwright's `.webm` (VP8, variable rate) stutters and seeks badly in `OffthreadVideo`; transcode first (#360 automates it): `ffmpeg -i rec.webm -vf "fps=30,format=yuv420p" -c:v libx264 -crf 14 -g 15 -an clip.mp4`.
+- **Clips must be constant-frame-rate H.264.** Playwright's `.webm` (VP8, variable rate) stutters and seeks badly in `OffthreadVideo`; the prep/checks stage transcodes first: `ffmpeg -i rec.webm -vf "fps=30,format=yuv420p" -c:v libx264 -crf 14 -g 15 -an clip.mp4`.
 - **Remotion copies `media_dir` into its bundle on every render.** Keep only what the demo uses there.
 - **Fonts** (Inter, Patrick Hand) load from Google Fonts at render time, so the render needs the network.
 - **Remotion's licence** is free for individuals and companies of up to 3 people. `remotion`, `@remotion/cli` and `@remotion/google-fonts` are pinned to the same version.

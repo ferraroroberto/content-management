@@ -5,7 +5,7 @@ Fourth pipeline in this repo (sibling to `planning/`, `reporting/`, `newsletter/
 1. **Real-comments inbox** — comments worth my personal reply, surfaced in a clean Streamlit view.
 2. **AI-triage queue** — staged canned acknowledgements I one-click approve in a batch.
 
-**Never auto-sends.** Every action is staged for explicit approval. See issue [#20](https://github.com/ferraroroberto/content-management/issues/20) for the full design + the public-repo defense-mechanism disclaimer.
+**Never auto-sends.** Every action is staged for explicit approval, as a public-repo defense against automated posting.
 
 ## What's here
 
@@ -18,7 +18,7 @@ Fourth pipeline in this repo (sibling to `planning/`, `reporting/`, `newsletter/
 - **Reputation feedback loop** (Phase 3) — `engagement.reputation.update` recomputes rolling per-commenter `signals`, `counters`, and `reputation_score` from accumulated comment history and upserts them into `commenters`. Pure batch, idempotent, preserves manual whitelist/blacklist labels.
 - Two Supabase tables (`commenters` + `comments`) — see `engagement/db/schema.sql`.
 - Streamlit review app — `engagement/review_app.py`.
-- **No auto-posting worker, ever.** Approved rows sit in Supabase; you copy the suggested reply via `st.code`'s built-in copy button and paste it into LinkedIn's native composer yourself. The originally-planned Phase 2b send worker is permanently out of scope on TOS grounds (see issue [#20](https://github.com/ferraroroberto/content-management/issues/20)).
+- **No auto-posting worker, ever.** Approved rows sit in Supabase; you copy the suggested reply via `st.code`'s built-in copy button and paste it into LinkedIn's native composer yourself. An automated send worker is permanently out of scope on TOS grounds.
 
 ## Workflow
 
@@ -59,7 +59,7 @@ No new secrets needed — uses `config.supabase.service_role_key` and `config.no
 ## Gotchas
 
 - **Selectors are unvalidated on first run.** The LinkedIn comment-area DOM was never used by the planning composer. `scrape_comments.py` hooks the comment list via two `data-testid` selectors (`SEL_COMMENT_LIST_CONTAINER`, `SEL_COMMENT_TEXT_NODES`). If a post returns 0 comments, `_dump_debug` writes an HTML + full-page PNG snapshot to `results/engagement/debug/`, and a DOM shape miss surfaces as the `no_list_container` structural error (tracked separately from a genuinely comment-free post — `_evaluate_scrape_health` only flags the run `"broken"` when every post structurally failed). Use the dump + structural-error signal to debug, not a selector-match log.
-- **The schema is applied by hand, so the code can ship ahead of the database.** `schema.sql` has no migration runner; step 2 above is a human action. When `post_posted_at` was added to the code but never applied, every scheduled scrape logged in, walked the posts, extracted the comments — and then died on its final upsert with `PGRST204`, throwing the whole run away. Twenty consecutive runs failed that way before anyone noticed (issue #262). `verify_schema()` now runs before Chrome launches and fails in about a second, naming every missing column and pointing back at step 2. If it cannot reach the database at all it reports `unverified` and lets the run continue — an unanswered question is never reported as a pass.
+- **The schema is applied by hand, so the code can ship ahead of the database.** `schema.sql` has no migration runner; step 2 above is a human action. When `post_posted_at` was added to the code but never applied, every scheduled scrape logged in, walked the posts, extracted the comments — and then died on its final upsert with `PGRST204`, throwing the whole run away. Twenty consecutive runs failed that way before anyone noticed. `verify_schema()` runs before Chrome launches and fails in about a second, naming every missing column and pointing back at step 2. If it cannot reach the database at all it reports `unverified` and lets the run continue — an unanswered question is never reported as a pass.
 - **Headful by default.** Headless would be brittle for first-run selector debugging. Use `--headless` once selectors are validated.
 - **Idempotent.** Both tables are upserted on `(platform, comment_id)` and `(platform, account_url)` respectively — safe to re-run on the same posts.
 - **Relative time parsing is approximate.** LinkedIn shows `2h`, `5m`, `1d`. We reconstruct an absolute timestamp from scrape time, so `posted_at` drifts up to ~one tick of the LI display unit. Fine for cadence rules.

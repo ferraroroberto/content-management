@@ -62,13 +62,13 @@ from the IG side of the editorial DB. The scheduler only **reads** these
 
 ---
 
-## Validated selectors (verified 2026-05-17 against `threads.com`)
+## Validated selectors (verified against `threads.com`)
 
 > **Centralised labels:** every user-facing accessible name (caption textbox, media-attach, the `Schedule…` menuitem, the calendar `Next month` / `Done` controls, the final `Schedule` action, the cancel / discard prompts) plus the localized calendar header live in [`threads_labels.py`](threads_labels.py) — `WHATS_NEW_TEXTBOX_RE`, `ATTACH_MEDIA_BTN_RE`, `SCHEDULE_MENUITEM_RE`, `SCHEDULE_TEXT_RE`, `NEXT_MONTH_BTN_RE`, `DONE_BTN_RE`, `FINAL_SCHEDULE_BTN_RE`, `CANCEL_DISCARD_BTN_RES`, `DISCARD_BTN_RE`, `calendar_header()`. When Threads relabels a control, extend the alternation there — do **not** re-inline a `re.compile` at the call site. The positional JS pickers and structural selectors below stay inline in the driver.
 
 | Step | Selector | Notes |
 |------|----------|-------|
-| Open composer | `get_by_role("button", name=COMPOSE_ENTRY_BTN_RE)` on the profile feed (aria-label `Empty text field. Type to compose a new post.`), falling back to the `WHATS_NEW_PLACEHOLDER_RE` text | Opens the `New thread` dialog. The placeholder text re-appears inside the dialog too. Since 2026-09 it uses a curly apostrophe (`What’s new?`, U+2019), so never match it with a straight-quote literal (#315). |
+| Open composer | `get_by_role("button", name=COMPOSE_ENTRY_BTN_RE)` on the profile feed (aria-label `Empty text field. Type to compose a new post.`), falling back to the `WHATS_NEW_PLACEHOLDER_RE` text | Opens the `New thread` dialog. The placeholder text re-appears inside the dialog too, and uses a curly apostrophe (`What’s new?`, U+2019), so never match it with a straight-quote literal. |
 | Caption textarea (inside dialog) | `[role="dialog"] div[contenteditable="true"]` | Lexical editor — type via `keyboard.type(...)`. |
 | Image upload | `[role="dialog"] input[type="file"]` | Pre-mounted; `set_input_files(path)` works directly. |
 | Top-right 3-dots | Positional JS picker (rightmost icon-only button in dialog header band, y < 80 from dialog top) | No aria-label, no test-id, no stable class. The header has 2 svg-only buttons; the rightmost is the 3-dots, the one next to it is "Drafts". |
@@ -84,7 +84,7 @@ from the IG side of the editorial DB. The scheduler only **reads** these
 
 ---
 
-## Gotchas (hard-won on first live run, 2026-05-17)
+## Gotchas (hard-won on first live run)
 
 1. **Span clicks DO NOT trigger the day handler.** The visible day digit
    lives in a leaf `<span>` (size ~13×16). The calendar's React click
@@ -107,7 +107,7 @@ from the IG side of the editorial DB. The scheduler only **reads** these
    the target day is today, where the current-month cell for that digit
    renders white (not black), so there is no black candidate and "lowest"
    would wrongly pick the grey overflow cell instead. Pick **highest**
-   lightness in that case (content-management#246).
+   lightness in that case.
 
 3. **The 3-dots button has no aria-label and no test-id.** The dialog
    header contains exactly 2 svg-only icon buttons (no text); the
@@ -138,7 +138,7 @@ from the IG side of the editorial DB. The scheduler only **reads** these
    The scheduler's primary idempotency marker is
    `work in progress TH` — unticked on a fully-successful LIVE run.
 
-9. **The modal shell and its caption box mount separately** (issue #235).
+9. **The modal shell and its caption box mount separately.**
    Treating `[role="dialog"]` as "composer open" is a race: the shell appears
    while the modal is still spinning, so `_type_caption` then probes for a
    `contenteditable` that has not rendered and fails — which is exactly how the

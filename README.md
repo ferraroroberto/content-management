@@ -408,7 +408,7 @@ flowchart LR
   carries a `"source"` key picking which collector runs — `"rapidapi"`
   (paid HTTP fetcher), `"playwright"` (free logged-in-Chrome scraper), or
   `"native"` (the platform's own HTTP API with cookie auth — Substack only).
-  See [Choosing the data source](#choosing-the-data-source-rapidapi-vs-playwright)
+  See [`docs/data-source-selection.md`](docs/data-source-selection.md)
   for how to flip per platform and roll back.
 - **Fails loudly when it drops data.** The run sends **one** Telegram alert and
   exits non-zero if any of these hold: a step raised; a configured endpoint
@@ -443,7 +443,8 @@ python -m venv .venv
 
 # Configure
 Copy-Item config\config_example.json config\config.json
-# edit config\config.json with API keys, Notion token, DB credentials
+# edit config\config.json with API keys, Notion token, Supabase URL/key
+# PostgreSQL connection credentials go in .env instead (read by python-dotenv)
 
 # One-time per-platform browser session bootstrap (interactive login):
 & .\.venv\Scripts\python.exe -m planning.linkedin.bootstrap_session
@@ -463,104 +464,11 @@ Copy-Item config\config_example.json config\config.json
 & .\.venv\Scripts\python.exe reporting_pipeline.py --date 20260517 --yes --skip-substack
 ```
 
-## Choosing the data source — RapidAPI vs Playwright
-
-Each `<platform>_<data_type>` block in `config/config.json` carries a
-`"source"` key. The dispatcher in
-`reporting/social_client/social_api_client.py::get_api_data` reads it and
-either makes the HTTP call (`"rapidapi"`), delegates to the matching
-`reporting.scrape_client.<platform>.fetch_<data_type>` (`"playwright"`), or
-delegates to `reporting.scrape_client.<platform>_native.fetch_<data_type>`
-(`"native"` — the platform's own HTTP API with cookie auth, no browser).
-
-**Substack native API:** both Substack blocks can run natively —
-`substack_profile` (follower count, one authenticated GET) and `substack_posts`
-(note engagement, a couple of GETs instead of a feed scroll plus one page load
-per note). The note path was verified record-for-record against the Playwright
-scrape on the live account — 10/10 identical, 0.9 s vs 37.0 s. Both need the
-one-time cookie harvest (`python -m planning.substack.extract_session`, re-run
-~quarterly when the cookie expires); flip either back to `"playwright"` to use
-the browser scrape. See [`docs/substack-native-api.md`](docs/substack-native-api.md)
-and [`planning/substack/README.md`](planning/substack/README.md). `"native"` is
-Substack-only for now; other platforms use rapidapi/playwright.
-
-Note *posting* has its own flag, `substack.note_source` (`"playwright"` default
-/ `"native"`), because it is a **write** to a public platform rather than a
-read. The native backend publishes the daily Note over the same HTTP API and
-records the permalink of the note it just created, instead of re-reading the
-profile and taking whatever is topmost. Video Notes are covered too — the same
-`substack.note_source` flag selects `post_substack_video_note.py`'s native
-branch, with Playwright as the one-key rollback.
-
-The downstream pipeline is source-agnostic — `data_processor` reads the
-JSON envelope from `reporting/results/raw/<platform>_<data_type>_<YYYY-MM-DD>.json`
-and uses the matching `<key>` mapping in `config/mapping.json`, falling
-back to `<key>_playwright` automatically (via
-`get_alternative_mapping_keys`). So you can flip one platform at a time
-with no other change.
-
-### Per-source trade-offs
-
-| | RapidAPI (`"source": "rapidapi"`) | Playwright (`"source": "playwright"`) |
-|---|---|---|
-| **Cost** | Monthly subscription per provider | Free — drives the existing logged-in Chrome profile |
-| **Speed** | ~2s per endpoint | ~5–30s per endpoint (browser launch + scroll + read; one open per endpoint) |
-| **Session** | API key in config | Persistent profile at `planning/<platform>/chrome_user_data/`; re-login via `python -m planning.<p>.bootstrap_session` if Chrome forgets the session |
-| **Breakage mode** | Provider may rate-limit, change pricing, deprecate endpoints | Selectors break when the platform's DOM changes — patch the per-platform module under `reporting/scrape_client/` |
-| **Site coverage** | 1:1 with provider's API | Whatever's visible in the logged-in browser; see `docs/playwright-social-scraping.md` for per-platform quirks |
-
-### Flipping a platform
-
-Edit `config/config.json` and set `source` on the two endpoints for that
-platform (the `_profile` and `_posts` block):
-
-```jsonc
-"linkedin_profile": {
-  "source": "playwright",           // ← was "rapidapi"
-  "api_url": "...",                 // RapidAPI keys left in place for instant rollback
-  ...
-},
-"linkedin_posts": {
-  "source": "playwright",
-  ...
-}
-```
-
-Then run just that platform to validate:
-
-```powershell
-& .\.venv\Scripts\python.exe -m reporting.social_client.social_api_client `
-    --platform linkedin_profile --no-skip --debug
-& .\.venv\Scripts\python.exe -m reporting.social_client.social_api_client `
-    --platform linkedin_posts --no-skip --debug
-```
-
-The new envelope lands in `reporting/results/raw/linkedin_*_<today>.json`.
-Re-run `reporting_pipeline.py` (or just `data_processor`) and confirm the
-Notion row matches what you expect.
-
-### Rolling back to RapidAPI
-
-If a platform's Playwright scraper breaks the day before you need a clean
-report — flip its `"source"` back to `"rapidapi"` in `config/config.json`,
-delete the broken file from `reporting/results/raw/`, and re-run the
-pipeline. The RapidAPI configuration (api_url / api_key / api_host / etc.)
-is intentionally left untouched in the config — flipping the key is the
-only change. Keep the RapidAPI subscription active for at least one full
-reporting cycle after the Playwright cutover to retain this rollback
-escape hatch.
-
-### Cancelling the RapidAPI subscription
-
-Only after a sustained period (≥ 1 week) of clean Playwright runs:
-
-1. Confirm every endpoint's `"source"` has been `"playwright"` continuously.
-2. Cancel the provider subscription(s) on RapidAPI.
-3. Open a follow-up issue to *retire* the now-dead RapidAPI integration —
-   strip the `api_url` / `api_key` / `api_host` / `querystring` fields from
-   `config.json` and remove the HTTP path from `social_api_client.py`. Do
-   NOT do this in the same PR as the Playwright cutover — the dual-path
-   architecture is the whole point of the rollback safety net.
+Each reporting endpoint in `config/config.json` picks its data source
+(RapidAPI, Playwright or — Substack-only — a native HTTP API) via a
+per-endpoint `"source"` key; flipping, trade-offs, rollback and cancelling
+the RapidAPI subscription are covered in
+[`docs/data-source-selection.md`](docs/data-source-selection.md).
 
 ### Weekly planning run
 
@@ -579,52 +487,7 @@ type mapping, the 15+ synced databases) — is documented in
 [`docs/data-schema.md`](docs/data-schema.md) rather than here, so this
 orientation map stays short. See that file for column-level detail.
 
-## 🔧 Advanced Configuration
-
-### Debug Mode
-
-Most scripts support debug mode for detailed logging. Use the venv-explicit module form (see Debug Commands below for ready-to-run examples):
-```powershell
-& .\.venv\Scripts\python.exe -m reporting.process.data_processor --debug
-```
-
-### Environment-Specific Settings
-
-Switch between local and cloud databases:
-```powershell
-& .\.venv\Scripts\python.exe -m reporting.process.supabase_uploader --environment local
-```
-
-### Custom Configurations
-
-Override default configuration files:
-```powershell
-& .\.venv\Scripts\python.exe -m reporting.notion.notion_supabase_sync --config custom_config.json
-```
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-1. **API Rate Limits**
-   - Use `--skip-existing` flag to avoid re-fetching data
-
-2. **Database Connection Errors**
-   - Verify credentials in `.env` file
-   - Check network connectivity
-   - Ensure database is accessible
-
-3. **Missing Data Fields**
-   - Review `mapping.json` for correct field paths
-   - Enable debug mode to see raw API responses
-   - Check if API response structure changed
-
-4. **Notion Sync Issues**
-   - Verify Notion API token is valid
-   - Check database IDs in configuration
-   - Review Notion API rate limits
-
-### Debug Commands
+## 🐛 Debug Commands
 
 ```powershell
 # Test database connection (also verifies RLS/policy posture)
@@ -640,45 +503,7 @@ Override default configuration files:
 & .\.venv\Scripts\python.exe -m planning.twitter.schedule_twitter_posts --all-wip --dry-run --debug
 ```
 
-## 📈 Performance Optimization
-
-- **Incremental Sync**: Only new/modified data is synced — `reporting_pipeline.py` skips re-fetch when today's JSON file already exists (`check_file_exists_for_date`), acting as an idempotent re-run guard
-
-## 🔐 Security Best Practices
-
-1. **Never commit sensitive data**
-   - Keep `config.json` out of version control
-   - Use `.env` files for database credentials
-   - Rotate API keys regularly
-
-2. **Store credentials in the right place**
-   - Supabase URL and key go in `config/config.json` (`supabase.url`, `supabase.key` / `supabase.service_role_key`) — keep that file out of version control
-   - PostgreSQL connection credentials go in `.env` (read by `python-dotenv` at startup)
-   - Reporting connects via direct psycopg2 (port 5432), not the REST API — no Supabase API key is involved. Engagement uses the Supabase client library at table-level (`/rest/v1/<table>`) with `service_role_key` preferred, falling back to the anon key; the bare `/rest/v1/` root endpoint is never called.
-
-3. **Implement access controls**
-   - Limit API key permissions
-   - Enable Supabase Row Level Security (RLS)
-
-## 🚧 Development
-
-### Adding New Platforms
-
-1. **Update configuration**
-   - Add platform config to `config.json`
-   - Define field mappings in `mapping.json`
-
-2. **Test data collection**
-   ```powershell
-   & .\.venv\Scripts\python.exe -m reporting.social_client.social_api_client --platform new_platform --debug
-   ```
-
-3. **Verify processing**
-   ```powershell
-   & .\.venv\Scripts\python.exe -m reporting.process.data_processor --debug
-   ```
-
-### Regenerating the screenshots
+## 🖼️ Regenerating the screenshots
 
 The [Control panel tour](#-control-panel-tour) section is generated by
 `config/doc_capture` from `docs/screenshots/manifest.json` (the contract:
