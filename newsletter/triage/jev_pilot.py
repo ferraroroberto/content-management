@@ -253,15 +253,6 @@ def _share(n: int, d: int) -> Optional[float]:
     return round(n / d, 3) if d else None
 
 
-def _bucket(conf: Optional[float]) -> Optional[str]:
-    if conf is None:
-        return None
-    for name, lo, hi in BUCKETS:
-        if lo <= conf < hi:
-            return name
-    return None
-
-
 def _calibration(pairs: Iterable[Tuple[Optional[float], bool]]) -> Dict[str, Any]:
     """(confidence, agreed) pairs → per-bucket n + agreement, plus auto-accept shares."""
     pairs = [(c, a) for c, a in pairs if c is not None]

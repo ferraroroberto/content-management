@@ -103,10 +103,6 @@ class PostPayload:
     image_paths: list[Path] = field(default_factory=list)
     caption: str = ""
 
-    @property
-    def is_thread(self) -> bool:
-        return len(self.image_paths) > 1
-
 
 # ---------- Notion query / payload resolution ----------
 
