@@ -154,6 +154,8 @@ native-scheduler driver under `planning/`.
 
 ## Project structure
 
+[`docs/layout.md`](docs/layout.md) says what each root folder and subpackage holds and why the tool folders are declared roots.
+
 ```
 content-management/                   # repo root
 ├── planning/                         # weekly publishing — drives platform schedulers
@@ -590,6 +592,22 @@ After rewording a reference away, shrink the baseline in the same PR with
 `& .\.venv\Scripts\python.exe scripts/comment_ratchet.py --update-baseline`.
 `gmail_readonly/` and `google_oauth_common/` are excluded: they are vendored
 copies. See the scaffold's `docs/comment-ratchet.md` for the exit codes and keys.
+
+The fifth stage is the structure ratchet. It fails when a file passes 1,000 lines,
+a function 100 lines or a directory 40 modules and is new or above its size in
+`.structure-ratchet-baseline.json`, or when the tracked root folders stop matching
+`shape` and `extra_roots` in `.fleet.toml`. The wrapper reports something it could
+not measure as **NOT CONFIRMED** (a failure, never a pass or a skip):
+
+```powershell
+& .\.venv\Scripts\python.exe -m scripts.structure_ratchet_gate
+```
+
+After splitting a baselined file or function, shrink the baseline in the same PR with
+`& .\.venv\Scripts\python.exe scripts/structure_ratchet.py --update-baseline`; only
+`--allow-additions` adds an entry. `gmail_readonly/` and `google_oauth_common/` are
+excluded: they are vendored copies. See the scaffold's `docs/structure-ratchet.md`
+for the exit codes and keys.
 
 ## 📝 License and contact
 

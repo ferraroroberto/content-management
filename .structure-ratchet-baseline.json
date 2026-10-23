@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "entries": [
+    {"key": "dir:tests", "modules": 86},
+    {"key": "fn:app/tab_check_ip.py:_render_table", "lines": 122},
+    {"key": "fn:app/tab_newsletter.py:run", "lines": 104},
+    {"key": "fn:app/tab_triage.py:_render_review", "lines": 103},
+    {"key": "fn:check_ip/run.py:main", "lines": 141},
+    {"key": "fn:check_ip/screen.py:next_batch", "lines": 114},
+    {"key": "fn:engagement/check_review_app.py:run", "lines": 217},
+    {"key": "fn:engagement/classify/rules.py:classify_pending", "lines": 160},
+    {"key": "fn:engagement/linkedin/scrape_comments.py:run", "lines": 102},
+    {"key": "fn:engagement/linkedin/scrape_comments.py:scrape_post_comments", "lines": 143},
+    {"key": "fn:newsletter/pipeline.py:process_url", "lines": 120},
+    {"key": "fn:newsletter/pipeline.py:run_batch", "lines": 110},
+    {"key": "fn:newsletter/triage/history.py:compute_stats", "lines": 134},
+    {"key": "fn:newsletter_pipeline.py:main", "lines": 104},
+    {"key": "fn:planning/_scheduler_main.py:run_single_post_scheduler", "lines": 124},
+    {"key": "fn:planning/instagram/schedule_instagram_posts.py:_upload_files", "lines": 178},
+    {"key": "fn:planning/instagram/schedule_instagram_posts.py:main", "lines": 113},
+    {"key": "fn:planning/substack/post_substack_note.py:publish_note_flow", "lines": 106},
+    {"key": "fn:planning/videos/schedule_videos_posts.py:main", "lines": 175},
+    {"key": "fn:recorder/server.py:create_app", "lines": 120},
+    {"key": "fn:reporting/notion/notion_update.py:main", "lines": 118},
+    {"key": "fn:reporting/process/data_processor.py:process_all_files", "lines": 102},
+    {"key": "fn:reporting/process/data_processor.py:process_array_data", "lines": 103},
+    {"key": "fn:reporting/process/data_processor.py:process_json_file", "lines": 101},
+    {"key": "fn:reporting_pipeline.py:run_pipeline", "lines": 110},
+    {"key": "size:planning/linkedin/linkedin_composer.py", "lines": 1112},
+    {"key": "size:reporting/notion/setup_notion_relations_system.sql", "lines": 1132},
+    {"key": "size:tests/test_check_ip_store.py", "lines": 1386}
+  ]
+}
