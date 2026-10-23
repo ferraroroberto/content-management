@@ -60,7 +60,7 @@ flowchart TD
 | `clip_pc` | `clipPC` | Folder path (already terminated with `\`) |
 | `file_pc` | `filePC` | Bare filename without extension |
 
-Video file = `<clipPC><filePC>.mp4`. Thumb = `<clipPC><filePC>.png` (LinkedIn auto-extracts a thumbnail; the .png is logged-and-skipped if missing). If `filePC` contains characters Windows can't store in a filename (`<>:"/\|?*`, e.g. a colon in the clip title) and the verbatim file is missing, the Windows-safe form of the name is used instead (those characters dropped, whitespace collapsed), with an info log line (#317).
+Video file = `<clipPC><filePC>.mp4`. Thumb = `<clipPC><filePC>.png` (LinkedIn auto-extracts a thumbnail; the .png is logged-and-skipped if missing). If `filePC` contains characters Windows can't store in a filename (`<>:"/\|?*`, e.g. a colon in the clip title) and the verbatim file is missing, the Windows-safe form of the name is used instead (those characters dropped, whitespace collapsed), with an info log line.
 
 ## Selectors per platform
 
@@ -72,8 +72,8 @@ attach helper. See:
   + ALT skipped (videos have no ALT in LI), `Video` button instead of
   `Photo`. The `Video` click is guarded like `Photo`'s: it only counts
   once a file input attaches, so a click swallowed by the feed's
-  re-hydration is retried (issue #271). Since 2026-09 the Editor
-  mounts `input[accept="video/*"]` straight away; the older build
+  re-hydration is retried. The Editor
+  mounts `input[accept="video/*"]` straight away; an older build
   mounted a hidden `input#media-editor-file-selector__file-input` with
   `accept="...video/mp4..."`. Either way, `_upload_video` pushes the
   .mp4 directly at the input (the older build's visible blue "Upload
@@ -89,7 +89,7 @@ attach helper. See:
   until LinkedIn's background video upload settles (also see Gotchas).
 - Instagram (Meta planner): `planning/videos/videos_instagram.py` via the
   **Reels composer** (`Create reel` in the day's `Schedule ▾` menu), not the
-  feed-post composer (issue #118). Instagram rejects vertical 9:16 clips in the
+  feed-post composer. Instagram rejects vertical 9:16 clips in the
   post composer ("doesn't fit within Instagram's accepted aspect ratio range of
   4:5 to 16:9", Schedule never enables) and also duplicates a single video
   upload into two tiles there; the Reels composer accepts 9:16 and attaches one
@@ -105,7 +105,7 @@ attach helper. See:
   it often stays on `/latest/reels_composer/` behind an in-place `Reel scheduled`
   confirmation dialog, so `wait_reel_composer_closes` treats *either* the URL
   leaving the composer *or* that dialog appearing as success, then clicks its
-  `Done` button (issue #125). A URL-only check false-FAILs an already-scheduled
+  `Done` button. A URL-only check false-FAILs an already-scheduled
   reel.
 - Twitter (X): `planning/twitter/schedule_twitter_posts.py` — same
   `SideNav_NewTweet_Button`, same `fileInput` (accepts .mp4 directly),
@@ -161,7 +161,7 @@ attach helper. See:
   `PLATFORMS_TAG_ALONG` set: in scope whenever any other clip relation
   is populated. There is no column to hold the sentinel every other
   platform uses, so the post-LIVE sentinel-write loop in
-  `schedule_videos_posts.py` skips tag-along platforms (issue #29 — the
+  `schedule_videos_posts.py` skips tag-along platforms (the
   write would log a misleading `"Role 'post_url_th' not present"`
   warning, and that warning is reserved for *real* `editorial_columns`
   regressions such as a `post_url_li` entry deleted from `config.json`).
@@ -171,7 +171,7 @@ attach helper. See:
   day title), and both `_rows_for_platform` and the WIP-Vd untick
   decision consult it.
 
-  This is what makes a **recovery run** possible (issue #239). Before the
+  This is what makes a **recovery run** possible. Before the
   ledger, a row whose LI leg failed while IG/TW/TH went live had no good
   re-run: plain re-run re-posted the Threads video, and `--skip-th`
   avoided that only by leaving WIP-Vd checked forever, since a flag-skip
@@ -197,7 +197,7 @@ attach helper. See:
   signal, because the composer disappearing is circumstantial: a real
   `--live` run reported 2 of 7 rows as failures that had in fact been
   scheduled, and the caller then skipped their Work-in-Progress untick,
-  queueing both for a duplicate (issue #178). Same class of bug as the
+  queueing both for a duplicate. Same class of bug as the
   Instagram Reels URL-only check further down, and the same fix — confirm on
   the platform's own signal, not on a side effect. Full account in
   [`planning/linkedin/README.md`](../linkedin/README.md).
@@ -205,7 +205,7 @@ attach helper. See:
   A pre-click snapshot inside that gap matched no composer, leaving the row
   to the toast alone, and the video toast often arrives after the 45 s wait —
   a scheduled post was reported FAIL. `schedule_pre_state` now waits (up to
-  10 s) for the composer before snapshotting (issue #319).
+  10 s) for the composer before snapshotting.
 - **LinkedIn keeps uploading the video AFTER the composer closes.** The
   composer disappears shortly after `Schedule` is clicked, but LinkedIn
   finishes the .mp4 upload in the background. If the Playwright context
@@ -249,8 +249,7 @@ attach helper. See:
   `https://scheduled.local/<platform>/<day>` into `link <P>(v)`. This is
   intentional and gets overwritten by the data-collection pipeline once the
   real post goes live.
-- **OneDrive online-only clips are auto-hydrated before upload (issue #104,
-  indeterminate-state gap closed in #244).** Clips live in a OneDrive folder.
+- **OneDrive online-only clips are auto-hydrated before upload.** Clips live in a OneDrive folder.
   When a clip `.mp4`/`.png` is "online-only" (a Files-On-Demand placeholder),
   `Path.exists()` is `True` **and** `stat().st_size` reports the full size, yet
   the bytes are not on disk — feeding that placeholder to a platform's
@@ -268,7 +267,7 @@ attach helper. See:
   *"The cloud file provider is not running"*; start OneDrive and retry.
   Hydrated files are left pinned ("always keep on this device"); free up space
   again later if needed.
-- **X video scheduling watches the in-dialog Schedule button (issue #107, correcting #106).**
+- **X video scheduling watches the in-dialog Schedule button.**
   The real reason X "never scheduled the weekly clip": the video driver waited on
   `.last` of a selector matching **both** `tweetButton` (the composer modal's real
   Schedule button) **and** `tweetButtonInline` (the home timeline's empty,
@@ -282,8 +281,8 @@ attach helper. See:
   mounts scrubber progressbars that never clear (a false "still uploading"
   signal). `_wait_for_video_upload_ready` now lets the upload settle before the
   schedule modal opens, so confirming never races a mid-upload state.
-- **Clips are transcoded to platform-safe specs before upload (issue #107).**
-  Independently of the scheduling fix, weekly masters are sometimes exported very
+- **Clips are transcoded to platform-safe specs before upload.**
+  Weekly masters are sometimes exported very
   heavy (~30 Mbps / 200+ MB — **over X's ~25 Mbps ceiling**) and carry a
   `mov_text` subtitle track X dislikes. After hydration, `load_clip_payload`
   calls `ensure_platform_safe_clip`, which `ffprobe`s the master and, if it trips

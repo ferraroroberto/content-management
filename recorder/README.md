@@ -5,9 +5,8 @@ call** between the two, and records each side's camera and mic **locally at
 full resolution**, uploading in chunks while it runs. The finished files land
 in the episode's `video editing/` folder, which is where `podcast_pipeline.py`
 reads its tracks from. This replaces the one job Riverside did for the
-podcast. The design and the probes behind it are in #336. Build steps: the
-recorder (#341), the call (#342), and the track sync (#343, the pipeline's
-`sync` stage, see `podcast/README.md`).
+podcast. It covers the browser recorder, the peer-to-peer call, and the
+track sync (the pipeline's `sync` stage, see `podcast/README.md`).
 
 ## Run
 
@@ -30,7 +29,7 @@ how much is uploaded. The files, per side:
   and mic, full quality.
 - `video editing/recorder - <side> remote-ref - <date time>.mp4`: the
   **other** side's voice as heard over the call (Opus, 32 kbps), recorded
-  while this side records. It is the reference the sync stage (#343)
+  while this side records. It is the reference the sync stage
   aligns the two full-quality tracks against. A call that drops and comes
   back while recording gives a second reference file.
 - Beside each file, a `.json` sidecar: its recording id, and for a
@@ -83,7 +82,7 @@ server says so at start, and some guests may not connect.
   recording passes 4 GiB of output (reproduced at 2³² bytes: ~46 min at 1080p,
   ~14 min at 4K); its WebM muxer has no such limit. MP4 is only the fallback
   for a browser that cannot record WebM. Echo cancellation stays on (the call
-  in #342 needs it); noise suppression and auto gain are off.
+  needs it); noise suppression and auto gain are off.
 - **No loss on a crash or a dropped link:** every chunk goes to IndexedDB as
   it arrives and is deleted only once the server has acknowledged it, so tab
   memory stays flat however long the recording runs. A single upload loop
@@ -100,7 +99,7 @@ server says so at start, and some guests may not connect.
   missing numbers otherwise), joins them in order and remuxes into `.mp4`
   with `ffmpeg -c copy` (no re-encode; MP4 holds H.264 and Opus). The remux
   is needed because neither container `MediaRecorder` writes carries a
-  usable duration (#336).
+  usable duration.
 
 ## Config (`config.json` → `podcast.recorder`)
 
@@ -118,11 +117,11 @@ server says so at start, and some guests may not connect.
 - 1080p is about 5–7 GB per hour per side, and 4K about 18 GB per hour. 4K can
   outrun a home uplink, so its upload may finish after the call: the page says
   "still to send", and closing the tab does not lose what is queued.
-- Safari is untested: the page records MP4 there in principle, but #336 found
+- Safari is untested: the page records MP4 there in principle, but there are
   reports of long-session problems. Ask guests to use Chrome or Edge.
 - Two participants per episode (one link per side); no screen sharing or chat.
 - The hosted TURN relay and a call across real networks (one side on mobile
-  data) are still to be proven: #342 stays open for them.
+  data) are still unproven.
 
 ## Verify
 
@@ -140,7 +139,7 @@ server says so at start, and some guests may not connect.
   colliding with the host's on join, which stuck about one call in three
   before ICE. Since then the host alone opens the call, and the guest answers
   with its tracks.
-- The browser side was proven in real Chrome 154 with the real webcam (#341),
+- The browser side was proven in real Chrome 154 with the real webcam,
   driven by Playwright on this PC:
   - 60-minute 1080p soak with a 60 s network cut at minute 20: 3600.2 s of
     video for 3600.1 s of wall clock, 107,892 frames (29.97 fps, none

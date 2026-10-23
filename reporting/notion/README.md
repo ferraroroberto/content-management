@@ -16,8 +16,7 @@ Database-relationship discovery is handled by the SQL auto-detector system —
 see `setup_notion_relations_system.py` below. The old `notion_database_relations.py`
 (JSON-file relation extractor feeding the now-removed Python relations creator)
 and `notion_relations_python_setup.py` (a broken duplicate setup wrapper that
-read a SQL file that never existed in this repo) were removed as stale/broken
-(issue #196).
+read a SQL file that never existed in this repo) are removed as stale/broken.
 
 The folder also ships a handful of **one-time setup and manual diagnostic
 scripts** that are *not* part of any pipeline orchestrator — see
