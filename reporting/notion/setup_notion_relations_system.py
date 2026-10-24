@@ -1,16 +1,12 @@
 import os
-import json
 import logging
 import sys
 import argparse
 from pathlib import Path
-import psycopg2
-from dotenv import load_dotenv
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.logger_config import setup_logger
-from config.loader import load_full_config as load_config
 from reporting.process.supabase_uploader import execute_sql, get_db_connection, run_sql_file
 
 SQL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "setup_notion_relations_system.sql")
@@ -60,9 +56,6 @@ def main(args=None):
     logger.info("🚀 Starting Notion Relations System Setup")
     logger.info(f"🐞 Debug mode: {'Enabled' if debug_mode else 'Disabled'}")
     
-    # Load configuration
-    config = load_config()
-
     # Connect to database
     connection = get_db_connection()
     if not connection:

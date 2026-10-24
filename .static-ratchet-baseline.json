@@ -1,36 +1,5 @@
 {
   "version": 1,
   "tools": {"jscpd": "5.4.0", "ruff": "0.17.1"},
-  "entries": [
-    {"key": "unused:F401:reporting/notion/next_relation_check.py:os", "files": ["reporting/notion/next_relation_check.py"]},
-    {"key": "unused:F401:reporting/notion/notion_supabase_sync.py:pandas", "files": ["reporting/notion/notion_supabase_sync.py"]},
-    {"key": "unused:F401:reporting/notion/notion_supabase_sync.py:typing.Dict", "files": ["reporting/notion/notion_supabase_sync.py"]},
-    {"key": "unused:F401:reporting/notion/notion_supabase_sync.py:typing.Set", "files": ["reporting/notion/notion_supabase_sync.py"]},
-    {"key": "unused:F401:reporting/notion/notion_supabase_sync.py:typing.Tuple", "files": ["reporting/notion/notion_supabase_sync.py"]},
-    {"key": "unused:F401:reporting/notion/notion_unify_data.py:dotenv.load_dotenv", "files": ["reporting/notion/notion_unify_data.py"]},
-    {"key": "unused:F401:reporting/notion/notion_unify_data.py:json", "files": ["reporting/notion/notion_unify_data.py"]},
-    {"key": "unused:F401:reporting/notion/notion_unify_data.py:psycopg2", "files": ["reporting/notion/notion_unify_data.py"]},
-    {"key": "unused:F401:reporting/notion/notion_update.py:dotenv.load_dotenv", "files": ["reporting/notion/notion_update.py"]},
-    {"key": "unused:F401:reporting/notion/notion_update.py:psycopg2", "files": ["reporting/notion/notion_update.py"]},
-    {"key": "unused:F401:reporting/notion/setup_notion_relations_system.py:dotenv.load_dotenv", "files": ["reporting/notion/setup_notion_relations_system.py"]},
-    {"key": "unused:F401:reporting/notion/setup_notion_relations_system.py:json", "files": ["reporting/notion/setup_notion_relations_system.py"]},
-    {"key": "unused:F401:reporting/notion/setup_notion_relations_system.py:psycopg2", "files": ["reporting/notion/setup_notion_relations_system.py"]},
-    {"key": "unused:F401:reporting/process/posts_consolidator.py:dotenv.load_dotenv", "files": ["reporting/process/posts_consolidator.py"]},
-    {"key": "unused:F401:reporting/process/posts_consolidator.py:json", "files": ["reporting/process/posts_consolidator.py"]},
-    {"key": "unused:F401:reporting/process/posts_consolidator.py:psycopg2", "files": ["reporting/process/posts_consolidator.py"]},
-    {"key": "unused:F401:reporting/process/profile_aggregator.py:dotenv.load_dotenv", "files": ["reporting/process/profile_aggregator.py"]},
-    {"key": "unused:F401:reporting/process/profile_aggregator.py:pandas", "files": ["reporting/process/profile_aggregator.py"]},
-    {"key": "unused:F401:reporting/process/profile_aggregator.py:psycopg2", "files": ["reporting/process/profile_aggregator.py"]},
-    {"key": "unused:F401:reporting/process/supabase_policy_script.py:json", "files": ["reporting/process/supabase_policy_script.py"]},
-    {"key": "unused:F401:reporting/process/supabase_policy_script.py:psycopg2", "files": ["reporting/process/supabase_policy_script.py"]},
-    {"key": "unused:F401:reporting/process/supabase_policy_script.py:reporting.process.supabase_uploader.load_db_config", "files": ["reporting/process/supabase_policy_script.py"]},
-    {"key": "unused:F401:reporting/process/supabase_uploader.py:json", "files": ["reporting/process/supabase_uploader.py"]},
-    {"key": "unused:F401:reporting/scrape_client/twitter.py:urllib.parse.urlparse", "files": ["reporting/scrape_client/twitter.py"]},
-    {"key": "unused:F401:reporting_pipeline.py:os", "files": ["reporting_pipeline.py"]},
-    {"key": "unused:F841:reporting/notion/notion_database_structure.py:properties", "files": ["reporting/notion/notion_database_structure.py"]},
-    {"key": "unused:F841:reporting/notion/notion_database_structure.py:timestamp", "files": ["reporting/notion/notion_database_structure.py"]},
-    {"key": "unused:F841:reporting/notion/notion_unify_data.py:config", "files": ["reporting/notion/notion_unify_data.py"]},
-    {"key": "unused:F841:reporting/notion/setup_notion_relations_system.py:config", "files": ["reporting/notion/setup_notion_relations_system.py"]},
-    {"key": "unused:F841:reporting/process/posts_consolidator.py:config", "files": ["reporting/process/posts_consolidator.py"]}
-  ]
+  "entries": []
 }

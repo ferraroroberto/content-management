@@ -6,8 +6,7 @@ import argparse
 import logging
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Dict, List, Any, Optional, Set, Tuple
-import pandas as pd
+from typing import List, Any, Optional
 import requests
 from dotenv import load_dotenv
 
