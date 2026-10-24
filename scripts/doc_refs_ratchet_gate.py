@@ -2,16 +2,15 @@ r"""The pre-ship gate's doc-refs-ratchet stage: run the vendored script, map its
 
     & .\.venv\Scripts\python.exe -m scripts.doc_refs_ratchet_gate
 
-The vendored `scripts/doc_refs_ratchet.py` is never edited here. Its exits:
-0 pass; 1 a dangling doc reference outside the baseline or a missing baseline;
-2 a bad table, baseline or arguments; 3 something could not be read (git
-unusable, a doc that is not UTF-8, a fence or HTML comment that never closes).
-Exit 3 means nothing was checked, so it fails the gate as its own state and
-never reads as a pass or a skip. The mapping lives here so a test can pin it;
-the README's Verification section calls this wrapper, never the script.
+`scripts/doc_refs_ratchet.py` is vendored and never edited here. It exits 0 on a
+pass; 1 when a doc names a missing path, module or link outside the baseline, or
+the baseline file is absent; 2 on a bad table, baseline or arguments; 3 when git
+or a doc could not be read (not UTF-8, a fence or HTML comment left open).
+Only 0 passes: 3 is reported as its own NOT CONFIRMED state, so an unread doc
+never looks checked. A test pins this mapping, and the README's Verification
+section runs this wrapper rather than the script.
 
-Exit 0 only when the script exited 0; every other outcome exits 1 with its
-reason on the last line.
+Every outcome other than a clean pass exits 1 with its reason on the last line.
 """
 
 from __future__ import annotations

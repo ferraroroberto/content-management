@@ -1,12 +1,11 @@
-"""The pre-ship gate's doc-refs-ratchet stage maps the vendored script's exit codes.
+"""Tests for the doc-refs-ratchet gate stage and the vendored script behind it.
 
-``scripts/doc_refs_ratchet.py`` exits 3 when a doc or git could not be read (a
-file that is not UTF-8, a fence or HTML comment that never closes): nothing was
-checked. These tests pin that 3 fails as NOT CONFIRMED -- never a pass, never a
-skip -- that the README's gate stage calls the wrapper rather than the script,
-that the real tree passes, and that a reference to a missing path turns the real
-script red until it is removed. They run a throwaway git repo in a temp
-directory: no network and never the real database or config.
+The script exits 3 when a doc or git could not be read (a non-UTF-8 file, a fence
+or HTML comment left open), meaning nothing was checked. Here: 3 fails as NOT
+CONFIRMED and is never a skip; the README runs the wrapper, not the script; the
+real tree passes; and a README naming a missing path turns the real script red
+until the line is removed. The red/green cases use a temporary git repo, so the
+suite needs no network, database or real config.
 
 Run: & .\\.venv\\Scripts\\python.exe -m unittest discover tests -v
 """
