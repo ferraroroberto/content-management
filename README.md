@@ -624,6 +624,24 @@ After rewording a hit away, shrink the baseline in the same PR with
 `--allow-additions` adds an entry. See the scaffold's `docs/instruction-ratchet.md`
 for the rules, exit codes and keys.
 
+The seventh stage is the doc-references ratchet. It reads `README.md`, `CLAUDE.md`
+and `docs/**/*.md` and fails when one names a repo path, a `python -m` module or a
+relative link that does not exist and is not recorded in
+`.doc-refs-ratchet-baseline.json`. Loopback ports are not checked, because
+`.fleet.toml` declares no `port`. The wrapper reports a doc or git it could not read
+as **NOT CONFIRMED** (a failure, never a pass or a skip):
+
+```powershell
+& .\.venv\Scripts\python.exe -m scripts.doc_refs_ratchet_gate
+```
+
+Point a reference at what exists now, or drop it; a path a doc names on purpose goes
+in `allow_refs` in the `[doc_refs_ratchet]` table of `.fleet.toml`. After fixing a
+baselined reference, shrink the baseline in the same PR with
+`& .\.venv\Scripts\python.exe scripts/doc_refs_ratchet.py --update-baseline`; only
+`--allow-additions` adds an entry. See the scaffold's `docs/doc-refs-ratchet.md` for
+the exit codes and keys.
+
 ## 📝 License and contact
 
 This project is free software for personal use from Roberto Ferraro 😇

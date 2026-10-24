@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "entries": [
+    {"key": "docs/playwright-social-scraping.md", "refs": ["planning/substack/update_substack_followers.py"]}
+  ]
+}
