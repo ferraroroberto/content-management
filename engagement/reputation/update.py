@@ -150,7 +150,7 @@ def recompute_for_platform(platform: str = "linkedin") -> dict:
     sb = supabase_client()
 
     # `post_posted_at` is now a real column (schema.sql), persisted by the
-    # scraper alongside each comment (issue #246) — select it explicitly so
+    # scraper alongside each comment — select it explicitly so
     # the cadence "seconds after my post" signal and sub_2_min counter below
     # aren't silently starved, matching rules.py.
     rows = (

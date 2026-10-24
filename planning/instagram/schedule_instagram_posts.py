@@ -327,7 +327,7 @@ def _upload_files(page: Page, paths: list[Path], *, is_video: bool = False) -> N
     #            a label-wrapped <input> where the visible button is decorative).
     # When uploading a video, narrow to the video-accept input so we do not
     # accidentally fill an image input that Meta also mounts in the same
-    # composer (issue #37).
+    # composer.
     leg0_selector = (
         'input[type="file"][accept*="video"]' if is_video else 'input[type="file"]'
     )
@@ -337,7 +337,7 @@ def _upload_files(page: Page, paths: list[Path], *, is_video: bool = False) -> N
         # 15 s — set_input_files on a multi-MB video can blow past 4 s while
         # Meta is still accepting the file. A premature TimeoutError there
         # used to throw us into Leg 1, which opened the file chooser and
-        # attached the same clip a SECOND time → issue #37's duplicate.
+        # attached the same clip a SECOND time (a duplicate attachment).
         try:
             pre_inp.set_input_files(file_paths, timeout=15000)
             logger.info(
@@ -373,7 +373,7 @@ def _upload_files(page: Page, paths: list[Path], *, is_video: bool = False) -> N
 
     # --- Leg 1: click 'Add photo/video' and hope for a direct file chooser ---
     # Meta's post composer sometimes leaves the button without a hydrated
-    # click handler for a short window after the sub-modal closes (issue #28).
+    # click handler for a short window after the sub-modal closes.
     # Settle, click, and on miss retry once via a JS-native click — that
     # bypasses any React handler-binding race a Playwright dispatch hits.
     page.wait_for_timeout(1500)
@@ -744,9 +744,9 @@ def _set_all_visible_date_time(
 
 # ---------- Reels composer ----------
 #
-# The Reels composer driver (issue #118 — "Create reel" in the day's
+# The Reels composer driver ("Create reel" in the day's
 # Schedule ▾ menu, the only path that accepts vertical 9:16 video) lives in
-# ``instagram_reels.py`` (issue #198): it is a self-contained full-page
+# ``instagram_reels.py``: it is a self-contained full-page
 # wizard flow with its own dozen-function lifecycle that shares nothing with
 # the feed-post/story driver below beyond the page session and ``fill_input``.
 # Consumed by ``planning/videos/videos_instagram.py``, not by this module.

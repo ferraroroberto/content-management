@@ -101,7 +101,7 @@ class Priors:
         # `python -m newsletter.triage.criteria` build; nothing in the run/
         # review flow re-runs it, so a tier the owner sets today (Apply, the
         # tier picker, feedback.py) would silently keep being ignored until
-        # the next rebuild (issue #321). Read the live overrides.json on every
+        # the next rebuild. Read the live overrides.json on every
         # run and let it win over the baked copy. ``live_overrides`` is an
         # injection point for tests; production callers always take the
         # default (a fresh disk read).

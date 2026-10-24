@@ -168,7 +168,8 @@ with st.sidebar:
 # non-default tab (it silently snaps back to the first tab and the
 # triggering widget's new value never reaches the script). Confirmed
 # against upstream Streamlit 1.59.1 too, so it isn't fixable by upgrading
-# (issue #157; streamlit/streamlit#11160, #12554). segmented_control is a
+# (see https://github.com/streamlit/streamlit/issues/11160 and
+# https://github.com/streamlit/streamlit/issues/12554). segmented_control is a
 # real widget — its selection is ordinary widget state, so it survives any
 # rerun the way st.tabs()'s internal state does not.
 SECTIONS = ["📊 reporting", "📅 editorial", "📅 planning", "📰 newsletter", "🧭 triage",

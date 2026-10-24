@@ -89,7 +89,7 @@ def resolve_payload(notion, cfg: dict, row: ScheduleRow) -> PostPayload:
 # ---------- X composer helpers ----------
 #
 # Shared with the video driver (``planning/videos/videos_twitter.py``) —
-# live in ``planning.twitter.twitter_composer``, not here (issue #324).
+# live in ``planning.twitter.twitter_composer``, not here.
 
 
 def return_to_home(page: Page, feed_url: str) -> None:
@@ -152,7 +152,7 @@ def schedule_post(
 
     click_confirm_in_modal(page)
 
-    # ---- point of no return (issue #235) ----
+    # ---- point of no return ----
     # From the final Schedule click onward a failure no longer means "nothing
     # happened" — the post may be scheduled and we merely lost sight of it. So
     # everything below raises PostMayBeLiveError, which the row loop refuses to

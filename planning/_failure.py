@@ -39,7 +39,7 @@ FailureKind = Literal["ui-drift", "login-required", "data-error", "other", "none
 
 # Playwright selector/locator breakage phrasing. These are the words Playwright
 # itself emits when a selector stops matching after a DOM change — the exact
-# signature of UI drift (issue #60 surfaced three of these in one run).
+# signature of UI drift (three of these surfaced in one run).
 _UI_DRIFT_RE = re.compile(
     r"timeout|timed out|waiting for|locator|selector|strict mode violation|"
     r"no element|element is not|not visible|not attached|intercepts pointer|"

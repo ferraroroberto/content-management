@@ -91,7 +91,7 @@ def schedule_one_video(
     click_final_schedule_action(page)
     # A large clip keeps uploading after Schedule; the New-thread dialog only
     # closes once it finalizes. Use the video budget, not the image-sized
-    # default (issue #106).
+    # default.
     if not wait_composer_closes(page, timeout_ms=VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS):
         shot = out_dir / f"{label}-th-FAIL.png"
         page.screenshot(path=str(shot), full_page=False)

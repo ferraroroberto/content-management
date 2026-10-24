@@ -82,7 +82,7 @@ RESCREEN_FIELDS = ("screen_verdict", "screen_reason")
 # to db.condition_state — argparse restricts the input, that function owns the
 # meaning, and there is no second word-to-value table to drift out of step.
 #
-# There is deliberately no word for NULL (issue #305). NULL means nobody ever
+# There is deliberately no word for NULL. NULL means nobody ever
 # looked, and the only honest way to say that is to not answer at all — which
 # is what omitting the flag does. A worker that looked and could not tell says
 # `unknown`, which is an answer and stores a 2.
@@ -280,7 +280,7 @@ def record_verdict(
         raise KeyError(f"no result row with id {row_id}")
 
     # One transaction: the opinion being replaced is copied into screen_history
-    # and the replacement is written, or neither happens (issue #301). `with
+    # and the replacement is written, or neither happens. `with
     # conn` commits on success and rolls back on any exception — the copy must
     # never survive a failed update, nor the update a failed copy.
     with conn:
@@ -422,7 +422,7 @@ def build_parser(cfg: dict) -> argparse.ArgumentParser:
     # An omitted condition defaults to None — never assessed — and never to
     # `met`: the default has to be the state that claims nothing, or a worker
     # who forgets one silently certifies compliance it never checked. It is no
-    # longer `unknown` either (issue #305): `unknown` now records that someone
+    # longer `unknown` either: `unknown` now records that someone
     # looked, which would be a claim about a flag the caller never passed, and
     # would drain the row out of the re-screen queue on the strength of it.
     p_verdict.add_argument("--credit", default=None, choices=CONDITION_CHOICES,
@@ -475,7 +475,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                       f"· found {row['search_date']}")
                 # Only served on the re-screen path, and shown rather than
                 # hidden: the worker is replacing this opinion, so it should
-                # be able to read what it is replacing (issue #300).
+                # be able to read what it is replacing.
                 if args.unassessed:
                     print(f"    previously {row['screen_verdict'] or 'unrecorded'}"
                           f" — {row['screen_reason'] or 'no reason recorded'}")
@@ -501,7 +501,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         elif not out["fully_assessed"]:
             tag += " · not fully assessed"
         # Says out loud that an earlier opinion was replaced and kept, so a
-        # re-screening pass is visibly not destroying what it overwrites (#301).
+        # re-screening pass is visibly not destroying what it overwrites.
         if out["superseded"]:
             tag += " · previous opinion kept"
         print(f"✅ [{out['id']}] {out['verdict']}{tag} — {out['found_link']}")

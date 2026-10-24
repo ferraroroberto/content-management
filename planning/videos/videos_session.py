@@ -64,7 +64,7 @@ PLATFORMS = ("li", "ig", "tw", "th", "sb")
 # ~25 s; a video needs longer for X's chunked upload + server-side processing
 # (INIT/APPEND/FINALIZE then STATUS polling to ``succeeded``) — empirically ~8 s
 # for a platform-safe clip, but allow generous headroom. It is a cap, so healthy
-# uploads return as soon as the button enables (issue #107).
+# uploads return as soon as the button enables.
 VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS = 180000
 
 
@@ -308,7 +308,7 @@ def ensure_local_file(path: Path, *, timeout_s: float = 600.0, poll_s: float = 1
 
 
 # ---------------------------------------------------------------------------
-# Platform-safe transcode (issue #107)
+# Platform-safe transcode
 #
 # Some weekly masters are exported very heavy (~30 Mbps / 200+ MB) and carry a
 # mov_text subtitle track. X (Twitter) silently refuses such clips — its
@@ -488,7 +488,7 @@ def ensure_platform_safe_clip(video_path: Path, tcfg: Optional[dict] = None) -> 
 
 # Characters Windows refuses in a filename. A clip's ``filePC`` derives from its
 # Notion title, which may contain them ("start small: the 10-at-10 method"),
-# while the exported file on disk had them dropped (issue #317).
+# while the exported file on disk had them dropped.
 _WIN_ILLEGAL_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*]')
 
 
@@ -563,10 +563,10 @@ def load_clip_payload(notion, editorial_row: dict, video_cols: dict, clip_cols: 
         raise FileNotFoundError(f"Video file not found: {video_path}{also}")
     # Materialise the clip locally before any driver feeds it to set_input_files —
     # an online-only OneDrive placeholder passes .exists() but uploads as no/partial
-    # media (issue #104). Raises loudly if it can't hydrate within the budget.
+    # media. Raises loudly if it can't hydrate within the budget.
     ensure_local_file(video_path)
     # Transcode a platform-safe derivative if the master is too heavy / carries
-    # subtitle or data tracks — X rejects such clips (issue #107). All five
+    # subtitle or data tracks — X rejects such clips. All five
     # consumers feed off this one ``video_path``, so doing it here covers every
     # platform uniformly; the OneDrive master is never modified.
     video_path = ensure_platform_safe_clip(video_path)

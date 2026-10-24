@@ -123,7 +123,8 @@ def extract_field_value(data: Any, field_config: dict[str, Any], field_name: Opt
             try:
                 # Execute the transformation expression
                 # For security, limit to simple expressions
-                result = eval(transform_expr, {"__builtins__": {}}, {"value": value})
+                # transform_expr comes from config/mapping.json, never from scraped data
+                result = eval(transform_expr, {"__builtins__": {}}, {"value": value})  # noqa: S307
                 return convert_boolean_to_integer(result)  # Convert boolean result to 1/0
             except Exception as e:
                 logger.error(f"❌ Error applying custom transformation: {e}")

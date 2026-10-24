@@ -241,7 +241,7 @@ def run() -> None:
         st.caption("no outputs yet: run the pipeline")
         return
     # segmented_control, not st.tabs(): st.tabs() snaps back to the first tab
-    # on the rerun the clip picker triggers (issue #157, see app.py).
+    # on the rerun the clip picker triggers (see app.py).
     view = st.segmented_control("view", ["clips", "cost", "files"], default="clips",
                                 key="podcast-view", label_visibility="collapsed") or "clips"
     if view == "cost":

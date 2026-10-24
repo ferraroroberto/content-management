@@ -59,7 +59,7 @@ _URN_ID_RE = re.compile(r"urn:li:activity:(\d+)")
 
 # Post containers on ``/recent-activity/all/``. The activity URN has lived in two places:
 #   * legacy: a ``data-urn`` attribute on the container itself;
-#   * server-driven markup (since 2026-10, issue #377): ``<div role="listitem">`` with no
+#   * server-driven markup (since 2026-10): ``<div role="listitem">`` with no
 #     URN attribute — the URN survives only in anchor hrefs inside the post
 #     (``/analytics/post-summary/urn:li:activity:<id>/`` on every post,
 #     ``/feed/update/urn:li:activity:<id>/`` on some). Class names there are hashed

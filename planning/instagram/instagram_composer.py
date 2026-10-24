@@ -163,7 +163,7 @@ def navigate_to_week(page: Page, target: date, *, max_clicks: int = 10) -> None:
 # whose menu — "Schedule post" / "Schedule story" / "Create reel" /
 # "Schedule ad" — only opens on a JS-native element.click(). Playwright's
 # mouse-event .click() leaves it closed (the same half-bound React handler that
-# breaks the Add-media button, issue #28), so a Playwright click never reveals
+# breaks the Add-media button), so a Playwright click never reveals
 # the menu item and the click times out. We therefore open the menu with a
 # JS-native click, then select the item. Each (open + click) attempt is retried
 # with an escalating click timeout in case Meta's menu is also slow to paint.
@@ -349,7 +349,7 @@ def return_to_planner(page: Page, planner_url: str) -> None:
             page.wait_for_timeout(500)
     except Exception as err:
         # The schedulers' "instagram_schedule" logger, not this module's: the
-        # drivers only configure that one (issue #37), so a warning here would
+        # drivers only configure that one, so a warning here would
         # otherwise vanish from their run logs.
         logging.getLogger("instagram_schedule").warning("⚠️ Could not return to planner: %s", err)
 
