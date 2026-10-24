@@ -311,13 +311,13 @@ def _dialog_done_control(page: Page):
 def _click_add_photo(page: Page) -> None:
     """Click the 'Photo' button on the feed (opens post dialog + file picker)."""
     # The hydrated 'Photo' affordance is a role-less <a> with a <p>Photo</p>
-    # label, so it's matched by visible text, not accessible name (issue #140).
+    # label, so it's matched by visible text, not accessible name.
     # `click_feed_entry` re-resolves on each attempt, absorbing both the
-    # cold-start race (issue #27) and the share-box rehydration swap. Passing
+    # cold-start race and the share-box rehydration swap. Passing
     # `expect_selector` also guards a third failure mode: the click can land
     # on a structurally-ready-but-not-yet-hydrated button and be silently
     # swallowed, so `_upload_photo`'s `input[type="file"]` wait times out with
-    # no composer ever having opened (issue #150). `click_feed_entry` retries
+    # no composer ever having opened. `click_feed_entry` retries
     # in that case instead of returning a false success.
     #
     # LinkedIn's 'Photo' click fires a native <input type="file"> click under
@@ -349,7 +349,7 @@ def _upload_photo(page: Page, image_path: Path) -> None:
 
 
 # How long to watch, after the ALT 'Add' click, for the photo editor to come
-# back or LinkedIn's crash screen to replace it (issue #270). The crash landed
+# back or LinkedIn's crash screen to replace it. The crash landed
 # within ~2 s in the live probe; the editor normally returns near-instantly.
 ALT_COMMIT_SETTLE_MS = 6000
 
@@ -639,17 +639,17 @@ def _click_start_a_post(page: Page) -> None:
     a document'. LI's share box exposes a button with accessible name
     matching 'Start a post' (case-insensitive).
     """
-    # The hydrated 'Start a post' box is also role-less (issue #140), so it's
+    # The hydrated 'Start a post' box is also role-less, so it's
     # matched by visible text. `click_feed_entry` absorbs both the cold-start
-    # race (issue #27) and the share-box rehydration swap by re-resolving on each
+    # race and the share-box rehydration swap by re-resolving on each
     # attempt. Both English variants ('Start a post' / 'Create a post') and the
     # Spanish variants are folded into the shared ``START_POST_TEXT_RE`` so one
     # call handles every locale.
     #
-    # ``expect_selector`` is the #150 inert-click guard `_click_add_photo`
+    # ``expect_selector`` is the inert-click guard `_click_add_photo`
     # already had: without it a swallowed click "succeeded", and the carousel
     # route then failed at 'Expand content types' against a feed with no
-    # composer open (issue #271).
+    # composer open.
     click_feed_entry(page, START_POST_TEXT_RE, "Start a post",
                      expect_selector=COMPOSER_EDITOR_SEL)
 

@@ -51,7 +51,7 @@ from newsletter.triage.score import MetaScore, ShadowPass, load_lessons
 logger = logging.getLogger("newsletter_triage.jev")
 
 ENGINES = ("legacy", "jev", "both", "jev+legacy")
-JEV_DECIDES = ("jev", "jev+legacy")   # engines whose Stage A answers are Jev's; `jev+legacy` = legacy shadow (#394)
+JEV_DECIDES = ("jev", "jev+legacy")   # engines whose Stage A answers are Jev's; `jev+legacy` = legacy shadow
 DEFAULT_ENGINE = "legacy"
 DEFAULT_MODEL = "jev-latest"
 ROUTE = "/v1/systemone"

@@ -41,18 +41,17 @@ SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 OWNER_COLUMNS = ("ok", "person", "chat", "report", "fixed")
 
 # The three CC BY-NC-ND conditions, in severity-reporting order. Each holds
-# one of four states (issues #295, #305):
+# one of four states:
 #
 #     1    = met
 #     0    = violated
 #     2    = assessed, could not be established
 #     NULL = never assessed
 #
-# #295 gave NULL its own meaning — never assessed, never a pass. #305 split the
-# second meaning back out of it: a worker that looked at the post and could not
-# establish a condition was storing the same NULL as a row nobody had ever
-# opened, so the re-screen queue re-served rows that had just been judged and
-# never drained. Two live batches were served the identical ten rows that way.
+# NULL means never assessed, never a pass. 2 is kept apart from it: a worker that
+# looked at the post and could not establish a condition would otherwise store
+# the same NULL as a row nobody had ever opened, so the re-screen queue would
+# re-serve rows that had just been judged and never drain.
 CONDITION_MET = 1
 CONDITION_VIOLATED = 0
 CONDITION_INDETERMINATE = 2
@@ -63,7 +62,7 @@ SCREEN_COLUMNS = ("screen_verdict", "screen_outcome", "screen_reason", "screened
                   "screen_source", "poster_url") + CONDITION_COLUMNS
 
 # What `screen_history` preserves when one of those writes replaces another
-# (issue #301) — exactly SCREEN_COLUMNS, so a superseded opinion round-trips
+# — exactly SCREEN_COLUMNS, so a superseded opinion round-trips
 # whole. Derived from that tuple rather than retyped: a screening column added
 # later and not preserved here would be silently lost on the next re-screen.
 SCREEN_HISTORY_COLUMNS = SCREEN_COLUMNS
@@ -152,7 +151,7 @@ def poster_key_for(link: Optional[str]) -> Optional[str]:
 
 # LinkedIn serves one post under a per-country host (`tn.`, `my.`, `rs.`, …),
 # which is a different string for the same page, so the duplicate flag never
-# fired and the queue screened the post once per mirror (issue #291). Every
+# fired and the queue screened the post once per mirror. Every
 # LinkedIn host in the store is either `www.` or a two-letter country code, so
 # the pattern stays exactly that narrow — `business.`/`learning.`/`careers.`
 # linkedin.com are different sites, not mirrors of one post.

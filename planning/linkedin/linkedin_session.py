@@ -63,5 +63,5 @@ class LinkedInSession(PlatformSession):
     session_display = "LinkedIn"
     default_timeout_ms = 30000
     # LinkedIn bounces unauthenticated users to /login, /uas/login, or /checkpoint;
-    # /in/<handle>/ pages go to /authwall instead, client-side (issue #310).
+    # /in/<handle>/ pages go to /authwall instead, client-side.
     login_markers = ("/login", "/uas/login", "/checkpoint/lg/login", "/authwall")

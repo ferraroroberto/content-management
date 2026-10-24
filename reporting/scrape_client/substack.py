@@ -4,7 +4,7 @@ Reuses ``planning/substack`` persistent profile via ``SubstackSession``.
 
 Profile follower count: drives ``substack.stats_audience_url`` and reads the
 ``"Total followers (N)"`` line — this is the same logic that used to live in
-``planning/substack/update_substack_followers.py``, folded in here so all
+a standalone Substack followers script, folded in here so all
 five platforms share a uniform shape.
 
 Posts: ``https://substack.com/@<handle>`` activity feed. We used to drop the
@@ -61,8 +61,7 @@ SCROLL_PAUSE_MS = 1500
 def fetch_profile(target_date: Optional[str] = None) -> Optional[dict]:
     """Scrape the Substack 'Total followers (N)' counter.
 
-    Folded-in equivalent of the previous
-    ``planning/substack/update_substack_followers.py``, returning the count
+    Folded-in equivalent of the previous standalone followers script, returning the count
     as the canonical envelope payload instead of writing directly to Notion.
     """
     target_date = normalize_target_date(target_date)

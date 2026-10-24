@@ -2,12 +2,8 @@
   "version": 1,
   "tools": {"jscpd": "5.4.0", "ruff": "0.17.1"},
   "entries": [
-    {"key": "lint:B017:tests/test_media_probes.py:with self.assertRaises(Exception):", "files": ["tests/test_media_probes.py"]},
-    {"key": "lint:B034:newsletter/triage/gmail.py:data = json.loads(re.split(r\"[\\x00-\\x1f\\x7f]\", text, 1)[0])", "files": ["newsletter/triage/gmail.py"]},
-    {"key": "lint:B034:newsletter/triage/gmail.py:return re.split(r\"[\\x00-\\x1f\\x7f]\", text, 1)[0]", "files": ["newsletter/triage/gmail.py"]},
     {"key": "lint:S113:reporting/notion/notion_database_list.py:response = requests.post(url, headers=self.headers, json=data)", "files": ["reporting/notion/notion_database_list.py"]},
     {"key": "lint:S113:reporting/notion/notion_supabase_sync.py:response = requests.get(url, headers=self.headers)", "files": ["reporting/notion/notion_supabase_sync.py"]},
-    {"key": "lint:S113:reporting/notion/notion_supabase_sync.py:response = requests.post(url, headers=self.headers, json=data)", "files": ["reporting/notion/notion_supabase_sync.py"]},
-    {"key": "lint:S307:reporting/process/data_processor.py:result = eval(transform_expr, {\"__builtins__\": {}}, {\"value\": value})", "files": ["reporting/process/data_processor.py"]}
+    {"key": "lint:S113:reporting/notion/notion_supabase_sync.py:response = requests.post(url, headers=self.headers, json=data)", "files": ["reporting/notion/notion_supabase_sync.py"]}
   ]
 }

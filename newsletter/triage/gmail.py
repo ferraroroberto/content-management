@@ -344,7 +344,7 @@ def _b64_url(segment: str) -> Optional[str]:
             continue
         text = out.decode("utf-8", "ignore")
         if text.startswith(("http://", "https://")):
-            return re.split(r"[\x00-\x1f\x7f]", text, 1)[0]
+            return re.split(r"[\x00-\x1f\x7f]", text, maxsplit=1)[0]
         if text.startswith("{"):
             url = _json_url(text)
             if url:
@@ -355,7 +355,7 @@ def _b64_url(segment: str) -> Optional[str]:
 def _json_url(text: str) -> Optional[str]:
     """``{"e": "https://…"}`` (Substack ``redirect/2/``) and friends."""
     try:
-        data = json.loads(re.split(r"[\x00-\x1f\x7f]", text, 1)[0])
+        data = json.loads(re.split(r"[\x00-\x1f\x7f]", text, maxsplit=1)[0])
     except Exception:
         return None
     if isinstance(data, dict):

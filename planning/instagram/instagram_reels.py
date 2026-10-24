@@ -42,8 +42,8 @@ from planning.instagram.instagram_composer import fill_input
 # Shares the "instagram_schedule" logger (rather than a module-local
 # "instagram_reels" one) so planning/videos/schedule_videos_posts.py's
 # existing ``configure_logger("instagram_schedule", ...)`` call keeps
-# covering these lines too — see this repo's issue #37 for what happens to a
-# driver's log lines when its logger name is left out of that list.
+# covering these lines too: a driver whose logger name is left out of that
+# list loses its log lines.
 logger = logging.getLogger("instagram_schedule")
 
 

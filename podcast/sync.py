@@ -321,7 +321,7 @@ def run(ep: Episode, cfg: dict, rec: StageRecord) -> Optional[dict]:
                 report["drift_ppm"], report["method"],
                 f", call round trip {report['round_trip_s']:.3f} s" if "round_trip_s" in report else "")
     # Into this episode's own folder, never beside a source track it may only
-    # read (a trial episode points at another folder's recording, #350).
+    # read (a trial episode points at another folder's recording).
     dst = ep.folder / VIDEO_DIR / OUTPUT
     dst.parent.mkdir(parents=True, exist_ok=True)
     retime(ep.tracks["guest"], dst, report["offset_s"], report["drift_ppm"] / 1e6, cfg.get("video_encoder", "libx264"))

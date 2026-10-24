@@ -40,7 +40,7 @@ SIMILAR_MATCH = "Similar Match"
 # Lens response section → the ``match_type`` stored for rows built from it.
 MATCH_TYPES = {"exact_matches": EXACT_MATCH}
 
-# Retired, not forgotten (issue #292). A ``Similar Match`` is Lens saying "this
+# Retired, not forgotten. A ``Similar Match`` is Lens saying "this
 # looks like your picture", which for minimalist business illustration means
 # another artist drawing in the same idiom — never evidence of reuse. Every one
 # ever screened resolved to `unclear`, none of ten months of owner decisions is
