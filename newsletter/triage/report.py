@@ -9,8 +9,7 @@ Layout: ① shortlist per topic (ticked = suggested pick; runners-up unticked;
 
 from __future__ import annotations
 
-from collections import Counter
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from newsletter.triage.rank import TOPICS, WEAK_FILL, Candidate, Selection
 
