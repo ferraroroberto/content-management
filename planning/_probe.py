@@ -25,7 +25,6 @@ from __future__ import annotations
 import argparse
 import importlib
 import re
-import sys
 from typing import Optional
 
 # platform -> (module, session-class, config-loader). Lazy-imported so probing
