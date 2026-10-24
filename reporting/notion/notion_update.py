@@ -4,8 +4,6 @@ import argparse
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Any, Optional
-import psycopg2
-from dotenv import load_dotenv
 from notion_client import Client
 from psycopg2.extensions import connection as PgConnection
 

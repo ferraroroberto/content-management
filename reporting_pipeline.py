@@ -9,7 +9,6 @@ Initialization script to run the complete data processing pipeline:
 6. substack.daily_pipeline - Publish daily Substack Note (follower scrape now lives in reporting/scrape_client/substack.py)
 """
 
-import os
 import sys
 import json
 import argparse

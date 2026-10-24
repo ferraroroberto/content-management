@@ -2,10 +2,7 @@ import os
 import sys
 import logging
 import argparse
-import pandas as pd
 from pathlib import Path
-import psycopg2
-from dotenv import load_dotenv
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))

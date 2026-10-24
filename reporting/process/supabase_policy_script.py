@@ -6,11 +6,9 @@ Applies Row Level Security (RLS) policies to all existing tables in Supabase.
 Follows project automation standards with logging and configuration management.
 """
 
-import json
 import logging
 from pathlib import Path
 import sys
-import psycopg2
 from psycopg2 import sql
 from psycopg2.extensions import connection as PgConnection
 import argparse
@@ -20,7 +18,7 @@ from typing import Any, Optional
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.logger_config import setup_logger
 # Single-source DB helpers — canonical defs live in supabase_uploader.
-from reporting.process.supabase_uploader import load_db_config, get_db_connection
+from reporting.process.supabase_uploader import get_db_connection
 
 # Set up logger - will use existing logger if available
 logger = logging.getLogger("supabase_policy_script")

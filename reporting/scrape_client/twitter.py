@@ -24,7 +24,6 @@ import re
 import sys
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlparse
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from planning.twitter.twitter_session import (  # noqa: E402

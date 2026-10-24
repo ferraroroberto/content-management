@@ -6,7 +6,6 @@ from pathlib import Path
 import os
 import pandas as pd
 from notion_client import Client
-from datetime import datetime
 from typing import Any, Optional
 
 # Add the parent directory to sys.path to allow importing from sibling packages
@@ -133,7 +132,6 @@ def create_dataframe_from_content(
         return None
     
     records = []
-    properties = database_structure.get('properties', {})
     
     for page in database_content:
         record = {
@@ -167,8 +165,6 @@ def save_database_info(
     
     os.makedirs(output_dir, exist_ok=True)
     
-    # Generate timestamp for filenames
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     db_id = database_structure.get('database_id', 'unknown')
     
     # Get database name (sanitized for filename)
