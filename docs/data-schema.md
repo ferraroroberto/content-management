@@ -1,9 +1,9 @@
 # Data schema
 
 The Supabase (PostgreSQL) schema behind the reporting pipeline: raw per-platform
-tables, the consolidated daily aggregates, and the Notion sync tables. Moved out
-of `README.md`'s orientation map into its own reference file (issue #170) — the
-README links here rather than carrying the column-level detail.
+tables, the consolidated daily aggregates, and the Notion sync tables. It is a
+reference file separate from `README.md`'s orientation map — the README links
+here rather than carrying the column-level detail.
 
 ## Database architecture
 
