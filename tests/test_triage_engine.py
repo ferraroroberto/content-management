@@ -85,7 +85,7 @@ class RankTests(unittest.TestCase):
         b = _cand(2, topic="innovation", score=8.0, domain="hbr.org", sender="b@x.com")
         a.url = a.canonical = "https://hbr.org/2026/08/article?deliveryName=NL_1"
         b.url = b.canonical = "https://hbr.org/2026/08/article?deliveryName=NL_2"
-        sel = rk.select([a, b], RULES)
+        rk.select([a, b], RULES)
         self.assertEqual((a.verdict, b.verdict), ("selected", "duplicate"))
 
     def test_slug_title_when_label_is_a_url(self) -> None:
@@ -102,7 +102,7 @@ class RankTests(unittest.TestCase):
         r2 = _cand(4, topic="innovation", score=8.0, msg="rw", sender="hello@readwise.io")
         h1 = _cand(5, topic="innovation", score=9.0, msg="hb", sender="digest@hbr.org", domain="hb1.com")
         h2 = _cand(6, topic="innovation", score=8.0, msg="hb", sender="digest@hbr.org", domain="hb2.com")
-        sel = rk.select([a, b, r1, r2, h1, h2], RULES)
+        rk.select([a, b, r1, r2, h1, h2], RULES)
         self.assertEqual(a.verdict, "selected")
         self.assertEqual(b.verdict, "runner-up")
         self.assertEqual((r1.verdict, r2.verdict), ("selected", "selected"))

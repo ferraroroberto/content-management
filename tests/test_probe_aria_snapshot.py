@@ -13,7 +13,6 @@ from __future__ import annotations
 import sys
 import types
 import unittest
-from contextlib import contextmanager
 
 import planning._probe as probe_mod
 

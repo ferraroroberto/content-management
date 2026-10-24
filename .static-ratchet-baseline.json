@@ -2,7 +2,6 @@
   "version": 1,
   "tools": {"jscpd": "5.4.0", "ruff": "0.17.1"},
   "entries": [
-    {"key": "dup:9758e925d0c5:tests/test_newsletter_classifier_unclassified.py|tests/test_newsletter_classifier_unclassified.py", "files": ["tests/test_newsletter_classifier_unclassified.py", "tests/test_newsletter_classifier_unclassified.py"]},
     {"key": "unused:F401:app/tab_triage.py:datetime.date", "files": ["app/tab_triage.py"]},
     {"key": "unused:F401:app/tab_triage.py:datetime.timedelta", "files": ["app/tab_triage.py"]},
     {"key": "unused:F401:config/chrome_profile_lock.py:typing.Optional", "files": ["config/chrome_profile_lock.py"]},
@@ -58,16 +57,11 @@
     {"key": "unused:F401:reporting/process/supabase_uploader.py:json", "files": ["reporting/process/supabase_uploader.py"]},
     {"key": "unused:F401:reporting/scrape_client/twitter.py:urllib.parse.urlparse", "files": ["reporting/scrape_client/twitter.py"]},
     {"key": "unused:F401:reporting_pipeline.py:os", "files": ["reporting_pipeline.py"]},
-    {"key": "unused:F401:tests/test_posts_coverage_substack_gap.py:contextlib.contextmanager", "files": ["tests/test_posts_coverage_substack_gap.py"]},
-    {"key": "unused:F401:tests/test_probe_aria_snapshot.py:contextlib.contextmanager", "files": ["tests/test_probe_aria_snapshot.py"]},
-    {"key": "unused:F401:tests/test_triage_handoff.py:datetime.timedelta", "files": ["tests/test_triage_handoff.py"]},
     {"key": "unused:F841:engagement/linkedin/scrape_comments.py:title_col", "files": ["engagement/linkedin/scrape_comments.py"]},
     {"key": "unused:F841:reporting/notion/notion_database_structure.py:properties", "files": ["reporting/notion/notion_database_structure.py"]},
     {"key": "unused:F841:reporting/notion/notion_database_structure.py:timestamp", "files": ["reporting/notion/notion_database_structure.py"]},
     {"key": "unused:F841:reporting/notion/notion_unify_data.py:config", "files": ["reporting/notion/notion_unify_data.py"]},
     {"key": "unused:F841:reporting/notion/setup_notion_relations_system.py:config", "files": ["reporting/notion/setup_notion_relations_system.py"]},
-    {"key": "unused:F841:reporting/process/posts_consolidator.py:config", "files": ["reporting/process/posts_consolidator.py"]},
-    {"key": "unused:F841:tests/test_triage_engine.py:sel", "files": ["tests/test_triage_engine.py"]},
-    {"key": "unused:F841:tests/test_triage_engine.py:sel#2", "files": ["tests/test_triage_engine.py"]}
+    {"key": "unused:F841:reporting/process/posts_consolidator.py:config", "files": ["reporting/process/posts_consolidator.py"]}
   ]
 }
