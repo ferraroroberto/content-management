@@ -11,6 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from newsletter.topics import TOPICS  # noqa: E402
 from newsletter.triage import criteria as cr  # noqa: E402
 
 _STATS = {
@@ -36,7 +37,7 @@ class CriteriaTests(unittest.TestCase):
         self.assertEqual(cr.RULES["edition"]["per_topic"], 8)
         self.assertEqual(cr.RULES["caps"]["hbr_per_edition"]["target"], 3)
         self.assertEqual(cr.RULES["caps"]["same_author_per_edition"]["target"], 2)
-        for topic in cr.TOPICS:
+        for topic in TOPICS:
             self.assertIn(topic, cr.RULES["topics"])
             self.assertTrue(cr.RULES["topics"][topic]["themes"])
 
