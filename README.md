@@ -546,9 +546,11 @@ instead, which understands both styles:
 appears nowhere else in the tracked files, so dead code cannot land unnoticed.
 
 The gate's second stage is the static-analysis ratchet. It compares the repo's
-unused imports, unused variables and duplicated blocks with the committed
-baseline (`.static-ratchet-baseline.json`) and fails on any **new** one, so the
-debt can only shrink. It needs Node (`npx` runs `jscpd`; the first run downloads
+unused imports, unused variables, duplicated blocks and a curated set of ruff bug
+(`B`) and security (`S`) findings (an HTTP call without a timeout, `shell=True`,
+a mutable default argument) with the committed baseline
+(`.static-ratchet-baseline.json`) and fails on any **new** one, so the debt can
+only shrink. It needs Node (`npx` runs `jscpd`; the first run downloads
 it) and `ruff` in the venv (`pip install -r requirements.txt`). Run it through
 the wrapper, which reports a detector that could not run as **NOT CONFIRMED**
 (a failure, never a pass or a skip):
@@ -660,6 +662,26 @@ After deleting a baselined definition, shrink the baseline in the same PR with
 `& .\.venv\Scripts\python.exe scripts/dead_code_ratchet.py --update-baseline`; only
 `--allow-additions` adds an entry. See the scaffold's `docs/dead-code-ratchet.md` for
 the exit codes and keys.
+
+The ninth stage is the conventions ratchet. It holds three fleet conventions as
+`ast` rules and fails when a file's count of hits for one rises above
+`.conventions-ratchet-baseline.json`, which is empty today: `no-window` (a
+`subprocess` spawn without `creationflags=`), `logging-not-print` (a `print` in a
+library package; command-line modules print by design and are skipped) and
+`no-drive-path` (a string literal that starts with a drive letter). The
+`secret-compare` and `git-wrapper` rules stay off because the repo has no helper
+for either. The wrapper reports git or a Python file it could not read or parse as
+**NOT CONFIRMED** (a failure, never a pass or a skip):
+
+```powershell
+& .\.venv\Scripts\python.exe -m scripts.conventions_ratchet_gate
+```
+
+Follow the convention; a call that must break it keeps a reasoned
+`# <rule>-exempt: <reason>` marker on one of its lines. Only
+`& .\.venv\Scripts\python.exe scripts/conventions_ratchet.py --update-baseline --allow-additions`
+adds an entry. See the scaffold's `docs/conventions-ratchet.md` for the exit codes
+and keys.
 
 ## 📝 License and contact
 
