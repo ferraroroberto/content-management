@@ -35,6 +35,7 @@ structure_ratchet = { src = "scripts/structure_ratchet.py", sha = "84d2b12ab4165
 instruction_ratchet = { src = "scripts/instruction_ratchet.py", sha = "60fdd0350f18d28838428b2e773f7868f6381fbf", dest = "scripts/instruction_ratchet.py" }
 doc_refs_ratchet = { src = "scripts/doc_refs_ratchet.py", sha = "23dbefa46635c952d3c871bda4e80b740e7f2859", dest = "scripts/doc_refs_ratchet.py" }
 dead_code_ratchet = { src = "scripts/dead_code_ratchet.py", sha = "8cc9a5f908c48dabc69971ff958869dffed1ba21", dest = "scripts/dead_code_ratchet.py" }
+conventions_ratchet = { src = "scripts/conventions_ratchet.py", sha = "4d75f1ebfae5c9d8462c55a90edd56f8b09157d4", dest = "scripts/conventions_ratchet.py" }
 
 # Comment ratchet (project-scaffolding docs/comment-ratchet.md): fails the pre-ship
 # gate when a file's count of `#NNN` issue references inside comments rises above
@@ -47,9 +48,10 @@ baseline = ".comment-ratchet-baseline.json"
 exclude  = ["gmail_readonly/**", "google_oauth_common/**"]
 
 # Static-analysis ratchet (project-scaffolding docs/static-ratchet.md): fails the
-# pre-ship gate on a new duplicate block or unused import/variable, never on the
-# baselined debt. gmail_readonly/ and google_oauth_common/ are vendored copies
-# (duplicates of their source repo by design), so they cannot be fixed here.
+# pre-ship gate on a new duplicate block, unused import/variable or curated ruff bug
+# (B) / security (S) finding, never on the baselined debt. gmail_readonly/ and
+# google_oauth_common/ are vendored copies (duplicates of their source repo by
+# design), so they cannot be fixed here.
 [static_ratchet]
 enabled    = true
 baseline   = ".static-ratchet-baseline.json"
@@ -128,3 +130,16 @@ allow_refs = []
 enabled  = true
 baseline = ".dead-code-ratchet-baseline.json"
 exclude  = ["gmail_readonly/**", "google_oauth_common/**"]
+
+# Conventions ratchet (project-scaffolding docs/conventions-ratchet.md): fails the
+# pre-ship gate when a file's count of hits for an enabled fleet-convention rule rises
+# above the baseline. no-window: the repo runs on Windows and spawns subprocesses.
+# logging-not-print and no-drive-path: it is library code. secret-compare and
+# git-wrapper stay off because the repo has no helper for either. Nothing is excluded:
+# the vendored gmail_readonly/ and google_oauth_common/ copies carry no hits.
+[conventions_ratchet]
+enabled  = true
+baseline = ".conventions-ratchet-baseline.json"
+rules    = ["no-window", "logging-not-print", "no-drive-path"]
+# the default print_paths (app/, src/) would skip every library package but app/
+print_paths = ["app/", "check_ip/", "config/", "demo_video/", "engagement/", "newsletter/", "planning/", "podcast/", "recorder/", "reporting/"]
