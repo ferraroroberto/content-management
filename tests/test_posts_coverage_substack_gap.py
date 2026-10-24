@@ -23,7 +23,6 @@ Run: & .\\.venv\\Scripts\\python.exe -m unittest discover tests -v
 from __future__ import annotations
 
 import unittest
-from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import reporting_pipeline as rp

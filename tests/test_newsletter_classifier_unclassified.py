@@ -13,6 +13,7 @@ import logging
 import sys
 import unittest
 import unittest.mock
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -80,6 +81,29 @@ class SharedMatcherTests(unittest.TestCase):
                 self.assertEqual(topics.match_topic(raw), expected)
 
 
+@contextmanager
+def _batch_with_outcome(outcome: str, archive_cfg: dict):
+    """Mock every collaborator of ``run_batch`` over one open tab whose ``process_url`` yields ``outcome``."""
+    tab = unittest.mock.Mock(url="https://example.com/a", page=unittest.mock.Mock())
+    cfg = {"newsletter_archive": dict(archive_cfg, chrome_debug_port=9222,
+                                      skip_url_substrings=[]),
+           "notion": {"api_token": "t"}}
+    patch = unittest.mock.patch.object
+    with ExitStack() as stack:
+        stack.enter_context(patch(pipeline, "setup_logger",
+                                  return_value=logging.getLogger("newsletter_archive")))
+        stack.enter_context(patch(pipeline, "load_config", return_value=cfg))
+        stack.enter_context(patch(pipeline.llm, "health_check", return_value=True))
+        stack.enter_context(patch(pipeline.notion_io, "init_client"))
+        stack.enter_context(patch(pipeline.notion_io, "hydrate_cache"))
+        stack.enter_context(patch(pipeline.chrome_tabs, "connect"))
+        stack.enter_context(patch(pipeline.chrome_tabs, "close_browser"))
+        stack.enter_context(patch(pipeline.chrome_tabs, "list_tabs", return_value=[tab]))
+        stack.enter_context(patch(pipeline.chrome_tabs, "should_skip", return_value=False))
+        stack.enter_context(patch(pipeline, "process_url", return_value=outcome))
+        yield tab
+
+
 class _Cache:
     def find_article(self, url: str) -> None:
         return None
@@ -111,22 +135,7 @@ class PipelineUnclassifiedTests(unittest.TestCase):
         summarize.assert_not_called()
 
     def test_run_batch_counts_it_and_keeps_the_tab_open(self) -> None:
-        tab = unittest.mock.Mock(url="https://example.com/a", page=unittest.mock.Mock())
-        cfg = {"newsletter_archive": dict(self.ARCHIVE_CFG, chrome_debug_port=9222,
-                                          skip_url_substrings=[]),
-               "notion": {"api_token": "t"}}
-        with unittest.mock.patch.object(pipeline, "setup_logger",
-                                        return_value=logging.getLogger("newsletter_archive")), \
-             unittest.mock.patch.object(pipeline, "load_config", return_value=cfg), \
-             unittest.mock.patch.object(pipeline.llm, "health_check", return_value=True), \
-             unittest.mock.patch.object(pipeline.notion_io, "init_client"), \
-             unittest.mock.patch.object(pipeline.notion_io, "hydrate_cache"), \
-             unittest.mock.patch.object(pipeline.chrome_tabs, "connect"), \
-             unittest.mock.patch.object(pipeline.chrome_tabs, "close_browser"), \
-             unittest.mock.patch.object(pipeline.chrome_tabs, "list_tabs", return_value=[tab]), \
-             unittest.mock.patch.object(pipeline.chrome_tabs, "should_skip", return_value=False), \
-             unittest.mock.patch.object(pipeline, "process_url",
-                                        return_value=pipeline.UNCLASSIFIED):
+        with _batch_with_outcome(pipeline.UNCLASSIFIED, self.ARCHIVE_CFG) as tab:
             with self.assertLogs("newsletter_archive", logging.INFO) as logs:
                 rc = pipeline.run_batch(write=True)
         self.assertEqual(rc, 0)
@@ -159,21 +168,7 @@ class PipelineNoRoomTests(unittest.TestCase):
         create.assert_not_called()
 
     def test_run_batch_counts_no_room_and_exits_non_zero(self) -> None:
-        tab = unittest.mock.Mock(url="https://example.com/a", page=unittest.mock.Mock())
-        cfg = {"newsletter_archive": dict(PipelineUnclassifiedTests.ARCHIVE_CFG, chrome_debug_port=9222,
-                                          skip_url_substrings=[]),
-               "notion": {"api_token": "t"}}
-        with unittest.mock.patch.object(pipeline, "setup_logger",
-                                        return_value=logging.getLogger("newsletter_archive")), \
-             unittest.mock.patch.object(pipeline, "load_config", return_value=cfg), \
-             unittest.mock.patch.object(pipeline.llm, "health_check", return_value=True), \
-             unittest.mock.patch.object(pipeline.notion_io, "init_client"), \
-             unittest.mock.patch.object(pipeline.notion_io, "hydrate_cache"), \
-             unittest.mock.patch.object(pipeline.chrome_tabs, "connect"), \
-             unittest.mock.patch.object(pipeline.chrome_tabs, "close_browser"), \
-             unittest.mock.patch.object(pipeline.chrome_tabs, "list_tabs", return_value=[tab]), \
-             unittest.mock.patch.object(pipeline.chrome_tabs, "should_skip", return_value=False), \
-             unittest.mock.patch.object(pipeline, "process_url", return_value=pipeline.NO_ROOM):
+        with _batch_with_outcome(pipeline.NO_ROOM, PipelineUnclassifiedTests.ARCHIVE_CFG) as tab:
             with self.assertLogs("newsletter_archive", logging.INFO) as logs:
                 rc = pipeline.run_batch(write=True)
         self.assertEqual(rc, 1)
