@@ -20,11 +20,10 @@ Six surfaces, one repo:
   a console. **Schedule** tops the buffer of *future* newsletter rows in
   Notion back up to eight, continuing the number sequence from the
   highest existing edition and the weekly cadence from the latest date —
-  without those rows **Archive** has nowhere to file an article and stops
-  (issue #230). **Bootstrap** launches the dedicated newsletter Chrome on `:9222`
-  without touching the everyday browser (targeted, idempotent — issue
-  #59). **Archive** walks the open article tabs in that CDP-attached
-  Chrome into Notion (readability-lxml extraction → Gemini-Lite topic +
+  without those rows **Archive** has nowhere to file an article and stops.
+  **Bootstrap** launches the dedicated newsletter Chrome on `:9222` without
+  touching the everyday browser (targeted, idempotent). **Archive** walks the
+  open article tabs in that CDP-attached Chrome into Notion (readability-lxml extraction → Gemini-Lite topic +
   3-line summary → author resolved against the connections DB with exact
   / fuzzy / LLM-pick-primary / `(not classified)` fallback — never
   invents → first future newsletter row with `< 8` per topic → write +
@@ -404,7 +403,7 @@ flowchart LR
 - Idempotent upserts: re-running for the same date is a no-op.
 - All seven steps run as one script (`reporting_pipeline.py`). Steps 1-6 have
   per-step `--skip-*` flags for partial reruns; step 7 (the Supabase RLS /
-  policy-drift posture check, issue #50) always runs — read-only and
+  policy-drift posture check) always runs — read-only and
   independent of the daily data, so it has no `--skip-*` flag.
 - Each of the 10 `<platform>_<data_type>` endpoints in `config/config.json`
   carries a `"source"` key picking which collector runs — `"rapidapi"`

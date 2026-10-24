@@ -3,7 +3,7 @@
 How this repo talks to Substack over its private HTTP API (cookie-auth) instead
 of driving a browser, and why. Companion to `planning/substack/README.md` (the
 Playwright integration, which is **kept** as an alternative path — this does not
-replace it). Originated from the spike in issue #91.
+replace it).
 
 ## Why a native path
 
@@ -90,7 +90,7 @@ payload already carries the engagement numbers, so there is **no** per-note
 request: what the Playwright path did with a feed scroll plus one page load per
 note is `1 + ceil(n/12)` GETs.
 
-The field mapping (issue #185), against `reporting/scrape_client/substack.py`'s
+The field mapping, against `reporting/scrape_client/substack.py`'s
 scrape:
 
 | Record field | Native source | Was (Playwright) |
@@ -154,7 +154,7 @@ Caveats worth knowing:
 - **There is no dry-run at the API layer**, because a Note has no draft state.
   `--dry-run` is enforced in `post_substack_note.py` *before* the publish call.
 
-### Reacting to ("liking") a Note (issue #186)
+### Reacting to ("liking") a Note
 
 `react_to_note(note_id)` / `unreact_to_note(note_id)` in `api_client.py` wrap
 `POST` / `DELETE /comment/{id}/reaction`. There is no existing "like" workflow
@@ -181,14 +181,14 @@ browser at all, confirming the minimal body `{"reaction": "❤"}` is sufficient
 probe created one throwaway note, reacted/un-reacted, then deleted it —
 nothing was left on the account.
 
-### Video Notes: chunked multipart upload + Mux transcode (issue #189)
+### Video Notes: chunked multipart upload + Mux transcode
 
 **Verdict: go.** The video-Note upload pipeline is reverse-engineered and
 shipped — `substack.note_source = "native"` now covers video Notes too, via
 `post_substack_video_note.py`'s native branch (same flag, same one-key
 rollback to `"playwright"` as the text/image path).
 
-The write routes were captured the same way as #185's — the composer is a
+The write routes were captured the same way as the text/image routes — the composer is a
 lazily-imported webpack chunk, invisible to a bundle grep — by driving the
 real video Note composer with a network listener attached, attaching a
 synthetic throwaway clip (2s solid color + silence, zero real content), and

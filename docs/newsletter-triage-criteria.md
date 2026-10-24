@@ -63,7 +63,7 @@ Beyond the mechanical noise filter (unsubscribe, share, social, app stores — `
 - Email → edition lag: mode 10 / 17 / 20 days (review ~1 week before publication, items land in the first edition with a free slot). Anything dated >21 days before an edition is rare; the backfill pool (`next` checkbox, 28 rows; classics) covers a short topic.
 - Stars concentrate on the strong-tier senders: Fisher 9, Geraghty 8, Bloom 7, Le Cunff 6, Woodbury 6, HBR 5+14 by domain, Yu 5, Mollick 5, Sotsenko 5. Must-reads by author: Geraghty 4, Le Cunff 4, Bloom 3, Burkeman 3, Sotsenko 3.
 
-## 8. Owner rules added at review (2026-08-21)
+## 8. Owner rules set at review
 
 - **No paywalled content, ever.** A paywalled pick is promotion, not content for the reader. Hard walls (Substack "for paid subscribers", subscribe-to-read) are excluded; metered/registration walls like HBR's are accessible and stay in. **Fearless Culture (Gustavo Razzetti) went paywalled in 2026 and is excluded from now on** — its 40 historical picks stay in the dataset as history, the sender is `tier: never` in `results/newsletter/triage/overrides.json` and its domain was dropped from the leadership signature list. The Step-2 engine detects paywall markers on fetch and reports them as their own state.
 - **One window → one edition.** A run covers the review window (last watermark → now, normally Saturday → Friday) and fills *one* edition (8/8/8) for the next Saturday, keeping the queue one edition ahead. A backlog of N weeks is processed as N windows → N editions, oldest first — never drained into one edition.
