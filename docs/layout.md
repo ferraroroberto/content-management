@@ -6,7 +6,7 @@ This is a multi-tool `pipeline-cli` repo: each tool is one root package, and `.f
 
 The preset folders:
 
-- `tests/` — the unittest + pytest-style suite. Flat today and baselined; a new test for a tool still lands here until a split issue groups them.
+- `tests/` — the unittest + pytest-style suite. Flat and baselined; `tests/ratchets/` holds the gate-wiring tests, and a new test for a tool still lands in `tests/` until a split issue groups them.
 - `scripts/` — the vendored ratchets (`*_ratchet.py`, never edited) and the gate wrappers that map their exit codes (`*_ratchet_gate.py`).
 - `config/` — `config.json`, `mapping.json`, logging, Chrome launch and shared helpers; `config/doc_capture/` is the control-panel screenshot engine.
 - `docs/` — durable topic reference; `docs/screenshots/` holds the capture manifest and generated per-tab images.
