@@ -642,6 +642,25 @@ baselined reference, shrink the baseline in the same PR with
 `--allow-additions` adds an entry. See the scaffold's `docs/doc-refs-ratchet.md` for
 the exit codes and keys.
 
+The eighth stage is the dead-code ratchet. It fails when a new function, class or
+method appears that nothing in the repo refers to and that is not recorded in
+`.dead-code-ratchet-baseline.json`. Routes, decorated hooks, `__all__` exports and
+tests are never reported, and a name used dynamically stays below the confidence
+floor. The vendored `gmail_readonly/` and `google_oauth_common/` copies are read for
+references but never reported. The wrapper reports git or a Python file it could not
+read or parse as **NOT CONFIRMED** (a failure, never a pass or a skip):
+
+```powershell
+& .\.venv\Scripts\python.exe -m scripts.dead_code_ratchet_gate
+```
+
+Delete the definition or call it; a real entry point the rules miss goes in
+`entry_decorators` or `allow` in the `[dead_code_ratchet]` table of `.fleet.toml`.
+After deleting a baselined definition, shrink the baseline in the same PR with
+`& .\.venv\Scripts\python.exe scripts/dead_code_ratchet.py --update-baseline`; only
+`--allow-additions` adds an entry. See the scaffold's `docs/dead-code-ratchet.md` for
+the exit codes and keys.
+
 ## 📝 License and contact
 
 This project is free software for personal use from Roberto Ferraro 😇
