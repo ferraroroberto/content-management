@@ -11,7 +11,6 @@ from __future__ import annotations
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
 from urllib.parse import quote
 
 import pandas as pd

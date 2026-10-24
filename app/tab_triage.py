@@ -12,7 +12,6 @@ week can be re-scored from its stored links with the chosen Stage A engine (``--
 
 from __future__ import annotations
 
-from datetime import date, timedelta
 from pathlib import Path
 
 import pandas as pd

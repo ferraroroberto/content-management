@@ -32,7 +32,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Sequence
 
 from playwright.sync_api import BrowserContext, Error as PlaywrightError, Playwright
 
