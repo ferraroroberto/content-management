@@ -22,7 +22,6 @@ from __future__ import annotations
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from playwright.sync_api import Page, TimeoutError as PWTimeoutError, sync_playwright
 

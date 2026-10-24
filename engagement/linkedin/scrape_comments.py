@@ -23,7 +23,6 @@ import json
 import logging
 import re
 import sys
-import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
@@ -70,7 +69,6 @@ def fetch_recent_li_posts(days: int) -> list[dict]:
     today = datetime.now(timezone.utc).date()
     earliest = today - timedelta(days=max(0, days - 1))
 
-    title_col = columns["title_day"]
     link_col = columns["post_url"]
     date_col = columns["date"]
 

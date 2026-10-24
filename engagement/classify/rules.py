@@ -16,9 +16,9 @@ import json
 import logging
 import re
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Optional
 
 from engagement.classify.phrases_io import pick_reply_from_templates
 from engagement.db.client import (
