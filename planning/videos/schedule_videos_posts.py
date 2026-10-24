@@ -44,13 +44,11 @@ from planning.videos.videos_session import (  # noqa: E402
     ClipPayload,
     VideoRow,
     configure_logger,
-    first_clip_relation_id,
     load_clip_payload,
     load_notion_token,
     load_videos_config,
 )
 from reporting.notion.editorial import (  # noqa: E402
-    get_field,
     set_field,
 )
 from reporting.notion.notion_update import format_database_id  # noqa: E402

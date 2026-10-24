@@ -89,16 +89,13 @@ from planning.linkedin.linkedin_labels import (  # noqa: E402
     TRY_AGAIN_RE,
 )
 from planning.linkedin.linkedin_posts_body import (  # noqa: E402
-    PostPayload,
     assert_caption_within_linkedin_limit,
     load_post_payload,
 )
 from reporting.notion.editorial import (  # noqa: E402
     get_field,
-    get_property_type,
     retrieve_page,
 )
-from reporting.notion.notion_update import format_database_id  # noqa: E402
 from planning._dates import date_to_day_title  # noqa: E402
 from planning._scheduler_main import (  # noqa: E402
     build_scheduler_parser,
