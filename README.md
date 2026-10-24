@@ -608,6 +608,22 @@ After splitting a baselined file or function, shrink the baseline in the same PR
 excluded: they are vendored copies. See the scaffold's `docs/structure-ratchet.md`
 for the exit codes and keys.
 
+The sixth stage is the instruction ratchet. It runs the weekly prompt audit's
+deterministic rules over the instruction files (`CLAUDE.md`, `AGENTS.md`, every
+`.claude/skills/*/SKILL.md` and the docs a skill links to) and fails when a file's
+count for a rule rises above `.instruction-ratchet-baseline.json`, or a file passes
+its size cap. The wrapper reports a file it could not measure as **NOT CONFIRMED**
+(a failure, never a pass or a skip):
+
+```powershell
+& .\.venv\Scripts\python.exe -m scripts.instruction_ratchet_gate
+```
+
+After rewording a hit away, shrink the baseline in the same PR with
+`& .\.venv\Scripts\python.exe scripts/instruction_ratchet.py --update-baseline`; only
+`--allow-additions` adds an entry. See the scaffold's `docs/instruction-ratchet.md`
+for the rules, exit codes and keys.
+
 ## 📝 License and contact
 
 This project is free software for personal use from Roberto Ferraro 😇
