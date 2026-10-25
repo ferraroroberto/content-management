@@ -60,7 +60,7 @@ PREV_WEEK_BTN_RE = re.compile(r"^(previous week|left)$", re.I)
 
 # ---------- Media-attach path (locale EN | ES) ----------
 
-# 'Add photo/video' affordance. Meta localizes this (issue #28 / #60), so the
+# 'Add photo/video' affordance. Meta localizes this, so the
 # selector unions every observed EN + ES wording plus the upload-button surface.
 ADD_MEDIA_BTN_SELECTOR = (
     'div[role="button"]:has-text("Add photo/video"), '
@@ -73,7 +73,7 @@ ADD_MEDIA_BTN_SELECTOR = (
 )
 
 # Some Meta builds open an intermediate dialog whose 'Upload from computer'
-# button is what actually triggers the file chooser. EN + ES wordings (issue #28).
+# button is what actually triggers the file chooser. EN + ES wordings.
 UPLOAD_FROM_COMPUTER_SELECTOR = (
     'div[role="dialog"] div[role="button"]:has-text("Upload from computer"), '
     'div[role="dialog"] button:has-text("Upload from computer"), '

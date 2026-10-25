@@ -63,7 +63,7 @@ logger = logging.getLogger("linkedin_composer")
 # ---------- Feed-entry click timeout ----------
 
 # The first feed-action of each Playwright session was timing out on the
-# Photo / Video / "Start a post" buttons (issue #27). LinkedIn redirects
+# Photo / Video / "Start a post" buttons. LinkedIn redirects
 # ``/feed/`` to ``/`` for logged-in users and re-renders the share-box client-
 # side; the 10 s default we were using wasn't enough for cold sessions, but
 # subsequent rows always succeeded within ~1 s because the share box is
@@ -82,7 +82,7 @@ FEED_ENTRY_ATTEMPT_TIMEOUT_MS = 6000
 
 # How long to wait, after a click reports success, for its expected effect
 # (``expect_selector`` attaching) before treating the click as inert and
-# retrying (issue #150). Short: on a hydrated feed the effect is near-
+# retrying. Short: on a hydrated feed the effect is near-
 # instant, so this only costs time on the inert-click path we're guarding.
 FEED_ENTRY_EFFECT_TIMEOUT_MS = 4000
 
@@ -185,7 +185,7 @@ def click_feed_entry(
 # also matches ``\n``/``\r``, so a capitalized word after a blank line would
 # continue the name ("@Andre Muller\n\nThanks" → "Andre Muller\n\nThanks"),
 # typed verbatim (newlines and all) into the composer and mis-resolved by the
-# typeahead (issue #74). Restricting to horizontal whitespace keeps a name on a
+# typeahead. Restricting to horizontal whitespace keeps a name on a
 # single line: "@Mercè Brey\n\nGreat book" resolves the chip "Mercè Brey" and
 # leaves "\n\nGreat book" as literal text.
 #
@@ -489,7 +489,7 @@ def wait_for_upload_complete(page: Page, *, timeout_ms: int = 420000) -> bool:
 #
 # The previous 20 s was tuned against the dry run, which discards instead of
 # scheduling and therefore never exercised this wait at all. The first real
-# ``--live`` run put 2 of 7 rows over it (issue #178) — and both had in fact
+# ``--live`` run put 2 of 7 rows over it — and both had in fact
 # been scheduled: their failure screenshots are indistinguishable from the
 # successful rows' (composer gone, feed restored, LinkedIn's own "Post
 # scheduled" toast on screen). So the wait was reporting a false negative on a
@@ -508,7 +508,7 @@ SCHEDULE_CONFIRM_POLL_MS = 400
 # while the callers only sleep 1.5 s. A snapshot inside that gap matched zero
 # composers, which disables the composer-closed signal and leaves the row to
 # the toast alone — and for videos the toast often lands after the 45 s wait,
-# so a scheduled post was reported FAIL (issue #319). Only paid in full when
+# so a scheduled post was reported FAIL. Only paid in full when
 # the composer genuinely never comes back.
 COMPOSER_REMOUNT_TIMEOUT_MS = 10000
 COMPOSER_REMOUNT_POLL_MS = 250
@@ -825,8 +825,8 @@ def _set_schedule_date(page: Page, target: date) -> None:
     )
 
 
-# How long to wait, per menu opening, for the wanted slot to render (issue
-# #390). The menu's slot list trails the date field: opened right after a date
+# How long to wait, per menu opening, for the wanted slot to render.
+# The menu's slot list trails the date field: opened right after a date
 # change it can still show the previous date's list, which for today is only
 # the slots after now (an evening run sees 7:45 PM … 11:45 PM, no morning).
 # The live probe saw it refresh to the full 96 slots within ~100 ms.

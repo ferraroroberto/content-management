@@ -41,7 +41,7 @@ FRAME_COLUMNS = [
 # How a condition renders in the grid. A four-state has no honest checkbox —
 # an unticked box reads as "no", NULL here means "nobody looked" and 2 means
 # "someone looked and could not tell", so each state gets its own words
-# instead (issues #295, #305). The 2 reads as an answer, because it is one;
+# instead. The 2 reads as an answer, because it is one;
 # what it must never read as is a pass.
 CONDITION_LABELS = {1: "✅ met", 0: "❌ violated", 2: "🔍 could not establish",
                     None: "— not assessed"}
@@ -65,7 +65,7 @@ STATUS_FILTERS = {
     "not fully assessed — needs a re-screen":
         f"r.screened_at is not null and not ({db.assessed_sql()}) and not {_PERMANENT}",
     # Screened, every condition answered, and at least one answer was "could
-    # not tell" (issue #305). Deliberately its own row in this list and not
+    # not tell". Deliberately its own row in this list and not
     # folded into the one above: another screening pass would return the same
     # answer, so what these rows want is the owner's eye, not the queue.
     "could not be established — my call": f"r.screened_at is not null and "
@@ -74,7 +74,7 @@ STATUS_FILTERS = {
     "proposed infringement, any severity": "r.ok is null and r.screen_verdict = 'infringement'",
     # `met_sql`, not `assessed_sql` + severity 0: an indeterminate condition is
     # assessed and is not a violation, so the old pair would have listed a row
-    # nothing was established about as compliant (issue #305).
+    # nothing was established about as compliant.
     "fully assessed and compliant": f"r.screened_at is not null and ({db.met_sql()})",
     "unclear — another look may settle it":
         f"r.ok is null and r.screen_verdict = 'unclear' and not {_PERMANENT}",

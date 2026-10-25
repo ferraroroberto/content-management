@@ -1,9 +1,9 @@
-// Podcast recorder page (issue #341): record this side's camera and mic at full
+// Podcast recorder page: record this side's camera and mic at full
 // resolution, keep every chunk in IndexedDB until the server has it, upload
 // while recording, resume after a dropped connection or a reload.
-// The call (#342): the same camera stream also feeds a peer-to-peer WebRTC
+// The call: the same camera stream also feeds a peer-to-peer WebRTC
 // call, downscaled; while recording, the other side's voice as received is
-// recorded too, at low quality, as the sync reference (#343).
+// recorded too, at low quality, as the sync reference.
 "use strict";
 
 const TOKEN = location.pathname.split("/").filter(Boolean).pop();
@@ -13,7 +13,7 @@ const PROFILES = {
   "2160": { width: 3840, height: 2160, bps: 40_000_000 },
 };
 // H.264 in WebM first. Chrome's MP4 recorder crashes the tab once a recording
-// passes 4 GiB (#341: reproduced at 2^32 bytes, ~46 min at 1080p, ~14 min at
+// passes 4 GiB (reproduced at 2^32 bytes, ~46 min at 1080p, ~14 min at
 // 4K); its WebM muxer has no such limit. MP4 stays as the fallback for browsers
 // that cannot record WebM (Safari). The server remuxes either one to .mp4.
 const MIMES = [
@@ -234,7 +234,7 @@ async function record(source, kind, mime, ext, options, onDone, main = null) {
     onDone();
   };
   // Both recorders of this page are started the same way, so their start
-  // times on one clock place the reference inside the main recording (#343).
+  // times on one clock place the reference inside the main recording.
   rec.t0 = performance.now();
   if (main) Object.assign(rec, { main: main.rid, offset_s: (rec.t0 - main.t0) / 1000 });
   mr.start(TIMESLICE_MS);
@@ -359,7 +359,7 @@ function closePeer() {
 // picture scaled down to CALL_HEIGHT for the call only. The guest waits for
 // the host's offer and puts its tracks on the transceivers that offer made, so
 // its answer carries them. Both sides offering at once on every join left the
-// call stuck before ICE in about one join in three (#342).
+// call stuck before ICE in about one join in three.
 function attachToCall() {
   if (!pc || !stream || (polite && !pc.remoteDescription)) return;
   for (const track of stream.getTracks()) {

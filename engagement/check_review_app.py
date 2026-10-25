@@ -198,7 +198,7 @@ def run() -> int:
             # the table's own primary key), never a blanket
             # `.eq("status", "approved")` — that would revert every row the
             # owner has approved by hand in the review app, not just this
-            # check's own row (issue #246).
+            # check's own row.
             newly_approved = _approved_keys() - approved_before
             sb = supabase_client()
             if newly_approved:

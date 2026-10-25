@@ -35,7 +35,7 @@ class Layout:
     line_pitch: int = 0  # baseline-to-baseline distance when a chunk spans two lines
 
 
-# Matched against the owner's published clips (#333): rendering their caption
+# Matched against the owner's published clips: rendering their caption
 # words with these values reproduces the reference glyph boxes within ~3 px.
 # 1:1: one line, baseline at y≈950. 9:16: two lines 110 px apart, the block's
 # bottom just under the seam. libass renders up to ~50 px/char at 126 and ~56

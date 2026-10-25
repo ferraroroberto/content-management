@@ -45,7 +45,7 @@ logger = logging.getLogger("videos_linkedin")
 
 # Budget for LinkedIn's video Editor dialog to mount its (hidden) file input.
 # Generous because it is only ever paid in full on a genuine failure, and the
-# old 15 s lost a leg to a slow LinkedIn morning (issue #235).
+# old 15 s lost a leg to a slow LinkedIn morning.
 VIDEO_INPUT_TIMEOUT_MS = 45000
 
 
@@ -111,7 +111,7 @@ def _upload_video(page: Page, video_path: Path) -> None:
     #
     # The 15 s budget this used to carry was not enough on a slow LinkedIn
     # morning — the Editor dialog simply had not mounted yet and the leg failed
-    # with a bare Playwright timeout (issue #235). ``wait_for_first_ready``
+    # with a bare Playwright timeout. ``wait_for_first_ready``
     # re-resolves until a far more generous deadline and, on a real failure,
     # reports what each selector could actually see instead of just the elapsed
     # time. ``state="attached"``, not visible: the input is deliberately

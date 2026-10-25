@@ -86,7 +86,7 @@ def resolve_payload(notion, cfg: dict, row: ScheduleRow) -> PostPayload:
 # ---------- Threads composer helpers ----------
 #
 # Shared with the video driver (``planning/videos/videos_threads.py``) —
-# live in ``planning.threads.threads_composer``, not here (issue #324).
+# live in ``planning.threads.threads_composer``, not here.
 
 
 def return_to_profile(page: Page, feed_url: str) -> None:
@@ -144,7 +144,7 @@ def schedule_post(
 
     click_calendar_done(page)
 
-    # ---- point of no return (issue #235) ----
+    # ---- point of no return ----
     # Past the final Schedule click a failure no longer proves the post was not
     # scheduled, so these raise PostMayBeLiveError and the row loop refuses to
     # retry them. See planning/_failure.py for the contract.

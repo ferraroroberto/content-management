@@ -58,7 +58,7 @@ def open_composer(page: Page) -> None:
         [
             # Profile-row click target. Several variants observed across
             # Threads builds — tried in order on every round. The placeholder
-            # switched to a curly apostrophe in 2026-09 (#315), so match it
+            # switched to a curly apostrophe in 2026-09, so match it
             # through the labels regex, never a straight-quote literal.
             ("aria compose-entry",
              page.get_by_role("button", name=COMPOSE_ENTRY_BTN_RE)),
@@ -88,7 +88,7 @@ def type_caption(page: Page, caption: str) -> None:
     # this box exists, so reaching here and finding nothing should be rare —
     # but the contenteditable is also re-created when Threads swaps the
     # composer between reply/thread modes, so the wait stays as the second
-    # line of defence (issue #235).
+    # line of defence.
     ta = wait_for_first_ready(
         page,
         [

@@ -29,7 +29,7 @@ from newsletter.triage.rank import TOPICS
 
 PIPELINE_NAME = "triage"
 _SHORT = {"leadership and management": "leadership", "personal development": "persdev", "innovation": "innovation"}
-_ENGINES = ("jev+legacy", "jev", "legacy")   # Stage A choices here; the first (the recommended setting, #394) is the default
+_ENGINES = ("jev+legacy", "jev", "legacy")   # Stage A choices here; the first (the recommended setting) is the default
 
 
 # ---------------------------------------------------------------------------
@@ -279,7 +279,7 @@ def _render_review(run: dict) -> None:
     if prior:
         st.caption(f"last applied {str(prior.get('reviewed_at', ''))[:16]} · {prior.get('n_pick')} picks · "
                    + (f"{len(prior.get('tier_changes') or [])} tier change(s)"))
-    # hand-off (issue #212): the two external writes, each an explicit click, streamed into the log panel
+    # hand-off: the two external writes, each an explicit click, streamed into the log panel
     # like every other pipeline step (Playwright + Notion run in the subprocess, never in the Streamlit thread)
     handoff = [str(VENV_PY), "-m", "newsletter.triage.handoff", "--run", str(run_id)]
     running = is_running(PIPELINE_NAME)
@@ -390,7 +390,7 @@ def run() -> None:
         runs = []
 
     # Two sub-sections (owner request): the run side and the review side stay separate. segmented_control
-    # rather than st.tabs() — same fix as app.py's top-level routing (issue #157).
+    # rather than st.tabs() — same fix as app.py's top-level routing.
     SUB_SECTIONS = ["▶ run", "📋 review"]
     sub = st.segmented_control("triage sub-section", options=SUB_SECTIONS, default=SUB_SECTIONS[0],
                                key="triage-sub-section", label_visibility="collapsed")
@@ -405,7 +405,7 @@ def run() -> None:
     if is_running(PIPELINE_NAME):
         st.info("a triage process is running — follow it in ▶ run; stored runs below refresh when it finishes")
     # options are run ids, not labels: a label changes after Apply (" · reviewed ✓") and a selectbox whose stored
-    # value vanished from its options silently resets to index 0 — the newest run (#225)
+    # value vanished from its options silently resets to index 0 — the newest run
     labels = {r["id"]: _run_label(r) for r in runs}
     choice = st.selectbox("stored run", list(labels.keys()), index=0, key="triage-run-pick",
                           format_func=lambda rid: labels.get(rid, f"run {rid}"))

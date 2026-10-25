@@ -279,7 +279,7 @@ class VideoTranscodeError(RuntimeError):
     """Raised when Substack's Mux transcode of an uploaded video fails or times out."""
 
 
-# A part every 50MB (server-observed, issue #189 — parts scale as
+# A part every 50MB (server-observed: parts scale as
 # ceil(fileSize / 50_000_000)); S3 multipart only requires order-preserving,
 # >=5MB-except-last parts, so slicing into exactly as many equal parts as the
 # server hands back URLs for is correct regardless of the server's own
@@ -462,7 +462,7 @@ def delete_note(note_id, *, session_file: Path = SESSION_FILE) -> None:
 
 
 # The heart is the only reaction the web composer sends — Notes have no other
-# reaction type (verified live, issue #186).
+# reaction type (verified live).
 NOTE_REACTION_HEART = "❤"
 
 

@@ -343,7 +343,7 @@ def fetch_posts(target_date: Optional[str] = None) -> Optional[dict]:
         # Tiles are visited newest-first, so posts[0] is the newest post — the
         # one the posts-coverage check depends on. A scrape where it still has
         # no posted_at after the retry above is not a clean success, even
-        # though every tile parsed; say so instead of an unqualified ✅ (#260).
+        # though every tile parsed; say so instead of an unqualified ✅.
         if posts[0]["posted_at"] is None:
             logger.error(
                 "❌ Instagram posts scraped: %d, but the newest post (%s) has no "

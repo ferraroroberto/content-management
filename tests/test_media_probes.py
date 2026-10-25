@@ -79,7 +79,7 @@ class MediaProbeTests(unittest.TestCase):
         self.assertIs(demo_media.has_audio(dst), True)
 
     def test_recorder_remux_raises_on_unreadable_input(self):
-        with self.assertRaises(Exception):
+        with self.assertRaises(RuntimeError):
             store.remux(self.garbage, self.dir / "out.mp4")
 
     def test_recorder_probe_duration_raises_on_unreadable_input(self):

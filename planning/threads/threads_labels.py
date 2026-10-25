@@ -26,7 +26,7 @@ import re
 
 # Threads renders the placeholder with a typographic apostrophe ("What’s new?",
 # U+2019) since 2026-09; older builds used the ASCII one. Accept both — a
-# straight-quote-only selector matched nothing and failed every row (#315).
+# straight-quote-only selector matched nothing and failed every row.
 _APOS = "['’]"
 
 # The profile feed's inline composer row that opens the New thread dialog.

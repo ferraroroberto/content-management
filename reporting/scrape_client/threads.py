@@ -77,8 +77,8 @@ def fetch_profile(target_date: Optional[str] = None) -> Optional[dict]:
         # Allow a decimal in the abbreviated count — Threads switched the
         # label from "31K followers" to "31.1K followers" once the count
         # crossed into needing one decimal, and the old digits-only matcher
-        # stopped matching (→ wait_for timed out → ScrapeError → no file,
-        # issue #77). The exact value still lives in the descendant span[title].
+        # stopped matching (→ wait_for timed out → ScrapeError → no file).
+        # The exact value still lives in the descendant span[title].
         followers_div = s.page.get_by_text(
             re.compile(r"^\d[\d.,]*[KMk]?\s+followers?$", re.IGNORECASE)
         ).first

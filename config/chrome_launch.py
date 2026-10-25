@@ -92,7 +92,7 @@ def stealth_launch_kwargs(user_data_dir: str, *, headless: bool = False) -> dict
 
 # ── doc-capture variant ─────────────────────────────────────────────
 #
-# Used by ``config/doc_capture`` (issue #110) to screenshot the Streamlit
+# Used by ``config/doc_capture`` to screenshot the Streamlit
 # control panel for the README. Deliberately NOT the stealth profile above:
 # doc capture drives our own localhost app, so there is nothing to hide
 # from — what matters is determinism (identical pixels for identical

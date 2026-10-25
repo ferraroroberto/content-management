@@ -58,7 +58,7 @@ def schedule_one_video(
     page = session.page
     label = row.day_title
 
-    # Issue #118 — schedule via the Reels composer, not the feed-post composer.
+    # Schedule via the Reels composer, not the feed-post composer.
     # Instagram rejects vertical 9:16 clips in the post composer ("doesn't fit
     # within Instagram's accepted aspect ratio range of 4:5 to 16:9", Schedule
     # never enables) and IG now routes video to reels anyway. "Create reel" is a
@@ -109,7 +109,7 @@ def schedule_one_video(
         raise RuntimeError(f"IG reel composer did not close — see {shot}")
     # On success Meta may stay on /reels_composer/ behind a "Reel scheduled"
     # confirmation dialog rather than navigating back — dismiss it so the next
-    # day starts from a clean planner state (issue #125).
+    # day starts from a clean planner state.
     dismiss_reel_success_dialog(page)
     page.wait_for_timeout(1500)
     logger.info("✅ LIVE %s IG video scheduled as reel", label)

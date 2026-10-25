@@ -59,7 +59,7 @@ class Candidate:
     fetched_ok: Optional[bool] = None
     paywalled: Optional[bool] = None
     in_notion: bool = False
-    picked_earlier: str = ""    # "2026-08-07 → 2026-08-14": picked in that earlier window (#228); implies in_notion
+    picked_earlier: str = ""    # "2026-08-07 → 2026-08-14": picked in that earlier window; implies in_notion
     sender_weight: float = 1.0
     sender_basis: str = ""
     is_new_sender: bool = False

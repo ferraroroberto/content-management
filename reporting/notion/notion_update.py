@@ -570,7 +570,7 @@ def main() -> bool:
     except Exception as e:
         # Distinct from "query ran, no row for this date" (logged as a warning
         # below, in get_supabase_data): the read itself failed, so this step
-        # must not report green (issue #445).
+        # must not report green.
         logger.error(f"❌ Failed to read Supabase data for {args.date}: {e}")
         supabase_connection.close()
         return False

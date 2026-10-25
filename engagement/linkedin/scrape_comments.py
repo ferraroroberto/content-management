@@ -643,8 +643,8 @@ def _evaluate_scrape_health(total_posts: int, structural_errors: list[str]) -> s
 def run(days: int, *, headless: bool = False, dry_run: bool = False, limit: Optional[int] = None) -> dict:
     # Fail fast when the live database is behind schema.sql. A missing column
     # used to surface only on the final upsert — after a full two-minute scrape
-    # — so 20 consecutive runs did all their work and threw it away (issue
-    # #262). A dry run writes nothing, so it has nothing to verify.
+    # — so 20 consecutive runs did all their work and threw it away.
+    # A dry run writes nothing, so it has nothing to verify.
     if not dry_run and verify_schema() == "unverified":
         logger.warning(
             "⚠️ proceeding with an UNVERIFIED schema — a column mismatch "
@@ -663,7 +663,7 @@ def run(days: int, *, headless: bool = False, dry_run: bool = False, limit: Opti
 
     all_comments: list[dict] = []
     all_commenters: dict[str, dict] = {}
-    # Per-post structural-error tracking (issue #175) — the extractor's `error`
+    # Per-post structural-error tracking — the extractor's `error`
     # key, not comment count, is the reliable "did extraction actually work"
     # signal. A post-level exception counts as structural too: the scrape never
     # produced a real result for it either.
@@ -757,7 +757,7 @@ def main() -> None:  # pragma: no cover
     # Configure the package-root logger so siblings (engagement.db,
     # engagement.classify.*, engagement.reputation) propagate into the same log
     # file. Naming a leaf here leaves them with no configured ancestor, so they
-    # fall through to logging.lastResort — stderr-only, WARNING+ (issue #160).
+    # fall through to logging.lastResort — stderr-only, WARNING+.
     setup_logger("engagement", level=logging.DEBUG if args.debug else logging.INFO, file_logging=True)
     logging.getLogger().setLevel(logging.DEBUG if args.debug else logging.INFO)
 
@@ -766,7 +766,7 @@ def main() -> None:  # pragma: no cover
     result = run(days=days, headless=args.headless, dry_run=args.dry_run, limit=args.limit)
     print(json.dumps(result, indent=2))
 
-    # Issue #175: a scrape where every attempted post came back structurally
+    # A scrape where every attempted post came back structurally
     # broken (extractor error / exception on all of them) must fail the run
     # instead of reporting green — that's what let an 18-run outage go unseen.
     if result.get("status") == "broken":

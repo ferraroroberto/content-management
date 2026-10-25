@@ -123,7 +123,7 @@ def _render_header() -> None:
                         "never looked at. These are unchecked, not compliant — pick "
                         "\"not fully assessed\" below to re-screen them.")
     # The two unresolved states are shown side by side because they call for
-    # different things (issue #305): the one on the left needs another
+    # different things: the one on the left needs another
     # screening pass, this one has had its pass and needs my eye instead.
     cols[8].metric("could not establish", f"{ov['indeterminate']:,}",
                    help="All three conditions were looked at and at least one could not be "

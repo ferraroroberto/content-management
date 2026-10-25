@@ -414,7 +414,7 @@ def run_module(module_func, module_name, debug_mode=False, extra_args=None, fail
         # Run the module. A step that degrades gracefully instead of raising
         # (e.g. no DB connection, missing config) returns False rather than
         # None/True — record that as a step failure too, not just an
-        # exception (issue #246). Steps that don't return a bool (e.g. still
+        # exception. Steps that don't return a bool (e.g. still
         # only ``return``/implicit ``None`` on their success path) are
         # treated as successful, matching prior behaviour.
         result = module_func()
@@ -456,7 +456,7 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
     configure_logger(debug_mode)
 
     # Failure detection: collect step exceptions + missing-endpoint coverage,
-    # then emit one consolidated Telegram alert at the end (issue #76).
+    # then emit one consolidated Telegram alert at the end.
     failures = PipelineFailures()
     config = _load_config()
 
@@ -515,7 +515,7 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
         configure_posts_logger(debug_mode)
         run_module(run_posts_consolidator, "Posts Consolidator", debug_mode, failures=failures)
         # Content-coverage check: did every platform actually land post metrics
-        # in the consolidated table (not just produce a raw file)? — issue #84.
+        # in the consolidated table (not just produce a raw file)?
         check_posts_coverage(processing_date, failures)
     else:
         logger.info("⏭️ Skipping Posts Consolidator step")
@@ -540,7 +540,7 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
     else:
         logger.info("⏭️ Skipping Substack Daily Pipeline step")
 
-    # Posture check: Supabase RLS / policy / view-security drift (issue #50).
+    # Posture check: Supabase RLS / policy / view-security drift.
     # Read-only and independent of the daily data; runs every pipeline so drift
     # surfaces on the project's own clock, not via the weekly advisor email.
     logger.info("🔒 Step 7: Checking Supabase RLS / policy drift")

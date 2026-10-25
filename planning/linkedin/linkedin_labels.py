@@ -34,7 +34,7 @@ from datetime import date
 #
 # LinkedIn's 2026 composer rebuild swapped the ARIA-annotated
 # ``<div role="dialog">`` for a **native ``<dialog>`` element carrying no
-# ``role`` attribute** (issue #178). A native ``<dialog>`` has an *implicit*
+# ``role`` attribute**. A native ``<dialog>`` has an *implicit*
 # ARIA dialog role, so screen readers are unaffected — but ``[role="dialog"]``
 # is an attribute selector and stopped matching, so every scoped helper
 # resolved zero elements and timed out with the target plainly visible on the
@@ -61,7 +61,7 @@ DIALOG_SEL = '[role="dialog"], dialog[open]'
 # share box mounts them as a role-less ``<a tabindex=0 onclick>`` (the visible
 # label lives in a child ``<p>Photo</p>``). The element has no ``role="button"``
 # and no aria-label once the feed hydrates, so the old accessible-name anchor
-# resolved nothing and the click timed out (issue #140 — confirmed by live DOM
+# resolved nothing and the click timed out (confirmed by live DOM
 # probe: ``get_by_role("button", name=…)`` on the trailing-noun anchor → 0
 # matches post-hydration, while ``get_by_text(PHOTO_TEXT_RE)`` → exactly 1). The
 # pre-hydration placeholder briefly *is* a ``<div role="button">``, which is why
@@ -86,11 +86,11 @@ START_POST_TEXT_RE = re.compile(
 )
 
 # What each share-box click must produce before it counts as landed — the
-# ``expect_selector`` of ``linkedin_composer.click_feed_entry`` (issue #150).
-# Since 2026-09 every feed load logs React error #418 (hydration mismatch) and
+# ``expect_selector`` of ``linkedin_composer.click_feed_entry``.
+# Since 2026-09 every feed load logs React error 418 (hydration mismatch) and
 # LinkedIn re-renders the share box client-side, so an early click is
 # swallowed; an unguarded caller then carried on against a feed with no
-# composer open (issue #271).
+# composer open.
 #
 # Photo and Video both mount a hidden file input as they open — Video did not
 # until 2026-09 (it showed "Upload from computer" first), which is why it had
@@ -115,7 +115,7 @@ ADD_BTN_RE = re.compile(r"^(?:add|añadir)$", re.I)
 
 # The lone button on LinkedIn's full-page "Something went wrong" screen, which
 # replaces the whole app when its client code throws. Since 2026-09 the photo
-# editor's ALT commit reliably lands there (issue #270), so the photo flow
+# editor's ALT commit reliably lands there, so the photo flow
 # watches for it to tell "LinkedIn crashed" from "the editor is slow".
 TRY_AGAIN_RE = re.compile(
     r"^\s*(?:try again|reintentar|volver a intentarlo|intentar de nuevo)\s*$",
@@ -154,8 +154,8 @@ CHOOSE_FILE_BTN_RE = re.compile(
 # Matched by VISIBLE TEXT, not by accessible name. This used to be
 # ``DONE_BTN_RE`` + ``get_by_role("button", name=…)``, which stopped matching
 # in 2026-08 when LinkedIn re-rendered the control as a role-less ``<a>``
-# whose label sits in nested ``<span>``s (issue #237 — the same pattern as the
-# feed share-box in #140). An ``<a>`` carrying neither ``href`` nor ``role``
+# whose label sits in nested ``<span>``s (the same pattern as the
+# feed share-box above). An ``<a>`` carrying neither ``href`` nor ``role``
 # has no implicit ARIA button role, so the role anchor could not match it at
 # all: it found nothing for 177 consecutive polls while the dialog sat plainly
 # ready on screen, and the caller reported the PDF as still processing.
@@ -220,7 +220,7 @@ DISCARD_BTN_RE = re.compile(r"^(?:discard|descartar)$", re.I)
 # LinkedIn's own toast after a successful schedule — "Post scheduled. View
 # scheduled posts". This is the only *positive* confirmation the UI gives; the
 # composer disappearing is merely circumstantial, and on a slow row it is not
-# observable inside any reasonable budget (issue #178). Matched page-wide by
+# observable inside any reasonable budget. Matched page-wide by
 # text rather than scoped to a toast container: the container's class names are
 # hashed and were never probed, whereas the copy is stable and the sibling
 # ``_UPLOAD_COMPLETE_TEXT_RE`` in ``linkedin_composer`` already matches this way.

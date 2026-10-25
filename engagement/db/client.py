@@ -55,7 +55,7 @@ def supabase_client():
 
 # Every column the engagement pipeline reads or writes. Kept in sync with
 # ``engagement/db/schema.sql`` by ``tests/test_engagement_schema_preflight.py``,
-# which parses that file and fails if the two drift apart (issue #262).
+# which parses that file and fails if the two drift apart.
 REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
     "commenters": (
         "platform", "account_url", "display_name", "reputation_score",

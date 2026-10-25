@@ -228,7 +228,7 @@ def build_candidates(records: Sequence[gm.EmailRecord], priors: sc.Priors, notio
                 if canonical in seen_in_email:
                     continue          # same article via two anchors (resolved after extraction-time dedupe)
                 seen_in_email.add(canonical)
-            dom = gm.publication_domain(link.best_url, rec.sender_address)   # each Substack publication = own domain (#220)
+            dom = gm.publication_domain(link.best_url, rec.sender_address)   # each Substack publication = own domain
             bonus, _ = priors.domain(dom)
             c = rk.Candidate(cid=f"{rec.message_id}:{i}", message_id=rec.message_id, sender_name=rec.sender_name,
                              sender_address=rec.sender_address, subject=rec.subject, email_ts=rec.timestamp,
@@ -338,7 +338,7 @@ def run_window(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[st
                             f"({prev.get('status')}, {str(prev.get('finished_at') or prev.get('started_at'))[:16]}) "
                             f"— re-run with --force to replace it")
         # `edition_hint` stays unset: `triage_editions` is filled once by
-        # `import-history` and never refreshed (issue #321), so a number read
+        # `import-history` and never refreshed, so a number read
         # from it would be stale. `_run_window_body` falls back to the honest
         # "next free edition" label instead.
         run_id = db.register_run(start, end, kind=kind, edition=backtest.get("edition") if backtest else None,
@@ -463,14 +463,14 @@ def _stage_a(stage_a: List[rk.Candidate], *, use_llm: bool, engine: str, cfg: Di
             logger.error("❌ LLM hub unreachable at %s — producing a rule-only report", base_url)
             out.use_llm = False
         else:
-            # key the cache by the model the hub serves *now*, so a repointed alias never replays old answers (#398)
+            # key the cache by the model the hub serves *now*, so a repointed alias never replays old answers
             stats["llm_model_served"] = llm_cache.use_version(model, llm.served_model(base_url=base_url, model=model))
             logger.info("🤖 %s is served as %s", model, stats["llm_model_served"])
     if out.use_llm and stage_a:
         items = [{"sender": c.sender_name, "label": c.label or c.url, "domain": c.domain,
                   "path": urlsplit(c.url).path} for c in stage_a]
         if engine in jx.JEV_DECIDES:
-            # `jev+legacy` (#394): legacy keeps scoring in the background through stage B, collected after it
+            # `jev+legacy`: legacy keeps scoring in the background through stage B, collected after it
             if engine == "jev+legacy":
                 out.legacy_shadow = _start_shadow("legacy", items, criteria, base_url=base_url, model=model, cfg=cfg,
                                                   cache=llm_cache)
@@ -762,7 +762,7 @@ def backtest_edition(number: str, *, cfg: Dict[str, Any], criteria: Dict[str, An
 
 
 # ---------------------------------------------------------------------------
-# re-score (#395)
+# re-score
 
 
 def rescore(run_id: int, *, cfg: Dict[str, Any], criteria: Dict[str, Any], use_llm: bool, use_fetch: bool,

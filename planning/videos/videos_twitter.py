@@ -179,7 +179,7 @@ def schedule_one_video(
     page.wait_for_timeout(2500)
     # Wait for X to finish uploading/processing the clip BEFORE opening the
     # schedule modal — confirming a schedule mid-upload stalls finalization and
-    # the final Schedule button then never enables (issue #107).
+    # the final Schedule button then never enables.
     _wait_for_video_upload_ready(page, VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS)
     click_schedule_toolbar(page)
     set_schedule_modal(
@@ -208,12 +208,12 @@ def schedule_one_video(
 
     click_confirm_in_modal(page)
     # X keeps the final Schedule button disabled until the video finishes
-    # processing; clicking before then is a silent no-op (issue #106).
+    # processing; clicking before then is a silent no-op.
     _wait_tweet_button_enabled(page, VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS)
     click_final_schedule_action(page)
     # A large clip is still committing server-side after Schedule; the inline
     # composer only reverts once that finishes. Use the video budget, not the
-    # image-sized default (issue #106).
+    # image-sized default.
     if not wait_composer_clears(page, timeout_ms=VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS):
         shot = out_dir / f"{label}-tw-FAIL.png"
         page.screenshot(path=str(shot), full_page=False)

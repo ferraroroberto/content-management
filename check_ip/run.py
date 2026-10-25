@@ -109,7 +109,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                     if on]
     # A retired search type still costs a SerpAPI call and would now yield
     # nothing, so it is dropped here rather than in build_rows — the cheapest
-    # place to not spend the money is before the call (issue #292).
+    # place to not spend the money is before the call.
     retired = [t for t in search_types if t in process.RETIRED_MATCH_TYPES]
     for search_type in retired:
         logger.warning("⚠️ %s is enabled in config but '%s' results are retired (#292) — "

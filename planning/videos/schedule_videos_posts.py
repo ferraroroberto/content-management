@@ -70,7 +70,7 @@ PLATFORMS_SCHEDULED = ("li", "ig", "tw", "th")  # SB is owned by the daily Subst
 # resolves identically regardless of which relation it was followed through.
 # Having no column of their own also means no ``link <P>(v)`` to hold the
 # idempotency sentinel, so their "already scheduled" marker lives off-column in
-# ``planning.videos.videos_ledger`` instead (issue #239).
+# ``planning.videos.videos_ledger`` instead.
 PLATFORMS_TAG_ALONG = frozenset({"th"})
 
 
@@ -259,7 +259,7 @@ def _aggregate_row_status(state: _RowState, dry_run: bool) -> tuple[str, str]:
         has_dry = any(s == "DRY" for s in statuses)
         has_fail = any(s == "FAIL" for s in statuses)
         if has_fail:
-            # A failed leg must never read as a clean DRY (issue #321): report
+            # A failed leg must never read as a clean DRY: report
             # PARTIAL when another leg still ran dry-clean, FAIL when none did.
             return ("PARTIAL" if has_dry else "FAIL"), ", ".join(parts)
         return "DRY", ", ".join(parts)
@@ -401,7 +401,7 @@ def main() -> tuple[int, list[dict]]:
         # "instagram_schedule" logger. Without this line, every 📤 Leg N
         # DEBUG message and every dump_upload_debug screenshot path
         # disappears during a videos run — which is exactly when we need
-        # them. See issue #37.
+        # them.
         "instagram_schedule",
         # The LinkedIn schedule dialog, finalize and upload wait log to
         # "linkedin_composer"; without it their INFO lines are dropped.
@@ -495,8 +495,7 @@ def main() -> tuple[int, list[dict]]:
         # platforms get a sentinel in link <P>(v); tag-along platforms (TH)
         # have no such column by design — `_set_post_url` would log a
         # misleading "Role 'post_url_th' not present" warning on every
-        # successful TH run (issue #29) — so they get a ledger entry instead
-        # (issue #239).
+        # successful TH run — so they get a ledger entry instead.
         if not dry_run:
             for entry in driver_results:
                 if entry["status"] != "LIVE":

@@ -100,8 +100,8 @@ def run() -> None:
     # ── ②③④ step buttons ─────────────────────────────────────────────
     # st.container(horizontal=True) rather than st.columns() — buttons with
     # on_click nested inside st.columns() under st.tabs() silently fail to
-    # fire and reset the active tab on Streamlit's uvicorn/Starlette server
-    # (issue #155). container(horizontal=True) doesn't have this problem.
+    # fire and reset the active tab on Streamlit's uvicorn/Starlette server.
+    # container(horizontal=True) doesn't have this problem.
     with st.container(horizontal=True, gap="small"):
         st.button(
             "② Archive → Notion",

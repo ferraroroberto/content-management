@@ -166,7 +166,7 @@ def run() -> None:
             platform, search = render_sidebar_filters(key_suffix="-engagement-tab")
 
     # st.segmented_control rather than st.tabs() — same fix as app.py's
-    # top-level routing (issue #157): st.tabs() loses the active sub-tab on
+    # top-level routing: st.tabs() loses the active sub-tab on
     # any widget rerun triggered inside a non-default sub-tab.
     SUB_SECTIONS = ["🚀 scrape + classify", "🧑 real comments", "🤖 AI triage", "📊 commenters"]
     sub_section = st.segmented_control(

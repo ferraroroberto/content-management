@@ -173,7 +173,7 @@ def _wait_settled(page: Any) -> None:
 # Streamlit 1.57 rendered st.segmented_control as a stButtonGroup of
 # stBaseButton-segmented_control[Active] buttons; 1.60 dropped that
 # data-testid in favor of a plain data-variant="segmented_control" attribute
-# on the <button> (confirmed against the live DOM — see issue #187). There is
+# on the <button> (confirmed against the live DOM). There is
 # no "stSegmentedControl" testid either way. Waiting for the button group
 # doubles as the "websocket render finished" signal for the whole app shell.
 _SECTION_ROUTER = '[data-testid="stButtonGroup"]'
