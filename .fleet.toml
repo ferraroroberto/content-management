@@ -124,12 +124,14 @@ allow_refs = []
 
 # Dead code ratchet (project-scaffolding docs/dead-code-ratchet.md): fails the pre-ship
 # gate when a new function, class or method appears that nothing in the repo refers
-# to, beyond the baseline. Nothing is excluded: the vendored gmail_readonly/ and
-# google_oauth_common/ copies are scanned too, and an unreferenced definition that
-# must stay byte-identical to its source is baselined rather than deleted.
+# to, beyond the baseline. gmail_readonly/ and google_oauth_common/ are vendored
+# copies that must stay byte-identical to whatsapp-radar, so their unused API belongs
+# to that repo: excluded from reporting, still read for references. They sit outside
+# [vendored] because that table tracks project-scaffolding copies by commit sha.
 [dead_code_ratchet]
 enabled  = true
 baseline = ".dead-code-ratchet-baseline.json"
+exclude  = ["gmail_readonly/**", "google_oauth_common/**"]
 
 # Conventions ratchet (project-scaffolding docs/conventions-ratchet.md): fails the
 # pre-ship gate when a file's count of hits for an enabled fleet-convention rule rises

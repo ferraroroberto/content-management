@@ -346,6 +346,35 @@ SELECT * FROM analyze_relationship_patterns();
 SELECT * FROM smart_resolve_relations('table', 'field');
 ```
 
+### Debug Log and Rebuild
+
+The setup functions write progress to the `debug_log` table instead of `RAISE NOTICE`, so a server-side run can be inspected afterwards.
+
+```sql
+-- Recent messages, or only those since a point in time
+SELECT * FROM view_debug_log(100);
+SELECT * FROM view_debug_log_since(NOW() - INTERVAL '1 hour');
+
+-- Error count plus the latest error and its time
+SELECT * FROM count_debug_errors();
+
+-- Clear the log
+SELECT clear_debug_log();
+
+-- Rebuild only the auxiliary views, or those of one table
+SELECT create_all_auxiliary_relation_views();
+SELECT rebuild_table_auxiliary_views('notion_articles');
+
+-- List the relation columns found (all tables, or one)
+SELECT * FROM get_all_relation_columns();
+SELECT * FROM get_all_relation_columns() WHERE table_name = 'notion_articles';
+
+-- One-row summary of every relation
+SELECT * FROM notion_all_relations_summary;
+```
+
+If setup fails, read `view_debug_log_since(NOW() - INTERVAL '10 minutes')` filtered on `msg ILIKE '%error%'`. If views are missing, check `get_all_relation_columns()` for `rel_` columns first, then rebuild the auxiliary views.
+
 ### Query Patterns
 
 ```sql
