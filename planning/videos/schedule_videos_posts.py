@@ -396,9 +396,9 @@ def main() -> tuple[int, list[dict]]:
         "videos_instagram",
         "videos_twitter",
         "videos_threads",
-        # _upload_files + Meta-toast / debug helpers live in
-        # planning.instagram.schedule_instagram_posts and log to the
-        # "instagram_schedule" logger. Without this line, every 📤 Leg N
+        # upload_files (planning.instagram.instagram_upload) and the
+        # Meta-toast / debug helpers in planning.instagram.schedule_instagram_posts
+        # log to the "instagram_schedule" logger. Without this line, every 📤 Leg N
         # DEBUG message and every dump_upload_debug screenshot path
         # disappears during a videos run — which is exactly when we need
         # them.

@@ -21,6 +21,7 @@ from planning.videos.videos_ledger import DEFAULT_LEDGER_PATH
 # module path (relative to the repo root) -> results sub-folder it wrote to
 SITES = {
     "planning/instagram/schedule_instagram_posts.py": "instagram",
+    "planning/instagram/instagram_upload.py": "instagram",
     "planning/threads/schedule_threads_posts.py": "threads",
     "planning/twitter/schedule_twitter_posts.py": "twitter",
     "planning/linkedin/schedule_linkedin_posts.py": "linkedin",

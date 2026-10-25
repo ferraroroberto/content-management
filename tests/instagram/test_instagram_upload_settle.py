@@ -1,9 +1,10 @@
 r"""Characterization tests for the Instagram composer's post-upload settle wait.
 
-``_upload_files`` waits ``_upload_settle_ms(n_files)`` after every successful
-attach (all four legs, plus Leg 0's race-guard exit) so Meta can render the
-preview thumbnails. The numbers (``3000 + 1500 * n``) predate the helper and are
-pinned here so a refactor cannot shift the timing of the unattended scheduler.
+``upload_files`` and its ``_upload_leg*`` helpers wait
+``_upload_settle_ms(n_files)`` after every successful attach (all four legs,
+plus Leg 0's race-guard exit) so Meta can render the preview thumbnails. The
+numbers (``3000 + 1500 * n``) predate the helper and are pinned here so a
+refactor cannot shift the timing of the unattended scheduler.
 
 Run: & .\.venv\Scripts\python.exe -m unittest discover tests -v
 """
@@ -14,23 +15,25 @@ import ast
 import unittest
 from pathlib import Path
 
-from planning.instagram.schedule_instagram_posts import _upload_settle_ms
+from planning.instagram.instagram_upload import _upload_settle_ms
 
 MODULE_PATH = (
     Path(__file__).resolve().parents[2]
-    / "planning" / "instagram" / "schedule_instagram_posts.py"
+    / "planning" / "instagram" / "instagram_upload.py"
 )
 
 
 def _settle_waits() -> list[str]:
-    """Source of every ``wait_for_timeout`` argument in ``_upload_files`` that scales with the file count."""
+    """Source of every ``wait_for_timeout`` argument in ``upload_files`` and its legs that scales with the file count."""
     tree = ast.parse(MODULE_PATH.read_text(encoding="utf-8"))
-    fn = next(
+    fns = [
         n for n in ast.walk(tree)
-        if isinstance(n, ast.FunctionDef) and n.name == "_upload_files"
-    )
+        if isinstance(n, ast.FunctionDef)
+        and (n.name == "upload_files" or n.name.startswith("_upload_leg"))
+    ]
     return [
         ast.unparse(call.args[0])
+        for fn in fns
         for call in ast.walk(fn)
         if isinstance(call, ast.Call)
         and isinstance(call.func, ast.Attribute)

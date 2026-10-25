@@ -1,8 +1,6 @@
 {
   "version": 1,
   "entries": [
-    {"key": "fn:planning/instagram/schedule_instagram_posts.py:_upload_files", "lines": 178},
-    {"key": "fn:planning/instagram/schedule_instagram_posts.py:main", "lines": 113},
     {"key": "fn:planning/videos/schedule_videos_posts.py:main", "lines": 174},
     {"key": "size:planning/linkedin/linkedin_composer.py", "lines": 1112},
     {"key": "size:reporting/notion/setup_notion_relations_system.sql", "lines": 1132}
