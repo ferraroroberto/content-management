@@ -1,9 +1,5 @@
 {
   "version": 1,
   "tools": {"jscpd": "5.4.0", "ruff": "0.17.1"},
-  "entries": [
-    {"key": "lint:S113:reporting/notion/notion_database_list.py:response = requests.post(url, headers=self.headers, json=data)", "files": ["reporting/notion/notion_database_list.py"]},
-    {"key": "lint:S113:reporting/notion/notion_supabase_sync.py:response = requests.get(url, headers=self.headers)", "files": ["reporting/notion/notion_supabase_sync.py"]},
-    {"key": "lint:S113:reporting/notion/notion_supabase_sync.py:response = requests.post(url, headers=self.headers, json=data)", "files": ["reporting/notion/notion_supabase_sync.py"]}
-  ]
+  "entries": []
 }

@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.logger_config import setup_logger
 from reporting.notion._client import (
+    NOTION_REQUEST_TIMEOUT,
     extract_property_value,
     load_project_config,
     notion_rest_headers,
@@ -77,14 +78,19 @@ class NotionSupabaseSync:
         
         try:
             if method == "GET":
-                response = requests.get(url, headers=self.headers)
+                response = requests.get(url, headers=self.headers, timeout=NOTION_REQUEST_TIMEOUT)
             elif method == "POST":
-                response = requests.post(url, headers=self.headers, json=data)
+                response = requests.post(
+                    url, headers=self.headers, json=data, timeout=NOTION_REQUEST_TIMEOUT
+                )
             else:
                 raise ValueError(f"Unsupported method: {method}")
-            
+
             response.raise_for_status()
             return response.json()
+        except requests.exceptions.Timeout as e:
+            logger.error(f"❌ Notion API timed out after {NOTION_REQUEST_TIMEOUT}s (connect, read): {e}")
+            return None  # type: ignore
         except requests.exceptions.RequestException as e:
             logger.error(f"❌ Notion API error: {e}")
             return None  # type: ignore
