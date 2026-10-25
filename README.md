@@ -645,9 +645,9 @@ The eighth stage is the dead-code ratchet. It fails when a new function, class o
 method appears that nothing in the repo refers to and that is not recorded in
 `.dead-code-ratchet-baseline.json`. Routes, decorated hooks, `__all__` exports and
 tests are never reported, and a name used dynamically stays below the confidence
-floor. The vendored `gmail_readonly/` and `google_oauth_common/` copies are scanned
-too; an unreferenced vendored definition that must stay byte-identical to its source
-(`GmailMailbox.messages_by_ids`) is baselined, not deleted. The wrapper reports git or a Python file it could not
+floor. The vendored `gmail_readonly/` and `google_oauth_common/` copies are excluded
+from reporting but still read for references: their unused API
+(`GmailMailbox.messages_by_ids`) belongs to the repo they were copied from. The wrapper reports git or a Python file it could not
 read or parse as **NOT CONFIRMED** (a failure, never a pass or a skip):
 
 ```powershell
