@@ -22,6 +22,7 @@ import argparse
 import logging
 import sqlite3
 import sys
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -72,7 +73,7 @@ def _existing_pairs(conn: sqlite3.Connection, filename: str) -> set[tuple[str, s
     return {(r["found_link"], r["match_type"]) for r in rows}
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def _parse_args(argv: Optional[list[str]]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the illustration reverse-image search.")
     parser.add_argument("--dry-run", action="store_true",
                         help="Report what would be searched; make no API calls and write nothing.")
@@ -80,7 +81,86 @@ def main(argv: Optional[list[str]] = None) -> int:
                         help="Cap the number of images searched (0 = every image that is due).")
     parser.add_argument("--force", action="store_true",
                         help="Search every image, ignoring the re-search windows.")
-    args = parser.parse_args(argv)
+    return parser.parse_args(argv)
+
+
+def _enabled_search_types(settings: dict) -> list[str]:
+    """The search types config enables, minus the retired ones."""
+    search_types = [t for t, on in (("exact_matches", settings.get("do_exact_search", True)),
+                                    ("visual_matches", settings.get("do_similar_search", False)))
+                    if on]
+    # A retired search type still costs a SerpAPI call and would now yield
+    # nothing, so it is dropped here rather than in build_rows — the cheapest
+    # place to not spend the money is before the call.
+    retired = [t for t in search_types if t in process.RETIRED_MATCH_TYPES]
+    for search_type in retired:
+        logger.warning("⚠️ %s is enabled in config but '%s' results are retired (#292) — "
+                       "skipping it; set search_settings.do_similar_search to false",
+                       search_type, process.RETIRED_MATCH_TYPES[search_type])
+    return [t for t in search_types if t not in process.RETIRED_MATCH_TYPES]
+
+
+def _search_image(conn: sqlite3.Connection, lens: LensClient, imgur: ImgurClient, path: Path,
+                  search_types: list[str], tally: Counter) -> None:
+    """Host one image if needed, search it once per type, and store the matches."""
+    filename = path.name
+    row = conn.execute("select imgur_url from images where filename = ?", (filename,)).fetchone()
+    image_url = row["imgur_url"] if row else None
+
+    if not image_url:
+        logger.info("🚀 %s — uploading (not hosted yet)", filename)
+        image_url = imgur.upload(path)
+        if not image_url:
+            logger.error("❌ skipping %s — upload failed", filename)
+            tally["failed"] += 1
+            return
+        tally["uploaded"] += 1
+    else:
+        logger.info("♻️  %s — reusing hosted copy", filename)
+
+    stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute(
+        """
+        insert into images (filename, imgur_url, last_processed_date)
+        values (?, ?, ?)
+        on conflict(filename) do update set
+            imgur_url           = excluded.imgur_url,
+            last_processed_date = excluded.last_processed_date
+        """,
+        (filename, image_url, stamp),
+    )
+    conn.commit()
+
+    existing = _existing_pairs(conn, filename)
+    for search_type in search_types:
+        data = lens.search(conn, image_url, filename, search_type)
+        if data is None:
+            tally["failed"] += 1
+            continue
+        tally["searched"] += 1
+        rows, new, dupes = process.build_rows(data, search_type, filename, image_url,
+                                              stamp, existing)
+        db.upsert_results(conn, rows)
+        tally["added"] += new
+        tally["skipped"] += dupes
+        logger.info("   %s: +%s new, %s already known", search_type, new, dupes)
+
+
+def _log_summary(due: list[Path], tally: Counter, dupes: dict) -> None:
+    failed = tally["failed"]
+    logger.info("📊 SUMMARY")
+    logger.info("   images searched   %s", len(due))
+    logger.info("   searches made     %s", tally["searched"])
+    logger.info("   uploads           %s", tally["uploaded"])
+    logger.info("   new links         %s", tally["added"])
+    logger.info("   already known     %s", tally["skipped"])
+    logger.info("   failures          %s", failed)
+    logger.info("   canonical rows    %s", dupes.get(0, 0) + dupes.get(2, 0))
+    logger.info("✅ run complete" if not failed else "⚠️ run complete with %s failure(s)" % failed)
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    args = _parse_args(argv)
 
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
@@ -103,19 +183,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.limit:
         due = due[: args.limit]
 
-    settings = cfg.get("search_settings", {})
-    search_types = [t for t, on in (("exact_matches", settings.get("do_exact_search", True)),
-                                    ("visual_matches", settings.get("do_similar_search", False)))
-                    if on]
-    # A retired search type still costs a SerpAPI call and would now yield
-    # nothing, so it is dropped here rather than in build_rows — the cheapest
-    # place to not spend the money is before the call.
-    retired = [t for t in search_types if t in process.RETIRED_MATCH_TYPES]
-    for search_type in retired:
-        logger.warning("⚠️ %s is enabled in config but '%s' results are retired (#292) — "
-                       "skipping it; set search_settings.do_similar_search to false",
-                       search_type, process.RETIRED_MATCH_TYPES[search_type])
-    search_types = [t for t in search_types if t not in process.RETIRED_MATCH_TYPES]
+    search_types = _enabled_search_types(cfg.get("search_settings", {}))
     if not search_types:
         logger.error("❌ no ingestable search type is enabled in config — nothing to do")
         return 1
@@ -151,50 +219,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     imgur = ImgurClient(creds["imgur_client_id"], creds["imgur_access_token"])
     imgur.validate()  # advisory — an existing URL means most runs never upload
 
-    searched = uploaded = added = skipped = failed = 0
-
+    tally: Counter = Counter()
     for path in due:
-        filename = path.name
-        row = conn.execute("select imgur_url from images where filename = ?", (filename,)).fetchone()
-        image_url = row["imgur_url"] if row else None
-
-        if not image_url:
-            logger.info("🚀 %s — uploading (not hosted yet)", filename)
-            image_url = imgur.upload(path)
-            if not image_url:
-                logger.error("❌ skipping %s — upload failed", filename)
-                failed += 1
-                continue
-            uploaded += 1
-        else:
-            logger.info("♻️  %s — reusing hosted copy", filename)
-
-        stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        conn.execute(
-            """
-            insert into images (filename, imgur_url, last_processed_date)
-            values (?, ?, ?)
-            on conflict(filename) do update set
-                imgur_url           = excluded.imgur_url,
-                last_processed_date = excluded.last_processed_date
-            """,
-            (filename, image_url, stamp),
-        )
-        conn.commit()
-
-        existing = _existing_pairs(conn, filename)
-        for search_type in search_types:
-            data = lens.search(conn, image_url, filename, search_type)
-            if data is None:
-                failed += 1
-                continue
-            searched += 1
-            rows, new, dupes = process.build_rows(data, search_type, filename, image_url,
-                                                  stamp, existing)
-            db.upsert_results(conn, rows)
-            added += new
-            skipped += dupes
-            logger.info("   %s: +%s new, %s already known", search_type, new, dupes)
+        _search_image(conn, lens, imgur, path, search_types, tally)
 
     logger.info("🔁 recomputing duplicate flags…")
     dupes = db.mark_duplicates(conn)
@@ -203,15 +230,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     # NULL by a store that predates the column.
     db.refresh_poster_keys(conn)
 
-    logger.info("📊 SUMMARY")
-    logger.info("   images searched   %s", len(due))
-    logger.info("   searches made     %s", searched)
-    logger.info("   uploads           %s", uploaded)
-    logger.info("   new links         %s", added)
-    logger.info("   already known     %s", skipped)
-    logger.info("   failures          %s", failed)
-    logger.info("   canonical rows    %s", dupes.get(0, 0) + dupes.get(2, 0))
-    logger.info("✅ run complete" if not failed else "⚠️ run complete with %s failure(s)" % failed)
+    _log_summary(due, tally, dupes)
     return 0
 
 
