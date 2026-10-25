@@ -542,9 +542,6 @@ instead, which understands both styles:
 & .\.venv\Scripts\python.exe -m pytest tests -v
 ```
 
-`tests/test_no_uncalled_functions.py` fails on any function or method whose name
-appears nowhere else in the tracked files, so dead code cannot land unnoticed.
-
 The gate's second stage is the static-analysis ratchet. It compares the repo's
 unused imports, unused variables, duplicated blocks and a curated set of ruff bug
 (`B`) and security (`S`) findings (an HTTP call without a timeout, `shell=True`,
@@ -648,8 +645,9 @@ The eighth stage is the dead-code ratchet. It fails when a new function, class o
 method appears that nothing in the repo refers to and that is not recorded in
 `.dead-code-ratchet-baseline.json`. Routes, decorated hooks, `__all__` exports and
 tests are never reported, and a name used dynamically stays below the confidence
-floor. The vendored `gmail_readonly/` and `google_oauth_common/` copies are read for
-references but never reported. The wrapper reports git or a Python file it could not
+floor. The vendored `gmail_readonly/` and `google_oauth_common/` copies are scanned
+too; an unreferenced vendored definition that must stay byte-identical to its source
+(`GmailMailbox.messages_by_ids`) is baselined, not deleted. The wrapper reports git or a Python file it could not
 read or parse as **NOT CONFIRMED** (a failure, never a pass or a skip):
 
 ```powershell
