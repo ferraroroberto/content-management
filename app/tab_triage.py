@@ -266,6 +266,23 @@ def _render_review(run: dict) -> None:
                   on_click=_distil, args=(run_id,),
                   help="Ask the hub to turn your comment + disagreements into ≤3 proposed criteria notes; "
                        "nothing enters the engine until you accept them below.")
+    _render_last_apply()
+    if prior:
+        st.caption(f"last applied {str(prior.get('reviewed_at', ''))[:16]} · {prior.get('n_pick')} picks · "
+                   + (f"{len(prior.get('tier_changes') or [])} tier change(s)"))
+    _render_handoff(run, run_id, prior)
+    _render_lessons(run_id, start, end)
+    _render_new_senders(run_id)
+    report_path = run.get("report_path")
+    with st.expander("📄 rendered report (the markdown the engine wrote)", expanded=False):
+        if report_path and Path(report_path).exists():
+            st.markdown(Path(report_path).read_text(encoding="utf-8"))
+        else:
+            st.info("report file not found on this machine" + (f": {report_path}" if report_path else ""))
+
+
+def _render_last_apply() -> None:
+    """Report the outcome of the Apply click that triggered this rerun, once."""
     last = st.session_state.pop("triage-last-apply", None)
     if last:
         if "error" in last:
@@ -276,9 +293,10 @@ def _render_review(run: dict) -> None:
                        + (f" · reviewed until {last['reviewed_until']}" if last.get("reviewed_until") else ""))
             for c in last["tier_changes"]:
                 st.caption(f"• {c}")
-    if prior:
-        st.caption(f"last applied {str(prior.get('reviewed_at', ''))[:16]} · {prior.get('n_pick')} picks · "
-                   + (f"{len(prior.get('tier_changes') or [])} tier change(s)"))
+
+
+def _render_handoff(run: dict, run_id: int, prior: dict | None) -> None:
+    """The Chrome / Notion hand-off buttons for a reviewed run."""
     # hand-off: the two external writes, each an explicit click, streamed into the log panel
     # like every other pipeline step (Playwright + Notion run in the subprocess, never in the Streamlit thread)
     handoff = [str(VENV_PY), "-m", "newsletter.triage.handoff", "--run", str(run_id)]
@@ -297,14 +315,6 @@ def _render_review(run: dict) -> None:
                   on_click=_launch, args=(handoff + ["--open", "--dry-run"],),
                   help="Ensure Chrome, connect, list its tabs and print what would open / is already open, plus the "
                        "watermark line — opens nothing, writes nothing. Follow it in ▶ run.")
-    _render_lessons(run_id, start, end)
-    _render_new_senders(run_id)
-    report_path = run.get("report_path")
-    with st.expander("📄 rendered report (the markdown the engine wrote)", expanded=False):
-        if report_path and Path(report_path).exists():
-            st.markdown(Path(report_path).read_text(encoding="utf-8"))
-        else:
-            st.info("report file not found on this machine" + (f": {report_path}" if report_path else ""))
 
 
 def _render_lessons(run_id: int, start: str, end: str) -> None:
