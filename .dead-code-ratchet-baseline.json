@@ -1,4 +1,6 @@
 {
   "version": 1,
-  "entries": []
+  "entries": [
+    {"key": "gmail_readonly/core.py", "names": ["GmailMailbox.messages_by_ids"]}
+  ]
 }

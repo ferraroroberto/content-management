@@ -1,7 +1,7 @@
 {
   "version": 1,
   "entries": [
-    {"key": "dir:tests", "modules": 86},
+    {"key": "dir:tests", "modules": 84},
     {"key": "fn:app/tab_check_ip.py:_render_table", "lines": 122},
     {"key": "fn:app/tab_newsletter.py:run", "lines": 104},
     {"key": "fn:app/tab_triage.py:_render_review", "lines": 103},
