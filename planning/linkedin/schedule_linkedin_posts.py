@@ -73,8 +73,8 @@ from planning.linkedin.linkedin_composer import (  # noqa: E402
     fill_caption_with_mentions,
     finalize_schedule,
     open_schedule_dialog,
-    set_schedule_datetime,
 )
+from planning.linkedin.linkedin_schedule_picker import set_schedule_datetime  # noqa: E402
 from planning.linkedin.linkedin_labels import (  # noqa: E402
     ADD_BTN_RE,
     ALT_TEXT_BTN_RE,

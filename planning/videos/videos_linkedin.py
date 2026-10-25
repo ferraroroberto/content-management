@@ -30,8 +30,8 @@ from planning.linkedin.linkedin_composer import (  # noqa: E402
     fill_caption_with_mentions,
     finalize_schedule,
     open_schedule_dialog,
-    set_schedule_datetime,
 )
+from planning.linkedin.linkedin_schedule_picker import set_schedule_datetime  # noqa: E402
 from planning.linkedin.linkedin_labels import MEDIA_FILE_INPUT_SEL, VIDEO_TEXT_RE  # noqa: E402
 from planning.linkedin.linkedin_session import (  # noqa: E402
     LinkedInSession,

@@ -24,7 +24,7 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from planning.linkedin import linkedin_composer as sched
+from planning.linkedin import linkedin_schedule_picker as sched
 from planning.linkedin.linkedin_labels import TIME_INPUT_SEL, TIME_MENU_SEL
 
 EVENING_START = 19 * 60 + 45  # the stale "today" list starts at 7:45 PM
