@@ -125,12 +125,12 @@ server says so at start, and some guests may not connect.
 
 ## Verify
 
-- `tests/test_recorder.py` covers the chunk store (idempotent re-send, the
+- `tests/recording/test_recorder.py` covers the chunk store (idempotent re-send, the
   missing-chunk report, join order, and real MP4 and WebM streams cut at
   arbitrary bytes and rejoined to their duration), the server (token refusal,
   upload/resume/finish, the reference file's name) and the signalling (bad
   link or peer id refused, presence, relay, one socket per side, ICE config).
-- `tests/test_recorder_call_browser.py` runs the call end to end against a
+- `tests/recording/test_recorder_call_browser.py` runs the call end to end against a
   local server: two pages in Playwright's Chromium with a fake camera and mic
   connect, the call sender carries the 720p / 1.5 Mbps cap while each side
   records 1080p, and both sides upload a main recording plus a reference that
