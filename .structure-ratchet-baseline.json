@@ -1,8 +1,6 @@
 {
   "version": 1,
   "entries": [
-    {"key": "fn:engagement/linkedin/scrape_comments.py:run", "lines": 102},
-    {"key": "fn:engagement/linkedin/scrape_comments.py:scrape_post_comments", "lines": 143},
     {"key": "fn:planning/instagram/schedule_instagram_posts.py:_upload_files", "lines": 178},
     {"key": "fn:planning/instagram/schedule_instagram_posts.py:main", "lines": 113},
     {"key": "fn:planning/videos/schedule_videos_posts.py:main", "lines": 174},

@@ -452,27 +452,8 @@ def _dump_debug(page: Page, post_url: str, *, prefix: str) -> None:
         logger.warning("dump failed: %s", err)
 
 
-def scrape_post_comments(
-    page: Page, post_url: str, post_posted_at: Optional[str]
-) -> tuple[list[dict], list[dict], Optional[str]]:
-    """Return (comments_rows, commenters_rows, structural_error) for a single post URL.
-
-    `structural_error` is the extractor's `error` key (e.g. `no_list_container`)
-    when the DOM didn't match expected shape at all — the discriminator `run()`
-    uses to tell a quiet day (0 comments, no error) from a broken scrape (0
-    comments because extraction never found what it was looking for)."""
-    logger.info("➡️ scraping %s", post_url)
-    page.goto(post_url, wait_until="domcontentloaded", timeout=POST_LOAD_TIMEOUT_MS)
-
-    # Comments are lazy-loaded — scroll the bottom of the post into view to
-    # trigger the comments-section hydration, then wait for the network to
-    # settle before we look for comment articles.
-    try:
-        page.wait_for_load_state("networkidle", timeout=NETWORK_IDLE_TIMEOUT_MS)
-    except PWTimeoutError:
-        logger.debug("networkidle wait timed out — proceeding anyway")
-    page.wait_for_timeout(POST_SETTLE_MS)
-
+def _hydrate_comments(page: Page) -> None:
+    """Scroll the post's comment region into view so LinkedIn hydrates it."""
     # Scroll a few page-heights down — LinkedIn hydrates the comments only
     # once the comment region is close to the viewport.
     for _ in range(HYDRATE_SCROLLS):
@@ -493,15 +474,9 @@ def scrape_post_comments(
             continue
     page.wait_for_timeout(POST_SETTLE_MS)
 
-    # Wait for the comment-list container before trying to extract.
-    try:
-        page.wait_for_selector(SEL_COMMENT_LIST_CONTAINER, timeout=COMMENT_LIST_TIMEOUT_MS)
-    except PWTimeoutError:
-        logger.warning("⚠️ comment list container not found within %ds on %s",
-                       COMMENT_LIST_TIMEOUT_MS // 1000, post_url)
 
-    _try_switch_to_most_recent(page)
-
+def _scroll_until_stable(page: Page) -> None:
+    """Scroll until the comment text-box count stops growing."""
     # Scroll until expandable-text-box count stabilises. The post body itself
     # is rendered as ONE text-box, so we need count >= MIN_COMMENT_BOXES before
     # considering the comments loaded (otherwise we exit early on a post-only page).
@@ -534,27 +509,10 @@ def scrape_post_comments(
             break
     logger.info("📊 comment text-boxes on page after scroll: %d", last_count)
 
-    _expand_all_comments(page)
 
-    # Final settle before extraction.
-    page.wait_for_timeout(EXTRACT_SETTLE_MS)
-
-    my_handle = _my_handle_from_config()
-    result = page.evaluate(
-        _JS_EXTRACT_COMMENTS,
-        {"listSel": SEL_COMMENT_LIST_CONTAINER, "textSel": SEL_COMMENT_TEXT_NODES, "myHandle": my_handle},
-    )
-
-    if result.get("error"):
-        logger.warning("⚠️ extractor reported %s on %s — dumping page for inspection", result["error"], post_url)
-        _dump_debug(page, post_url, prefix="miss")
-        return [], [], result["error"]
-
-    records = result.get("records") or []
-    if not records:
-        logger.warning("⚠️ 0 comments extracted from %s — dumping page for inspection", post_url)
-        _dump_debug(page, post_url, prefix="empty")
-
+def _rows_from_records(records: list[dict], post_url: str,
+                       post_posted_at: Optional[str]) -> tuple[list[dict], list[dict]]:
+    """The comments and the distinct commenters behind the extractor's records."""
     comments_rows: list[dict] = []
     commenters_seen: dict[str, dict] = {}
     for rec in records:
@@ -592,9 +550,67 @@ def scrape_post_comments(
                     "display_name": display_name,
                 },
             )
+    return comments_rows, list(commenters_seen.values())
 
+
+def scrape_post_comments(
+    page: Page, post_url: str, post_posted_at: Optional[str]
+) -> tuple[list[dict], list[dict], Optional[str]]:
+    """Return (comments_rows, commenters_rows, structural_error) for a single post URL.
+
+    `structural_error` is the extractor's `error` key (e.g. `no_list_container`)
+    when the DOM didn't match expected shape at all — the discriminator `run()`
+    uses to tell a quiet day (0 comments, no error) from a broken scrape (0
+    comments because extraction never found what it was looking for)."""
+    logger.info("➡️ scraping %s", post_url)
+    page.goto(post_url, wait_until="domcontentloaded", timeout=POST_LOAD_TIMEOUT_MS)
+
+    # Comments are lazy-loaded — scroll the bottom of the post into view to
+    # trigger the comments-section hydration, then wait for the network to
+    # settle before we look for comment articles.
+    try:
+        page.wait_for_load_state("networkidle", timeout=NETWORK_IDLE_TIMEOUT_MS)
+    except PWTimeoutError:
+        logger.debug("networkidle wait timed out — proceeding anyway")
+    page.wait_for_timeout(POST_SETTLE_MS)
+
+    _hydrate_comments(page)
+
+    # Wait for the comment-list container before trying to extract.
+    try:
+        page.wait_for_selector(SEL_COMMENT_LIST_CONTAINER, timeout=COMMENT_LIST_TIMEOUT_MS)
+    except PWTimeoutError:
+        logger.warning("⚠️ comment list container not found within %ds on %s",
+                       COMMENT_LIST_TIMEOUT_MS // 1000, post_url)
+
+    _try_switch_to_most_recent(page)
+
+    _scroll_until_stable(page)
+
+    _expand_all_comments(page)
+
+    # Final settle before extraction.
+    page.wait_for_timeout(EXTRACT_SETTLE_MS)
+
+    my_handle = _my_handle_from_config()
+    result = page.evaluate(
+        _JS_EXTRACT_COMMENTS,
+        {"listSel": SEL_COMMENT_LIST_CONTAINER, "textSel": SEL_COMMENT_TEXT_NODES, "myHandle": my_handle},
+    )
+
+    if result.get("error"):
+        logger.warning("⚠️ extractor reported %s on %s — dumping page for inspection", result["error"], post_url)
+        _dump_debug(page, post_url, prefix="miss")
+        return [], [], result["error"]
+
+    records = result.get("records") or []
+    if not records:
+        logger.warning("⚠️ 0 comments extracted from %s — dumping page for inspection", post_url)
+        _dump_debug(page, post_url, prefix="empty")
+
+    comments_rows, commenters = _rows_from_records(records, post_url, post_posted_at)
     logger.info("✅ %s — extracted %d comments", post_url, len(comments_rows))
-    return comments_rows, list(commenters_seen.values()), None
+    return comments_rows, commenters, None
 
 
 # ---------- Orchestrator ----------
@@ -638,6 +654,46 @@ def _evaluate_scrape_health(total_posts: int, structural_errors: list[str]) -> s
     extractor's own `error` key is, since it is the one signal that tells
     "the DOM didn't match" apart from "there was nothing to find"."""
     return "broken" if total_posts > 0 and len(structural_errors) == total_posts else "ok"
+
+
+def _write_dry_run(posts: list[dict], all_comments: list[dict], all_commenters: dict[str, dict]) -> None:
+    """Write what a live run would persist to a timestamped JSON file."""
+    out_path = REPO_ROOT / "results" / "engagement" / f"dryrun-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(
+        json.dumps(
+            {"posts": [p["post_url"] for p in posts], "comments": all_comments, "commenters": list(all_commenters.values())},
+            ensure_ascii=False, indent=2,
+        ),
+        encoding="utf-8",
+    )
+    logger.info("📝 dry-run output → %s", out_path)
+
+
+def _persist(persistable_comments: list[dict], all_commenters: dict[str, dict]) -> list[dict]:
+    """Upsert the scrape, then mark replied rows and classify; returns the comments written."""
+    # Promote legacy fallback:<hash> comment_ids to the new URN so user-set
+    # classifications and statuses carry over to the URN-keyed row that
+    # the upsert is about to write. Idempotent — only runs where a new URN
+    # exists AND a matching fallback row is present.
+    migrate_fallback_ids_to_urn(platform="linkedin", new_comments=persistable_comments)
+    persistable_comments = _dedupe_comments_by_id(persistable_comments)
+    upsert_commenters(list(all_commenters.values()))
+    upsert_comments(persistable_comments)
+    # Auto-mark "I already replied" rows as ignored so the triage inbox
+    # only contains comments that actually need my attention.
+    flipped = mark_replied_as_ignored(platform="linkedin")
+    if flipped:
+        logger.info("✓ auto-marked %d already-replied row(s) as ignored", flipped)
+    # Chain: apply the rule classifier so new comments from whitelist/
+    # blacklist commenters get cascaded immediately (no manual click).
+    try:
+        from engagement.classify.rules import classify_pending  # late import
+        res = classify_pending(platform="linkedin")
+        logger.info("🧮 post-scrape classify: %s", res)
+    except Exception as err:  # never let classify failure mask scrape success
+        logger.warning("post-scrape classify failed: %s", err)
+    return persistable_comments
 
 
 def run(days: int, *, headless: bool = False, dry_run: bool = False, limit: Optional[int] = None) -> dict:
@@ -695,38 +751,9 @@ def run(days: int, *, headless: bool = False, dry_run: bool = False, limit: Opti
     persistable_comments = [{k: v for k, v in c.items() if not k.startswith("_")} for c in all_comments]
 
     if dry_run:
-        out_path = REPO_ROOT / "results" / "engagement" / f"dryrun-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(
-            json.dumps(
-                {"posts": [p["post_url"] for p in posts], "comments": all_comments, "commenters": list(all_commenters.values())},
-                ensure_ascii=False, indent=2,
-            ),
-            encoding="utf-8",
-        )
-        logger.info("📝 dry-run output → %s", out_path)
+        _write_dry_run(posts, all_comments, all_commenters)
     else:
-        # Promote legacy fallback:<hash> comment_ids to the new URN so user-set
-        # classifications and statuses carry over to the URN-keyed row that
-        # the upsert is about to write. Idempotent — only runs where a new URN
-        # exists AND a matching fallback row is present.
-        migrate_fallback_ids_to_urn(platform="linkedin", new_comments=persistable_comments)
-        persistable_comments = _dedupe_comments_by_id(persistable_comments)
-        upsert_commenters(list(all_commenters.values()))
-        upsert_comments(persistable_comments)
-        # Auto-mark "I already replied" rows as ignored so the triage inbox
-        # only contains comments that actually need my attention.
-        flipped = mark_replied_as_ignored(platform="linkedin")
-        if flipped:
-            logger.info("✓ auto-marked %d already-replied row(s) as ignored", flipped)
-        # Chain: apply the rule classifier so new comments from whitelist/
-        # blacklist commenters get cascaded immediately (no manual click).
-        try:
-            from engagement.classify.rules import classify_pending  # late import
-            res = classify_pending(platform="linkedin")
-            logger.info("🧮 post-scrape classify: %s", res)
-        except Exception as err:  # never let classify failure mask scrape success
-            logger.warning("post-scrape classify failed: %s", err)
+        persistable_comments = _persist(persistable_comments, all_commenters)
 
     status = _evaluate_scrape_health(len(posts), structural_errors)
     if status == "broken":
