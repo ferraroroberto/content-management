@@ -327,6 +327,22 @@ def _write_link(note: NotePublish, note_url: str) -> int:
     return 0
 
 
+def _publish_note_native(note: NotePublish, *, dry_run: bool) -> int:
+    """Publish one Note through the native HTTP API; return an exit code."""
+    if dry_run:
+        logger.info("✅ DRY-RUN (native): would publish %s — nothing was posted.",
+                    note.native_dry_run)
+        return 0
+    logger.info("🔌 Publishing the %s via the native HTTP API (no browser).", note.noun)
+    try:
+        note_url = note.publish_native()
+    except Exception as err:  # noqa: BLE001
+        logger.error("❌ Native %s publish failed: %s", note.noun.lower(), err)
+        return 9
+    logger.info("🔗 Published %s URL: %s", note.noun.lower(), note_url)
+    return _write_link(note, note_url)
+
+
 def publish_note_flow(
     cfg: dict,
     note: NotePublish,
@@ -356,18 +372,7 @@ def publish_note_flow(
         return 2
 
     if note_source == "native":
-        if dry_run:
-            logger.info("✅ DRY-RUN (native): would publish %s — nothing was posted.",
-                        note.native_dry_run)
-            return 0
-        logger.info("🔌 Publishing the %s via the native HTTP API (no browser).", note.noun)
-        try:
-            note_url = note.publish_native()
-        except Exception as err:  # noqa: BLE001
-            logger.error("❌ Native %s publish failed: %s", note.noun.lower(), err)
-            return 9
-        logger.info("🔗 Published %s URL: %s", note.noun.lower(), note_url)
-        return _write_link(note, note_url)
+        return _publish_note_native(note, dry_run=dry_run)
 
     owned_session = session is None
     s = session or SubstackSession(cfg)
