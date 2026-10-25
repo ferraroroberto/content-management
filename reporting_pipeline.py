@@ -29,7 +29,12 @@ from reporting.social_client.social_api_client import (
     configure_logger as configure_social_logger,
     check_file_exists_for_date,
 )
-from reporting.process.data_processor import main as run_data_processor, configure_logger as configure_data_processor_logger
+from reporting.process.data_processor import (
+    main as run_data_processor,
+    configure_logger as configure_data_processor_logger,
+    load_mapping_config,
+    process_json_file,
+)
 from reporting.process.profile_aggregator import main as run_profile_aggregator, configure_logger as configure_profile_logger
 from reporting.process.posts_consolidator import main as run_posts_consolidator, configure_logger as configure_posts_logger
 from reporting.notion.notion_update import main as run_notion_update, configure_logger as configure_notion_logger
@@ -72,6 +77,9 @@ class PipelineFailures:
       a view lost ``security_invoker`` (recorded by ``check_policy_drift_coverage``);
       this catches Supabase security drift on the project's own clock instead of
       waiting for the weekly security-advisor email (issue #50).
+    * ``all_zero_platforms`` — every post a platform's raw scrape holds has 0 likes,
+      0 comments and 0 reposts (recorded by ``check_all_zero_posts``); a scraper that
+      can no longer read the counts looks exactly like this.
     * ``unverified`` — a coverage/drift check could not run at all (no DB
       connection, or it raised) so its posture is genuinely unknown, not
       "clean" (issue #246). Kept separate from the other lists so a full DB
@@ -86,11 +94,12 @@ class PipelineFailures:
         self.missing_post_metrics: list[str] = []
         self.policy_drift: list[str] = []
         self.unverified: list[str] = []
+        self.all_zero_platforms: list[str] = []
 
     def any(self) -> bool:
         return bool(self.step_failures or self.missing_endpoints or self.skipped_platforms
                     or self.missing_post_metrics or self.policy_drift
-                    or self.unverified)
+                    or self.unverified or self.all_zero_platforms)
 
 
 def _load_config() -> dict | None:
@@ -138,6 +147,36 @@ def check_endpoint_coverage(config: dict, processing_date: str, failures: "Pipel
         logger.error(f"❌ Missing expected data file for {platform_key} on {processing_date}")
     if not failures.missing_endpoints and not failures.skipped_platforms:
         logger.info(f"✅ All {len(config_endpoints)} expected endpoint files present for {processing_date}")
+
+
+def check_all_zero_posts(config: dict, processing_date: str, failures: "PipelineFailures") -> None:
+    """Record every platform whose scraped posts all read 0 likes, 0 comments and 0 reposts.
+
+    Reads each ``<platform>_posts`` raw file for the date through the same mapping the
+    data processor uses, so the check holds for every source (RapidAPI, Playwright,
+    native). A file that cannot be mapped is left to the data processor's own failure;
+    a platform with no raw file is already reported by ``check_endpoint_coverage``.
+    """
+    mapping_config = load_mapping_config()
+    if not mapping_config:
+        failures.unverified.append("all_zero_posts: mapping config not loaded")
+        return
+    for platform_key in (k for k, v in config.items() if isinstance(v, dict) and 'api_url' in v):
+        if not platform_key.endswith("_posts"):
+            continue
+        exists, file_path = check_file_exists_for_date(platform_key, config, processing_date)
+        records = process_json_file(file_path, mapping_config) if exists else None
+        if not records:
+            continue
+        engagement = (record.get(field) or 0 for record in records
+                      for field in ("num_likes", "num_comments", "num_reshares"))
+        if not any(engagement):
+            platform = platform_key.removesuffix("_posts")
+            failures.all_zero_platforms.append(platform)
+            logger.error(
+                f"❌ {platform}: all {len(records)} scraped posts have 0 likes, 0 comments and "
+                f"0 reposts for {processing_date} — the scrape likely stopped reading the counts"
+            )
 
 
 # Platforms whose consolidated post metrics we expect on every daily run.
@@ -326,6 +365,11 @@ def _build_alert_message(failures: "PipelineFailures", processing_date: str) -> 
         lines.append("No post metrics (platform):")
         for platform in failures.missing_post_metrics:
             lines.append(f"• {platform}")
+    if failures.all_zero_platforms:
+        lines.append("")
+        lines.append("All posts at 0 likes, 0 comments and 0 reposts (platform):")
+        for platform in failures.all_zero_platforms:
+            lines.append(f"• {platform}")
     if failures.policy_drift:
         lines.append("")
         lines.append("RLS/policy drift:")
@@ -496,7 +540,11 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
             check_endpoint_coverage(config, processing_date, failures)
     else:
         logger.info("⏭️ Skipping Social API Client step")
-    
+    # Runs even when the fetch was skipped: an all-zero raw file left over from an
+    # earlier run is still bad data headed for Notion. The other platforms finish first.
+    if config:
+        check_all_zero_posts(config, processing_date, failures)
+
     # Step 2: Process the raw data
     if not skip_processing:
         logger.info("🔄 Step 2: Running Data Processor")

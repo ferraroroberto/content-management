@@ -12,9 +12,9 @@ Posts page: ``https://www.linkedin.com/in/<handle>/recent-activity/all/``
     * ``post_id``     canonical post URL built from the URN activity id.
     * ``posted_at``   derived from the URN activity id (``id >> 22`` → ms).
     * ``is_video``    presence of a ``<video>`` element inside the post.
-    * ``num_likes``   "You and N others" + 1, or numeric reactions count.
-    * ``num_comments`` "N comments".
-    * ``num_reshares`` "N reposts".
+    * ``num_likes``   count in the reaction button, else "You and N others" + 1.
+    * ``num_comments`` count in the comment button, else "N comments".
+    * ``num_reshares`` count in the repost button, else "N reposts".
 """
 
 from __future__ import annotations
@@ -37,6 +37,7 @@ from reporting.scrape_client.base import (  # noqa: E402
     load_full_config,
     normalize_target_date,
     parse_int,
+    parse_short_int,
 )
 
 logger = logging.getLogger("linkedin_scrape")
@@ -68,6 +69,18 @@ _URN_ID_RE = re.compile(r"urn:li:activity:(\d+)")
 _URN_LINK_SELECTOR = "a[href*='urn:li:activity:']"
 _LEGACY_POST_SELECTOR = "[data-urn^='urn:li:activity:']"
 _POST_SELECTOR = f"{_LEGACY_POST_SELECTOR}, main [role='listitem']:has({_URN_LINK_SELECTOR})"
+
+# Since 2026-10-15 the counts are bare numbers inside the post's stat buttons (reaction
+# button label starts "Reaction button state:", then "Comment" and "Repost"), with no
+# "comments" / "reposts" words in the text for the regexes above to match.
+_BUTTON_COUNTS_JS = """el => {
+    const text = sel => { const b = el.querySelector(sel); return b ? b.innerText : null; };
+    return {
+        reactions: text("button[aria-label^='Reaction button state']"),
+        comments: text("button[aria-label='Comment']"),
+        reposts: text("button[aria-label='Repost']"),
+    };
+}"""
 
 POSTS_WAIT_MS = 20000
 MAX_POSTS = 15
@@ -170,6 +183,32 @@ def _scroll_to_load(page, *, scrolls: int = SCROLLS, pause_ms: int = SCROLL_PAUS
     for _ in range(scrolls):
         page.mouse.wheel(0, 4000)
         page.wait_for_timeout(pause_ms)
+
+
+def _counts_from_buttons(raw: dict) -> dict:
+    """Turn the stat-button texts read by ``_BUTTON_COUNTS_JS`` into counts.
+
+    A missing button is ``None`` (unreadable); a button whose label is blank is a
+    real 0 — LinkedIn renders a zero-width space instead of "0".
+    """
+    out: dict = {}
+    for field, key in (("num_likes", "reactions"), ("num_comments", "comments"), ("num_reshares", "reposts")):
+        text = raw.get(key)
+        if text is None:
+            out[field] = None
+            continue
+        text = text.replace("​", "").strip()
+        out[field] = 0 if not text else parse_short_int(text)
+    return out
+
+
+def _post_button_counts(post_locator) -> dict:
+    """Read the reaction / comment / repost counts from the post's stat buttons."""
+    try:
+        return _counts_from_buttons(post_locator.evaluate(_BUTTON_COUNTS_JS) or {})
+    except Exception as err:
+        logger.warning("⚠️ Could not read the stat buttons: %s", err)
+        return _counts_from_buttons({})
 
 
 def _extract_post_engagement(post_text: str) -> dict:
@@ -297,9 +336,16 @@ def fetch_posts(target_date: Optional[str] = None) -> Optional[dict]:
             except Exception as err:
                 logger.warning("⚠️ Could not read inner_text for activity %s: %s", activity_id, err)
                 continue
-            eng = _extract_post_engagement(post_text)
+            eng = _post_button_counts(post)
+            text_eng = _extract_post_engagement(post_text)
+            eng = {field: text_eng[field] if value is None else value for field, value in eng.items()}
+            if all(value is None for value in eng.values()):
+                # Unreadable is not zero: saving it as 0 hid a markup change for ten days.
+                logger.warning("⚠️ No like/comment/repost count readable for activity %s — skipped", activity_id)
+                continue
             is_video = _post_is_video(post)
 
+            # A post that shows some counts but not others (no reposts line) is a real 0 there.
             record = {
                 "post_id": post_url,
                 "posted_at": posted_at,
@@ -317,7 +363,10 @@ def fetch_posts(target_date: Optional[str] = None) -> Optional[dict]:
 
         if not posts:
             s.screenshot_failure(f"{target_date}-activity-no-parseable")
-            raise ScrapeError("LinkedIn recent-activity page had containers but none parsed.")
+            raise ScrapeError(
+                f"LinkedIn recent-activity page had {count} containers but no post had a readable "
+                "like/comment/repost count — the markup likely changed."
+            )
 
         logger.info("✅ LinkedIn posts scraped: %d", len(posts))
         return {"posts": posts}
