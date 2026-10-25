@@ -90,6 +90,222 @@ def _click_tab(page: Page, label: str) -> bool:
     return False
 
 
+def _check_real_tab(page, out_dir: Path) -> int:
+    """The real-comments tab renders its cards with no leaked NaN."""
+    fails = 0
+    print("\n📱 step 2 — Real comments tab")
+    _click_tab(page, "real comments")
+    page.wait_for_timeout(800)
+    _shot(page, out_dir, "02-real-tab")
+    body = page.inner_text("body")
+    # The bug we just fixed: "you already replied nan" appearing on every card.
+    nan_hits = body.lower().count("already replied nan")
+    if nan_hits:
+        _fail("no leaked NaN in real-comments tab", f"found {nan_hits} 'already replied nan' lines")
+        fails += 1
+    else:
+        _pass("no leaked NaN in real-comments tab")
+    # The cards should render — assert on structure (the count caption
+    # `render_real_tab` always emits, or the explicit empty state), not
+    # on specific commenters' names: those are live DB rows that churn
+    # (blacklisted / ignored / aged out) and shouldn't be hardcoded into
+    # a public-repo check anyway.
+    if "inbox clear" in body.lower() or "real comment(s)" in body.lower():
+        _pass("real-comments cards rendered")
+    else:
+        _fail("real-comments cards", "expected 'inbox clear' or 'N real comment(s)' caption")
+        fails += 1
+    return fails
+
+
+def _check_ai_tab(page, out_dir: Path) -> int:
+    """The AI triage tab renders its count caption or empty state."""
+    fails = 0
+    print("\n📱 step 3 — AI triage tab")
+    _click_tab(page, "AI triage")
+    page.wait_for_timeout(800)
+    _shot(page, out_dir, "03-ai-tab")
+    body = page.inner_text("body")
+    # Same structural rule as step 2: the count caption `render_ai_tab`
+    # always emits, or the explicit empty state — never a named row.
+    if "triage clear" in body.lower() or "comment(s)" in body.lower():
+        _pass("AI triage rendered")
+    else:
+        _fail("AI triage state ambiguous", "expected empty-state caption or comment-count caption")
+        fails += 1
+    return fails
+
+
+def _check_sidebar(page, out_dir: Path) -> int:
+    """The sidebar shows the 'pending' metric."""
+    fails = 0
+    print("\n📱 step 4 — sidebar counts non-zero")
+    # Sidebar 'pending' metric — Streamlit renders metrics as labelled divs.
+    sidebar_text = ""
+    try:
+        sidebar_text = page.locator("section[data-testid='stSidebar']").first.inner_text()
+    except Exception:
+        sidebar_text = page.inner_text("body")
+    if "pending" in sidebar_text.lower():
+        _pass("sidebar 'pending' metric present")
+    else:
+        _fail("sidebar metric missing", "no 'pending' label seen")
+        fails += 1
+    return fails
+
+
+def _check_approve(page, out_dir: Path) -> int:
+    """Approving a row lowers the pending count by one, then rolls it back."""
+    fails = 0
+    print("\n📱 step 5 — approve action lowers pending count by 1")
+    pending_before = _count_pending()
+    approved_before = _approved_keys()
+    _click_tab(page, "AI triage")
+    page.wait_for_timeout(500)
+    approve_clicked = False
+    try:
+        # Streamlit renders st.button as <button kind='secondary'> with text inside; emoji is in the label.
+        btn = page.locator("button:has-text('approve')").first
+        if btn.count() and btn.is_visible():
+            btn.click()
+            page.wait_for_timeout(1500)
+            approve_clicked = True
+    except Exception as err:
+        print(f"     note: approve click skipped — {err}")
+    _shot(page, out_dir, "04-after-approve")
+    if approve_clicked:
+        pending_after = _count_pending()
+        if pending_after == pending_before - 1:
+            _pass("approve dropped pending count by 1", f"{pending_before} -> {pending_after}")
+        else:
+            _fail("approve count delta", f"expected {pending_before - 1}, got {pending_after}")
+            fails += 1
+        # Roll back so the test is idempotent — re-run friendly. Scope to
+        # exactly the row(s) THIS click approved (the before/after diff on
+        # the table's own primary key), never a blanket
+        # `.eq("status", "approved")` — that would revert every row the
+        # owner has approved by hand in the review app, not just this
+        # check's own row.
+        newly_approved = _approved_keys() - approved_before
+        sb = supabase_client()
+        if newly_approved:
+            for platform, comment_id in newly_approved:
+                sb.table("comments").update({"status": "pending", "decided_at": None}) \
+                    .eq("platform", platform).eq("comment_id", comment_id).execute()
+        else:
+            print("     note: rollback skipped — could not identify which row(s) the click approved")
+    else:
+        _pass("approve button skipped — no AI-flagged rows to approve (expected on first run)")
+    return fails
+
+
+def _check_real_tab_after_rerun(page, out_dir: Path) -> int:
+    """The real-comments tab still has no NaN after an action."""
+    fails = 0
+    print("\n📱 step 6 — back to Real comments and verify no NaN after rerun")
+    _click_tab(page, "real comments")
+    page.wait_for_timeout(800)
+    _shot(page, out_dir, "05-real-tab-after")
+    body = page.inner_text("body")
+    if "already replied nan" not in body.lower():
+        _pass("no NaN after rerun")
+    else:
+        _fail("NaN reappeared after action", "")
+        fails += 1
+    return fails
+
+
+def _check_commenters_tab(page, out_dir: Path) -> int:
+    """The commenters tab caption, filter and headers match the DB."""
+    fails = 0
+    print("\n📱 step 7 — Commenters analysis tab")
+    _click_tab(page, "commenters")
+    page.wait_for_timeout(1200)
+    _shot(page, out_dir, "06-commenters-tab")
+    body = page.inner_text("body")
+    if "commenter(s)" in body.lower() and "sorted by total desc" in body.lower():
+        _pass("commenters table caption present")
+    else:
+        _fail("commenters table caption", "expected 'commenter(s) · sorted by total desc'")
+        fails += 1
+    if "classification filter" in body.lower():
+        _pass("classification filter rendered")
+    else:
+        _fail("classification filter missing", "")
+        fails += 1
+    # Cell contents render to canvas inside Glide grid — inner_text can't see
+    # them. Use the visible caption + the header row + DB cross-check.
+    sb = supabase_client()
+    commenter_count = sb.table("commenters").select("account_url", count="exact").limit(1).execute().count or 0
+    expected_caption = f"{commenter_count} commenter(s)"
+    if expected_caption.lower() in body.lower():
+        _pass("commenters caption matches DB count", expected_caption)
+    else:
+        _fail("commenters caption mismatch", f"expected '{expected_caption}'")
+        fails += 1
+    if "total" in body.lower() and "commenter" in body.lower() and "class" in body.lower():
+        _pass("commenters table headers rendered")
+    else:
+        _fail("commenters table headers", "expected commenter/class/total")
+        fails += 1
+    return fails
+
+
+def _check_drilldown(page, out_dir: Path) -> None:
+    """Clicking the first commenter row opens its drill-down (advisory)."""
+    print("\n📱 step 8 — click first row → drill-down renders")
+    # Glide grid is canvas-rendered. Click at row-1 pixel coordinates within the
+    # stDataFrame element. Row height ≈ 35px; header ≈ 35px; row 1 center ≈ 52px
+    # from the top of the canvas, x ≈ 30px hits the row-selector checkbox column.
+    drill_ok = False
+    try:
+        grid = page.locator("[data-testid='stDataFrame']").first
+        grid.scroll_into_view_if_needed()
+        box = grid.bounding_box()
+        if box:
+            page.mouse.click(box["x"] + 30, box["y"] + 52)
+            page.wait_for_timeout(1500)
+    except Exception as err:
+        print(f"     note: canvas click strategy — {err}")
+    body2 = page.inner_text("body")
+    if "selected:" in body2.lower():
+        drill_ok = True
+    _shot(page, out_dir, "07-drilldown")
+    if drill_ok:
+        _pass("drill-down panel rendered after row click")
+    else:
+        print("  ⚠️ SKIP  drill-down click (canvas grid not reliably clickable headless) — data verified separately")
+
+
+def _check_theme(page, out_dir: Path) -> int:
+    """The custom theme from .streamlit/config.toml is applied."""
+    fails = 0
+    print("\n📱 step 9 — custom theme from .streamlit/config.toml applied")
+    theme_probe = page.evaluate(
+        r"""
+        () => {
+            const body = document.body;
+            const sidebar = document.querySelector("section[data-testid='stSidebar']");
+            const cs = (el) => el ? getComputedStyle(el) : null;
+            return {
+                bodyBg:    cs(body)?.backgroundColor    || null,
+                sidebarBg: cs(sidebar)?.backgroundColor || null,
+            };
+        }
+        """
+    )
+    print(f"     probe: {theme_probe}")
+    expected = {"bodyBg": "rgb(14, 17, 23)", "sidebarBg": "rgb(38, 39, 48)"}
+    for k, want in expected.items():
+        got = theme_probe.get(k)
+        if got == want:
+            _pass(f"theme {k} == {want}")
+        else:
+            _fail(f"theme {k}", f"expected {want}, got {got}")
+            fails += 1
+    return fails
+
+
 def run() -> int:
     force_utf8_stdio()
     out_dir = REPO_ROOT / "results" / "engagement" / "e2e" / datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -121,183 +337,14 @@ def run() -> int:
             browser.close()
             return fails
 
-        print("\n📱 step 2 — Real comments tab")
-        _click_tab(page, "real comments")
-        page.wait_for_timeout(800)
-        _shot(page, out_dir, "02-real-tab")
-        body = page.inner_text("body")
-        # The bug we just fixed: "you already replied nan" appearing on every card.
-        nan_hits = body.lower().count("already replied nan")
-        if nan_hits:
-            _fail("no leaked NaN in real-comments tab", f"found {nan_hits} 'already replied nan' lines")
-            fails += 1
-        else:
-            _pass("no leaked NaN in real-comments tab")
-        # The cards should render — assert on structure (the count caption
-        # `render_real_tab` always emits, or the explicit empty state), not
-        # on specific commenters' names: those are live DB rows that churn
-        # (blacklisted / ignored / aged out) and shouldn't be hardcoded into
-        # a public-repo check anyway.
-        if "inbox clear" in body.lower() or "real comment(s)" in body.lower():
-            _pass("real-comments cards rendered")
-        else:
-            _fail("real-comments cards", "expected 'inbox clear' or 'N real comment(s)' caption")
-            fails += 1
-
-        print("\n📱 step 3 — AI triage tab")
-        _click_tab(page, "AI triage")
-        page.wait_for_timeout(800)
-        _shot(page, out_dir, "03-ai-tab")
-        body = page.inner_text("body")
-        # Same structural rule as step 2: the count caption `render_ai_tab`
-        # always emits, or the explicit empty state — never a named row.
-        if "triage clear" in body.lower() or "comment(s)" in body.lower():
-            _pass("AI triage rendered")
-        else:
-            _fail("AI triage state ambiguous", "expected empty-state caption or comment-count caption")
-            fails += 1
-
-        print("\n📱 step 4 — sidebar counts non-zero")
-        # Sidebar 'pending' metric — Streamlit renders metrics as labelled divs.
-        sidebar_text = ""
-        try:
-            sidebar_text = page.locator("section[data-testid='stSidebar']").first.inner_text()
-        except Exception:
-            sidebar_text = body
-        if "pending" in sidebar_text.lower():
-            _pass("sidebar 'pending' metric present")
-        else:
-            _fail("sidebar metric missing", "no 'pending' label seen")
-            fails += 1
-
-        print("\n📱 step 5 — approve action lowers pending count by 1")
-        pending_before = _count_pending()
-        approved_before = _approved_keys()
-        _click_tab(page, "AI triage")
-        page.wait_for_timeout(500)
-        approve_clicked = False
-        try:
-            # Streamlit renders st.button as <button kind='secondary'> with text inside; emoji is in the label.
-            btn = page.locator("button:has-text('approve')").first
-            if btn.count() and btn.is_visible():
-                btn.click()
-                page.wait_for_timeout(1500)
-                approve_clicked = True
-        except Exception as err:
-            print(f"     note: approve click skipped — {err}")
-        _shot(page, out_dir, "04-after-approve")
-        if approve_clicked:
-            pending_after = _count_pending()
-            if pending_after == pending_before - 1:
-                _pass("approve dropped pending count by 1", f"{pending_before} -> {pending_after}")
-            else:
-                _fail("approve count delta", f"expected {pending_before - 1}, got {pending_after}")
-                fails += 1
-            # Roll back so the test is idempotent — re-run friendly. Scope to
-            # exactly the row(s) THIS click approved (the before/after diff on
-            # the table's own primary key), never a blanket
-            # `.eq("status", "approved")` — that would revert every row the
-            # owner has approved by hand in the review app, not just this
-            # check's own row.
-            newly_approved = _approved_keys() - approved_before
-            sb = supabase_client()
-            if newly_approved:
-                for platform, comment_id in newly_approved:
-                    sb.table("comments").update({"status": "pending", "decided_at": None}) \
-                        .eq("platform", platform).eq("comment_id", comment_id).execute()
-            else:
-                print("     note: rollback skipped — could not identify which row(s) the click approved")
-        else:
-            _pass("approve button skipped — no AI-flagged rows to approve (expected on first run)")
-
-        print("\n📱 step 6 — back to Real comments and verify no NaN after rerun")
-        _click_tab(page, "real comments")
-        page.wait_for_timeout(800)
-        _shot(page, out_dir, "05-real-tab-after")
-        body = page.inner_text("body")
-        if "already replied nan" not in body.lower():
-            _pass("no NaN after rerun")
-        else:
-            _fail("NaN reappeared after action", "")
-            fails += 1
-
-        print("\n📱 step 7 — Commenters analysis tab")
-        _click_tab(page, "commenters")
-        page.wait_for_timeout(1200)
-        _shot(page, out_dir, "06-commenters-tab")
-        body = page.inner_text("body")
-        if "commenter(s)" in body.lower() and "sorted by total desc" in body.lower():
-            _pass("commenters table caption present")
-        else:
-            _fail("commenters table caption", "expected 'commenter(s) · sorted by total desc'")
-            fails += 1
-        if "classification filter" in body.lower():
-            _pass("classification filter rendered")
-        else:
-            _fail("classification filter missing", "")
-            fails += 1
-        # Cell contents render to canvas inside Glide grid — inner_text can't see
-        # them. Use the visible caption + the header row + DB cross-check.
-        sb = supabase_client()
-        commenter_count = sb.table("commenters").select("account_url", count="exact").limit(1).execute().count or 0
-        expected_caption = f"{commenter_count} commenter(s)"
-        if expected_caption.lower() in body.lower():
-            _pass("commenters caption matches DB count", expected_caption)
-        else:
-            _fail("commenters caption mismatch", f"expected '{expected_caption}'")
-            fails += 1
-        if "total" in body.lower() and "commenter" in body.lower() and "class" in body.lower():
-            _pass("commenters table headers rendered")
-        else:
-            _fail("commenters table headers", "expected commenter/class/total")
-            fails += 1
-
-        print("\n📱 step 8 — click first row → drill-down renders")
-        # Glide grid is canvas-rendered. Click at row-1 pixel coordinates within the
-        # stDataFrame element. Row height ≈ 35px; header ≈ 35px; row 1 center ≈ 52px
-        # from the top of the canvas, x ≈ 30px hits the row-selector checkbox column.
-        drill_ok = False
-        try:
-            grid = page.locator("[data-testid='stDataFrame']").first
-            grid.scroll_into_view_if_needed()
-            box = grid.bounding_box()
-            if box:
-                page.mouse.click(box["x"] + 30, box["y"] + 52)
-                page.wait_for_timeout(1500)
-        except Exception as err:
-            print(f"     note: canvas click strategy — {err}")
-        body2 = page.inner_text("body")
-        if "selected:" in body2.lower():
-            drill_ok = True
-        _shot(page, out_dir, "07-drilldown")
-        if drill_ok:
-            _pass("drill-down panel rendered after row click")
-        else:
-            print("  ⚠️ SKIP  drill-down click (canvas grid not reliably clickable headless) — data verified separately")
-
-        print("\n📱 step 9 — custom theme from .streamlit/config.toml applied")
-        theme_probe = page.evaluate(
-            r"""
-            () => {
-                const body = document.body;
-                const sidebar = document.querySelector("section[data-testid='stSidebar']");
-                const cs = (el) => el ? getComputedStyle(el) : null;
-                return {
-                    bodyBg:    cs(body)?.backgroundColor    || null,
-                    sidebarBg: cs(sidebar)?.backgroundColor || null,
-                };
-            }
-            """
-        )
-        print(f"     probe: {theme_probe}")
-        expected = {"bodyBg": "rgb(14, 17, 23)", "sidebarBg": "rgb(38, 39, 48)"}
-        for k, want in expected.items():
-            got = theme_probe.get(k)
-            if got == want:
-                _pass(f"theme {k} == {want}")
-            else:
-                _fail(f"theme {k}", f"expected {want}, got {got}")
-                fails += 1
+        fails += _check_real_tab(page, out_dir)
+        fails += _check_ai_tab(page, out_dir)
+        fails += _check_sidebar(page, out_dir)
+        fails += _check_approve(page, out_dir)
+        fails += _check_real_tab_after_rerun(page, out_dir)
+        fails += _check_commenters_tab(page, out_dir)
+        _check_drilldown(page, out_dir)
+        fails += _check_theme(page, out_dir)
 
         browser.close()
 

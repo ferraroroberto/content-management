@@ -140,6 +140,91 @@ def _build_duplicate_set(comments: list[dict]) -> set[str]:
     return {t for t, urls in by_text.items() if len(urls) >= 2}
 
 
+def _llm_verdict(c: dict, reasons: list, score: float, prob: float, phrases: dict,
+                 llm_ai_threshold: float) -> tuple:
+    """Third layer: ask the LLM about a comment inside the local model's uncertainty window."""
+    from engagement.classify import llm_fallback
+    out = llm_fallback.classify_one(c, reasons)
+    if out and out["verdict"] == "ai" and out["confidence"] >= llm_ai_threshold:
+        return (
+            "ai", float(out["confidence"]), "llm",
+            reasons + [
+                {"rule": "local_model_prob", "prob": float(prob)},
+                {"rule": "llm_fallback",
+                 "confidence": float(out["confidence"]),
+                 "reasoning": out["reasoning"]},
+            ],
+            "like_and_thanks",
+            out.get("suggested_reply")
+            or _pick_reply("like_and_thanks", c.get("display_name"), phrases),
+        )
+    elif out and out["verdict"] == "human":
+        return (
+            "human", float(out["confidence"]), "llm",
+            reasons + [
+                {"rule": "local_model_prob", "prob": float(prob)},
+                {"rule": "llm_fallback",
+                 "confidence": float(out["confidence"]),
+                 "reasoning": out["reasoning"]},
+            ],
+            "surface_to_me", None,
+        )
+    else:
+        return (
+            "unknown", score, "rules",
+            reasons + [
+                {"rule": "local_model_prob", "prob": float(prob)},
+                {"rule": "llm_skipped"},
+            ],
+            "surface_to_me", None,
+        )
+
+
+def _fetch_pending(sb, platform: str) -> list[dict]:
+    """Every pending, still-unclassified comment on one platform."""
+    return (
+        sb.table("comments")
+        .select("*")
+        .eq("platform", platform)
+        .eq("status", "pending")
+        .eq("classification", "unknown")
+        .execute()
+        .data
+        or []
+    )
+
+
+def _verdict_payload(c: dict, verdict: tuple) -> dict:
+    """The comments-table update for one verdict."""
+    classification_new, conf, src, reasons, action, reply = verdict
+    payload = {
+        "platform": c["platform"],
+        "comment_id": c["comment_id"],
+        "classification": classification_new,
+        "confidence": conf,
+        "verdict_source": src,
+        "verdict_reasons": reasons,
+        "suggested_action": action,
+        "suggested_reply": reply,
+    }
+    # Blacklist-classified comments auto-approve — same policy as
+    # cascade_blacklist_pending so the manual-click and the rescan
+    # paths give identical state. User trusts the blacklist.
+    if src == "blacklist":
+        payload["status"] = "approved"
+        payload["decided_at"] = "now()"
+    return payload
+
+
+def _write_verdicts(sb, updates: list[dict]) -> None:
+    # Apply updates one row at a time (PostgREST has no batch-update-by-pk).
+    # ~hundreds of rows max per run, so individual updates are fine.
+    for u in updates:
+        sb.table("comments").update(
+            {k: v for k, v in u.items() if k not in ("platform", "comment_id")}
+        ).eq("platform", u["platform"]).eq("comment_id", u["comment_id"]).execute()
+
+
 def classify_pending(platform: str = "linkedin") -> dict:
     """Score every `status=pending` `classification=unknown` row and write the verdict back."""
     phrases = load_phrases()
@@ -170,16 +255,7 @@ def classify_pending(platform: str = "linkedin") -> dict:
         )
 
     sb = supabase_client()
-    pending = (
-        sb.table("comments")
-        .select("*")
-        .eq("platform", platform)
-        .eq("status", "pending")
-        .eq("classification", "unknown")
-        .execute()
-        .data
-        or []
-    )
+    pending = _fetch_pending(sb, platform)
     logger.info("🧮 classifying %d pending rows for %s", len(pending), platform)
 
     if not pending:
@@ -227,40 +303,7 @@ def classify_pending(platform: str = "linkedin") -> dict:
                     and prob is not None
                     and llm_low <= prob < local_threshold
                 ):
-                    out = llm_fallback.classify_one(c, reasons)
-                    if out and out["verdict"] == "ai" and out["confidence"] >= llm_ai_threshold:
-                        verdict = (
-                            "ai", float(out["confidence"]), "llm",
-                            reasons + [
-                                {"rule": "local_model_prob", "prob": float(prob)},
-                                {"rule": "llm_fallback",
-                                 "confidence": float(out["confidence"]),
-                                 "reasoning": out["reasoning"]},
-                            ],
-                            "like_and_thanks",
-                            out.get("suggested_reply")
-                            or _pick_reply("like_and_thanks", c.get("display_name"), phrases),
-                        )
-                    elif out and out["verdict"] == "human":
-                        verdict = (
-                            "human", float(out["confidence"]), "llm",
-                            reasons + [
-                                {"rule": "local_model_prob", "prob": float(prob)},
-                                {"rule": "llm_fallback",
-                                 "confidence": float(out["confidence"]),
-                                 "reasoning": out["reasoning"]},
-                            ],
-                            "surface_to_me", None,
-                        )
-                    else:
-                        verdict = (
-                            "unknown", score, "rules",
-                            reasons + [
-                                {"rule": "local_model_prob", "prob": float(prob)},
-                                {"rule": "llm_skipped"},
-                            ],
-                            "surface_to_me", None,
-                        )
+                    verdict = _llm_verdict(c, reasons, score, prob, phrases, llm_ai_threshold)
                 else:
                     extra = [{"rule": "local_model_prob", "prob": float(prob)}] if prob is not None else []
                     verdict = ("unknown", score, "rules", reasons + extra, "surface_to_me", None)
@@ -268,32 +311,10 @@ def classify_pending(platform: str = "linkedin") -> dict:
                 # Stay unknown so we still surface for review, but record the score.
                 verdict = ("unknown", score, "rules", reasons, "surface_to_me", None)
 
-        classification_new, conf, src, reasons, action, reply = verdict
-        counts[classification_new] += 1
-        payload = {
-            "platform": c["platform"],
-            "comment_id": c["comment_id"],
-            "classification": classification_new,
-            "confidence": conf,
-            "verdict_source": src,
-            "verdict_reasons": reasons,
-            "suggested_action": action,
-            "suggested_reply": reply,
-        }
-        # Blacklist-classified comments auto-approve — same policy as
-        # cascade_blacklist_pending so the manual-click and the rescan
-        # paths give identical state. User trusts the blacklist.
-        if src == "blacklist":
-            payload["status"] = "approved"
-            payload["decided_at"] = "now()"
-        updates.append(payload)
+        counts[verdict[0]] += 1
+        updates.append(_verdict_payload(c, verdict))
 
-    # Apply updates one row at a time (PostgREST has no batch-update-by-pk).
-    # ~hundreds of rows max per run, so individual updates are fine.
-    for u in updates:
-        sb.table("comments").update(
-            {k: v for k, v in u.items() if k not in ("platform", "comment_id")}
-        ).eq("platform", u["platform"]).eq("comment_id", u["comment_id"]).execute()
+    _write_verdicts(sb, updates)
 
     logger.info(
         "✅ classify done — ai=%d unknown=%d human=%d (threshold=%.2f)",
