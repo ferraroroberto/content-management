@@ -85,6 +85,19 @@ def run() -> None:
     _render_schedule_editions(running, base, dbg)
     st.divider()
 
+    _render_pipeline_steps(base, dbg, num, has_num, int(days), running)
+
+    render_status_badge(PIPELINE_NAME)
+    render_log_panel(PIPELINE_NAME)
+
+    must_read = _render_must_read_picker(num)
+    _render_substack_draft(num, has_num, running, base, dbg, must_read)
+
+
+def _render_pipeline_steps(
+    base: list[str], dbg: list[str], num: str, has_num: bool, days: int, running: bool
+) -> None:
+    """The ① bootstrap, ②③④ step and ▶ combo buttons."""
     # ── ① bootstrap ──────────────────────────────────────────────────
     st.button(
         "① Bootstrap Chrome",
@@ -116,7 +129,7 @@ def run() -> None:
             key="newsletter-normalize",
             disabled=running,
             on_click=start_pipeline,
-            args=(PIPELINE_NAME, base + ["normalize", "--days", str(int(days))] + dbg),
+            args=(PIPELINE_NAME, base + ["normalize", "--days", str(days)] + dbg),
             width="stretch",
         )
         st.button(
@@ -135,17 +148,11 @@ def run() -> None:
         type="primary",
         disabled=running or not has_num,
         on_click=start_pipeline,
-        args=(PIPELINE_NAME, base + ["create", "--newsletter", num, "--days", str(int(days))] + dbg),
+        args=(PIPELINE_NAME, base + ["create", "--newsletter", num, "--days", str(days)] + dbg),
     )
 
     if not has_num:
         st.caption("ℹ️ enter a newsletter number to enable ④ Build and ▶ Run.")
-
-    render_status_badge(PIPELINE_NAME)
-    render_log_panel(PIPELINE_NAME)
-
-    must_read = _render_must_read_picker(num)
-    _render_substack_draft(num, has_num, running, base, dbg, must_read)
 
 
 @st.cache_data(ttl=120, show_spinner="⏬ reading the newsletter buffer from Notion…")

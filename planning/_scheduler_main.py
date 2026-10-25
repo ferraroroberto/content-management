@@ -160,6 +160,71 @@ def untick_wip(
     return None
 
 
+def _resolve_plans(rows: list, notion: Any, cfg: dict, resolve_payload: Callable[..., Any],
+                   log: logging.Logger) -> tuple[list[tuple[Any, Any]], list[dict]]:
+    """Each row paired with its payload, plus a FAIL result for every row whose payload did not resolve."""
+    plans: list[tuple[Any, Any]] = []
+    results: list[dict] = []
+    for row in rows:
+        try:
+            payload = resolve_payload(notion, cfg, row)
+        except (RuntimeError, FileNotFoundError) as err:
+            log.error("❌ %s payload resolution failed: %s", row.day_title, err)
+            results.append({"day": row.day_title, "status": "FAIL", "detail": f"payload resolution: {err}"})
+            continue
+        log.info(
+            "🖼️ %s: image=%s, caption=%d chars",
+            row.day_title, payload.image_path.name, len(payload.caption),
+        )
+        plans.append((row, payload))
+    return plans, results
+
+
+def _schedule_row(
+    session: Any,
+    cfg: dict,
+    row: Any,
+    payload: Any,
+    *,
+    dry_run: bool,
+    schedule_post: Callable[..., str],
+    cancel_composer: Callable[[Any], None],
+    return_home: Callable[[Any, str], None],
+    notion: Any,
+    wip_label: str,
+    log: logging.Logger,
+) -> tuple[str, dict]:
+    """Schedule one row with a retry; returns its summary line and its result entry."""
+    return_home(session.page, cfg["feed_url"])
+
+    def _reset() -> None:
+        """Clean slate between attempts — a half-filled composer left
+        by the failed attempt would otherwise capture the retry."""
+        cancel_composer(session.page)
+        return_home(session.page, cfg["feed_url"])
+
+    try:
+        status = attempt_row(
+            lambda: schedule_post(session, cfg, row, payload, dry_run=dry_run),
+            label=row.day_title,
+            reset=_reset,
+        )
+    except (RuntimeError, PWTimeoutError) as err:
+        shot = session.screenshot_failure(f"{row.day_title}-error")
+        log.error("❌ %s post failed: %s (screenshot %s)", row.day_title, err, shot)
+        cancel_composer(session.page)
+        return_home(session.page, cfg["feed_url"])
+        return (f"{row.day_title}: post:FAIL({err})",
+                {"day": row.day_title, "status": "FAIL", "detail": f"{err} (screenshot {shot})"})
+
+    # Untick the WIP checkbox only on a fully-successful LIVE day.
+    if not dry_run and "LIVE" in status:
+        untick_wip(notion, row.page_id, cfg["editorial_columns"],
+                   day_title=row.day_title, wip_label=wip_label, log=log)
+    return (f"{row.day_title}: {status}",
+            {"day": row.day_title, "status": "DRY" if dry_run else "LIVE", "detail": status})
+
+
 def run_single_post_scheduler(
     args: argparse.Namespace,
     *,
@@ -211,20 +276,7 @@ def run_single_post_scheduler(
         return 0, []
 
     # Pre-resolve payloads BEFORE launching Chrome — fail fast on missing files.
-    plans: list[tuple[Any, Any]] = []
-    results: list[dict] = []
-    for row in rows:
-        try:
-            payload = resolve_payload(notion, cfg, row)
-        except (RuntimeError, FileNotFoundError) as err:
-            log.error("❌ %s payload resolution failed: %s", row.day_title, err)
-            results.append({"day": row.day_title, "status": "FAIL", "detail": f"payload resolution: {err}"})
-            continue
-        log.info(
-            "🖼️ %s: image=%s, caption=%d chars",
-            row.day_title, payload.image_path.name, len(payload.caption),
-        )
-        plans.append((row, payload))
+    plans, results = _resolve_plans(rows, notion, cfg, resolve_payload, log)
 
     if not plans:
         log.warning("⚠️ All rows failed payload resolution. Nothing to do.")
@@ -244,40 +296,13 @@ def run_single_post_scheduler(
             after_login(session.page)
 
         for row, payload in plans:
-            return_home(session.page, cfg["feed_url"])
-
-            def _reset() -> None:
-                """Clean slate between attempts — a half-filled composer left
-                by the failed attempt would otherwise capture the retry."""
-                cancel_composer(session.page)
-                return_home(session.page, cfg["feed_url"])
-
-            try:
-                status = attempt_row(
-                    lambda: schedule_post(session, cfg, row, payload, dry_run=dry_run),
-                    label=row.day_title,
-                    reset=_reset,
-                )
-            except (RuntimeError, PWTimeoutError) as err:
-                shot = session.screenshot_failure(f"{row.day_title}-error")
-                log.error("❌ %s post failed: %s (screenshot %s)", row.day_title, err, shot)
-                cancel_composer(session.page)
-                return_home(session.page, cfg["feed_url"])
-                statuses.append(f"{row.day_title}: post:FAIL({err})")
-                results.append({"day": row.day_title, "status": "FAIL", "detail": f"{err} (screenshot {shot})"})
-                continue
-
-            statuses.append(f"{row.day_title}: {status}")
-            results.append({
-                "day": row.day_title,
-                "status": "DRY" if dry_run else "LIVE",
-                "detail": status,
-            })
-
-            # Untick the WIP checkbox only on a fully-successful LIVE day.
-            if not dry_run and "LIVE" in status:
-                untick_wip(notion, row.page_id, cfg["editorial_columns"],
-                           day_title=row.day_title, wip_label=wip_label, log=log)
+            status_line, result = _schedule_row(
+                session, cfg, row, payload, dry_run=dry_run, schedule_post=schedule_post,
+                cancel_composer=cancel_composer, return_home=return_home,
+                notion=notion, wip_label=wip_label, log=log,
+            )
+            statuses.append(status_line)
+            results.append(result)
 
     log.info("══════════ Summary ══════════")
     for s in statuses:

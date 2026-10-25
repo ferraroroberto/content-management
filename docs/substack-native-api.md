@@ -114,7 +114,7 @@ Three things worth keeping in mind:
   posts consolidator matches on local days (`posted_at = date - 1 day`). Slicing
   the first ten characters of the UTC string would silently shift late-evening
   notes onto the wrong day. `note_posted_date` does the conversion and
-  `tests/test_substack_native_notes.py` pins it.
+  `tests/substack_posting/test_substack_native_notes.py` pins it.
 - **Teaser detection keys on the `/p/` URL, not merely on "has a link".**
   Ordinary daily notes *do* carry `link` attachments (an outbound article link),
   so testing for an attachment type alone would drop real notes. Caveat: no
@@ -275,7 +275,7 @@ Two findings from building it, both verified against the live API:
 - **`Post.from_markdown` cannot express this shape.** Given a `##` heading
   followed by `- [title](url)` lines, it folds the bullet lines into the
   *heading's own text node* — the list and every link are destroyed, silently.
-  The nodes are therefore constructed directly. `tests/test_substack_draft_sections.py`
+  The nodes are therefore constructed directly. `tests/substack_posting/test_substack_draft_sections.py`
   pins the resulting structure so a refactor back to `from_markdown` fails loudly.
 - **Node names are snake_case** (`bullet_list`, `list_item`), not the camelCase
   many ProseMirror schemas use. Confirmed by creating a draft and reading it back

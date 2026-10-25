@@ -444,6 +444,24 @@ def run_module(module_func, module_name, debug_mode=False, extra_args=None, fail
         # Restore original arguments
         sys.argv = original_argv.copy()
 
+def _resolve_processing_date(reference_date) -> str:
+    """The run's date as YYYY-MM-DD: the reference date given, else today."""
+    if reference_date:
+        try:
+            # Normalize date to YYYY-MM-DD
+            if '-' in reference_date:
+                processing_date = reference_date
+            else:
+                processing_date = datetime.strptime(reference_date, "%Y%m%d").strftime("%Y-%m-%d")
+            logger.info(f"📅 Using specified date: {processing_date}")
+        except ValueError:
+            logger.error(f"❌ Invalid date format: {reference_date}. Using current date.")
+            processing_date = datetime.now().strftime("%Y-%m-%d")
+    else:
+        processing_date = datetime.now().strftime("%Y-%m-%d")
+        logger.info(f"📅 No date specified. Using current date: {processing_date}")
+    return processing_date
+
 def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
                 skip_aggregation=False, skip_consolidation=False, skip_notion=False,
                 skip_substack=False, reference_date=None, auto_confirm=False):
@@ -463,21 +481,7 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
     logger.info("🚀 Starting the complete data processing pipeline")
     logger.info(f"🐞 Debug mode: {'Enabled' if debug_mode else 'Disabled'}")
     
-    # Use the reference date directly or today's date
-    if reference_date:
-        try:
-            # Normalize date to YYYY-MM-DD
-            if '-' in reference_date:
-                processing_date = reference_date
-            else:
-                processing_date = datetime.strptime(reference_date, "%Y%m%d").strftime("%Y-%m-%d")
-            logger.info(f"📅 Using specified date: {processing_date}")
-        except ValueError:
-            logger.error(f"❌ Invalid date format: {reference_date}. Using current date.")
-            processing_date = datetime.now().strftime("%Y-%m-%d")
-    else:
-        processing_date = datetime.now().strftime("%Y-%m-%d")
-        logger.info(f"📅 No date specified. Using current date: {processing_date}")
+    processing_date = _resolve_processing_date(reference_date)
     
     # Prepare common arguments
     date_args = ['--date', processing_date]

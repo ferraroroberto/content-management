@@ -38,7 +38,7 @@ The store has two sets of decision columns, and they never mix:
 
 `ok = 0` means "this is an infringement, act on it". `ok = 1` means "reviewed,
 acceptable use". The skill cannot write either — `check_ip.screen.record_verdict`
-has no code path that touches them, and `tests/test_check_ip_store.py` fails if
+has no code path that touches them, and `tests/ip_checks/` fails if
 one is ever added. That separation is what makes the skill safe to let loose on
 a queue of 13,000 links: the worst it can do is propose something wrong.
 
@@ -162,7 +162,7 @@ state — `db.severity()` counts only conditions *found violated*, and
 positively established. A severity of 0 alone says nothing was proven wrong,
 not that the post is compliant; the tab prints both and the `not fully
 assessed` metric is the gap between them. Any `coalesce(col, 1)` here would
-silently undo the whole model, which is why `tests/test_check_ip_store.py`
+silently undo the whole model, which is why `tests/ip_checks/`
 asserts it in Python, in SQL, in the queue stats and in the tab's frame.
 
 **`2` is an answer; `NULL` is the absence of one.** A worker that opens a post

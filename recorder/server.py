@@ -133,6 +133,35 @@ class Room:
                                  "peer": self.other_peer(side)})
 
 
+async def _join_call(ws: WebSocket, side: str, peer: str, room: Room) -> None:
+    """Seat a validated socket in the room and relay its signals until it leaves."""
+    await ws.accept()
+    stale = room.sockets.get(side)
+    room.sockets[side], room.peers[side] = ws, peer
+    if stale is not None:
+        await stale.close(code=REPLACED)
+    logger.info("ℹ️ %s joined the call", side)
+    await room.presence()
+    try:
+        while True:
+            text = await ws.receive_text()
+            if len(text) > MAX_SIGNAL_BYTES:
+                continue
+            try:
+                message = json.loads(text)
+            except ValueError:
+                continue
+            if isinstance(message, dict) and message.get("type") in SIGNALS:
+                await room.tell(room.other(side), {**message, "from": side})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        if room.sockets.get(side) is ws:
+            del room.sockets[side]
+            logger.info("ℹ️ %s left the call", side)
+            await room.presence()
+
+
 def create_app(episode: Path, store: ChunkStore, links: dict[str, str],
                ice: Optional[list[dict]] = None) -> Starlette:
     """The app for one episode folder."""
@@ -183,31 +212,7 @@ def create_app(episode: Path, store: ChunkStore, links: dict[str, str],
         if not PEER_ID.match(peer):
             await ws.close(code=1008)
             return
-        await ws.accept()
-        stale = room.sockets.get(side)
-        room.sockets[side], room.peers[side] = ws, peer
-        if stale is not None:
-            await stale.close(code=REPLACED)
-        logger.info("ℹ️ %s joined the call", side)
-        await room.presence()
-        try:
-            while True:
-                text = await ws.receive_text()
-                if len(text) > MAX_SIGNAL_BYTES:
-                    continue
-                try:
-                    message = json.loads(text)
-                except ValueError:
-                    continue
-                if isinstance(message, dict) and message.get("type") in SIGNALS:
-                    await room.tell(room.other(side), {**message, "from": side})
-        except WebSocketDisconnect:
-            pass
-        finally:
-            if room.sockets.get(side) is ws:
-                del room.sockets[side]
-                logger.info("ℹ️ %s left the call", side)
-                await room.presence()
+        await _join_call(ws, side, peer, room)
 
     @guarded
     async def chunk(request: Request, side: str) -> Response:

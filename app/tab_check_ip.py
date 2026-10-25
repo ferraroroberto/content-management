@@ -229,18 +229,7 @@ def _render_table() -> None:
     st.session_state[f"{editor_key}-base"] = frame
 
     qs = _queue_stats(source_arg)
-    st.caption(
-        f"{qs['pending']:,} undecided of {qs['canonical']:,} canonical on this platform · "
-        f"{qs['screened']:,} screened · {qs['proposed_infringement']:,} proposed as infringement"
-        + (f", {qs['severity_3']:,} of them worst-case" if qs["severity_3"] else "")
-        + f" · {qs['not_fully_assessed']:,} screened but not fully assessed "
-          f"(unknown, not compliant)"
-        + (f" · {qs['indeterminate']:,} assessed but not establishable"
-           if qs["indeterminate"] else "")
-        + (f" · {qs['nothing_to_assess']:,} with nothing left to assess"
-           if qs["nothing_to_assess"] else "")
-        + f". Ordered {sort}. Nothing saves until you click Apply."
-    )
+    st.caption(_queue_caption(qs, sort))
 
     # Wrapped in a keyed container so the docs-capture mask can target this
     # grid alone (`.st-key-check-ip-grid`). Masking every [data-testid="stDataFrame"]
@@ -263,60 +252,86 @@ def _render_table() -> None:
                       "post_date", "search_date", "duplicate", "screen_verdict",
                       "screen_reason", "poster_url", "screened_at", "severity", "assessed",
                       "screen_outcome", *db.CONDITION_COLUMNS],
-            column_config={
-                "ok": st.column_config.SelectboxColumn(
-                    "verdict", options=[0, 1], width="small",
-                    help="0 = infringement, act on it · 1 = reviewed, acceptable use"),
-                "found_link": st.column_config.LinkColumn("where it appears", display_text="open ↗",
-                                                          width="small"),
-                "local_image": st.column_config.TextColumn("illustration", width="medium"),
-                "severity": st.column_config.NumberColumn(
-                    "⚠", width="small", format="%d",
-                    help="How many of the three licence conditions were found violated. "
-                         "0 means none was — not that the post is compliant; check the "
-                         "assessed column for that."),
-                "assessed": st.column_config.CheckboxColumn(
-                    "all 3 checked", width="small",
-                    help="Ticked when credit, non-commercial and no-derivatives were all "
-                         "looked at. Unticked means at least one was never assessed. "
-                         "Ticked is not the same as compliant: a condition can be looked "
-                         "at and still come back \"could not establish\", so read the "
-                         "three condition columns for that."),
-                "screen_credit_ok": st.column_config.TextColumn(
-                    "credit (BY)", width="small",
-                    help="Named, tagged, linked, or his own comment claims it. A bare "
-                         "ROBERTOFERRARO.ART watermark is not credit."),
-                "screen_noncommercial_ok": st.column_config.TextColumn(
-                    "non-commercial (NC)", width="small",
-                    help="No promotional call to action and no paid or business context."),
-                "screen_unmodified_ok": st.column_config.TextColumn(
-                    "unmodified (ND)", width="small",
-                    help="No crop, filter, added logo or text, no translation; signature intact."),
-                "screen_outcome": st.column_config.TextColumn(
-                    "unclear kind", width="small",
-                    help="ambiguous = another look may settle it · nothing_to_assess = the "
-                         "post is gone or carries no illustration, and never will be."),
-                "screen_verdict": st.column_config.TextColumn("skill says", width="small",
-                                                              help="Proposed by the check-ip skill — never a decision."),
-                "screen_reason": st.column_config.TextColumn("why", width="large"),
-                "poster_url": st.column_config.LinkColumn("who posted", display_text="profile ↗",
-                                                          width="small"),
-                "person": st.column_config.TextColumn("contact", width="medium"),
-                "chat": st.column_config.TextColumn("outreach", width="medium"),
-                "report": st.column_config.TextColumn("report", width="small"),
-                "fixed": st.column_config.CheckboxColumn("fixed", width="small"),
-                "title": st.column_config.TextColumn("page title", width="large"),
-                "post_date": st.column_config.TextColumn("posted", width="small"),
-                "match_type": st.column_config.TextColumn("match", width="small"),
-                "source": st.column_config.TextColumn("platform", width="small"),
-                "search_date": st.column_config.TextColumn("found", width="small"),
-            },
+            column_config=_grid_column_config(),
         )
 
     st.button("✅ Apply decisions", key=f"check-ip-apply-{editor_key}", type="primary",
               on_click=_apply, args=(editor_key,),
               help="Writes your verdict and follow-up trail for every edited row.")
 
+    _render_last_apply()
+
+
+def _queue_caption(qs: dict, sort: str) -> str:
+    """The one-line queue summary above the triage grid."""
+    return (
+        f"{qs['pending']:,} undecided of {qs['canonical']:,} canonical on this platform · "
+        f"{qs['screened']:,} screened · {qs['proposed_infringement']:,} proposed as infringement"
+        + (f", {qs['severity_3']:,} of them worst-case" if qs["severity_3"] else "")
+        + f" · {qs['not_fully_assessed']:,} screened but not fully assessed "
+          f"(unknown, not compliant)"
+        + (f" · {qs['indeterminate']:,} assessed but not establishable"
+           if qs["indeterminate"] else "")
+        + (f" · {qs['nothing_to_assess']:,} with nothing left to assess"
+           if qs["nothing_to_assess"] else "")
+        + f". Ordered {sort}. Nothing saves until you click Apply."
+    )
+
+
+def _grid_column_config() -> dict:
+    """Column labels, widths and help for the triage grid."""
+    return {
+        "ok": st.column_config.SelectboxColumn(
+            "verdict", options=[0, 1], width="small",
+            help="0 = infringement, act on it · 1 = reviewed, acceptable use"),
+        "found_link": st.column_config.LinkColumn("where it appears", display_text="open ↗",
+                                                  width="small"),
+        "local_image": st.column_config.TextColumn("illustration", width="medium"),
+        "severity": st.column_config.NumberColumn(
+            "⚠", width="small", format="%d",
+            help="How many of the three licence conditions were found violated. "
+                 "0 means none was — not that the post is compliant; check the "
+                 "assessed column for that."),
+        "assessed": st.column_config.CheckboxColumn(
+            "all 3 checked", width="small",
+            help="Ticked when credit, non-commercial and no-derivatives were all "
+                 "looked at. Unticked means at least one was never assessed. "
+                 "Ticked is not the same as compliant: a condition can be looked "
+                 "at and still come back \"could not establish\", so read the "
+                 "three condition columns for that."),
+        "screen_credit_ok": st.column_config.TextColumn(
+            "credit (BY)", width="small",
+            help="Named, tagged, linked, or his own comment claims it. A bare "
+                 "ROBERTOFERRARO.ART watermark is not credit."),
+        "screen_noncommercial_ok": st.column_config.TextColumn(
+            "non-commercial (NC)", width="small",
+            help="No promotional call to action and no paid or business context."),
+        "screen_unmodified_ok": st.column_config.TextColumn(
+            "unmodified (ND)", width="small",
+            help="No crop, filter, added logo or text, no translation; signature intact."),
+        "screen_outcome": st.column_config.TextColumn(
+            "unclear kind", width="small",
+            help="ambiguous = another look may settle it · nothing_to_assess = the "
+                 "post is gone or carries no illustration, and never will be."),
+        "screen_verdict": st.column_config.TextColumn("skill says", width="small",
+                                                      help="Proposed by the check-ip skill — never a decision."),
+        "screen_reason": st.column_config.TextColumn("why", width="large"),
+        "poster_url": st.column_config.LinkColumn("who posted", display_text="profile ↗",
+                                                  width="small"),
+        "person": st.column_config.TextColumn("contact", width="medium"),
+        "chat": st.column_config.TextColumn("outreach", width="medium"),
+        "report": st.column_config.TextColumn("report", width="small"),
+        "fixed": st.column_config.CheckboxColumn("fixed", width="small"),
+        "title": st.column_config.TextColumn("page title", width="large"),
+        "post_date": st.column_config.TextColumn("posted", width="small"),
+        "match_type": st.column_config.TextColumn("match", width="small"),
+        "source": st.column_config.TextColumn("platform", width="small"),
+        "search_date": st.column_config.TextColumn("found", width="small"),
+    }
+
+
+def _render_last_apply() -> None:
+    """Report the outcome of the Apply click that triggered this rerun, once."""
     last = st.session_state.pop("check-ip-last-apply", None)
     if last:
         if "error" in last:

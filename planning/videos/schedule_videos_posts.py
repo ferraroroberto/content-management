@@ -384,8 +384,7 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def main() -> tuple[int, list[dict]]:
-    args = parse_args()
+def _configure_loggers(debug: bool) -> None:
     # Configure every videos-side logger up front so per-driver log lines
     # propagate (the bare ``getLogger`` calls inside videos_<P>.py inherit
     # whatever the first ``setup_logger`` configured for the root).
@@ -396,9 +395,9 @@ def main() -> tuple[int, list[dict]]:
         "videos_instagram",
         "videos_twitter",
         "videos_threads",
-        # _upload_files + Meta-toast / debug helpers live in
-        # planning.instagram.schedule_instagram_posts and log to the
-        # "instagram_schedule" logger. Without this line, every 📤 Leg N
+        # upload_files (planning.instagram.instagram_upload) and the
+        # Meta-toast / debug helpers in planning.instagram.schedule_instagram_posts
+        # log to the "instagram_schedule" logger. Without this line, every 📤 Leg N
         # DEBUG message and every dump_upload_debug screenshot path
         # disappears during a videos run — which is exactly when we need
         # them.
@@ -407,7 +406,114 @@ def main() -> tuple[int, list[dict]]:
         # "linkedin_composer"; without it their INFO lines are dropped.
         "linkedin_composer",
     ):
-        configure_logger(name, debug=args.debug)
+        configure_logger(name, debug=debug)
+
+
+def _log_in_scope_rows(rows: list[_RowState]) -> None:
+    logger.info("📋 %d in-scope row(s):", len(rows))
+    for r in rows:
+        scope_summary = " ".join(
+            f"{p.upper()}:{'✓' if r.in_scope[p] else '✗'}"
+            for p in PLATFORMS_SCHEDULED
+        )
+        link_summary = " ".join(
+            f"{p.upper()}={'set' if r.link_status.get(p) else 'empty'}"
+            for p in PLATFORMS_SCHEDULED + ("sb",)
+        )
+        logger.info("   - %s scope=[%s] links=[%s]",
+                    r.day_title, scope_summary, link_summary)
+
+
+def _mark_skipped(rows: list[_RowState], platform: str, ledger: TagAlongLedger) -> None:
+    """Record SKIP for every row on a platform turned off by its --skip-* flag."""
+    for state in rows:
+        state.driver_status[platform] = "SKIP"
+        state.driver_detail[platform] = "platform skipped via --skip-* flag"
+        if (platform in PLATFORMS_TAG_ALONG
+                and ledger.is_scheduled(platform, state.day_title)):
+            # Same SKIP status, materially different meaning: the flag
+            # suppressed a run a *prior* run had already done. Say so
+            # here — the untick decision below acts on it, and without
+            # this line the log gives no hint why WIP-Vd cleared on a
+            # platform that visibly did nothing this run.
+            logger.info(
+                "🧾 %s: %s was skipped by the flag, but the tag-along ledger "
+                "records it as scheduled on %s.",
+                state.day_title, platform.upper(),
+                ledger.recorded_at(platform, state.day_title) or "an earlier run",
+            )
+
+
+def _run_driver(platform: str, eligible: list[_RowState], cfg: dict, *, dry_run: bool) -> Optional[list[dict]]:
+    """Run one platform's driver (each opens its own browser session); None for an unknown platform."""
+    if platform == "li":
+        from planning.videos.videos_linkedin import run as run_li
+        return run_li(eligible, cfg, dry_run=dry_run)
+    elif platform == "ig":
+        from planning.videos.videos_instagram import run as run_ig
+        return run_ig(eligible, cfg, dry_run=dry_run)
+    elif platform == "tw":
+        from planning.videos.videos_twitter import run as run_tw
+        return run_tw(eligible, cfg, dry_run=dry_run)
+    elif platform == "th":
+        from planning.videos.videos_threads import run as run_th
+        return run_th(eligible, cfg, dry_run=dry_run)
+    return None
+
+
+def _mark_live_rows_scheduled(notion, cfg: dict, rows: list[_RowState], platform: str,
+                              driver_results: list[dict], ledger: TagAlongLedger) -> None:
+    for entry in driver_results:
+        if entry["status"] != "LIVE":
+            continue
+        # Find the matching state.
+        state = next((s for s in rows if s.day_title == entry["day"]), None)
+        if state is None:
+            continue
+        if platform in PLATFORMS_TAG_ALONG:
+            ledger.record(platform, state.day_title,
+                          detail=entry.get("detail", ""))
+            continue
+        sentinel = _scheduled_sentinel(platform, state.day_title)
+        _set_post_url(notion, state.page_id, cfg["editorial_columns"],
+                      platform, sentinel, state.day_title)
+        state.link_status[platform] = sentinel
+
+
+def _refresh_sb_link(notion, cfg: dict, state: _RowState) -> None:
+    # Re-read link SB(v) before deciding untick — daily SB pipeline may
+    # have run concurrently.
+    try:
+        page = notion.pages.retrieve(page_id=state.page_id)
+        sb_col = cfg["editorial_columns"].get("post_url_sb")
+        if sb_col:
+            sb_prop = page.get("properties", {}).get(sb_col, {})
+            if sb_prop.get("type") == "url":
+                state.link_status["sb"] = sb_prop.get("url")
+    except Exception as err:
+        logger.warning(
+            "⚠️ %s: could not re-read link SB(v) before untick decision: %s",
+            state.day_title, err,
+        )
+
+
+def _log_summary(summary_rows: list[dict]) -> None:
+    _WIP_GLYPH = {
+        "unticked": "✅ unticked",
+        "kept-checked": "⏳ kept checked",
+        "untick-failed": "⚠️ untick failed",
+        "dry-run": "🧪 dry-run",
+    }
+    logger.info("══════════ Summary ══════════")
+    for entry in summary_rows:
+        logger.info("   %s: %s | %s", entry["day"], entry["status"], entry["detail"])
+        glyph = _WIP_GLYPH.get(entry["wip_action"], entry["wip_action"])
+        logger.info("       WIP-Vd: %s — %s", glyph, entry["wip_reason"])
+
+
+def main() -> tuple[int, list[dict]]:
+    args = parse_args()
+    _configure_loggers(args.debug)
     cfg = load_videos_config()
 
     scope = resolve_scope(args, cfg, wip_label="WIP-Video", log=logger)
@@ -427,18 +533,7 @@ def main() -> tuple[int, list[dict]]:
         logger.warning("⚠️ No WIP-Video rows in target range. Nothing to do.")
         return 0, []
 
-    logger.info("📋 %d in-scope row(s):", len(rows))
-    for r in rows:
-        scope_summary = " ".join(
-            f"{p.upper()}:{'✓' if r.in_scope[p] else '✗'}"
-            for p in PLATFORMS_SCHEDULED
-        )
-        link_summary = " ".join(
-            f"{p.upper()}={'set' if r.link_status.get(p) else 'empty'}"
-            for p in PLATFORMS_SCHEDULED + ("sb",)
-        )
-        logger.info("   - %s scope=[%s] links=[%s]",
-                    r.day_title, scope_summary, link_summary)
+    _log_in_scope_rows(rows)
 
     # Pre-compute eligibility per platform (so we don't waste a session if 0 rows).
     skip = {"li": args.skip_li, "ig": args.skip_ig, "tw": args.skip_tw, "th": args.skip_th}
@@ -450,22 +545,7 @@ def main() -> tuple[int, list[dict]]:
     for platform in PLATFORMS_SCHEDULED:
         if skip[platform]:
             logger.info("⏭️  Skipping %s (per --skip-%s).", platform.upper(), platform)
-            for state in rows:
-                state.driver_status[platform] = "SKIP"
-                state.driver_detail[platform] = "platform skipped via --skip-* flag"
-                if (platform in PLATFORMS_TAG_ALONG
-                        and ledger.is_scheduled(platform, state.day_title)):
-                    # Same SKIP status, materially different meaning: the flag
-                    # suppressed a run a *prior* run had already done. Say so
-                    # here — the untick decision below acts on it, and without
-                    # this line the log gives no hint why WIP-Vd cleared on a
-                    # platform that visibly did nothing this run.
-                    logger.info(
-                        "🧾 %s: %s was skipped by the flag, but the tag-along ledger "
-                        "records it as scheduled on %s.",
-                        state.day_title, platform.upper(),
-                        ledger.recorded_at(platform, state.day_title) or "an earlier run",
-                    )
+            _mark_skipped(rows, platform, ledger)
             continue
 
         eligible = _rows_for_platform(rows, platform, force=args.force, ledger=ledger)
@@ -474,19 +554,8 @@ def main() -> tuple[int, list[dict]]:
             continue
 
         logger.info("━━━━━━━━━━ %s: %d row(s) ━━━━━━━━━━", platform.upper(), len(eligible))
-        if platform == "li":
-            from planning.videos.videos_linkedin import run as run_li
-            driver_results = run_li(eligible, cfg, dry_run=dry_run)
-        elif platform == "ig":
-            from planning.videos.videos_instagram import run as run_ig
-            driver_results = run_ig(eligible, cfg, dry_run=dry_run)
-        elif platform == "tw":
-            from planning.videos.videos_twitter import run as run_tw
-            driver_results = run_tw(eligible, cfg, dry_run=dry_run)
-        elif platform == "th":
-            from planning.videos.videos_threads import run as run_th
-            driver_results = run_th(eligible, cfg, dry_run=dry_run)
-        else:
+        driver_results = _run_driver(platform, eligible, cfg, dry_run=dry_run)
+        if driver_results is None:
             continue
 
         _record_driver_results(rows, platform, driver_results)
@@ -497,39 +566,12 @@ def main() -> tuple[int, list[dict]]:
         # misleading "Role 'post_url_th' not present" warning on every
         # successful TH run — so they get a ledger entry instead.
         if not dry_run:
-            for entry in driver_results:
-                if entry["status"] != "LIVE":
-                    continue
-                # Find the matching state.
-                state = next((s for s in rows if s.day_title == entry["day"]), None)
-                if state is None:
-                    continue
-                if platform in PLATFORMS_TAG_ALONG:
-                    ledger.record(platform, state.day_title,
-                                  detail=entry.get("detail", ""))
-                    continue
-                sentinel = _scheduled_sentinel(platform, state.day_title)
-                _set_post_url(notion, state.page_id, cfg["editorial_columns"],
-                              platform, sentinel, state.day_title)
-                state.link_status[platform] = sentinel
+            _mark_live_rows_scheduled(notion, cfg, rows, platform, driver_results, ledger)
 
     # Aggregate + coordinate WIP-Video untick per row.
     summary_rows: list[dict] = []
     for state in rows:
-        # Re-read link SB(v) before deciding untick — daily SB pipeline may
-        # have run concurrently.
-        try:
-            page = notion.pages.retrieve(page_id=state.page_id)
-            sb_col = cfg["editorial_columns"].get("post_url_sb")
-            if sb_col:
-                sb_prop = page.get("properties", {}).get(sb_col, {})
-                if sb_prop.get("type") == "url":
-                    state.link_status["sb"] = sb_prop.get("url")
-        except Exception as err:
-            logger.warning(
-                "⚠️ %s: could not re-read link SB(v) before untick decision: %s",
-                state.day_title, err,
-            )
+        _refresh_sb_link(notion, cfg, state)
 
         status, detail = _aggregate_row_status(state, dry_run)
         wip_action, wip_reason = _maybe_untick_wip(
@@ -543,17 +585,7 @@ def main() -> tuple[int, list[dict]]:
             "wip_reason": wip_reason,
         })
 
-    _WIP_GLYPH = {
-        "unticked": "✅ unticked",
-        "kept-checked": "⏳ kept checked",
-        "untick-failed": "⚠️ untick failed",
-        "dry-run": "🧪 dry-run",
-    }
-    logger.info("══════════ Summary ══════════")
-    for entry in summary_rows:
-        logger.info("   %s: %s | %s", entry["day"], entry["status"], entry["detail"])
-        glyph = _WIP_GLYPH.get(entry["wip_action"], entry["wip_action"])
-        logger.info("       WIP-Vd: %s — %s", glyph, entry["wip_reason"])
+    _log_summary(summary_rows)
 
     # SKIP-only is not a failure (e.g. --skip-* flags or all-already-scheduled).
     failed = [r for r in summary_rows if r["status"] in ("FAIL", "PARTIAL", "LOGIN-REQUIRED")]

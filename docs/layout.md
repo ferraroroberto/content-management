@@ -6,7 +6,7 @@ This is a multi-tool `pipeline-cli` repo: each tool is one root package, and `.f
 
 The preset folders:
 
-- `tests/` — the unittest + pytest-style suite. Flat and baselined; `tests/ratchets/` holds the gate-wiring tests, a `notion` subfolder the Notion helper tests, and any other new test goes in a subfolder too, since the flat `tests/` is at its baselined size.
+- `tests/` — the unittest + pytest-style suite, one subfolder per domain (`ratchets/` the gate-wiring tests, `notion/`, `ip_checks/`, `triage/`, `podcasting/`, `linkedin/`, `instagram/`, `videos/`, `substack_posting/`, `demo_videos/`, `recording/`); cross-cutting tests stay at the root. A new test goes in its domain's subfolder. A subfolder is never named after a top-level package or an installed one (`planning`, `podcast`, `substack`): pytest puts `tests/` on `sys.path`, so a folder of that name would shadow the real package.
 - `scripts/` — the vendored ratchets (`*_ratchet.py`, never edited) and the gate wrappers that map their exit codes (`*_ratchet_gate.py`).
 - `config/` — `config.json`, `mapping.json`, logging, Chrome launch and shared helpers; `config/doc_capture/` is the control-panel screenshot engine.
 - `docs/` — durable topic reference; `docs/screenshots/` holds the capture manifest and generated per-tab images.

@@ -106,6 +106,44 @@ def queue_config() -> dict:
     }
 
 
+def _queue_predicates(
+    *,
+    source: Optional[str],
+    image: Optional[str],
+    include_screened: bool,
+    unassessed: bool,
+    exclude_posters: Optional[list[str]],
+) -> tuple[list[str], list]:
+    """The ``where`` clauses and their parameters for ``next_batch``'s pending set."""
+    where = [
+        "r.duplicate in (0, 2)",
+        "r.found_link is not null",
+        "r.ok is null",  # the owner already ruled on it — nothing to propose
+        "r.retired = 0",
+        "r.match_type = ?",
+    ]
+    params: list = [process.EXACT_MATCH]
+    if unassessed:
+        where.append("r.screened_at is not null")
+        where.append(f"not ({db.assessed_sql()})")
+        where.append(f"not ({db.permanent_sql()})")
+    elif not include_screened:
+        where.append("r.screened_at is null")
+    clause, clause_params = db.source_clause(source, "r.source")
+    if clause:
+        where.append(clause)
+        params.extend(clause_params)
+    if image:
+        where.append("r.local_image = ?")
+        params.append(image)
+    if exclude_posters:
+        placeholders = ", ".join("?" for _ in exclude_posters)
+        where.append(f"(r.poster_key is null or r.poster_key not in ({placeholders}))")
+        params.extend(exclude_posters)
+
+    return where, params
+
+
 def next_batch(
     conn: sqlite3.Connection,
     *,
@@ -158,32 +196,9 @@ def next_batch(
     migration has not run yet — a fresh clone against an old database must not
     start proposing accusations off style lookalikes.
     """
-    where = [
-        "r.duplicate in (0, 2)",
-        "r.found_link is not null",
-        "r.ok is null",  # the owner already ruled on it — nothing to propose
-        "r.retired = 0",
-        "r.match_type = ?",
-    ]
-    params: list = [process.EXACT_MATCH]
-    if unassessed:
-        where.append("r.screened_at is not null")
-        where.append(f"not ({db.assessed_sql()})")
-        where.append(f"not ({db.permanent_sql()})")
-    elif not include_screened:
-        where.append("r.screened_at is null")
-    clause, clause_params = db.source_clause(source, "r.source")
-    if clause:
-        where.append(clause)
-        params.extend(clause_params)
-    if image:
-        where.append("r.local_image = ?")
-        params.append(image)
-    if exclude_posters:
-        placeholders = ", ".join("?" for _ in exclude_posters)
-        where.append(f"(r.poster_key is null or r.poster_key not in ({placeholders}))")
-        params.extend(exclude_posters)
-
+    where, params = _queue_predicates(source=source, image=image,
+                                      include_screened=include_screened,
+                                      unassessed=unassessed, exclude_posters=exclude_posters)
     params.append(int(limit))
     # One conditional fragment rather than a second query: the re-screen serve
     # differs from a normal one by two columns and nothing else, and a forked

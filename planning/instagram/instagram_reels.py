@@ -109,9 +109,9 @@ def wait_reels_composer_ready(page: Page, *, timeout_ms: int = 30000) -> None:
 def reel_add_video(page: Page, video_path: Path) -> None:
     """Click 'Add Video' and push the clip via the file chooser.
 
-    Mirrors ``_upload_files`` Leg 1 (Playwright click → JS-native retry) because
-    the Reels composer's button hits the same React handler-binding race the
-    post composer does. One file in → one tile here (the post composer's
+    Mirrors ``instagram_upload.upload_files`` Leg 1 (Playwright click →
+    JS-native retry) because the Reels composer's button hits the same React
+    handler-binding race the post composer does. One file in → one tile here (the post composer's
     duplicate-attach does not occur in the Reels composer).
     """
     add = page.get_by_role("button", name=re.compile(r"^Add Video$", re.I)).first
