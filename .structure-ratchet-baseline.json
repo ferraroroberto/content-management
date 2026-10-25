@@ -8,7 +8,6 @@
     {"key": "fn:planning/instagram/schedule_instagram_posts.py:main", "lines": 113},
     {"key": "fn:planning/substack/post_substack_note.py:publish_note_flow", "lines": 106},
     {"key": "fn:planning/videos/schedule_videos_posts.py:main", "lines": 174},
-    {"key": "fn:recorder/server.py:create_app", "lines": 120},
     {"key": "size:planning/linkedin/linkedin_composer.py", "lines": 1112},
     {"key": "size:reporting/notion/setup_notion_relations_system.sql", "lines": 1132}
   ]
