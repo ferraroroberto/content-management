@@ -37,6 +37,44 @@ UNCLASSIFIED = "unclassified"
 NO_ROOM = "no_room"
 
 
+def _resolve_author(*, art, topic: str, archive_cfg: Dict[str, Any], client, cache: CacheState,
+                    write: bool, logger: logging.Logger):
+    """The article's author connection, creating one for a new byline on a write run."""
+    resolution = author_resolver.resolve(
+        byline=art.author,
+        title=art.title,
+        body_text=art.body_text,
+        cache=cache,
+        fallback_name=archive_cfg.get("author_fallback_name", "not classified"),
+        llm_base_url=archive_cfg["llm_hub_base_url"],
+        llm_model=archive_cfg["llm_model"],
+    )
+    author_conn = resolution.connection
+
+    if resolution.via == "byline-match":
+        logger.info("👤 Byline matched DB: %s (%s)",
+                    author_conn.name, author_conn.page_id)
+    elif resolution.via == "byline-create":
+        if write:
+            author_conn = notion_io.create_connection(
+                client, connections_db_id=archive_cfg["connections_db_id"],
+                name=resolution.raw_byline, topic=topic, cache=cache,
+            )
+        else:
+            logger.info("👤 [DRY-RUN] Would create new connection: %s (topic=%s)",
+                        resolution.raw_byline, topic)
+    elif resolution.via == "llm-match":
+        logger.info("🤖→👤 LLM-picked author matched DB: %s (LLM said: %s)",
+                    author_conn.name, resolution.llm_choice)
+    elif resolution.via == "fallback":
+        logger.info("↩️  Using fallback author '%s' (raw byline: %s, LLM said: %s)",
+                    author_conn.name, resolution.raw_byline or "<none>",
+                    resolution.llm_choice or "<none>")
+    else:  # "none"
+        logger.warning("👤 No author resolution + no fallback in DB — article saved without author")
+    return author_conn
+
+
 def process_url(
     *, url: str, page, archive_cfg: Dict[str, Any], client, cache: CacheState,
     write: bool, logger: logging.Logger,
@@ -90,38 +128,8 @@ def process_url(
     )
     logger.info("📜 Summary:\n%s", summary)
 
-    resolution = author_resolver.resolve(
-        byline=art.author,
-        title=art.title,
-        body_text=art.body_text,
-        cache=cache,
-        fallback_name=archive_cfg.get("author_fallback_name", "not classified"),
-        llm_base_url=archive_cfg["llm_hub_base_url"],
-        llm_model=archive_cfg["llm_model"],
-    )
-    author_conn = resolution.connection
-
-    if resolution.via == "byline-match":
-        logger.info("👤 Byline matched DB: %s (%s)",
-                    author_conn.name, author_conn.page_id)
-    elif resolution.via == "byline-create":
-        if write:
-            author_conn = notion_io.create_connection(
-                client, connections_db_id=archive_cfg["connections_db_id"],
-                name=resolution.raw_byline, topic=topic, cache=cache,
-            )
-        else:
-            logger.info("👤 [DRY-RUN] Would create new connection: %s (topic=%s)",
-                        resolution.raw_byline, topic)
-    elif resolution.via == "llm-match":
-        logger.info("🤖→👤 LLM-picked author matched DB: %s (LLM said: %s)",
-                    author_conn.name, resolution.llm_choice)
-    elif resolution.via == "fallback":
-        logger.info("↩️  Using fallback author '%s' (raw byline: %s, LLM said: %s)",
-                    author_conn.name, resolution.raw_byline or "<none>",
-                    resolution.llm_choice or "<none>")
-    else:  # "none"
-        logger.warning("👤 No author resolution + no fallback in DB — article saved without author")
+    author_conn = _resolve_author(art=art, topic=topic, archive_cfg=archive_cfg, client=client,
+                                  cache=cache, write=write, logger=logger)
 
     newsletter = notion_io.pick_newsletter(
         client,
@@ -157,6 +165,26 @@ def process_url(
         cache=cache,
     )
     return CREATED
+
+
+def _log_batch_report(archived: int, skipped: int, unclassified_urls: list[str],
+                      failed_urls: list[str], no_room_urls: list[str],
+                      logger: logging.Logger) -> None:
+    logger.info("📊 %d archived, %d skipped, %d unclassified, %d failed, %d no room",
+                archived, skipped, len(unclassified_urls), len(failed_urls),
+                len(no_room_urls))
+    if no_room_urls:
+        logger.error("❌ No newsletter room — not archived (left open):")
+        for u in no_room_urls:
+            logger.error("   • %s", u)
+    if unclassified_urls:
+        logger.warning("🏷️ Unclassified — no topic, not archived (left open):")
+        for u in unclassified_urls:
+            logger.warning("   • %s", u)
+    if failed_urls:
+        logger.info("❌ Failed URLs (left open for re-run):")
+        for u in failed_urls:
+            logger.info("   • %s", u)
 
 
 def run_batch(*, write: bool, debug: bool = False) -> int:
@@ -249,21 +277,7 @@ def run_batch(*, write: bool, debug: bool = False) -> int:
     finally:
         chrome_tabs.close_browser(browser)
 
-    logger.info("📊 %d archived, %d skipped, %d unclassified, %d failed, %d no room",
-                archived, skipped, len(unclassified_urls), len(failed_urls),
-                len(no_room_urls))
-    if no_room_urls:
-        logger.error("❌ No newsletter room — not archived (left open):")
-        for u in no_room_urls:
-            logger.error("   • %s", u)
-    if unclassified_urls:
-        logger.warning("🏷️ Unclassified — no topic, not archived (left open):")
-        for u in unclassified_urls:
-            logger.warning("   • %s", u)
-    if failed_urls:
-        logger.info("❌ Failed URLs (left open for re-run):")
-        for u in failed_urls:
-            logger.info("   • %s", u)
+    _log_batch_report(archived, skipped, unclassified_urls, failed_urls, no_room_urls, logger)
 
     if aborted or no_room_urls:
         return 1

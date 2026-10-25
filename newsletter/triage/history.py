@@ -390,6 +390,69 @@ _NEWS_HINT = re.compile(
     r"valuation|ipo|acquir|ceo steps|layoffs?|earnings)\b", re.IGNORECASE)
 
 
+def _sender_stats(records: List[gm.EmailRecord], matched: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Per sender: emails, links offered, picks, stars and topics, most-picked first."""
+    sender_emails = Counter(); sender_offered = Counter()
+    sender_name: Dict[str, str] = {}
+    for r in records:
+        sender_emails[r.sender_address] += 1
+        sender_offered[r.sender_address] += sum(1 for l in r.links if not l.noise)
+        sender_name.setdefault(r.sender_address, r.sender_name)
+    sender_sel = Counter(); sender_star = Counter(); sender_topics: Dict[str, Counter] = defaultdict(Counter)
+    sender_eds: Dict[str, set] = defaultdict(set)
+    for m in matched:
+        a = m["sender_address"]
+        sender_sel[a] += 1
+        sender_star[a] += int(bool(m["star"]))
+        sender_topics[a][m["topic"] or "?"] += 1
+        sender_eds[a].add(m["edition"])
+    senders = []
+    for addr, n_em in sender_emails.most_common():
+        senders.append({"sender": sender_name.get(addr, addr), "address": addr, "emails": n_em,
+                        "offered_links": sender_offered[addr], "selected": sender_sel[addr],
+                        "editions_with_pick": len(sender_eds[addr]),
+                        "hit_rate_per_email": round(sender_sel[addr] / n_em, 2),
+                        "hit_rate_per_link": round(sender_sel[addr] / max(1, sender_offered[addr]), 3),
+                        "stars": sender_star[addr],
+                        "topics": dict(sender_topics[addr].most_common())})
+    senders.sort(key=lambda s: (-s["selected"], -s["emails"]))
+    return senders
+
+
+def _per_edition_max(positives: List[Dict[str, Any]], key: str) -> Dict[str, Dict[str, Any]]:
+    """Per value of ``key`` (domain or author): totals and the most picked in one edition."""
+    out: Dict[str, Dict[str, Any]] = {}
+    counts: Dict[str, Counter] = defaultdict(Counter)
+    for p in positives:
+        counts[p[key]][p["edition"]] += 1
+    for val, c in counts.items():
+        if not val:
+            continue
+        total = sum(c.values())
+        out[val] = {"total": total, "editions": len(c), "max_per_edition": max(c.values()),
+                    "avg_per_edition": round(total / len(c), 2),
+                    "per_edition_hist": dict(Counter(c.values()))}
+    return dict(sorted(out.items(), key=lambda kv: -kv[1]["total"]))
+
+
+def _edition_rows(editions: List[Dict[str, Any]], positives: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The composition of each past edition that has picks."""
+    ed_rows = []
+    for ed in editions:
+        ps = [p for p in positives if p["edition"] == ed["number"]]
+        if not ps:
+            continue
+        doms = Counter(p["domain"] for p in ps)
+        auths = Counter(p["author"] for p in ps)
+        ed_rows.append({"edition": ed["number"], "date": ed["date"], "n": len(ps),
+                        "topics": dict(Counter(p["topic"] for p in ps)),
+                        "hbr": doms.get("hbr.org", 0),
+                        "max_same_domain": max(doms.values()), "max_same_author": max(auths.values()),
+                        "distinct_authors": len(auths), "stars": sum(p["star"] for p in ps),
+                        "must_read_topic": next((p["topic"] for p in ps if p["must_read"]), None)})
+    return ed_rows
+
+
 def compute_stats(positives: List[Dict[str, Any]], editions: List[Dict[str, Any]],
                   records: List[gm.EmailRecord], matches: List[Dict[str, Any]]) -> Dict[str, Any]:
     st: Dict[str, Any] = {}
@@ -416,49 +479,13 @@ def compute_stats(positives: List[Dict[str, Any]], editions: List[Dict[str, Any]
     st["match"]["rate"] = round(len(matched) / max(1, len(matches)), 3)
 
     # per sender: emails, offered, selected, topics, stars
-    sender_emails = Counter(); sender_offered = Counter()
-    sender_name: Dict[str, str] = {}
-    for r in records:
-        sender_emails[r.sender_address] += 1
-        sender_offered[r.sender_address] += sum(1 for l in r.links if not l.noise)
-        sender_name.setdefault(r.sender_address, r.sender_name)
-    sender_sel = Counter(); sender_star = Counter(); sender_topics: Dict[str, Counter] = defaultdict(Counter)
-    sender_eds: Dict[str, set] = defaultdict(set)
-    for m in matched:
-        a = m["sender_address"]
-        sender_sel[a] += 1
-        sender_star[a] += int(bool(m["star"]))
-        sender_topics[a][m["topic"] or "?"] += 1
-        sender_eds[a].add(m["edition"])
-    senders = []
-    for addr, n_em in sender_emails.most_common():
-        senders.append({"sender": sender_name.get(addr, addr), "address": addr, "emails": n_em,
-                        "offered_links": sender_offered[addr], "selected": sender_sel[addr],
-                        "editions_with_pick": len(sender_eds[addr]),
-                        "hit_rate_per_email": round(sender_sel[addr] / n_em, 2),
-                        "hit_rate_per_link": round(sender_sel[addr] / max(1, sender_offered[addr]), 3),
-                        "stars": sender_star[addr],
-                        "topics": dict(sender_topics[addr].most_common())})
-    senders.sort(key=lambda s: (-s["selected"], -s["emails"]))
+    senders = _sender_stats(records, matched)
     st["senders"] = senders
     st["senders_never_selected"] = [s for s in senders if s["selected"] == 0 and s["emails"] >= 3]
 
     # per domain / per author caps observed per edition
-    def per_edition_max(key: str) -> Dict[str, Dict[str, Any]]:
-        out: Dict[str, Dict[str, Any]] = {}
-        counts: Dict[str, Counter] = defaultdict(Counter)
-        for p in positives:
-            counts[p[key]][p["edition"]] += 1
-        for val, c in counts.items():
-            if not val:
-                continue
-            total = sum(c.values())
-            out[val] = {"total": total, "editions": len(c), "max_per_edition": max(c.values()),
-                        "avg_per_edition": round(total / len(c), 2),
-                        "per_edition_hist": dict(Counter(c.values()))}
-        return dict(sorted(out.items(), key=lambda kv: -kv[1]["total"]))
-    st["domains"] = per_edition_max("domain")
-    st["authors"] = per_edition_max("author")
+    st["domains"] = _per_edition_max(positives, "domain")
+    st["authors"] = _per_edition_max(positives, "author")
 
     # topics / stars / must-read / type
     st["topics"] = dict(Counter(p["topic"] for p in positives))
@@ -474,19 +501,7 @@ def compute_stats(positives: List[Dict[str, Any]], editions: List[Dict[str, Any]
     st["stars_by_author"] = dict(Counter(p["author"] for p in positives if p["star"]).most_common(20))
 
     # per-edition composition
-    ed_rows = []
-    for ed in editions:
-        ps = [p for p in positives if p["edition"] == ed["number"]]
-        if not ps:
-            continue
-        doms = Counter(p["domain"] for p in ps)
-        auths = Counter(p["author"] for p in ps)
-        ed_rows.append({"edition": ed["number"], "date": ed["date"], "n": len(ps),
-                        "topics": dict(Counter(p["topic"] for p in ps)),
-                        "hbr": doms.get("hbr.org", 0),
-                        "max_same_domain": max(doms.values()), "max_same_author": max(auths.values()),
-                        "distinct_authors": len(auths), "stars": sum(p["star"] for p in ps),
-                        "must_read_topic": next((p["topic"] for p in ps if p["must_read"]), None)})
+    ed_rows = _edition_rows(editions, positives)
     st["editions"] = ed_rows
     st["edition_caps"] = {
         "hbr_hist": dict(Counter(e["hbr"] for e in ed_rows)),
