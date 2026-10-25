@@ -79,6 +79,47 @@ SDUI_FEED = f"""<!doctype html><html><body>
   </div>
 </main></body></html>"""
 
+ID_BUTTONS = "7500000000000000005"
+ID_BUTTONS_NO_REPOSTS = "7500000000000000006"
+ID_BUTTONS_QUIET = "7500000000000000007"
+ID_UNREADABLE = "7500000000000000008"
+ZWSP = "​"
+
+
+def _count_button(label: str, count: str) -> str:
+    return f'<button type="button" aria-label="{label}"><span><div><span><span><span>{count}</span></span></span></div></span></button>'
+
+
+def _button_post(activity_id: str, *, reactions: str, comments: str, reposts: str) -> str:
+    """Post as LinkedIn renders it since 2026-10-15: bare counts in the stat buttons, no words."""
+    return f"""
+    <div role="listitem">
+      <a href="/analytics/post-summary/urn:li:activity:{activity_id}/">View analytics</a>
+      <p>A post.</p>
+      <div>
+        {_count_button("Reaction button state: Insightful", reactions)}
+        <button type="button" aria-label="Open reactions menu"></button>
+        {_count_button("Comment", comments)}
+        {_count_button("Repost", reposts)}
+        <a aria-label="Send">{ZWSP}</a>
+        <a href="/feed/">{reactions} reactions</a>
+      </div>
+      <div>1,234 impressions</div>
+    </div>"""
+
+
+BUTTON_FEED = f"""<!doctype html><html><body><main><div role="list">
+  {_button_post(ID_BUTTONS, reactions="21", comments="13", reposts="1,002")}
+  {_button_post(ID_BUTTONS_NO_REPOSTS, reactions="65", comments="13", reposts=ZWSP)}
+  {_button_post(ID_BUTTONS_QUIET, reactions=ZWSP, comments=ZWSP, reposts=ZWSP)}
+</div></main></body></html>"""
+
+# Logged in, posts found, but no count can be read from any of them.
+UNREADABLE_COUNTS_FEED = f"""<!doctype html><html><body><main><div role="list">
+  <div role="listitem"><a href="/analytics/post-summary/urn:li:activity:{ID_UNREADABLE}/">View analytics</a>
+    <p>A post.</p><div>1,234 impressions</div></div>
+</div></main></body></html>"""
+
 LEGACY_FEED = f"""<!doctype html><html><body><main>
   <div data-urn="urn:li:activity:{ID_LEGACY}">
     <div>Alex Example and 9 others</div><div>2 comments</div>
@@ -164,6 +205,27 @@ class LinkedInPostsDomTest(unittest.TestCase):
                 {"post_id", "posted_at", "is_video", "num_likes", "num_comments", "num_reshares"},
             )
             self.assertRegex(record["posted_at"], r"^\d{4}-\d{2}-\d{2}$")
+
+    def test_counts_in_stat_buttons_are_read(self) -> None:
+        posts = {p["post_id"].split(":")[-1].rstrip("/"): p for p in self._fetch(BUTTON_FEED)["posts"]}
+
+        full = posts[ID_BUTTONS]
+        self.assertEqual((full["num_likes"], full["num_comments"], full["num_reshares"]), (21, 13, 1002))
+        # A blank repost label is a real zero, and must not shift the comment count.
+        no_reposts = posts[ID_BUTTONS_NO_REPOSTS]
+        self.assertEqual(
+            (no_reposts["num_likes"], no_reposts["num_comments"], no_reposts["num_reshares"]), (65, 13, 0)
+        )
+
+    def test_a_post_with_every_count_blank_is_a_real_zero(self) -> None:
+        posts = {p["post_id"].split(":")[-1].rstrip("/"): p for p in self._fetch(BUTTON_FEED)["posts"]}
+        quiet = posts[ID_BUTTONS_QUIET]
+        self.assertEqual((quiet["num_likes"], quiet["num_comments"], quiet["num_reshares"]), (0, 0, 0))
+
+    def test_unreadable_counts_fail_the_scrape_instead_of_saving_zeros(self) -> None:
+        with self.assertRaises(ScrapeError) as ctx:
+            self._fetch(UNREADABLE_COUNTS_FEED)
+        self.assertIn("no post had a readable", str(ctx.exception))
 
     def test_legacy_data_urn_markup_still_works(self) -> None:
         (post,) = self._fetch(LEGACY_FEED)["posts"]
