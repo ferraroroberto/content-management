@@ -105,6 +105,13 @@ def load_editorial_notion(database_id_override: Optional[str] = None) -> tuple[s
     return api_token, databases[0]["id"]
 
 
+# (connect, read) seconds for the hand-rolled ``requests`` callers. The read
+# leg must outlast the slowest legitimate response, a 100-row database query
+# or search page, which Notion can take tens of seconds to serve; a stalled
+# socket still fails well inside a minute and a half instead of hanging.
+NOTION_REQUEST_TIMEOUT = (10, 90)
+
+
 def notion_rest_headers(api_token: str) -> dict:
     """Standard Notion REST API headers for the hand-rolled ``requests``
     callers (``notion_database_list.py``, ``notion_supabase_sync.py``) that
