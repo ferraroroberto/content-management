@@ -494,6 +494,33 @@ def _apply_updates(notion, supabase_connection, auto_confirm, posts_target, foll
     return update_ok
 
 
+def _resolve_database_id(database_id_arg: Optional[str], databases: list[dict]) -> str:
+    """The Notion database to update: the command-line ID, else the first configured one."""
+    if database_id_arg:
+        database_id = database_id_arg
+        logger.info(f"📊 Using database ID from command line: {database_id}")
+    else:
+        # Use the first database from config
+        database_id = databases[0]["id"]
+        database_name = databases[0].get("name", "UNKNOWN")
+        logger.info(f"📊 Using database from config: {database_name} (ID: {database_id})")
+    return database_id
+
+
+def _log_supabase_summary(posts_data, profile_data, mapped_posts_data: dict,
+                          mapped_followers_data: dict) -> None:
+    logger.info("=" * 60)
+    logger.info("SUPABASE DATA SUMMARY")
+    logger.info("Posts data (previous day): %s", "Yes" if posts_data else "No")
+    logger.info("Profile data (current day): %s", "Yes" if profile_data else "No")
+    logger.info("Mapped Posts Fields:")
+    for field_name, value in mapped_posts_data.items():
+        logger.info("  - %s: %s", field_name, value)
+    logger.info("Mapped Follower Fields:")
+    for field_name, value in mapped_followers_data.items():
+        logger.info("  - %s: %s", field_name, value)
+
+
 def main() -> bool:
     """Main function to execute the Notion update process.
 
@@ -523,15 +550,7 @@ def main() -> bool:
         logger.error("❌ Notion API token or databases not found in config.json")
         return False
 
-    # Get database ID (from args or config)
-    if args.database_id:
-        database_id = args.database_id
-        logger.info(f"📊 Using database ID from command line: {database_id}")
-    else:
-        # Use the first database from config
-        database_id = databases[0]["id"]
-        database_name = databases[0].get("name", "UNKNOWN")
-        logger.info(f"📊 Using database from config: {database_name} (ID: {database_id})")
+    database_id = _resolve_database_id(args.database_id, databases)
 
     # Initialize Notion client
     notion = init_notion_client(api_token)
@@ -579,17 +598,7 @@ def main() -> bool:
     mapped_posts_data = map_supabase_to_notion_fields(posts_data, profile_data, update_field_mapping_posts)
     mapped_followers_data = map_supabase_to_notion_fields(posts_data, profile_data, update_field_mapping_followers)
 
-    # Print Supabase data summary
-    logger.info("=" * 60)
-    logger.info("SUPABASE DATA SUMMARY")
-    logger.info("Posts data (previous day): %s", "Yes" if posts_data else "No")
-    logger.info("Profile data (current day): %s", "Yes" if profile_data else "No")
-    logger.info("Mapped Posts Fields:")
-    for field_name, value in mapped_posts_data.items():
-        logger.info("  - %s: %s", field_name, value)
-    logger.info("Mapped Follower Fields:")
-    for field_name, value in mapped_followers_data.items():
-        logger.info("  - %s: %s", field_name, value)
+    _log_supabase_summary(posts_data, profile_data, mapped_posts_data, mapped_followers_data)
 
     # Build: POSTS (previous day) and FOLLOWERS (current day, plus its 'next' relation to tomorrow)
     posts_updates, posts_changes = build_updates(

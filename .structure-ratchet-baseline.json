@@ -6,18 +6,12 @@
     {"key": "fn:newsletter/pipeline.py:process_url", "lines": 120},
     {"key": "fn:newsletter/pipeline.py:run_batch", "lines": 110},
     {"key": "fn:newsletter/triage/history.py:compute_stats", "lines": 134},
-    {"key": "fn:newsletter_pipeline.py:main", "lines": 104},
     {"key": "fn:planning/_scheduler_main.py:run_single_post_scheduler", "lines": 124},
     {"key": "fn:planning/instagram/schedule_instagram_posts.py:_upload_files", "lines": 178},
     {"key": "fn:planning/instagram/schedule_instagram_posts.py:main", "lines": 113},
     {"key": "fn:planning/substack/post_substack_note.py:publish_note_flow", "lines": 106},
     {"key": "fn:planning/videos/schedule_videos_posts.py:main", "lines": 174},
     {"key": "fn:recorder/server.py:create_app", "lines": 120},
-    {"key": "fn:reporting/notion/notion_update.py:main", "lines": 118},
-    {"key": "fn:reporting/process/data_processor.py:process_all_files", "lines": 102},
-    {"key": "fn:reporting/process/data_processor.py:process_array_data", "lines": 103},
-    {"key": "fn:reporting/process/data_processor.py:process_json_file", "lines": 101},
-    {"key": "fn:reporting_pipeline.py:run_pipeline", "lines": 110},
     {"key": "size:planning/linkedin/linkedin_composer.py", "lines": 1112},
     {"key": "size:reporting/notion/setup_notion_relations_system.sql", "lines": 1132}
   ]

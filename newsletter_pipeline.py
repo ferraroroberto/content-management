@@ -205,7 +205,7 @@ def _add_newsletter(p: argparse.ArgumentParser, *, required: bool) -> None:
                    help="Newsletter number, e.g. 057 or N057")
 
 
-def main(argv: list[str] | None = None) -> int:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Newsletter pipeline: schedule → bootstrap → archive → normalize → build."
     )
@@ -270,7 +270,11 @@ def main(argv: list[str] | None = None) -> int:
     _add_newsletter(p_all, required=False)
     _add_days(p_all)
     p_all.add_argument("--debug", action="store_true")
+    return parser
 
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
     args = parser.parse_args(argv)
     debug = bool(getattr(args, "debug", False))
     configure_root_logging(debug)

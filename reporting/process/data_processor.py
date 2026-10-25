@@ -156,6 +156,30 @@ def extract_date_from_filename(file_path: str) -> Optional[str]:
         return date_match.group(1)
     return None
 
+def _log_missing_field_debug(item: Any, field_config: dict[str, Any], field_name: str, index: int) -> None:
+    """Debug detail for a required field missing from one array record."""
+    # More detailed debug logging
+    path = field_config.get('path')
+    logger.debug(f"DEBUG: Missing required field '{field_name}' (path: {path}) in record {index+1}")
+    
+    # Check if the parent object exists
+    parent_path = '.'.join(path.split('.')[:-1]) if '.' in path else ''
+    if parent_path:
+        parent_obj = get_nested_value(item, parent_path)
+        if parent_obj is None:
+            logger.debug(f"DEBUG: Parent object at '{parent_path}' does not exist")
+        else:
+            logger.debug(f"DEBUG: Parent object exists: {parent_obj}")
+    
+    # Log a sample of the record for debugging
+    try:
+        import json
+        record_sample = json.dumps(item, indent=2)[:500]  # First 500 chars to avoid huge logs
+        logger.debug(f"DEBUG: Record sample: {record_sample}...")
+    except:
+        logger.debug(f"DEBUG: Unable to serialize record for logging")
+
+
 def process_array_data(data: Any, mapping_config: dict[str, Any], file_date: Optional[str] = None) -> list[dict[str, Any]]:
     """Process array data type (like LinkedIn posts)."""
     array_path = mapping_config.get('array_path', 'data')
@@ -204,27 +228,8 @@ def process_array_data(data: Any, mapping_config: dict[str, Any], file_date: Opt
             if value is None and field_config.get('required', False):
                 missing_fields.append(field_name)
                 if logger.level <= logging.DEBUG:
-                    # More detailed debug logging
-                    path = field_config.get('path')
-                    logger.debug(f"DEBUG: Missing required field '{field_name}' (path: {path}) in record {index+1}")
-                    
-                    # Check if the parent object exists
-                    parent_path = '.'.join(path.split('.')[:-1]) if '.' in path else ''
-                    if parent_path:
-                        parent_obj = get_nested_value(item, parent_path)
-                        if parent_obj is None:
-                            logger.debug(f"DEBUG: Parent object at '{parent_path}' does not exist")
-                        else:
-                            logger.debug(f"DEBUG: Parent object exists: {parent_obj}")
-                    
-                    # Log a sample of the record for debugging
-                    try:
-                        import json
-                        record_sample = json.dumps(item, indent=2)[:500]  # First 500 chars to avoid huge logs
-                        logger.debug(f"DEBUG: Record sample: {record_sample}...")
-                    except:
-                        logger.debug(f"DEBUG: Unable to serialize record for logging")
-                
+                    _log_missing_field_debug(item, field_config, field_name, index)
+
                 # A field can declare itself optional on the first scraped
                 # record only (e.g. Substack's first post is expected to be
                 # missing num_likes) via "optional_if_first_record" in
@@ -274,6 +279,35 @@ def get_alternative_mapping_keys(platform_key: str, mapping_config: dict[str, An
             alternatives.append(key)
     
     return alternatives
+
+def _extract_single_record(data: dict, platform_config: dict[str, Any], mapping_key: str,
+                           date: Any, platform: str, data_type: str,
+                           api_config_used: str) -> Optional[dict[str, Any]]:
+    """Map one non-array payload to a record, or None when a required field is missing."""
+    result = {
+        'date': convert_to_date_string(date),
+        'platform': platform,
+        'data_type': data_type
+    }
+    if api_config_used:
+        result['api_config_used'] = api_config_used
+    
+    field_mappings = platform_config.get('fields', {})
+    
+    for field_name, field_config in field_mappings.items():
+        value = extract_field_value(data, field_config, field_name=field_name)
+        
+        if value is None and field_config.get('required', False):
+            logger.warning(f"⚠️  Required field '{field_name}' not found using {mapping_key}")
+            return None
+        
+        # Convert date fields to 'YYYY-MM-DD'
+        if field_name in ['posted_at', 'date', 'posted']:
+            result[field_name] = convert_to_date_string(value)
+        else:
+            result[field_name] = convert_boolean_to_integer(value)
+    return result
+
 
 def process_json_file(file_path: str, mapping_config: dict[str, Any]) -> Optional[list[dict[str, Any]]]:
     """Process a single JSON file and extract mapped fields."""
@@ -334,31 +368,9 @@ def process_json_file(file_path: str, mapping_config: dict[str, Any]) -> Optiona
                         logger.warning(f"⚠️  No valid records extracted from {os.path.basename(file_path)} after trying all mappings")
                         return None
             else:
-                # Process single record (existing logic)
-                result = {
-                    'date': convert_to_date_string(date),
-                    'platform': platform,
-                    'data_type': data_type
-                }
-                if api_config_used:
-                    result['api_config_used'] = api_config_used
-                
-                field_mappings = platform_config.get('fields', {})
-                has_required_fields = True
-                
-                for field_name, field_config in field_mappings.items():
-                    value = extract_field_value(data, field_config, field_name=field_name)
-                    
-                    if value is None and field_config.get('required', False):
-                        has_required_fields = False
-                        logger.warning(f"⚠️  Required field '{field_name}' not found using {current_mapping_key}")
-                        break
-                    
-                    # Convert date fields to 'YYYY-MM-DD'
-                    if field_name in ['posted_at', 'date', 'posted']:
-                        result[field_name] = convert_to_date_string(value)
-                    else:
-                        result[field_name] = convert_boolean_to_integer(value)
+                result = _extract_single_record(data, platform_config, current_mapping_key,
+                                                date, platform, data_type, api_config_used)
+                has_required_fields = result is not None
                 
                 if has_required_fields:
                     logger.debug(f"✅ Extracted data: {result}")
@@ -403,6 +415,35 @@ def order_dataframe_columns(df: pd.DataFrame, mapping_config: dict[str, Any]) ->
     
     # Reorder DataFrame columns
     return df[ordered_columns]
+
+def _build_dataframes(data_by_platform_type: dict[str, list], mapping_config: dict[str, Any]) -> dict[str, pd.DataFrame]:
+    """One ordered, date-normalised DataFrame per platform and data type."""
+    dataframes = {}
+    for key, records in data_by_platform_type.items():
+        # Create DataFrame for this platform and data type
+        df = pd.DataFrame(records)
+        
+        if df.empty:
+            logger.warning(f"⚠️  No data extracted for: {key}")
+            continue
+        
+        # Order columns based on mapping configuration
+        df = order_dataframe_columns(df, mapping_config)
+        
+        # Convert date columns to datetime and format as 'YYYY-MM-DD'
+        for col in df.columns:
+            if col in ['date', 'posted_at', 'posted']:
+                df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime('%Y-%m-%d')
+        
+        # Sort by posted date if available
+        if 'posted' in df.columns:
+            df = df.sort_values(['posted'], ascending=False)
+        
+        logger.info(f"✅ Created DataFrame for {key} with {len(df)} rows and {len(df.columns)} columns")
+        dataframes[key] = df
+    
+    return dataframes
+
 
 def process_all_files(mapping_config: dict[str, Any], main_config: Optional[dict[str, Any]] = None, debug_mode: bool = False, target_date: Optional[str] = None) -> dict[str, pd.DataFrame]:
     """Process all JSON files in the results directory and create separate DataFrames by data type."""
@@ -480,32 +521,7 @@ def process_all_files(mapping_config: dict[str, Any], main_config: Optional[dict
     if skipped > 0:
         logger.info(f"⏩ Skipped {skipped} files older than {cutoff_date}")
 
-    # Create separate DataFrames for each platform and data type
-    dataframes = {}
-    for key, records in data_by_platform_type.items():
-        # Create DataFrame for this platform and data type
-        df = pd.DataFrame(records)
-        
-        if df.empty:
-            logger.warning(f"⚠️  No data extracted for: {key}")
-            continue
-        
-        # Order columns based on mapping configuration
-        df = order_dataframe_columns(df, mapping_config)
-        
-        # Convert date columns to datetime and format as 'YYYY-MM-DD'
-        for col in df.columns:
-            if col in ['date', 'posted_at', 'posted']:
-                df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime('%Y-%m-%d')
-        
-        # Sort by posted date if available
-        if 'posted' in df.columns:
-            df = df.sort_values(['posted'], ascending=False)
-        
-        logger.info(f"✅ Created DataFrame for {key} with {len(df)} rows and {len(df.columns)} columns")
-        dataframes[key] = df
-    
-    return dataframes
+    return _build_dataframes(data_by_platform_type, mapping_config)
 
 def save_dataframes(dataframes: dict[str, pd.DataFrame], main_config: Optional[dict[str, Any]] = None, output_format: str = 'csv') -> list[str]:
     """Save multiple DataFrames to files in specified format."""
