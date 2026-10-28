@@ -217,8 +217,8 @@ stops at a manual publishing checklist"]
 review clips, cost, files"| PODPIPE
   APP -->|"approve / drop / feedback"| PREVISE
   PODPIPE --> PSYNC --> PTRANS --> PCLIPS --> PEDIT --> PRENDER --> PREVISE --> PPACK --> PSCORE
-  PTRANS -->|"per-track WAV"| WHISPER[("whisper-server
-127.0.0.1:8090")]
+  PTRANS -->|"per-track WAV"| WHISPER[("whisper via hub
+127.0.0.1:8000/v1/audio")]
   PEDIT -->|"clip decode + filler check"| WHISPER
   PCLIPS -->|"select + copy"| LLMHUB
   PEDIT -->|"caption review"| LLMHUB

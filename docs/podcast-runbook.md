@@ -44,10 +44,11 @@ pipeline itself never publishes, posts, schedules, emails or writes to Notion.
    `curl -s -o NUL -w "%{http_code}" http://127.0.0.1:8000/v1/models` → `200`.
    The hub is its own project, outside this repo; start it there if it is
    down.
-3. **[code] The whisper server** answers at `podcast.whisper_url` (default
-   port `8090`). Check: `curl -s http://127.0.0.1:8090/health` →
-   `{"status":"ok"}`. Port 8090 is shared with other transcription tools, so
-   one of them may hold it; it is started from the hub project too.
+3. **[code] Transcription** goes through the hub: `podcast.whisper_url` is
+   `http://127.0.0.1:8000/v1/audio/transcriptions`. The hub places whisper on
+   whichever fleet machine is up, so no whisper port listens on this PC.
+   Check: `curl -s -o NUL -w "%{http_code}" -F file=@clip.wav http://127.0.0.1:8000/v1/audio/transcriptions`
+   → `200` (the pipeline sends no `model` field; the hub picks the default).
 4. **[code] ffmpeg/ffprobe** on `PATH`. Set `podcast.video_encoder` to
    `h264_nvenc` on a machine with an NVIDIA GPU (libx264 works everywhere,
    slower).

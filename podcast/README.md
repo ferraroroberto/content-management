@@ -14,7 +14,7 @@ runbook in its collapsed "How the podcast pipeline works" card.
 ```mermaid
 flowchart LR
     Y[sync<br/>recorder sessions only] --> T
-    T[transcribe<br/>whisper :8090] --> C[clean<br/>hub]
+    T[transcribe<br/>whisper via hub] --> C[clean<br/>hub]
     T --> S[select<br/>hub]
     S --> P[copy<br/>hub]
     P --> D[edit<br/>whisper + hub]
