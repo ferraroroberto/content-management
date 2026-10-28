@@ -50,7 +50,7 @@ Run all four checks, report them in one block, and fix and re-check until they a
 
 1. Config: `./.venv/Scripts/python.exe -c "from podcast.episode import load_podcast_config as c; p=c(); print(p['models'], p.get('trials_root'))"`. If it says *Missing 'podcast' block*, `config/config.json` is machine-local and this checkout lacks it, which is common in a git worktree or a fresh clone. Stop, and ask the owner to copy the block from the primary checkout or from `config/config_example.json`. Every font and host asset path in it must exist.
 2. Hub: `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/v1/models` → `200`.
-3. Whisper: `curl -s http://127.0.0.1:8090/health` → `{"status":"ok"}`.
+3. Whisper (via the hub): `curl -s -o /dev/null -w "%{http_code}" -F file=@clip.wav http://127.0.0.1:8000/v1/audio/transcriptions` → `200`.
 4. `ffmpeg -version` and `ffprobe -version` both resolve.
 
 If the hub or whisper is down, report it and stop. They are started from the hub project, not here.
