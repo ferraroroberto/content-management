@@ -15,8 +15,7 @@ What lives here:
 * ``load_clip_payload(notion, editorial_row, video_cols, clip_cols)`` —
   resolves a clip relation on the editorial row, follows it into the clips
   DB, and returns a ``ClipPayload`` with everything four drivers need
-  (short caption, LI long caption from the page body, video path, thumb
-  path).
+  (short caption, LI long caption from the page body, video path).
 * ``run_video_driver(...)`` — the session + login check + per-row loop the
   Threads, Twitter and Instagram drivers share; each passes only its own
   session class, config loader and composer callbacks.

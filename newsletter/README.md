@@ -146,11 +146,17 @@ others).
 
 `archive` files each article against the first **future** newsletter row that
 still has room for its topic (`notion_io.pick_newsletter`, which filters
-`Date >= today`). When the buffer of future rows runs dry it aborts outright:
+`Date >= today`). When the buffer of future rows runs dry for a topic, that
+one article is left unfiled — the tab stays open, and the run keeps going on
+the remaining tabs:
 
 ```
-❌ No future newsletter has room for topic '<topic>' — stopping
+❌ No future newsletter has room for topic '<topic>' — not archiving, leaving tab open: <url>
 ```
+
+`pipeline.run_batch` counts the URL under `no_room_urls` in the run summary;
+the owner adds a newsletter row (or raises the topic cap) and re-runs to pick
+it up.
 
 `schedule` tops that buffer back up. It reads every row of the newsletter DB
 once, takes the highest `number` and the highest `Date` **independently**, and

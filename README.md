@@ -524,162 +524,25 @@ suite command.
 
 ## ✅ Verification
 
-No CI pipeline — run the test suite locally before shipping. Most of `tests/`
-is `unittest.TestCase`-based and picked up by discovery:
+No CI pipeline — run the test suite locally before shipping, then every
+ratchet stage in order. Each ratchet compares the repo against its own
+committed baseline and fails on anything new; a detector that could not run
+is **NOT CONFIRMED** (a failure, never a pass or a skip). Detail on what
+each stage checks, its baseline file, and how to shrink it after a fix:
+[`docs/verification-gates.md`](docs/verification-gates.md).
 
 ```powershell
-& .\.venv\Scripts\python.exe -m unittest discover tests -v
+& .\.venv\Scripts\python.exe -m unittest discover tests -v          # most of tests/
+& .\.venv\Scripts\python.exe -m pytest tests/test_gmail_readonly.py -v  # pytest-style, skipped by discover
+& .\.venv\Scripts\python.exe -m scripts.static_ratchet_gate         # unused code, duplication, ruff B/S
+& .\.venv\Scripts\python.exe -m scripts.docs_ratchet_gate           # README size cap, history markers
+& .\.venv\Scripts\python.exe -m scripts.comment_ratchet_gate        # #NNN issue refs in comments
+& .\.venv\Scripts\python.exe -m scripts.structure_ratchet_gate      # file/function/directory size caps
+& .\.venv\Scripts\python.exe -m scripts.instruction_ratchet_gate    # prompt-audit rules on CLAUDE.md/SKILL.md
+& .\.venv\Scripts\python.exe -m scripts.doc_refs_ratchet_gate       # dangling repo paths/links in docs
+& .\.venv\Scripts\python.exe -m scripts.dead_code_ratchet_gate      # unreferenced functions/classes/methods
+& .\.venv\Scripts\python.exe -m scripts.conventions_ratchet_gate    # no-window, logging-not-print, no-drive-path
 ```
-
-`tests/test_gmail_readonly.py` is pytest-style (plain test functions, not
-`unittest.TestCase`) — `unittest discover` silently skips it, no error, no
-warning. Run it separately with pytest, or run the whole suite through pytest
-instead, which understands both styles:
-
-```powershell
-& .\.venv\Scripts\python.exe -m pytest tests/test_gmail_readonly.py -v
-# or, to cover everything (unittest- and pytest-style) in one pass:
-& .\.venv\Scripts\python.exe -m pytest tests -v
-```
-
-The gate's second stage is the static-analysis ratchet. It compares the repo's
-unused imports, unused variables, duplicated blocks and a curated set of ruff bug
-(`B`) and security (`S`) findings (an HTTP call without a timeout, `shell=True`,
-a mutable default argument) with the committed baseline
-(`.static-ratchet-baseline.json`) and fails on any **new** one, so the debt can
-only shrink. It needs Node (`npx` runs `jscpd`; the first run downloads
-it) and `ruff` in the venv (`pip install -r requirements.txt`). Run it through
-the wrapper, which reports a detector that could not run as **NOT CONFIRMED**
-(a failure, never a pass or a skip):
-
-```powershell
-& .\.venv\Scripts\python.exe -m scripts.static_ratchet_gate
-```
-
-After removing baselined debt, shrink the baseline in the same PR with
-`& .\.venv\Scripts\python.exe scripts/static_ratchet.py --update-baseline`.
-`gmail_readonly/` and `google_oauth_common/` are excluded: they are vendored
-copies. See the scaffold's `docs/static-ratchet.md` for the exit codes and keys.
-
-The third stage is the docs ratchet. It fails when `README.md` grows past 40 KiB
-or past its baselined size, or when `README.md` or a `docs/**/*.md` file gains a
-history marker (an issue reference, a dated heading or a changelog heading) above
-its count in `.docs-ratchet-baseline.json`. Docs state what is true and why, in
-the present tense; history lives in git, PRs and issues. The wrapper reports a
-doc it could not read as **NOT CONFIRMED** (a failure, never a pass or a skip):
-
-```powershell
-& .\.venv\Scripts\python.exe -m scripts.docs_ratchet_gate
-```
-
-After rewording a marker away, shrink the baseline in the same PR with
-`& .\.venv\Scripts\python.exe scripts/docs_ratchet.py --update-baseline`. See the
-scaffold's `docs/docs-ratchet.md` for the exit codes and keys.
-
-The fourth stage is the comment ratchet. It counts `#NNN` issue references
-inside product-code comments per file (a comment states the present-tense why;
-history lives in git, PRs and issues) and fails when a file's count rises above
-`.comment-ratchet-baseline.json`. The wrapper reports a file it could not scan
-as **NOT CONFIRMED** (a failure, never a pass or a skip):
-
-```powershell
-& .\.venv\Scripts\python.exe -m scripts.comment_ratchet_gate
-```
-
-After rewording a reference away, shrink the baseline in the same PR with
-`& .\.venv\Scripts\python.exe scripts/comment_ratchet.py --update-baseline`.
-`gmail_readonly/` and `google_oauth_common/` are excluded: they are vendored
-copies. See the scaffold's `docs/comment-ratchet.md` for the exit codes and keys.
-
-The fifth stage is the structure ratchet. It fails when a file passes 1,000 lines,
-a function 100 lines or a directory 40 modules and is new or above its size in
-`.structure-ratchet-baseline.json`, or when the tracked root folders stop matching
-`shape` and `extra_roots` in `.fleet.toml`. The wrapper reports something it could
-not measure as **NOT CONFIRMED** (a failure, never a pass or a skip):
-
-```powershell
-& .\.venv\Scripts\python.exe -m scripts.structure_ratchet_gate
-```
-
-After splitting a baselined file or function, shrink the baseline in the same PR with
-`& .\.venv\Scripts\python.exe scripts/structure_ratchet.py --update-baseline`; only
-`--allow-additions` adds an entry. `gmail_readonly/` and `google_oauth_common/` are
-excluded: they are vendored copies. See the scaffold's `docs/structure-ratchet.md`
-for the exit codes and keys.
-
-The sixth stage is the instruction ratchet. It runs the weekly prompt audit's
-deterministic rules over the instruction files (`CLAUDE.md`, `AGENTS.md`, every
-`.claude/skills/*/SKILL.md` and the docs a skill links to) and fails when a file's
-count for a rule rises above `.instruction-ratchet-baseline.json`, or a file passes
-its size cap. The wrapper reports a file it could not measure as **NOT CONFIRMED**
-(a failure, never a pass or a skip):
-
-```powershell
-& .\.venv\Scripts\python.exe -m scripts.instruction_ratchet_gate
-```
-
-After rewording a hit away, shrink the baseline in the same PR with
-`& .\.venv\Scripts\python.exe scripts/instruction_ratchet.py --update-baseline`; only
-`--allow-additions` adds an entry. See the scaffold's `docs/instruction-ratchet.md`
-for the rules, exit codes and keys.
-
-The seventh stage is the doc-references ratchet. It reads `README.md`, `CLAUDE.md`
-and `docs/**/*.md` and fails when one names a repo path, a `python -m` module or a
-relative link that does not exist and is not recorded in
-`.doc-refs-ratchet-baseline.json`. Loopback ports are not checked, because
-`.fleet.toml` declares no `port`. The wrapper reports a doc or git it could not read
-as **NOT CONFIRMED** (a failure, never a pass or a skip):
-
-```powershell
-& .\.venv\Scripts\python.exe -m scripts.doc_refs_ratchet_gate
-```
-
-Point a reference at what exists now, or drop it; a path a doc names on purpose goes
-in `allow_refs` in the `[doc_refs_ratchet]` table of `.fleet.toml`. After fixing a
-baselined reference, shrink the baseline in the same PR with
-`& .\.venv\Scripts\python.exe scripts/doc_refs_ratchet.py --update-baseline`; only
-`--allow-additions` adds an entry. See the scaffold's `docs/doc-refs-ratchet.md` for
-the exit codes and keys.
-
-The eighth stage is the dead-code ratchet. It fails when a new function, class or
-method appears that nothing in the repo refers to and that is not recorded in
-`.dead-code-ratchet-baseline.json`. Routes, decorated hooks, `__all__` exports and
-tests are never reported, and a name used dynamically stays below the confidence
-floor. The vendored `gmail_readonly/` and `google_oauth_common/` copies are excluded
-from reporting but still read for references: their unused API
-(`GmailMailbox.messages_by_ids`) belongs to the repo they were copied from. The wrapper reports git or a Python file it could not
-read or parse as **NOT CONFIRMED** (a failure, never a pass or a skip):
-
-```powershell
-& .\.venv\Scripts\python.exe -m scripts.dead_code_ratchet_gate
-```
-
-Delete the definition or call it; a real entry point the rules miss goes in
-`entry_decorators` or `allow` in the `[dead_code_ratchet]` table of `.fleet.toml`.
-After deleting a baselined definition, shrink the baseline in the same PR with
-`& .\.venv\Scripts\python.exe scripts/dead_code_ratchet.py --update-baseline`; only
-`--allow-additions` adds an entry. See the scaffold's `docs/dead-code-ratchet.md` for
-the exit codes and keys.
-
-The ninth stage is the conventions ratchet. It holds three fleet conventions as
-`ast` rules and fails when a file's count of hits for one rises above
-`.conventions-ratchet-baseline.json`, which is empty today: `no-window` (a
-`subprocess` spawn without `creationflags=`), `logging-not-print` (a `print` in a
-library package; command-line modules print by design and are skipped) and
-`no-drive-path` (a string literal that starts with a drive letter). The
-`secret-compare` and `git-wrapper` rules stay off because the repo has no helper
-for either. The wrapper reports git or a Python file it could not read or parse as
-**NOT CONFIRMED** (a failure, never a pass or a skip):
-
-```powershell
-& .\.venv\Scripts\python.exe -m scripts.conventions_ratchet_gate
-```
-
-Follow the convention; a call that must break it keeps a reasoned
-`# <rule>-exempt: <reason>` marker on one of its lines. Only
-`& .\.venv\Scripts\python.exe scripts/conventions_ratchet.py --update-baseline --allow-additions`
-adds an entry. See the scaffold's `docs/conventions-ratchet.md` for the exit codes
-and keys.
 
 ## 📝 License and contact
 

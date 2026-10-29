@@ -220,6 +220,169 @@
         "headless": false,
         "dry_run_default": false
     },
+    "instagram": {
+        "feed_url": "https://business.facebook.com/latest/content_calendar?business_id=your_business_id&asset_id=your_asset_id",
+        "login_url": "https://business.facebook.com/",
+        "user_data_dir": "planning/instagram/chrome_user_data",
+        "illustrations_folder": "C:/path/to/illustrations",
+        "editorial_db_id": "your_editorial_database_id_here",
+        "illustrations_db_id": "your_illustrations_database_id_here",
+        "posts_db_id": "your_posts_database_id_here",
+        "editorial_columns": {
+            "title_day": "day",
+            "wip_checkbox": "Work in Progress IG",
+            "date": "date",
+            "illustration_rel": "illustration IG",
+            "article_rel": "article LI",
+            "post_url": "link IG",
+            "caption_text": "text IG",
+            "repost_checkbox": "repost IG",
+            "thread_checkbox": "thread IG",
+            "post_rel": "post IG"
+        },
+        "illustration_columns": {
+            "image_filename": "illustration",
+            "alt_text": "ALT text",
+            "publish_relation": "publishIG",
+            "caption_fallback": "text IG to copy"
+        },
+        "posts_columns": {
+            "illustration_rel": "illustration"
+        },
+        "sunday_template_text": "Ten visuals on personal development, management and leadership.\n\nWhat is your favourite?",
+        "story_hour_local": 10,
+        "story_minute_local": 0,
+        "post_hour_local": 15,
+        "post_minute_local": 0,
+        "schedule_timezone": "Europe/Madrid",
+        "headless": false,
+        "dry_run_default": true
+    },
+    "clone_ig_to_others": {
+        "targets": [
+            {
+                "name": "TW",
+                "wip_checkbox": "Work in Progress TW",
+                "illustration_rel": "illustration TW",
+                "caption_text": "text TW",
+                "repost_checkbox": "repost TW",
+                "set_wip": true
+            },
+            {
+                "name": "TH",
+                "wip_checkbox": "work in progress TH",
+                "illustration_rel": "illustration TH",
+                "caption_text": "text TH",
+                "repost_checkbox": "repost TH",
+                "set_wip": true
+            },
+            {
+                "name": "SB",
+                "wip_checkbox": "work in progress SB",
+                "illustration_rel": "illustration SB",
+                "caption_text": "text SB",
+                "repost_checkbox": "repost SB",
+                "set_wip": false
+            }
+        ]
+    },
+    "twitter": {
+        "feed_url": "https://x.com/home",
+        "login_url": "https://x.com/home",
+        "user_data_dir": "planning/twitter/chrome_user_data",
+        "illustrations_folder": "C:/path/to/illustrations",
+        "editorial_db_id": "your_editorial_database_id_here",
+        "illustrations_db_id": "your_illustrations_database_id_here",
+        "editorial_columns": {
+            "title_day": "day",
+            "wip_checkbox": "Work in Progress TW",
+            "date": "date",
+            "illustration_rel": "illustration TW",
+            "article_rel": "article LI",
+            "post_url": "link TW",
+            "caption_text": "text TW"
+        },
+        "illustration_columns": {
+            "image_filename": "illustration",
+            "alt_text": "ALT text"
+        },
+        "post_hour_local": 15,
+        "post_minute_local": 0,
+        "schedule_timezone": "Europe/Madrid",
+        "headless": false,
+        "dry_run_default": true
+    },
+    "threads": {
+        "feed_url": "https://www.threads.com/@your_threads_handle",
+        "login_url": "https://www.threads.com/@your_threads_handle",
+        "user_data_dir": "planning/threads/chrome_user_data",
+        "illustrations_folder": "C:/path/to/illustrations",
+        "editorial_db_id": "your_editorial_database_id_here",
+        "illustrations_db_id": "your_illustrations_database_id_here",
+        "editorial_columns": {
+            "title_day": "day",
+            "wip_checkbox": "work in progress TH",
+            "date": "date",
+            "illustration_rel": "illustration TH",
+            "article_rel": "article LI",
+            "post_url": "link TH",
+            "caption_text": "text TH"
+        },
+        "illustration_columns": {
+            "image_filename": "illustration",
+            "alt_text": "ALT text"
+        },
+        "post_hour_local": 15,
+        "post_minute_local": 0,
+        "schedule_timezone": "Europe/Madrid",
+        "headless": false,
+        "dry_run_default": true
+    },
+    "linkedin": {
+        "feed_url": "https://www.linkedin.com/feed/",
+        "login_url": "https://www.linkedin.com/login",
+        "user_data_dir": "planning/linkedin/chrome_user_data",
+        "illustrations_folder": "C:/path/to/illustrations",
+        "editorial_db_id": "your_editorial_database_id_here",
+        "illustrations_db_id": "your_illustrations_database_id_here",
+        "posts_db_id": "your_posts_database_id_here",
+        "editorial_columns": {
+            "title_day": "day",
+            "wip_checkbox": "Work in Progress LI",
+            "date": "date",
+            "illustration_rel": "illustration LI",
+            "article_rel": "article LI",
+            "post_rel": "post LI",
+            "newsletter_rel": "newsletter",
+            "post_url": "link LI",
+            "caption_text": "text IG"
+        },
+        "illustration_columns": {
+            "image_filename": "illustration",
+            "alt_text": "ALT text",
+            "publish_relation": "publishIG",
+            "caption_fallback": "text IG to copy"
+        },
+        "posts_columns": {
+            "caption_li": "textLI"
+        },
+        "carousel": {
+            "thread_root": "C:/path/to/carousel/pdfs",
+            "subfolders": [
+                "books",
+                "monographic"
+            ],
+            "fuzzy_min_ratio": 0.6,
+            "doc_title_max_chars": 50
+        },
+        "schedule_hour_local": 6,
+        "schedule_minute_local": 30,
+        "schedule_weekend_hour_local": 8,
+        "schedule_weekend_minute_local": 0,
+        "schedule_timezone": "Europe/Madrid",
+        "headless": false,
+        "dry_run_default": true
+    },
     "videos": {
         "editorial_db_id": "your_editorial_database_id_here",
         "editorial_columns": {

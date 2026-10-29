@@ -141,8 +141,8 @@ RULES: Dict[str, Any] = {
     },
     "feedback_loop": {
         "rule": "after the owner reviews a report (tick = yes, untick = no), ingest the decisions: update sender tiers/weights in "
-                "results/newsletter/triage/overrides.json, log every decision to results/newsletter/triage/feedback.jsonl; "
-                "the weekly Notion re-sync (history.py) refreshes the data priors",
+                "results/newsletter/triage/overrides.json, record every decision in Supabase's triage_decisions table "
+                "(keyed by window + canonical URL); the weekly Notion re-sync (history.py) refreshes the data priors",
         "new_senders": "a sender with no history is flagged NEW in the report, scored on content + criteria only, and listed for a manual tier "
                        "decision (always/usually/rarely/never/review) that persists in results/newsletter/triage/overrides.json",
     },
