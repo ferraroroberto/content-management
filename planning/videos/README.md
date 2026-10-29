@@ -11,7 +11,7 @@ scheduler) via a branch added to `planning/substack/daily_pipeline.py`.
 flowchart TD
     A[editorial DB row<br/>Work in Progress Video ✓] -->|first populated| B[clip relation]
     B --> C[clip page<br/>clipPC + filePC + Text + body]
-    C --> D[load_clip_payload<br/>video=mp4, thumb=png,<br/>caption_short, caption_long]
+    C --> D[load_clip_payload<br/>video=mp4,<br/>caption_short, caption_long]
     D --> E1[LI driver<br/>page body = caption]
     D --> E2[IG driver<br/>Text = caption]
     D --> E3[TW driver<br/>Text = caption]
@@ -60,7 +60,7 @@ flowchart TD
 | `clip_pc` | `clipPC` | Folder path (already terminated with `\`) |
 | `file_pc` | `filePC` | Bare filename without extension |
 
-Video file = `<clipPC><filePC>.mp4`. Thumb = `<clipPC><filePC>.png` (LinkedIn auto-extracts a thumbnail; the .png is logged-and-skipped if missing). If `filePC` contains characters Windows can't store in a filename (`<>:"/\|?*`, e.g. a colon in the clip title) and the verbatim file is missing, the Windows-safe form of the name is used instead (those characters dropped, whitespace collapsed), with an info log line.
+Video file = `<clipPC><filePC>.mp4` (no separate thumbnail — `ClipPayload` carries only the video path; LinkedIn auto-extracts its own thumbnail from the upload). If `filePC` contains characters Windows can't store in a filename (`<>:"/\|?*`, e.g. a colon in the clip title) and the verbatim file is missing, the Windows-safe form of the name is used instead (those characters dropped, whitespace collapsed), with an info log line.
 
 ## Selectors per platform
 
