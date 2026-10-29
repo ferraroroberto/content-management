@@ -1,6 +1,6 @@
 ---
 name: podcast
-description: Drives one podcast episode from its recorded tracks to a reviewed, local episode package with the owner — preflight, episode.json, the pipeline stages, the clip-by-clip review loop, covers and package — then stops at a manual publishing checklist; it never publishes, posts, uploads, schedules or emails. Can work in a separate trial folder so an episode already edited by hand is re-run without touching its package. Use when the owner wants to process a new episode, resume one, re-run the pipeline on an old episode for comparison, or check where an episode stands. E.g. "/podcast <episode folder>", "/podcast <episode folder> --trial", "/podcast status <episode folder>".
+description: Drives one podcast episode from recorded tracks to a clip-by-clip reviewed local package, then stops at a manual publishing checklist; never publishes, posts, uploads, schedules or emails. Supports a separate trial folder to re-run a hand-edited episode. Use to process, resume, re-run or check an episode. E.g. "/podcast <episode folder>", "/podcast <episode folder> --trial", "/podcast status <episode folder>".
 ---
 
 # podcast
