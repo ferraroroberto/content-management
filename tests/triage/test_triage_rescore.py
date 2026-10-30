@@ -7,7 +7,7 @@ falls back to the snapshot; the body never reads e-mail and records ``rescored_f
 takes live runs, replaces with ``--force`` semantics and leaves ``state.json`` alone; the engine label
 the tab shows; and the tab launches the re-score with Jev pre-selected.
 
-Run: & .\\.venv\\Scripts\\python.exe -m unittest tests.test_triage_rescore -v
+Run: & .\\.venv\\Scripts\\python.exe -m unittest tests.triage.test_triage_rescore -v
 """
 
 from __future__ import annotations

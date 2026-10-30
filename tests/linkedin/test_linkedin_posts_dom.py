@@ -12,7 +12,7 @@ and counts, no real post text, hashed class names dropped. The tests drive the
 real ``fetch_posts`` against them in headless Chrome, so a selector that does not
 match the markup fails here exactly as it did in production.
 
-Run: & .\\.venv\\Scripts\\python.exe -m unittest tests.test_linkedin_posts_dom -v
+Run: & .\\.venv\\Scripts\\python.exe -m unittest tests.linkedin.test_linkedin_posts_dom -v
 """
 
 from __future__ import annotations

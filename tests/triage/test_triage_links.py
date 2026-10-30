@@ -1,7 +1,7 @@
 """Pure tests for newsletter.triage.gmail — link extraction, noise rules, local
 redirect decoding, dedupe. No network, no Gmail, no Notion.
 
-Run: `& .\\.venv\\Scripts\\python.exe -m unittest tests.test_triage_links -v`
+Run: `& .\\.venv\\Scripts\\python.exe -m unittest tests.triage.test_triage_links -v`
 """
 
 from __future__ import annotations

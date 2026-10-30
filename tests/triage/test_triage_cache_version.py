@@ -10,7 +10,7 @@ same version → answers reused; the alias repointed to a newer model → nothin
 call goes out and the new answers are stored; an unreadable version → keyed by the alias; the ``--fresh``
 flag (the Triage tab switch is covered in ``test_triage_rescore``).
 
-Run: & .\\.venv\\Scripts\\python.exe -m unittest tests.test_triage_cache_version -v
+Run: & .\\.venv\\Scripts\\python.exe -m unittest tests.triage.test_triage_cache_version -v
 """
 
 from __future__ import annotations

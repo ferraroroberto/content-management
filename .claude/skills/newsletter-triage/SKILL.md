@@ -56,4 +56,4 @@ Then point the owner to the **🧭 triage** tab to review + Apply (or, for a mar
 ## Verification gate (before declaring done)
 
 - Report file exists and every email in the window appears once; shortlist ≤ 8 per topic; stats footer present (`store: run <id>` or `unavailable`).
-- `& .\.venv\Scripts\python.exe -m unittest tests.test_triage_links tests.test_triage_criteria tests.test_triage_engine tests.test_triage_db` green when the engine code was touched.
+- `& .\.venv\Scripts\python.exe -m unittest tests.triage.test_triage_links tests.triage.test_triage_criteria tests.triage.test_triage_engine tests.triage.test_triage_db` green when the engine code was touched.

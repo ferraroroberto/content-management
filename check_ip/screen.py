@@ -524,9 +524,9 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     source = None if args.source in ("any", "all", "") else args.source
     for key, value in stats(conn, source=source).items():
-        # The retired count carries its reason inline: a checkout that has not
-        # run `migrate --retire-similar` shows 0 here, and one that has should
-        # not have to go read the schema to find out what was skipped and why.
+        # The retired count carries its reason inline, so a reader seeing a
+        # non-zero number does not have to go read the schema to find out what
+        # was skipped and why.
         note = f"  ({db.RETIRED_REASON})" if key == "retired" else ""
         print(f"{key:24s} {value}{note}")
     # Surfaced rather than silent: config.json is gitignored, so a checkout

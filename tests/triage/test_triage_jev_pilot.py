@@ -1,7 +1,7 @@
 """Jev pilot measures (#285): owner/model agreement, calibration buckets, reliability, consistency, and the
 `--shadow` compare reading a run's ``<report>.jev-shadow.json``. No network: the store is a fake client.
 
-Run: & .\\.venv\\Scripts\\python.exe -m unittest tests.test_triage_jev_pilot -v
+Run: & .\\.venv\\Scripts\\python.exe -m unittest tests.triage.test_triage_jev_pilot -v
 """
 
 from __future__ import annotations
