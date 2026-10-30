@@ -85,6 +85,7 @@ class GrowthTurnsTheGateRedTests(unittest.TestCase):
         self.repo = Path(tmp.name)
         (self.repo / "scripts").mkdir()
         shutil.copy(gate.SCRIPT, self.repo / "scripts" / "structure_ratchet.py")
+        shutil.copy(gate.SCRIPT.with_name("structure_layout.py"), self.repo / "scripts" / "structure_layout.py")
         (self.repo / "tests").mkdir()
         (self.repo / "tests" / "test_x.py").write_text("def test_x() -> None:\n    pass\n", encoding="utf-8")
         self.giant = self.repo / "tool.py"
