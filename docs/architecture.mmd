@@ -107,7 +107,7 @@ episode / covers / package / score"]
   APP -->|"🧭 triage tab: run (slot 'triage'),\neditable table → Apply, distil, tiers"| NTRIAGEREVIEW
   NTRIAGEREVIEW -->|"handoff.py --open: ticked URLs\nas tabs (then archive, unchanged)"| NBOOT
   NTRIAGEREVIEW -->|"handoff.py --mark-reviewed:\none 'until … > included' comment"| NOTION
-  TRIAGESKILL["newsletter-triage skill\n(.claude/skills/, .agents/skills/)"] --> NTRIAGERUN
+  TRIAGESKILL["newsletter-triage skill\n(.claude/skills/)"] --> NTRIAGERUN
   NARCHIVE -->|"readability-lxml extraction"| NOTION
   NARCHIVE --> LLMHUB[("local LLM hub\n127.0.0.1:8000\ntopic + 3-line summary")]
   NBUILD --> RESULTSNEWS[["results/newsletter/N{NNN}.html"]]
@@ -159,7 +159,7 @@ Google Lens")]
   CILENS --> CIDB
   CILENS -->|"full payload"| CIRAW[["results/check_ip/api_raw/"]]
   CIDB --> CISCREEN --> CHECKIPSKILL["check-ip skill
-(.claude/skills/, .agents/skills/)
+(.claude/skills/)
 browser pass -> proposed verdict only"]
   CHECKIPSKILL -->|"screen_* columns ONLY —
 never the owner's ok/person/chat/report/fixed"| CIDB
@@ -279,6 +279,6 @@ prep / check / preview / render / status"| DEMOPIPE
   demo_mod -.-> shared
   APP -.-> shared
 
-  AUTOHEALSKILL["schedule-autoheal skill\n(.claude/skills/, .agents/skills/)\nprobe live DOM -> selector-only fix ->\ndry-run revalidate -> issue + PR"]
+  AUTOHEALSKILL["schedule-autoheal skill\n(.claude/skills/)\nprobe live DOM -> selector-only fix ->\ndry-run revalidate -> issue + PR"]
   AUTOHEAL --> AUTOHEALSKILL
   AUTOHEALSKILL -.->|"on confident fix"| GH[("GitHub\n(issue + PR)")]

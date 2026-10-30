@@ -25,7 +25,7 @@ Declared tool roots (`extra_roots`):
 - `gmail_readonly/` — portable read-only Gmail OAuth + search component, vendored; excluded from the ratchet.
 - `google_oauth_common/` — shared installed-app OAuth bootstrap for the portable Google packages, vendored; excluded from the ratchet.
 
-Hidden folders: `.streamlit/` (Streamlit config), `.claude/skills/` and `.agents/skills/` (the repo's skills, mirrored for each agent).
+Hidden folders: `.streamlit/` (Streamlit config), `.claude/skills/` (the repo's skills; Codex and Pi reach them through per-skill discovery links that fleet-config generates and git ignores, so a new skill needs no second copy).
 
 ## Root files
 

@@ -51,7 +51,6 @@ import argparse
 import logging
 import sys
 from dataclasses import dataclass
-from datetime import date
 from pathlib import Path
 from typing import Optional
 
@@ -67,36 +66,15 @@ from reporting.notion.notion_update import (  # noqa: E402
     format_database_id,
     prepare_notion_update,
 )
-from planning._dates import date_to_day_title  # noqa: E402
 from planning._scheduler_main import (  # noqa: E402
     build_scheduler_parser,
     notion_or_none,
     resolve_scope,
 )
-from planning._wip_rows import iter_wip_pages  # noqa: E402
+from planning._wip_rows import IgRow, fetch_wip_ig_rows  # noqa: E402
 from planning._captions import canonical_caption_from_publish_ig  # noqa: E402
 
 logger = logging.getLogger("instagram_clone")
-
-
-# ---------- Row model ----------
-
-@dataclass
-class IgRow:
-    """Snapshot of one editorial row's IG side, as read from Notion."""
-
-    page_id: str
-    day: date
-    illustration_ig_ids: list[str]
-    text_ig: str
-    repost_ig: bool
-    thread_ig: bool
-    post_ig_ids: list[str]
-    raw_properties: dict  # for force-check on target columns
-
-    @property
-    def day_title(self) -> str:
-        return date_to_day_title(self.day)
 
 
 @dataclass
@@ -112,45 +90,6 @@ class CloneSource:
     caption_text: str
     ig_row_illustration_id: Optional[str] = None
     ig_row_text: Optional[str] = None
-
-
-# ---------- Notion query ----------
-
-def fetch_wip_ig_rows(notion, db_id: str, ed_cols: dict, days: list[date]) -> list[IgRow]:
-    """Fetch editorial rows where ``Work in Progress IG`` is checked and the
-    row's title (day) is one of `days`."""
-    wip_col = ed_cols["wip_checkbox"]
-    title_col = ed_cols["title_day"]
-    illust_col = ed_cols["illustration_rel"]
-    text_col = ed_cols["caption_text"]
-    repost_col = ed_cols["repost_checkbox"]
-    thread_col = ed_cols["thread_checkbox"]
-    post_col = ed_cols["post_rel"]
-
-    rows: list[IgRow] = []
-    for r, d in iter_wip_pages(
-        notion, db_id, wip_col=wip_col, title_col=title_col, days=days, logger=logger,
-    ):
-        props = r.get("properties", {})
-        illust_rels = props.get(illust_col, {}).get("relation", []) or []
-        post_rels = props.get(post_col, {}).get("relation", []) or []
-        text_rt = props.get(text_col, {}).get("rich_text", []) or []
-        text_val = "".join(seg.get("plain_text", "") for seg in text_rt).strip()
-        repost = bool(props.get(repost_col, {}).get("checkbox", False))
-        thread = bool(props.get(thread_col, {}).get("checkbox", False))
-        rows.append(
-            IgRow(
-                page_id=r["id"],
-                day=d,
-                illustration_ig_ids=[rel["id"] for rel in illust_rels],
-                text_ig=text_val,
-                repost_ig=repost,
-                thread_ig=thread,
-                post_ig_ids=[rel["id"] for rel in post_rels],
-                raw_properties=props,
-            )
-        )
-    return rows
 
 
 # ---------- Source resolution ----------
@@ -366,7 +305,9 @@ def main() -> int:
         return 3
 
     db_id = format_database_id(ig_cfg["editorial_db_id"])
-    rows = fetch_wip_ig_rows(notion, db_id, ig_cfg["editorial_columns"], target_days)
+    rows = fetch_wip_ig_rows(
+        notion, db_id, ig_cfg["editorial_columns"], target_days, logger=logger,
+    )
     if not rows:
         logger.warning("⚠️ No WIP-IG rows in target range. Nothing to do.")
         return 0

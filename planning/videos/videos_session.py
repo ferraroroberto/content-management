@@ -44,6 +44,7 @@ from config.no_window import NO_WINDOW  # noqa: E402
 from planning._session_base import configure_logger as _configure_logger  # noqa: E402
 from planning._session_base import LoginRequiredError, load_config_block, load_notion_token  # noqa: E402
 from podcast.media import ffprobe_json, run_ffmpeg  # noqa: E402
+from reporting.notion._client import page_title  # noqa: E402
 from reporting.notion.editorial import (  # noqa: E402
     get_field,
     get_page_body_text,
@@ -143,14 +144,6 @@ def _clip_string_property(clip_page: dict, clip_cols: dict, role: str) -> str:
     returns '' when the property is empty.
     """
     return str(get_field(clip_page, role, clip_cols) or "").strip()
-
-
-def _clip_page_title(clip_page: dict) -> str:
-    for prop in (clip_page.get("properties") or {}).values():
-        if prop.get("type") == "title":
-            segs = prop.get("title", []) or []
-            return "".join(s.get("plain_text", "") for s in segs).strip()
-    return ""
 
 
 # Win32 file-attribute bits that mark an un-hydrated OneDrive "Files On-Demand"
@@ -538,7 +531,7 @@ def load_clip_payload(notion, editorial_row: dict, video_cols: dict, clip_cols: 
         raise RuntimeError("No ``clip <P>(v)`` relation populated on editorial row.")
 
     clip_page = retrieve_page(notion, rel_id)
-    title = _clip_page_title(clip_page)
+    title = page_title(clip_page)
 
     folder = _clip_string_property(clip_page, clip_cols, "clip_pc")
     fname = _clip_string_property(clip_page, clip_cols, "file_pc")

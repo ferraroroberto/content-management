@@ -47,6 +47,7 @@ from typing import Optional
 from notion_client.errors import HTTPResponseError, RequestTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from reporting.notion._client import page_title  # noqa: E402
 from reporting.notion.editorial import (  # noqa: E402
     retrieve_page,
 )
@@ -180,15 +181,6 @@ def first_code_block_text(notion, page_id: str) -> str:
     return ""
 
 
-def post_page_title(post_page: dict) -> str:
-    """Return the title text of a posts-DB page (first title property)."""
-    for prop in (post_page.get("properties") or {}).values():
-        if prop.get("type") == "title":
-            segs = prop.get("title", []) or []
-            return "".join(s.get("plain_text", "") for s in segs).strip()
-    return ""
-
-
 def load_post_payload(notion, post_page_id: str, posts_columns: dict) -> PostPayload:
     """Return the title + LI long caption for a posts-DB page.
 
@@ -205,7 +197,7 @@ def load_post_payload(notion, post_page_id: str, posts_columns: dict) -> PostPay
     driver requires a non-empty caption.
     """
     page = retrieve_page(notion, post_page_id)
-    title = post_page_title(page) or post_page_id
+    title = page_title(page) or post_page_id
 
     caption_li_col = posts_columns.get("caption_li") or "textLI"
     cached = _read_text_property(page, caption_li_col)
@@ -266,5 +258,4 @@ __all__ = [
     "assert_caption_within_linkedin_limit",
     "first_code_block_text",
     "load_post_payload",
-    "post_page_title",
 ]

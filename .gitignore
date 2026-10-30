@@ -56,6 +56,9 @@ supabase/.branches/_current_branch
 .claude/*
 !.claude/skills/
 
+# generated per-skill discovery links for Codex/Pi (fleet-config installer); never tracked
+.agents/
+
 # temp files
 /tmp
 

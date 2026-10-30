@@ -92,7 +92,7 @@ class InstagramUntickTests(unittest.TestCase):
             "load_instagram_config": lambda: CFG,
             "load_notion_token": lambda: "tok",
             "notion_or_none": lambda *a, **k: object(),
-            "fetch_wip_ig_rows": lambda *a: [row],
+            "fetch_wip_ig_rows": lambda *a, **k: [row],
             "resolve_story_payload": lambda *a: payload,
             "resolve_post_payload": lambda *a: payload,
             "InstagramSession": FakeSession,

@@ -25,7 +25,8 @@ from typing import Any, Callable, Optional
 
 from playwright.sync_api import TimeoutError as PWTimeoutError
 
-from planning._dates import parse_single_date, parse_week_start
+from config.dates import parse_day
+from planning._dates import parse_week_start
 from planning._failure import attempt_row
 from planning._session_base import LoginRequiredError
 from reporting.notion.editorial import init_notion_client, set_field
@@ -98,7 +99,7 @@ def resolve_scope(
         target_days = None
         log.info("🎯 All-WIP mode: ignoring date filter, scheduling every %s row.", wip_label)
     elif args.date:
-        d = parse_single_date(args.date)
+        d = parse_day(args.date)
         target_days = [d]
         log.info("🎯 Single-day mode: %s", d.isoformat())
     else:

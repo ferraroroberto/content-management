@@ -27,16 +27,7 @@ from reporting.notion.notion_update import (
     init_notion_client,
     parse_date,
 )
-from reporting.notion._client import load_editorial_notion
-
-
-def extract_title(page: dict) -> str:
-    """Return the title text of a Notion page (the `day` column)."""
-    for prop in page.get("properties", {}).values():
-        if prop.get("type") == "title":
-            arr = prop.get("title", [])
-            return arr[0].get("plain_text", "") if arr else ""
-    return ""
+from reporting.notion._client import load_editorial_notion, page_title
 
 
 def extract_next_relation_id(page: dict) -> Optional[str]:
@@ -84,7 +75,7 @@ def main() -> int:
         logger.error(f"❌ No row found for today ({today_iso}). Nothing to do.")
         return 2
     today_page_id = today_row["id"]
-    today_title = extract_title(today_row)
+    today_title = page_title(today_row)
     current_next_id = extract_next_relation_id(today_row)
     logger.info(f"📄 today's row       : page_id={today_page_id}  title='{today_title}'")
     logger.info(f"🔗 today's 'next'    : {current_next_id or '(empty)'}")
@@ -96,7 +87,7 @@ def main() -> int:
         )
         return 0
     tomorrow_page_id = tomorrow_row["id"]
-    tomorrow_title = extract_title(tomorrow_row)
+    tomorrow_title = page_title(tomorrow_row)
     logger.info(f"📄 tomorrow's row    : page_id={tomorrow_page_id}  title='{tomorrow_title}'")
 
     logger.info("=" * 60)

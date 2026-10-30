@@ -39,6 +39,25 @@ class ScheduleRow:
 
 
 @dataclass
+class IgRow:
+    """Snapshot of one editorial row's IG side, as read from Notion."""
+
+    page_id: str
+    day: date
+    illustration_ig_ids: list[str]
+    text_ig: str
+    repost_ig: bool
+    thread_ig: bool
+    post_ig_ids: list[str]
+    existing_post_url: Optional[str]
+    raw_properties: dict  # for force-check on target columns
+
+    @property
+    def day_title(self) -> str:
+        return date_to_day_title(self.day)
+
+
+@dataclass
 class PostPayload:
     image_path: Path
     caption: str
@@ -146,6 +165,59 @@ def fetch_wip_rows(
                 illustration_ids=[rel["id"] for rel in illust_rels],
                 text=text_val,
                 existing_post_url=existing_url,
+            )
+        )
+    rows.sort(key=lambda r: r.day)
+    return rows
+
+
+def fetch_wip_ig_rows(
+    notion,
+    db_id: str,
+    ed_cols: dict,
+    days: Optional[list[date]],
+    *,
+    logger: logging.Logger,
+) -> list[IgRow]:
+    """Fetch WIP-IG rows for the Instagram scheduler and the IG clone step.
+
+    If ``days`` is None, returns every WIP-IG row (``--all-wip`` mode);
+    otherwise filters by title-equals per day. Both callers read the same IG
+    columns, so a renamed Notion column is fixed here once.
+    """
+    illust_col = ed_cols["illustration_rel"]
+    text_col = ed_cols["caption_text"]
+    repost_col = ed_cols["repost_checkbox"]
+    thread_col = ed_cols["thread_checkbox"]
+    post_col = ed_cols["post_rel"]
+    post_url_col = ed_cols["post_url"]
+
+    rows: list[IgRow] = []
+    for r, row_day in iter_wip_pages(
+        notion, db_id,
+        wip_col=ed_cols["wip_checkbox"],
+        title_col=ed_cols["title_day"],
+        days=days,
+        logger=logger,
+    ):
+        props = r.get("properties", {})
+        illust_rels = props.get(illust_col, {}).get("relation", []) or []
+        post_rels = props.get(post_col, {}).get("relation", []) or []
+        text_rt = props.get(text_col, {}).get("rich_text", []) or []
+        text_val = "".join(seg.get("plain_text", "") for seg in text_rt).strip()
+        url_obj = props.get(post_url_col, {})
+        existing_url = url_obj.get("url") if url_obj.get("type") == "url" else None
+        rows.append(
+            IgRow(
+                page_id=r["id"],
+                day=row_day,
+                illustration_ig_ids=[rel["id"] for rel in illust_rels],
+                text_ig=text_val,
+                repost_ig=bool(props.get(repost_col, {}).get("checkbox", False)),
+                thread_ig=bool(props.get(thread_col, {}).get("checkbox", False)),
+                post_ig_ids=[rel["id"] for rel in post_rels],
+                existing_post_url=existing_url,
+                raw_properties=props,
             )
         )
     rows.sort(key=lambda r: r.day)

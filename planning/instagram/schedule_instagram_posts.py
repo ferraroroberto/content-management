@@ -33,7 +33,6 @@ import sys
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import Optional
 
 from playwright.sync_api import Page, TimeoutError as PWTimeoutError
 
@@ -61,7 +60,6 @@ from planning.instagram.instagram_session import (  # noqa: E402
 )
 from reporting.notion.editorial import retrieve_page  # noqa: E402
 from reporting.notion.notion_update import format_database_id  # noqa: E402
-from planning._dates import date_to_day_title  # noqa: E402
 from planning._scheduler_main import (  # noqa: E402
     build_scheduler_parser,
     drop_already_scheduled,
@@ -71,28 +69,12 @@ from planning._scheduler_main import (  # noqa: E402
 )
 from planning._wip_rows import (  # noqa: E402
     illustration_filename,
-    iter_wip_pages,
+    IgRow,
+    fetch_wip_ig_rows,
     resolve_image_path,
 )
 
 logger = logging.getLogger("instagram_schedule")
-
-
-# ---------- Row model ----------
-
-@dataclass
-class ScheduleRow:
-    page_id: str
-    day: date
-    illustration_ig_ids: list[str]
-    text_ig: str
-    thread_ig: bool
-    post_ig_ids: list[str]
-    existing_post_url: Optional[str]
-
-    @property
-    def day_title(self) -> str:
-        return date_to_day_title(self.day)
 
 
 @dataclass
@@ -105,47 +87,7 @@ class PostPayload:
 
 # ---------- Notion query / payload resolution ----------
 
-def fetch_wip_ig_rows(notion, db_id: str, ed_cols: dict, days: Optional[list[date]]) -> list[ScheduleRow]:
-    """Fetch WIP-IG rows. If ``days`` is None, returns every WIP-IG row
-    (used by ``--all-wip`` mode); otherwise filters by title-equals per day."""
-    illust_col = ed_cols["illustration_rel"]
-    text_col = ed_cols["caption_text"]
-    thread_col = ed_cols["thread_checkbox"]
-    post_col = ed_cols["post_rel"]
-    post_url_col = ed_cols["post_url"]
-
-    rows: list[ScheduleRow] = []
-    for r, row_day in iter_wip_pages(
-        notion, db_id,
-        wip_col=ed_cols["wip_checkbox"],
-        title_col=ed_cols["title_day"],
-        days=days,
-        logger=logger,
-    ):
-        props = r.get("properties", {})
-        illust_rels = props.get(illust_col, {}).get("relation", []) or []
-        post_rels = props.get(post_col, {}).get("relation", []) or []
-        text_rt = props.get(text_col, {}).get("rich_text", []) or []
-        text_val = "".join(seg.get("plain_text", "") for seg in text_rt).strip()
-        thread = bool(props.get(thread_col, {}).get("checkbox", False))
-        url_obj = props.get(post_url_col, {})
-        existing_url = url_obj.get("url") if url_obj.get("type") == "url" else None
-        rows.append(
-            ScheduleRow(
-                page_id=r["id"],
-                day=row_day,
-                illustration_ig_ids=[rel["id"] for rel in illust_rels],
-                text_ig=text_val,
-                thread_ig=thread,
-                post_ig_ids=[rel["id"] for rel in post_rels],
-                existing_post_url=existing_url,
-            )
-        )
-    rows.sort(key=lambda r: r.day)
-    return rows
-
-
-def resolve_post_payload(notion, cfg: dict, row: ScheduleRow) -> PostPayload:
+def resolve_post_payload(notion, cfg: dict, row: IgRow) -> PostPayload:
     """Build the (image paths, caption) for the day's 15:00 feed post."""
     illust_cols = cfg["illustration_columns"]
     posts_cols = cfg["posts_columns"]
@@ -196,7 +138,7 @@ def resolve_post_payload(notion, cfg: dict, row: ScheduleRow) -> PostPayload:
     )
 
 
-def resolve_story_payload(notion, cfg: dict, row: ScheduleRow) -> PostPayload:
+def resolve_story_payload(notion, cfg: dict, row: IgRow) -> PostPayload:
     """Story is always 1 image — the day's first illustration (no caption)."""
     illust_cols = cfg["illustration_columns"]
     folder = cfg["illustrations_folder"]
@@ -479,7 +421,7 @@ def _set_all_visible_date_time(
 def schedule_story(
     session: InstagramSession,
     cfg: dict,
-    row: ScheduleRow,
+    row: IgRow,
     story: PostPayload,
     *,
     dry_run: bool,
@@ -524,7 +466,7 @@ def schedule_story(
 def schedule_post(
     session: InstagramSession,
     cfg: dict,
-    row: ScheduleRow,
+    row: IgRow,
     post: PostPayload,
     *,
     dry_run: bool,
@@ -581,10 +523,10 @@ def parse_args() -> argparse.Namespace:
     ).parse_args()
 
 
-def _resolve_plans(notion, cfg: dict, rows: list[ScheduleRow]
-                   ) -> tuple[list[tuple[ScheduleRow, PostPayload, PostPayload]], list[dict]]:
+def _resolve_plans(notion, cfg: dict, rows: list[IgRow]
+                   ) -> tuple[list[tuple[IgRow, PostPayload, PostPayload]], list[dict]]:
     """Each row with its story and post payloads, plus a FAIL result for every row that did not resolve."""
-    plans: list[tuple[ScheduleRow, PostPayload, PostPayload]] = []
+    plans: list[tuple[IgRow, PostPayload, PostPayload]] = []
     results: list[dict] = []
     for row in rows:
         try:
@@ -618,7 +560,7 @@ def main() -> tuple[int, list[dict]]:
         return 3, []
 
     db_id = format_database_id(cfg["editorial_db_id"])
-    rows = fetch_wip_ig_rows(notion, db_id, cfg["editorial_columns"], target_days)
+    rows = fetch_wip_ig_rows(notion, db_id, cfg["editorial_columns"], target_days, logger=logger)
     if not rows:
         logger.warning("⚠️ No WIP-IG rows in target range. Nothing to do.")
         return 0, []

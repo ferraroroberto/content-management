@@ -9,6 +9,7 @@ from psycopg2.extensions import connection as PgConnection
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from config.dates import parse_day
 from config.loader import load_full_config
 from config.logger_config import setup_logger
 from reporting.process.supabase_uploader import get_db_connection
@@ -39,10 +40,7 @@ def configure_logger(debug_mode: bool = False) -> logging.Logger:
 def parse_date(date_str: str) -> datetime:
     """Parse date string in either YYYY-MM-DD or YYYYMMDD format."""
     try:
-        if '-' in date_str:
-            return datetime.strptime(date_str, "%Y-%m-%d")
-        else:
-            return datetime.strptime(date_str, "%Y%m%d")
+        return datetime.combine(parse_day(date_str), datetime.min.time())
     except ValueError as e:
         logger.error(f"❌ Error parsing date '{date_str}': {e}")
         raise
