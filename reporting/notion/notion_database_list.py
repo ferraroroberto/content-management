@@ -4,7 +4,7 @@ import sys
 import argparse
 import logging
 from pathlib import Path
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Optional, Tuple
 import requests
 from dotenv import load_dotenv
 
@@ -27,14 +27,14 @@ if not logger.handlers:
 class NotionDatabaseLister:
     """List all Notion databases and save to JSON file."""
     
-    def __init__(self, config_path: str = None):
+    def __init__(self, config_path: Optional[str] = None):
         """Initialize with configuration."""
         self.config = load_project_config(config_path, logger=logger)
         self.notion_token = self.config["notion"]["api_token"]
         self.headers = notion_rest_headers(self.notion_token)
 
 
-    def _search_databases(self, start_cursor: str = None) -> Dict[str, Any]:
+    def _search_databases(self, start_cursor: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Search for all databases using Notion API."""
         url = "https://api.notion.com/v1/search"
         
