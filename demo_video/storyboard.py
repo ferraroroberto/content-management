@@ -286,15 +286,9 @@ class Take(_Model):
     beats: list[Beat] = Field(min_length=1)
 
 
-class Viewport(_Model):
-    width: int = 1920
-    height: int = 1080
-
-
 class Recording(_Model):
     driver: str  # a throwaway driver file in the demo folder (see docs/demo-video-driver-playbook.md)
     driver_args: dict[str, Any] = Field(default_factory=dict)
-    viewport: Viewport = Field(default_factory=Viewport)
     senders: Text = "@people"  # who posts the chat messages
     sender_step: int = 7  # the n-th message overall comes from senders[(n × step) % len]
     headless: bool = True
