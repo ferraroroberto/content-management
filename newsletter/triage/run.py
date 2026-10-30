@@ -142,7 +142,7 @@ def load_notion_urls(*, ttl_hours: int = 24, refresh: bool = False,
         client = notion_io.init_client(cfg["notion"]["api_token"])
         created: Dict[str, str] = {}
         titles: Dict[str, List[str]] = {}
-        for page in notion_io._iter_database(client, na["articles_db_id"]):  # noqa: SLF001
+        for page in notion_io.iter_database(client, na["articles_db_id"]):
             link = (page["properties"].get("link", {}).get("url") or "").strip()
             if not link:
                 continue
@@ -150,7 +150,7 @@ def load_notion_urls(*, ttl_hours: int = 24, refresh: bool = False,
             day = (page.get("created_time") or "")[:10]
             if c not in created or day < created[c]:
                 created[c] = day
-            t = notion_io._read_title(page, "article")  # noqa: SLF001
+            t = notion_io.read_title(page, "article")
             if t:
                 titles[_norm(t)] = [c, day]
         data = {"fetched_at": time.time(), "created": created, "titles": titles}
@@ -375,7 +375,7 @@ def _start_shadow(engine: str, items: List[Dict[str, str]], criteria: Dict[str, 
                              workers=int(cfg.get("jev_workers", jx.DEFAULT_WORKERS)),
                              budget_s=float(cfg.get("jev_budget_s", jx.DEFAULT_BUDGET_S)))
         return sc.LegacyShadow(items, criteria, base_url=base_url, model=model,
-                               workers=int(cfg.get("llm_workers", 3)) + 1, cache=cache,
+                               workers=sc.stage_a_workers(cfg), cache=cache,
                                budget_s=float(cfg.get("legacy_budget_s", sc.DEFAULT_LEGACY_BUDGET_S)))
     except Exception as err:  # noqa: BLE001 — the shadow must never fail the deciding run
         logger.warning("⚠️ %s shadow not started: %s", engine, type(err).__name__)
@@ -482,7 +482,7 @@ def _stage_a(stage_a: List[rk.Candidate], *, use_llm: bool, engine: str, cfg: Di
             shadow = (_start_shadow("jev", items, criteria, base_url=base_url, model=model, cfg=cfg, cache=llm_cache)
                       if engine == "both" else None)
             metas = sc.score_metadata(items, criteria, base_url=base_url, model=model, batch=sc.STAGE_A_BATCH,
-                                      workers=int(cfg.get("llm_workers", 3)) + 1, cache=llm_cache)
+                                      workers=sc.stage_a_workers(cfg), cache=llm_cache)
             out.llm_calls += (llm_cache.misses + sc.STAGE_A_BATCH - 1) // sc.STAGE_A_BATCH
             if engine == "both":
                 stats["stage_a_engine"] = engine
@@ -552,7 +552,7 @@ def _stage_b(stage_a: List[rk.Candidate], *, use_llm: bool, use_fetch: bool, top
                 c.content = sc.score_content(title=c.title or c.label, author=c.author or "", sender=c.sender_name,
                                              domain=c.domain, excerpt=f.excerpt if f else "", criteria=criteria,
                                              base_url=base_url, model=model, cache=llm_cache)
-            with ThreadPoolExecutor(max_workers=int(cfg.get("llm_workers", 3))) as pool:
+            with ThreadPoolExecutor(max_workers=int(cfg.get("llm_workers", sc.DEFAULT_LLM_WORKERS))) as pool:
                 list(pool.map(work, todo))
             llm_cache.flush()
             llm_calls += len(todo)

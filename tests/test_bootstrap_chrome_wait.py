@@ -56,14 +56,16 @@ class WaitForProfileFreeTests(unittest.TestCase):
 
 class EnsureChromeReturnCodesTests(unittest.TestCase):
     def test_debug_port_already_up_is_an_immediate_success(self):
-        with mock.patch.object(bc, "debug_port_up", return_value=True), \
+        with mock.patch.object(bc, "configured_debug_port", return_value=9222), \
+             mock.patch.object(bc, "debug_port_up", return_value=True), \
              mock.patch.object(bc, "_wait_for_profile_free") as m_wait:
             rc = bc.ensure_chrome()
         self.assertEqual(rc, 0)
         m_wait.assert_not_called()
 
     def test_wedged_holder_after_full_schedule_returns_4_without_launching(self):
-        with mock.patch.object(bc, "debug_port_up", return_value=False), \
+        with mock.patch.object(bc, "configured_debug_port", return_value=9222), \
+             mock.patch.object(bc, "debug_port_up", return_value=False), \
              mock.patch.object(bc, "_wait_for_profile_free", return_value=[111]), \
              mock.patch.object(bc, "_find_chrome_exe") as m_find:
             rc = bc.ensure_chrome()

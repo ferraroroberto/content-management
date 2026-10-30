@@ -62,7 +62,7 @@ def query_database(
     and ``normalize_url.NotionURLNormalizer`` — none of which retried on a
     transient Notion error, unlike the archive path below.
     """
-    return list(_iter_database(client, db_id, query_filter=query_filter, sorts=sorts))
+    return list(iter_database(client, db_id, query_filter=query_filter, sorts=sorts))
 
 
 def update_page(client: Client, page_id: str, properties: Dict[str, Any]) -> Dict[str, Any]:
@@ -77,7 +77,7 @@ def update_page(client: Client, page_id: str, properties: Dict[str, Any]) -> Dic
 # property readers
 
 
-def _read_title(page: Dict[str, Any], prop_name: str) -> str:
+def read_title(page: Dict[str, Any], prop_name: str) -> str:
     prop = page.get("properties", {}).get(prop_name, {})
     arr = prop.get("title", [])
     return arr[0].get("plain_text", "").strip() if arr else ""
@@ -94,7 +94,7 @@ def _read_select(page: Dict[str, Any], prop_name: str) -> Optional[str]:
     return sel.get("name") if sel else None
 
 
-def _read_rollup_number(page: Dict[str, Any], prop_name: str) -> Optional[float]:
+def read_rollup_number(page: Dict[str, Any], prop_name: str) -> Optional[float]:
     prop = page.get("properties", {}).get(prop_name, {})
     if prop.get("type") == "rollup":
         rollup = prop.get("rollup", {})
@@ -113,7 +113,7 @@ def _read_rollup_number(page: Dict[str, Any], prop_name: str) -> Optional[float]
 # pagination
 
 
-def _iter_database(client: Client, db_id: str, *, page_size: int = 100,
+def iter_database(client: Client, db_id: str, *, page_size: int = 100,
                    query_filter: Optional[Dict[str, Any]] = None,
                    sorts: Optional[List[Dict[str, Any]]] = None) -> Iterator[Dict[str, Any]]:
     cursor: Optional[str] = None
@@ -143,8 +143,8 @@ def hydrate_cache(client: Client, *, articles_db_id: str, connections_db_id: str
     state = CacheState(fuzzy_threshold=fuzzy_threshold)
 
     logger.info("⏬ Loading connections from Notion…")
-    for page in _iter_database(client, connections_db_id):
-        name = _read_title(page, "name")
+    for page in iter_database(client, connections_db_id):
+        name = read_title(page, "name")
         if not name:
             continue
         topic = _read_select(page, "topic")
@@ -153,7 +153,7 @@ def hydrate_cache(client: Client, *, articles_db_id: str, connections_db_id: str
 
     logger.info("⏬ Loading existing article URLs from Notion…")
     count = 0
-    for page in _iter_database(client, articles_db_id):
+    for page in iter_database(client, articles_db_id):
         link = _read_url(page, "link")
         if link:
             state.article_urls.add(canonicalize_url(link))
@@ -178,10 +178,10 @@ def pick_newsletter(
     today = today or date.today()
     filt = {"property": "Date", "date": {"on_or_after": today.isoformat()}}
     sorts = [{"property": "Date", "direction": "ascending"}]
-    for row in _iter_database(client, newsletter_db_id, page_size=50,
+    for row in iter_database(client, newsletter_db_id, page_size=50,
                               query_filter=filt, sorts=sorts):
-        count = _read_rollup_number(row, rollup_field) or 0
-        number = _read_title(row, "number")
+        count = read_rollup_number(row, rollup_field) or 0
+        number = read_title(row, "number")
         logger.debug("📰 Newsletter candidate %s: %s=%s", number, rollup_field, count)
         if count < category_cap:
             return row
@@ -198,7 +198,7 @@ def iter_newsletter_editions(
     edition that exists *anywhere*, not just the newest-dated one.
     """
     sorts = [{"property": "Date", "direction": "ascending"}]
-    return _iter_database(client, newsletter_db_id, sorts=sorts)
+    return iter_database(client, newsletter_db_id, sorts=sorts)
 
 
 # ---------------------------------------------------------------------------

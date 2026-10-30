@@ -66,6 +66,9 @@ _CORE = re.compile(r"[^\w']+")
 MIN_TURN_S = 1.0        # a shorter turn of the other speaker ("yeah", a laugh) does not move the camera
 MIN_SHOT_S = 2.0        # a jump cut changes framing only after this long on one shot
 MAX_SHOT_S = 6.0        # one framing at most this long
+SPLIT_LOOKBACK_S = 1.5  # a forced split at MAX_SHOT_S may land on a word start up to this far before the cut
+SPLIT_MIN_TAIL_S = 1.0  # ... and must leave at least this much of the piece after it, so no sliver shot is left
+SPEECH_AMP_RATIO = 30.0 # linear rms ratio (~30 dB, like SILENCE_DB): a frame below the track's loud (95th percentile) level / this is not speech
 ZOOMS = (1.0, 1.18, 1.08)
 
 
@@ -251,7 +254,8 @@ def speaker_switches(rms: dict[str, np.ndarray], start: float, first: str) -> li
     if not n:
         return [(start, first)]
     g, h = rms["guest"][:n], rms["host"][:n]
-    speaking_g, speaking_h = g > np.percentile(g, 95) / 30, h > np.percentile(h, 95) / 30
+    speaking_g = g > np.percentile(g, 95) / SPEECH_AMP_RATIO
+    speaking_h = h > np.percentile(h, 95) / SPEECH_AMP_RATIO
     label = np.where((g > BLEED_RATIO * h) & speaking_g, 1, np.where((h > BLEED_RATIO * g) & speaking_h, 2, 0))
     runs: list[list[int]] = []  # [speaker code, first frame, last frame]
     for i in np.flatnonzero(label):
@@ -308,7 +312,7 @@ def shots(keep: list[tuple[float, float]], switches: list[tuple[float, str]],
                 reframe(spk)  # a jump cut: hide it with a new framing
             while stop - t + shown > MAX_SHOT_S:
                 due = t + MAX_SHOT_S - shown
-                split = [x for x in word_starts if due - 1.5 <= x <= due and t < x < stop - 1.0]
+                split = [x for x in word_starts if due - SPLIT_LOOKBACK_S <= x <= due and t < x < stop - SPLIT_MIN_TAIL_S]
                 if not split:
                     break
                 emit(t, split[-1], spk)
