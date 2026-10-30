@@ -94,7 +94,7 @@ class HandoffTests(unittest.TestCase):
         browser.contexts = [ctx]
         fake_tabs = types.SimpleNamespace(connect=lambda port: browser, list_tabs=lambda b: [tab],
                                           close_browser=lambda b: None)
-        fake_boot = types.SimpleNamespace(ensure_chrome=lambda: 0)
+        fake_boot = types.SimpleNamespace(ensure_chrome=lambda: 0, configured_debug_port=lambda: 9222)
         # ``open_in_chrome`` does ``from newsletter import chrome_tabs``, which
         # reads the package *attribute* whenever the real submodule is already
         # imported (as it is once any test imports newsletter.pipeline) — so the

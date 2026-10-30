@@ -1,6 +1,6 @@
 """CDP attach helpers for the user's real Chrome.
 
-Chrome must be launched with ``--remote-debugging-port=9222`` first — see
+Chrome must be launched on the configured ``newsletter_archive.chrome_debug_port`` first — see
 ``bootstrap_chrome.bat``. We attach over CDP (no fresh browser spawn) so the
 script operates on the actual tabs the user opened.
 """
@@ -20,7 +20,7 @@ class TabRef:
     title: str
 
 
-def connect(debug_port: int = 9222) -> Browser:
+def connect(debug_port: int) -> Browser:
     pw = sync_playwright().start()
     browser = pw.chromium.connect_over_cdp(f"http://127.0.0.1:{debug_port}")
     browser._pw_handle = pw  # type: ignore[attr-defined]

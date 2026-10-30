@@ -95,12 +95,14 @@ def plan_open(urls: Sequence[str], already_open: Sequence[str]) -> Tuple[List[st
     return to_open, skipped
 
 
-def open_in_chrome(urls: Sequence[str], *, debug_port: int = 9222, dry_run: bool = False) -> Dict[str, Any]:
+def open_in_chrome(urls: Sequence[str], *, debug_port: Optional[int] = None, dry_run: bool = False) -> Dict[str, Any]:
     """Ensure the newsletter Chrome, open one tab per URL not already open. Returns counts + the skipped list.
     ``dry_run`` does everything except opening: ensure Chrome, connect, list tabs, print the plan."""
     from newsletter import chrome_tabs  # noqa: PLC0415 — Playwright, imported only when opening
-    from newsletter.bootstrap_chrome import ensure_chrome  # noqa: PLC0415
+    from newsletter.bootstrap_chrome import configured_debug_port, ensure_chrome  # noqa: PLC0415
 
+    if debug_port is None:
+        debug_port = configured_debug_port()
     rc = ensure_chrome()
     if rc != 0:
         raise RuntimeError(f"Chrome on :{debug_port} not reachable (bootstrap exit {rc})")

@@ -96,7 +96,7 @@ def step_archive(debug: bool) -> int:
     _banner("archive open Chrome tabs to Notion")
     if not bootstrap_chrome.debug_port_up():
         logger.error(
-            "❌ Chrome isn't responding on :9222 — run the bootstrap step first\n"
+            "❌ Chrome isn't responding on its debug port — run the bootstrap step first\n"
             "   (the '① Bootstrap Chrome' button, or:\n"
             "       newsletter_pipeline.py bootstrap )"
         )

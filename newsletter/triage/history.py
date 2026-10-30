@@ -178,7 +178,7 @@ def pull_emails(weeks: int, *, cfg: Dict[str, Any], reextract: bool = False,
 
 
 def _title(page: Dict[str, Any], prop: str) -> str:
-    return notion_io._read_title(page, prop)  # noqa: SLF001 — shared reader
+    return notion_io.read_title(page, prop)
 
 
 def _rich(page: Dict[str, Any], prop: str) -> str:
@@ -194,7 +194,7 @@ def load_positives(weeks: int) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any
     since = (date.today() - timedelta(weeks=weeks)).isoformat()
 
     editions: Dict[str, Dict[str, Any]] = {}
-    for page in notion_io._iter_database(  # noqa: SLF001
+    for page in notion_io.iter_database(
             client, na["newsletter_db_id"],
             query_filter={"property": "Date", "date": {"on_or_after": since}},
             sorts=[{"property": "Date", "direction": "ascending"}]):
@@ -203,21 +203,21 @@ def load_positives(weeks: int) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any
         editions[page["id"]] = {
             "id": page["id"], "number": _title(page, "number"), "date": d,
             "title": _rich(page, "title"),
-            "n_leader": notion_io._read_rollup_number(page, "n leader"),  # noqa: SLF001
-            "n_innov": notion_io._read_rollup_number(page, "n innov"),  # noqa: SLF001
-            "n_persdev": notion_io._read_rollup_number(page, "n persdev"),  # noqa: SLF001
+            "n_leader": notion_io.read_rollup_number(page, "n leader"),
+            "n_innov": notion_io.read_rollup_number(page, "n innov"),
+            "n_persdev": notion_io.read_rollup_number(page, "n persdev"),
             "substack": (props.get("substack", {}).get("url") or ""),
         }
     logger.info("📰 %d editions since %s", len(editions), since)
 
     connections: Dict[str, str] = {}
-    for page in notion_io._iter_database(client, na["connections_db_id"]):  # noqa: SLF001
+    for page in notion_io.iter_database(client, na["connections_db_id"]):
         connections[page["id"]] = _title(page, "name")
     logger.info("👤 %d connections", len(connections))
 
     created_since = (date.today() - timedelta(weeks=weeks + 6)).isoformat()
     positives: List[Dict[str, Any]] = []
-    for page in notion_io._iter_database(  # noqa: SLF001
+    for page in notion_io.iter_database(
             client, na["articles_db_id"],
             query_filter={"property": "created", "created_time": {"on_or_after": created_since}}):
         props = page["properties"]

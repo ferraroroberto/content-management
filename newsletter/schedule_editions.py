@@ -121,7 +121,7 @@ def summarize_editions(
     future = 0
     total = 0
     for row in rows:
-        number = parse_edition_number(notion_io._read_title(row, "number"))  # noqa: SLF001
+        number = parse_edition_number(notion_io.read_title(row, "number"))
         raw_date = (row.get("properties", {}).get("Date", {}).get("date") or {}).get("start")
         parsed: Optional[date] = None
         if raw_date:

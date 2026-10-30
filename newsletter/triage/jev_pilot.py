@@ -645,7 +645,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             ap.error("--run is required for a replay")
         criteria = json.loads(CRITERIA_PATH.read_text(encoding="utf-8"))
         legacy_model = cfg.get("llm_model", "claude_haiku")
-        legacy = {"model": legacy_model, "workers": int(cfg.get("llm_workers", 3)) + 1,      # as run.py sets it
+        legacy = {"model": legacy_model, "workers": sc.stage_a_workers(cfg),
                   "top_k": int(cfg.get("stage_b_top_k", 90))} if args.legacy else None
         before = hub_counters(base_url)
         result = replay(args.run, base_url=base_url, model=model, repeat=args.repeat, criteria=criteria,
@@ -654,7 +654,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.capture:
             _run, first = stage_a_items(args.run[0], require_review=not args.allow_unreviewed)
             result["capture"] = capture_requests(first, criteria, base_url=base_url, jev_model=model,
-                                                 legacy_model=legacy_model, batch=25)
+                                                 legacy_model=legacy_model, batch=sc.STAGE_A_BATCH)
         after = hub_counters(base_url)
         result["hub_counters"] = {k: {"before": before.get(k), "after": v} for k, v in after.items()
                                   if k.startswith("jev") or k == cfg.get("llm_model", "claude_haiku")}

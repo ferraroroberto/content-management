@@ -167,6 +167,8 @@ STABLE_PASSES_TO_STOP = 2            # consecutive unchanged counts that mean "f
 EXTRACT_SETTLE_MS = 1_000            # final settle before reading the DOM
 SORT_MENU_SETTLE_MS = 400            # sort dropdown opening
 SORT_APPLIED_SETTLE_MS = 1_200       # the re-sorted list re-rendering
+EXPAND_MAX_CLICKS = 30               # per "load more" button pool; a bound so a button that never goes away cannot loop forever
+EXPAND_SETTLE_MS = 1_200             # after each expand click, for the newly loaded comments to render
 
 
 # JS extractor — runs in the page context, walks the DOM by stable hooks
@@ -394,7 +396,7 @@ def _click_all(page: Page, selectors: list[str], *, max_clicks: int, settle_ms: 
     return clicks
 
 
-def _expand_all_comments(page: Page, *, max_clicks: int = 30, settle_ms: int = 1200) -> int:
+def _expand_all_comments(page: Page, *, max_clicks: int = EXPAND_MAX_CLICKS, settle_ms: int = EXPAND_SETTLE_MS) -> int:
     """Expand top-level comments + nested replies until both pools are exhausted."""
     top = _click_all(page, SEL_LOAD_MORE, max_clicks=max_clicks, settle_ms=settle_ms, label="load-more-comments")
     replies = _click_all(page, SEL_LOAD_REPLIES, max_clicks=max_clicks, settle_ms=settle_ms, label="see-previous-replies")

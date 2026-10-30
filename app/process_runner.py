@@ -37,6 +37,7 @@ from typing import Optional
 
 import streamlit as st
 
+from app.autoheal_console import DEFAULT_MODEL
 from config.no_window import NO_WINDOW
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -143,7 +144,7 @@ def start_pipeline(name: str, cmd: list[str], *, cwd: Optional[Path] = None) -> 
     threading.Thread(target=_pump, daemon=True, name=f"pump-{name}").start()
 
 
-def start_skill_console(name: str, skill_cmd: str, *, model: str = "claude-opus-4-8") -> None:
+def start_skill_console(name: str, skill_cmd: str, *, model: str = DEFAULT_MODEL) -> None:
     """Launch the ``/schedule-autoheal`` skill in a **visible, detached console**.
 
     Unlike :func:`start_pipeline` (which PIPEs the child into an in-app panel),

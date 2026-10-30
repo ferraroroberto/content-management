@@ -218,6 +218,17 @@ def _clamp(v: Any, lo: int = 0, hi: int = 5) -> Optional[int]:
 # stage A — metadata, batched
 
 STAGE_A_BATCH = 25    # links per Stage A hub call; ``run`` sizes its call estimate from it
+DEFAULT_LLM_WORKERS = 3    # per-link hub threads (Stage B) when config has no ``llm_workers``
+
+
+def stage_a_workers(cfg: Dict[str, Any]) -> int:
+    """Hub threads for the legacy Stage A pass: one above ``llm_workers``.
+
+    Stage A sends whole batches (``STAGE_A_BATCH`` links per call) concurrently while Stage B sends one call
+    per link, so the batch pass gets one extra thread over the per-link pool. ``run`` and ``jev_pilot`` both
+    size it here so the replay measures the engine as the weekly run configures it.
+    """
+    return int(cfg.get("llm_workers", DEFAULT_LLM_WORKERS)) + 1
 
 
 @dataclass

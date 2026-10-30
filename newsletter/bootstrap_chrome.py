@@ -36,7 +36,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Sequence
+from typing import Optional, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -48,10 +48,9 @@ from config.chrome_profile_lock import (  # noqa: E402
     DEFAULT_LOCK_BACKOFF_SECONDS,
     pids_holding_profile,
 )
+from config.loader import load_block  # noqa: E402
 
 USER_DATA_DIR = Path(__file__).parent / "chrome_user_data"
-DEBUG_PORT = 9222
-DEBUG_URL = f"http://127.0.0.1:{DEBUG_PORT}/json/version"
 
 # Chrome install locations, in probe order (mirrors the old bat).
 _CHROME_CANDIDATES = (
@@ -62,10 +61,16 @@ _CHROME_CANDIDATES = (
 logger = logging.getLogger("newsletter.bootstrap_chrome")
 
 
-def debug_port_up(timeout: float = 1.0) -> bool:
-    """True when Chrome's CDP endpoint answers on :9222."""
+def configured_debug_port() -> int:
+    """The CDP port from ``newsletter_archive.chrome_debug_port`` — the key archive and dry-run attach to."""
+    return int(load_block("newsletter_archive")["chrome_debug_port"])
+
+
+def debug_port_up(timeout: float = 1.0, *, port: Optional[int] = None) -> bool:
+    """True when Chrome's CDP endpoint answers on the configured debug port."""
+    url = f"http://127.0.0.1:{port if port is not None else configured_debug_port()}/json/version"
     try:
-        return requests.get(DEBUG_URL, timeout=timeout).status_code == 200
+        return requests.get(url, timeout=timeout).status_code == 200
     except requests.RequestException:
         return False
 
@@ -111,7 +116,7 @@ def _wait_for_profile_free(
 
 
 def ensure_chrome(*, timeout_s: int = 15) -> int:
-    """Ensure Chrome is up on :9222 against the newsletter profile.
+    """Ensure Chrome is up on the configured debug port against the newsletter profile.
 
     Returns 0 on success (already up, or launched and reachable), 3 if the
     port never came up within ``timeout_s`` seconds after launch, 4 if the
@@ -119,9 +124,10 @@ def ensure_chrome(*, timeout_s: int = 15) -> int:
     (a likely-wedged holder, reported rather than force-killed).
     """
     USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    port = configured_debug_port()
 
-    if debug_port_up():
-        logger.info("✅ Chrome already up on :%d — reusing it (open tabs untouched)", DEBUG_PORT)
+    if debug_port_up(port=port):
+        logger.info("✅ Chrome already up on :%d — reusing it (open tabs untouched)", port)
         return 0
 
     still_held = _wait_for_profile_free()
@@ -136,11 +142,11 @@ def ensure_chrome(*, timeout_s: int = 15) -> int:
         return 4
 
     chrome = _find_chrome_exe()
-    logger.info("🚀 Launching Chrome on :%d  ·  profile %s", DEBUG_PORT, USER_DATA_DIR)
+    logger.info("🚀 Launching Chrome on :%d  ·  profile %s", port, USER_DATA_DIR)
     subprocess.Popen(
         [
             str(chrome),
-            f"--remote-debugging-port={DEBUG_PORT}",
+            f"--remote-debugging-port={port}",
             f"--user-data-dir={USER_DATA_DIR}",
             "--no-first-run",
             "--no-default-browser-check",
@@ -153,13 +159,13 @@ def ensure_chrome(*, timeout_s: int = 15) -> int:
     )
 
     for _ in range(timeout_s):
-        if debug_port_up():
-            logger.info("✅ Chrome debug port is UP on %s", DEBUG_URL)
+        if debug_port_up(port=port):
+            logger.info("✅ Chrome debug port is UP on :%d", port)
             logger.info("   Open your newsletter article tabs in that window, then archive.")
             return 0
         time.sleep(1)
 
-    logger.error("❌ :%d not reachable after %ds — bootstrap failed", DEBUG_PORT, timeout_s)
+    logger.error("❌ :%d not reachable after %ds — bootstrap failed", port, timeout_s)
     return 3
 
 
