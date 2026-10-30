@@ -75,6 +75,13 @@ def _recording(takes: list[dict]) -> Recording:
     return Recording.model_validate({"driver": "driver.py", "senders": "@people", "takes": takes})
 
 
+class RecordingSchemaTests(unittest.TestCase):
+    def test_viewport_is_rejected_because_the_recording_size_is_fixed(self) -> None:
+        take = {"id": "t", "pages": {"p": {"url": "/"}}, "beats": [{"name": "b"}]}
+        with self.assertRaises(ValidationError):
+            Recording.model_validate({"driver": "driver.py", "viewport": {"width": 1280, "height": 720}, "takes": [take]})
+
+
 class RunnerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.clock = FakeClock()

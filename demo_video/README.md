@@ -100,7 +100,7 @@ The worked example is [`examples/facilitation-suite/`](examples/facilitation-sui
 | `media_dir`, `marks` | The media folder and marks file, relative to the demo folder; `{lang}` is the cut's language. |
 | `clips` | Clip id → `{file, marks?, source?}`: the file (relative to `media_dir`, `{lang}` allowed), its key in the marks file (default: the clip id), and the raw recording `prep` transcodes into it (relative to the demo folder). |
 | `privacy` | Roster, blocklist, extra files to scan, accepted tokens (see **Checks**). |
-| `recording` | `driver`, `driver_args`, `viewport`, `senders` (+ `sender_step`), `headless`, and `takes` (see **recording** below). |
+| `recording` | `driver`, `driver_args`, `senders` (+ `sender_step`), `headless`, and `takes` (see **recording** below). |
 | `copy` | Language → key → string or list. Every `"@key"` in a scene is replaced by `copy[<cut language>][key]`. |
 | `cuts` | `{id, lang, aspect: 16:9 \| 1:1 \| 4:5, public, soundtrack}`. One render per cut. |
 | `scenes` | In order; each `{id, type, seconds, fade_s?}` plus its type's fields (below). |

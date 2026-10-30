@@ -38,6 +38,9 @@ from demo_video.storyboard import STATES_KEY, Beat, Demo, Recording, Step, Take
 
 logger = logging.getLogger("demo_video.record")
 
+# The Remotion template crops in 1920×1080 source pixels (ui.tsx Clip), so the recording size is fixed.
+RECORDING_SIZE = {"width": 1920, "height": 1080}
+
 
 class Driver(Protocol):
     def boot(self, workdir: Path, lang: str) -> dict: ...
@@ -165,7 +168,7 @@ def _fill(template: Optional[str], values: dict) -> Optional[str]:
 
 def record_take(browser: Any, take: Take, runner: Runner, values: dict, rec: Recording, out_dir: Path) -> dict:
     """Open the take's pages (one context each), run it, save ``<page>.webm`` per page."""
-    size = {"width": rec.viewport.width, "height": rec.viewport.height}
+    size = RECORDING_SIZE
     raw = Path(tempfile.mkdtemp(prefix="demo-rec-"))
     contexts, pages, t0 = {}, {}, {}
     try:
