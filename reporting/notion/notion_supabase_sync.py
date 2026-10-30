@@ -30,7 +30,8 @@ if not logger.handlers:
 class NotionSupabaseSync:
     """Sync Notion databases to Supabase PostgreSQL."""
     
-    def __init__(self, config_path: str = None, environment: str = "cloud", database_list_path: str = None):  # type: ignore
+    def __init__(self, config_path: Optional[str] = None, environment: str = "cloud",
+                 database_list_path: Optional[str] = None):
         """Initialize the sync with configuration."""
         self.environment = environment
         self.config = load_project_config(config_path, logger=logger)
@@ -44,7 +45,7 @@ class NotionSupabaseSync:
         self.headers = notion_rest_headers(self.notion_token)
         self.last_sync_times = {}  # Track last sync time per database
 
-    def _load_database_list(self, database_list_path: str = None) -> List[dict]:  # type: ignore
+    def _load_database_list(self, database_list_path: Optional[str] = None) -> List[dict]:
         """Load database list from JSON file and filter by replication status."""
         if database_list_path is None:
             database_list_path = Path(__file__).parent / "notion_database_list.json"
@@ -69,7 +70,7 @@ class NotionSupabaseSync:
         
         return databases_to_sync
     
-    def _notion_api_call(self, endpoint: str, method: str = "GET", data: dict = None) -> dict:  # type: ignore
+    def _notion_api_call(self, endpoint: str, method: str = "GET", data: Optional[dict] = None) -> Optional[dict]:
         """Make a Notion API call with rate limiting."""
         url = f"https://api.notion.com/v1/{endpoint}"
         
@@ -90,10 +91,10 @@ class NotionSupabaseSync:
             return response.json()
         except requests.exceptions.Timeout as e:
             logger.error(f"❌ Notion API timed out after {NOTION_REQUEST_TIMEOUT}s (connect, read): {e}")
-            return None  # type: ignore
+            return None
         except requests.exceptions.RequestException as e:
             logger.error(f"❌ Notion API error: {e}")
-            return None  # type: ignore
+            return None
     
     def _get_database_schema(self, database_id: str) -> dict:
         """Retrieve the schema (properties) of a Notion database."""
@@ -102,8 +103,8 @@ class NotionSupabaseSync:
             return result.get("properties", {})
         return {}
     
-    def _query_database(self, database_id: str, start_cursor: str = None, # type: ignore
-                       filter_after: datetime = None) -> dict:  # type: ignore
+    def _query_database(self, database_id: str, start_cursor: Optional[str] = None,
+                       filter_after: Optional[datetime] = None) -> Optional[dict]:
         """Query a Notion database with optional filtering."""
         data = {
             "page_size": self.page_size
@@ -408,11 +409,11 @@ class NotionSupabaseSync:
         # Query pages
         all_rows = []
         has_more = True
-        start_cursor = None
+        start_cursor: Optional[str] = None
         pages_fetched = 0
         
         while has_more:
-            result = self._query_database(database_id, start_cursor, last_sync)  # type: ignore
+            result = self._query_database(database_id, start_cursor, last_sync)
             if not result:
                 logger.error(f"❌ Failed to query database {database_id}")
                 break

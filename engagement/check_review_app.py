@@ -11,7 +11,8 @@ Usage:
     & .\.venv\Scripts\python.exe -m engagement.check_review_app
 
 Screenshots land in results/engagement/e2e/<timestamp>/. Each step prints
-PASS/FAIL with a short reason.
+PASS/FAIL/SKIP with a short reason; a SKIP is a check that could not run (NOT
+CONFIRMED), never counted as a pass.
 
 This is a smoke check, not a full test suite — designed to verify the
 review_app end-to-end without manually clicking on a mobile device.
@@ -34,6 +35,9 @@ from engagement.db.client import supabase_client  # noqa: E402
 
 APP_URL = "http://localhost:8501"
 
+# Labels of checks that could not establish their fact in this run; reset by run().
+_skipped: list[str] = []
+
 
 def _shot(page: Page, out_dir: Path, label: str) -> Path:
     out = out_dir / f"{label}.png"
@@ -47,6 +51,11 @@ def _pass(label: str, detail: str = "") -> None:
 
 def _fail(label: str, detail: str = "") -> None:
     print(f"  ❌ FAIL  {label}" + (f"  — {detail}" if detail else ""))
+
+
+def _skip(label: str, detail: str = "") -> None:
+    _skipped.append(label)
+    print(f"  ⏭️ SKIP  {label} — NOT CONFIRMED" + (f"  — {detail}" if detail else ""))
 
 
 def _count_pending() -> int:
@@ -195,7 +204,7 @@ def _check_approve(page, out_dir: Path) -> int:
         else:
             print("     note: rollback skipped — could not identify which row(s) the click approved")
     else:
-        _pass("approve button skipped — no AI-flagged rows to approve (expected on first run)")
+        _skip("approve button", "no AI-flagged rows to approve (expected on first run)")
     return fails
 
 
@@ -313,6 +322,7 @@ def run() -> int:
     print(f"📁 screenshots → {out_dir}")
 
     fails = 0
+    _skipped.clear()
     with sync_playwright() as pw:
         # Fresh context, no persistent profile — drives our own localhost
         # Streamlit app, so the doc-capture profile applies (determinism and
@@ -349,8 +359,10 @@ def run() -> int:
         browser.close()
 
     print("\n" + "=" * 50)
-    if fails == 0:
+    if fails == 0 and not _skipped:
         print("🎉 ALL CHECKS PASSED")
+    elif fails == 0:
+        print(f"✅ NO CHECK FAILED — {len(_skipped)} NOT CONFIRMED (skipped): {', '.join(_skipped)}")
     else:
         print(f"⚠️  {fails} CHECK(S) FAILED — see screenshots above")
     return fails

@@ -284,6 +284,8 @@ def video_fps(path: Path) -> float:
     try:
         fps = float(num) / float(den or 1)
     except ValueError:
+        logger.warning("⚠️ no readable frame rate for %s (ffprobe gave %r) — assuming 30 fps for the retime",
+                       path.name, rate)
         fps = 30.0
     return round(fps) if abs(fps - round(fps)) < 0.1 else round(fps, 3)
 

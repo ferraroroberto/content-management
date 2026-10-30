@@ -165,7 +165,8 @@ def load_lessons(path: Optional[Path] = None) -> List[str]:
         return []
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("⚠️ accepted lessons %s are unreadable (%s) — scoring without them", path, type(exc).__name__)
         return []
     return [str(x.get("text") if isinstance(x, dict) else x).strip() for x in data.get("lessons", []) if x]
 
@@ -296,6 +297,11 @@ def score_metadata(items: Sequence[Dict[str, str]], criteria: Dict[str, Any], *,
             calls.append({"links": len(chunk), "start": t_call, "end": time.monotonic(),
                           "ok": isinstance(data, list), "usage": usage})
         if not isinstance(data, list):
+            if data is not None:
+                logger.warning("⚠️ stage-A batch %d reply is not a JSON list (%s) — batch left unscored",
+                               start // batch, type(data).__name__)
+            else:
+                logger.warning("⚠️ stage-A batch %d reply did not parse as JSON — batch left unscored", start // batch)
             return
         for obj in data:
             if not isinstance(obj, dict):

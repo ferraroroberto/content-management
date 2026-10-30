@@ -113,7 +113,10 @@ def propose(run_id: int, *, model: Optional[str] = None, base_url: Optional[str]
     logger.info("🧠 distilling run %s (%s → %s) with %s — %d dropped, %d promoted, %d notes", run_id, start, end, model,
                 len(deltas["dropped"]), len(deltas["promoted"]), len(deltas["noted"]))
     text = llm.call(base_url=base_url, model=model, prompt=prompt, max_tokens=600, timeout=180)
-    data = _parse_json(text) or {}
+    data = _parse_json(text)
+    if data is None:
+        logger.warning("⚠️ lessons reply for run %s did not parse as JSON — no notes stored", run_id)
+        return []
     items = data.get("lessons", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
     texts = [str(x).strip() for x in items if str(x).strip()][:MAX_LESSONS]
     if not texts:
