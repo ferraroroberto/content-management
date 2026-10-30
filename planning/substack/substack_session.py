@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from config.dates import COMPACT_FORMAT, parse_day  # noqa: E402
 from planning._session_base import (  # noqa: E402
     LoginRequiredError,
     PlatformSession,
@@ -58,10 +59,7 @@ def normalize_day(date_str: Optional[str]) -> str:
     """
     if not date_str:
         return datetime.now().strftime("%Y%m%d")
-    s = date_str.strip()
-    if "-" in s:
-        return datetime.strptime(s, "%Y-%m-%d").strftime("%Y%m%d")
-    return datetime.strptime(s, "%Y%m%d").strftime("%Y%m%d")
+    return parse_day(date_str).strftime(COMPACT_FORMAT)
 
 
 def configure_logger(name: str = "substack", debug: bool = False) -> logging.Logger:

@@ -245,6 +245,14 @@ def extract_property_value(prop: dict) -> Any:
         return prop
 
 
+def page_title(page: dict) -> str:
+    """Return the text of a page's first title property, whole and stripped ('' if none)."""
+    for prop in (page.get("properties") or {}).values():
+        if prop.get("type") == "title":
+            return extract_property_value(prop).strip()
+    return ""
+
+
 def prepare_notion_update(property_type, value):
     """Prepare the update payload for a Notion property based on its type."""
     # Checkbox must be handled before the None-skip below so that an explicit

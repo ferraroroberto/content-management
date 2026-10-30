@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
+from config.dates import parse_day
 from config.loader import load_full_config  # noqa: F401  (re-exported for per-platform modules)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -169,11 +170,7 @@ def normalize_target_date(date_str: Optional[str]) -> str:
     """Accept ``YYYY-MM-DD`` / ``YYYYMMDD`` / ``None`` → return ``YYYY-MM-DD``."""
     if not date_str:
         return datetime.now().strftime("%Y-%m-%d")
-    s = date_str.strip()
-    if "-" in s:
-        # Validate
-        return datetime.strptime(s, "%Y-%m-%d").strftime("%Y-%m-%d")
-    return datetime.strptime(s, "%Y%m%d").strftime("%Y-%m-%d")
+    return parse_day(date_str).isoformat()
 
 
 def relative_time_to_iso_date(text: str, *, now: Optional[datetime] = None) -> Optional[str]:

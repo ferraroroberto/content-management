@@ -402,7 +402,7 @@ suggested), runners-up, a "new senders — set a tier" list, then every email in
 inbox order with every link and its verdict (`selected / runner-up / candidate /
 low / vetoed / duplicate / unknown`) — an unfetchable or unscorable link is
 `unknown`, never "skipped". Skill: `/newsletter-triage`
-(`.claude/skills/newsletter-triage/SKILL.md`, mirrored in `.agents/skills/`).
+(`.claude/skills/newsletter-triage/SKILL.md`).
 
 ### Store + control-panel tab
 

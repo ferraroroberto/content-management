@@ -1,7 +1,6 @@
 """Shared date helpers for the per-platform planning schedulers.
 
-``next_monday`` / ``parse_week_start`` / ``parse_single_date`` /
-``date_to_day_title`` were byte-identical (or near-identical) copies in each
+``next_monday`` / ``parse_week_start`` / ``date_to_day_title`` were byte-identical (or near-identical) copies in each
 of the five scheduler modules (twitter, threads, linkedin, videos,
 instagram's ``clone_to_other_platforms``). They are pure, stdlib-only, and
 Playwright-free, so there is no reason for the "copied to avoid cross-package
@@ -28,14 +27,6 @@ def parse_week_start(s: Optional[str]) -> date:
     if not s:
         return next_monday()
     return datetime.strptime(s, "%Y-%m-%d").date()
-
-
-def parse_single_date(s: str) -> date:
-    """Accept YYYYMMDD or YYYY-MM-DD."""
-    s = s.strip()
-    if "-" in s:
-        return datetime.strptime(s, "%Y-%m-%d").date()
-    return datetime.strptime(s, "%Y%m%d").date()
 
 
 def date_to_day_title(d: date) -> str:

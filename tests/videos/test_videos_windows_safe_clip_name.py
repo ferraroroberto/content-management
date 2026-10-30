@@ -50,7 +50,7 @@ class LoadClipPayloadPathTests(unittest.TestCase):
         props = {"clip_pc": self.folder, "file_pc": file_pc}
         with mock.patch.object(vs, "first_clip_relation_id", return_value="rel"), \
              mock.patch.object(vs, "retrieve_page", return_value={}), \
-             mock.patch.object(vs, "_clip_page_title", return_value="clip"), \
+             mock.patch.object(vs, "page_title", return_value="clip"), \
              mock.patch.object(vs, "_clip_string_property",
                                side_effect=lambda _p, _c, role: props.get(role, "short")), \
              mock.patch.object(vs, "get_page_body_text", return_value="long"), \
