@@ -60,9 +60,8 @@ def _recompute_duplicates(conn: sqlite3.Connection) -> int:
 
     Nothing but the ``duplicate`` column is written — ``found_link`` stays the
     URL that was actually found and opened, and every verdict stays on the row
-    that earned it. The guard is the same one the retirement lane ends on: the
-    annotation count and the row count are taken either side and a change is a
-    failure, not a warning.
+    that earned it. The guard: the annotation count and the row count are taken
+    either side and a change is a failure, not a warning.
     """
     before_counts = db.counts(conn)
     before = _duplicate_shape(conn)

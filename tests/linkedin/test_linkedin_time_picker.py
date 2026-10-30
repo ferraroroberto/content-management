@@ -16,7 +16,7 @@ the label, and an input carrying ``data-time-picker-value`` in minutes since
 midnight), no account data, no post content, hashed class names dropped. The
 tests drive the real ``_set_schedule_time`` against it in headless Chrome.
 
-Run: & .\\.venv\\Scripts\\python.exe -m unittest tests.test_linkedin_time_picker -v
+Run: & .\\.venv\\Scripts\\python.exe -m unittest tests.linkedin.test_linkedin_time_picker -v
 """
 
 from __future__ import annotations

@@ -61,11 +61,6 @@ from planning._scheduler_main import (  # noqa: E402
 
 logger = logging.getLogger("twitter_schedule")
 
-_MONTH_NAMES = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
-]
-
 
 # ---------- Row model / payload resolution ----------
 

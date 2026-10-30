@@ -5,7 +5,7 @@
 spawn at the ``podcast.media`` boundary — so they only pass when the calls are
 routed through it — and need no real ffmpeg.
 
-Run: & .\\.venv\\Scripts\\python.exe -m unittest tests.test_videos_ffprobe_routing -v
+Run: & .\\.venv\\Scripts\\python.exe -m unittest tests.videos.test_videos_ffprobe_routing -v
 """
 
 from __future__ import annotations

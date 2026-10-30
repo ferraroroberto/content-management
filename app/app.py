@@ -1,7 +1,7 @@
 r"""Unified control-panel Streamlit app.
 
-Sections: 📊 Reporting · 📅 Editorial · 📅 Planning · 📰 Newsletter · 🛡️ Engagement ·
-⚖️ Check IP · 🎙️ Podcast.
+Sections: 📊 Reporting · 📅 Editorial · 📅 Planning · 📰 Newsletter · 🧭 Triage ·
+🛡️ Engagement · ⚖️ Check IP · 🎙️ Podcast · 🎬 Demo video.
 Routed via st.segmented_control rather than st.tabs() (issue #157 — st.tabs()
 loses the active tab on any widget rerun). Each section owns its own module
 (`app.tab_*`) per the project's per-tab convention (see pdf-to-markdown
@@ -136,6 +136,7 @@ PIPELINES = [
     ("triage",             "🧭 triage"),
     ("check-ip",           "⚖️ check IP"),
     ("podcast",            "🎙️ podcast"),
+    ("demo_video",         "🎬 demo video"),
     ("engagement-scrape",  "🛡️ engagement (scrape)"),
     ("engagement-classify","🛡️ engagement (classify)"),
 ]

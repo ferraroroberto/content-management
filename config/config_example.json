@@ -3,7 +3,6 @@
     "folder_results_processed": "results/processed",
     "days_to_process": 7,
     "supabase": {
-        "environment": "cloud",
         "url": "your_supabase_url_here",
         "key": "your_supabase_key_here",
         "enable_upload": true,
@@ -405,7 +404,6 @@
         },
         "post_hour_local": 19,
         "post_minute_local": 0,
-        "schedule_timezone": "Europe/Madrid",
         "headless": false,
         "dry_run_default": true,
         "transcode": {
@@ -452,7 +450,6 @@
     },
     "newsletter_triage": {
         "gmail_label": "newsletters",
-        "gmail_credentials_path": "auth/gmail/credentials.json",
         "gmail_token_path": "auth/gmail/token.json",
         "history_weeks": 54,
         "min_anchor_chars": 12,

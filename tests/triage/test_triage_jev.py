@@ -6,7 +6,7 @@ Covers: ``legacy`` runs exactly the pre-#285 path (same scorer call, no Jev, no 
 answers parse into typed scores with their confidences, failures are ``not evaluated`` (never 0),
 only link metadata leaves the machine, and nothing in the repo calls the vendor URL directly.
 
-Run: & .\\.venv\\Scripts\\python.exe -m unittest tests.test_triage_jev -v
+Run: & .\\.venv\\Scripts\\python.exe -m unittest tests.triage.test_triage_jev -v
 """
 
 from __future__ import annotations
