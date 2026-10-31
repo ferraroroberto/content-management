@@ -16,6 +16,7 @@ import logging
 import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Optional
 
 from podcast.clips import clip_length, load_clips
 from podcast.episode import Episode, work_dir
@@ -87,8 +88,12 @@ def _accept(raw: list[dict], cleaned: list[dict]) -> tuple[bool, str]:
 
 
 def _clean_chunk(cfg: dict, rec: StageRecord, chunk: list[str], labels: tuple[str, ...],
-                 cache_dir: Path, attempts: int = 2) -> list[dict]:
-    """Edit one chunk; an accepted edit is cached by source hash so a re-run only redoes the rest."""
+                 cache_dir: Path, attempts: int = 2) -> Optional[list[dict]]:
+    """Edit one chunk; an accepted edit is cached by source hash so a re-run only redoes the rest.
+
+    Returns ``None`` when the hub call itself failed: the stage must not finish on text
+    that was never edited. A reply the model gave but that failed ``_accept`` keeps the raw text.
+    """
     source = "\n\n".join(chunk)
     raw = parse_clean(source, labels)
     cached = cache_dir / f"{hashlib.sha1(source.encode('utf-8')).hexdigest()[:16]}.json"
@@ -98,9 +103,9 @@ def _clean_chunk(cfg: dict, rec: StageRecord, chunk: list[str], labels: tuple[st
         try:
             reply = ask(cfg, rec, "clean", CLEAN_PROMPT.format(text=source), system=CLEAN_SYSTEM,
                         max_tokens=8000)
-        except Exception as exc:  # noqa: BLE001 — keep the raw chunk rather than lose the episode
-            logger.error("❌ clean chunk failed, keeping raw text: %s", exc)
-            return raw
+        except Exception as exc:  # noqa: BLE001 — one failed chunk must not stop the others being cached
+            logger.error("❌ clean chunk failed (hub call): %s", exc)
+            return None
         cleaned = parse_clean(reply, labels)
         ok, why = _accept(raw, cleaned)
         if ok:
@@ -121,6 +126,12 @@ def run_clean(ep: Episode, cfg: dict, rec: StageRecord) -> Path:
     cache_dir.mkdir(exist_ok=True)
     with ThreadPoolExecutor(max_workers=3) as pool:
         results = list(pool.map(lambda c: _clean_chunk(cfg, rec, c, labels, cache_dir), chunks))
+    unreached = sum(1 for part in results if part is None)
+    if unreached:
+        # No transcript is written: its existence marks the stage done, and a re-run
+        # redoes only these chunks (the edited ones are cached).
+        raise RuntimeError(f"{unreached} of {len(chunks)} transcript chunks could not be cleaned "
+                           "(hub call failed); re-run to resume")
     cleaned = [p for part in results for p in part]
     (ep.package / CLEAN_FILE).write_text(json.dumps(cleaned, indent=1, ensure_ascii=False), encoding="utf-8")
     md = [f"# {ep.base_name} - transcript\n",

@@ -567,7 +567,10 @@ def _follow(session: requests.Session, method: str, url: str, *, timeout: float,
 
 
 def resolve_one(session: requests.Session, href: str, *, timeout: float = 10.0) -> Tuple[str, str]:
-    """Follow redirects; return ``(final_url, status)`` where status ∈ http|http-fail.
+    """Follow redirects; return ``(final_url, status)`` where status ∈ http|http-fail|http-error.
+
+    ``http-fail`` is a definitive answer (a 4xx, a redirect loop); ``http-error`` is
+    transient (timeout, connection error, 5xx) and must not be cached as a result.
 
     HEAD first; GET (streamed, body never read) when HEAD is refused (405/404
     on e2ma/firstround-style redirectors) or when HEAD did not leave the
@@ -581,10 +584,10 @@ def resolve_one(session: requests.Session, href: str, *, timeout: float = 10.0) 
         status, final = _follow(session, "GET", href, timeout=timeout, deadline=deadline)
         if status < 400:
             return final, "http"
-        return "", "http-fail"
+        return "", ("http-error" if 500 <= status < 599 else "http-fail")
     except (requests.RequestException, ValueError) as exc:
         logger.debug("resolve failed for %s: %s", href[:80], type(exc).__name__)
-        return "", "http-fail"
+        return "", "http-error"
 
 
 def resolve_links(links: Iterable[Link], cache: RedirectCache, *, workers: int = 8,
@@ -628,8 +631,9 @@ def resolve_links(links: Iterable[Link], cache: RedirectCache, *, workers: int =
         futures = [pool.submit(work, k) for k in keys]
         done = 0
         for fut in as_completed(futures):
-            key, final, _status = fut.result()
-            cache.put(key, final)
+            key, final, status = fut.result()
+            if status != "http-error":
+                cache.put(key, final)
             for link in by_key[key]:
                 if final:
                     link.target, link.via = final, "http"

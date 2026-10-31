@@ -179,6 +179,13 @@ class PaywallTests(unittest.TestCase):
         html = "You've hit the paywall. Subscribe to keep reading."
         self.assertEqual(fx.detect_paywall(html, "x" * 2000, "https://hbr.org/2026/08/a"), (False, "metered-ok"))
 
+    def test_lookalike_domains_do_not_inherit_metered_ok(self) -> None:
+        html = '<div class="paywall">This post is for paid subscribers</div>'
+        for url in ("https://microsoft.com/a", "https://www.zinc.com/a", "https://minecraft.com/a"):
+            with self.subTest(url=url):
+                self.assertEqual(fx.detect_paywall(html, "short", url)[0], True)
+        self.assertEqual(fx.detect_paywall(html, "short", "https://www.ft.com/a"), (False, "metered-ok"))
+
     def test_free_substack_with_subscribe_box(self) -> None:
         html = '<p>Subscribe now</p>' + "<p>body</p>" * 300
         self.assertEqual(fx.detect_paywall(html, "x" * 5000, "https://x.substack.com/p/free")[0], False)

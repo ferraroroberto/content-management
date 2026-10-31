@@ -10,6 +10,7 @@ Initialization script to run the complete data processing pipeline:
 """
 
 import sys
+import re
 import json
 import argparse
 import logging
@@ -489,18 +490,23 @@ def run_module(module_func, module_name, debug_mode=False, extra_args=None, fail
         sys.argv = original_argv.copy()
 
 def _resolve_processing_date(reference_date) -> str:
-    """The run's date as YYYY-MM-DD: the reference date given, else today."""
+    """The run's date as YYYY-MM-DD: the reference date given, else today.
+
+    Raises ``ValueError`` for a ``--date`` that is neither YYYYMMDD nor YYYY-MM-DD: a
+    run for the wrong day would fetch, upload and write Notion rows for it.
+    """
     if reference_date:
-        try:
-            # Normalize date to YYYY-MM-DD
-            if '-' in reference_date:
-                processing_date = reference_date
-            else:
-                processing_date = datetime.strptime(reference_date, "%Y%m%d").strftime("%Y-%m-%d")
-            logger.info(f"📅 Using specified date: {processing_date}")
-        except ValueError:
-            logger.error(f"❌ Invalid date format: {reference_date}. Using current date.")
-            processing_date = datetime.now().strftime("%Y-%m-%d")
+        # strptime alone accepts "2026929" and "2026-9-29"; the digits must be zero-padded.
+        for pattern, date_format in ((r"\d{8}", "%Y%m%d"), (r"\d{4}-\d{2}-\d{2}", "%Y-%m-%d")):
+            if re.fullmatch(pattern, reference_date):
+                try:
+                    processing_date = datetime.strptime(reference_date, date_format).strftime("%Y-%m-%d")
+                    break
+                except ValueError:
+                    pass
+        else:
+            raise ValueError(f"Invalid date format: {reference_date} (expected YYYYMMDD or YYYY-MM-DD)")
+        logger.info(f"📅 Using specified date: {processing_date}")
     else:
         processing_date = datetime.now().strftime("%Y-%m-%d")
         logger.info(f"📅 No date specified. Using current date: {processing_date}")
@@ -610,6 +616,13 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
 def main():
     """Main function to run the complete pipeline."""
     args = parse_arguments()
+
+    try:
+        _resolve_processing_date(args.date)
+    except ValueError as err:
+        configure_logger(args.debug)
+        logger.error(f"❌ {err}")
+        sys.exit(2)
 
     failures = run_pipeline(
         debug_mode=args.debug,

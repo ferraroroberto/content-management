@@ -215,6 +215,13 @@ class CleanTests(unittest.TestCase):
         self.assertEqual(first, again)
         self.assertEqual(first[0], {"speaker": "Guest", "text": "So the point is, sleep matters a lot."})
 
+    def test_hub_failure_leaves_the_clean_stage_not_done(self) -> None:
+        from unittest.mock import patch
+        ep = _episode(Path("."))
+        with tempfile.TemporaryDirectory() as tmp,                 patch.object(package, "load_turns", return_value=[{"speaker": "guest", "text": "Hello there."}]),                 patch.object(package, "work_dir", return_value=Path(tmp)),                 patch.object(package, "ask", side_effect=ConnectionError("hub down")),                 self.assertRaisesRegex(RuntimeError, "re-run to resume"):
+            package.run_clean(ep, {}, None)
+        self.assertFalse(any(Path(tmp).glob("*transcript*")))
+
     def test_website_html_follows_the_live_page_markup(self) -> None:
         ep = _episode(Path("."))
         copy = {"website_title": "A & B", "website_intro": "Talking with Guest Person was great.",

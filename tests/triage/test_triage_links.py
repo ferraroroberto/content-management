@@ -217,5 +217,42 @@ class ResolveTests(unittest.TestCase):
         self.assertEqual((final, status), ("https://news.ycombinator.com/item?id=1", "http"))
 
 
+class ResolveCacheTests(unittest.TestCase):
+    """A transient failure is retried on the next run; a definitive one is remembered."""
+
+    HREF = "https://go.example.com/x"
+
+    def _resolve(self, response, cache):
+        from unittest import mock
+        sess = _StubSession({("*", self.HREF): response, ("*", "https://pub.example.com/p"): _StubResp(200)})
+        link = gm.Link(href=self.HREF)
+        with mock.patch.object(gm, "_session", return_value=sess):
+            stats = gm.resolve_links([link], cache, workers=1)
+        return link, stats
+
+    def test_server_error_is_not_cached(self) -> None:
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            cache = gm.RedirectCache(Path(td) / "r.json")
+            link, stats = self._resolve(_StubResp(503), cache)
+            self.assertEqual((link.via, stats["failed"]), ("http-fail", 1))
+            self.assertIsNone(cache.get(self.HREF))
+            link, _ = self._resolve(_StubResp(302, "https://pub.example.com/p"), cache)  # next run succeeds
+            self.assertEqual((link.target, cache.get(self.HREF)), ("https://pub.example.com/p",) * 2)
+
+    def test_connection_error_is_transient(self) -> None:
+        import requests
+        sess = _StubSession({})
+        sess.request = lambda *a, **kw: (_ for _ in ()).throw(requests.ConnectionError("down"))
+        self.assertEqual(gm.resolve_one(sess, self.HREF, timeout=1), ("", "http-error"))
+
+    def test_definitive_404_is_cached(self) -> None:
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            cache = gm.RedirectCache(Path(td) / "r.json")
+            self._resolve(_StubResp(404), cache)
+            self.assertEqual(cache.get(self.HREF), "")
+
+
 if __name__ == "__main__":
     unittest.main()

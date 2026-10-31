@@ -11,7 +11,7 @@ import logging
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
+from typing import Dict, Iterable, List, Optional, Set
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from rapidfuzz import fuzz
@@ -46,6 +46,16 @@ def canonicalize_url(url: str) -> str:
     query = urlencode(cleaned)
     path = parts.path.rstrip("/") or "/"
     return urlunsplit((scheme, netloc, path, query, ""))
+
+
+def host_matches(host: str, domains: Iterable[str]) -> bool:
+    """True when ``host`` is one of ``domains`` or a subdomain of one (dot boundary).
+
+    A bare suffix or substring test lets ``microsoft.com`` match ``ft.com`` and
+    ``dropbox.com`` match ``x.com``.
+    """
+    host = (host or "").lower()
+    return any(host == d or host.endswith("." + d) for d in (d.lower() for d in domains))
 
 
 def normalize_name(name: str) -> str:

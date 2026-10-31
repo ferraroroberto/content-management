@@ -54,6 +54,7 @@ force_utf8_stdio()
 
 from newsletter import bootstrap_chrome  # noqa: E402
 from newsletter import build_newsletter, normalize_names, normalize_url  # noqa: E402
+from newsletter._normalizer_base import UpdateFailedError  # noqa: E402
 from newsletter import pipeline as archive_pipeline  # noqa: E402
 from newsletter import schedule_editions  # noqa: E402
 from newsletter import substack_draft  # noqa: E402
@@ -105,11 +106,18 @@ def step_archive(debug: bool) -> int:
 
 
 def step_normalize(days: int, debug: bool) -> int:
-    _banner(f"normalize_names (last {days} days)")
-    normalize_names.run(days=days, dry_run=False, debug=debug)
-    _banner(f"normalize_url (last {days} days)")
-    normalize_url.run(days=days, dry_run=False, testing_mode=False, debug=debug)
-    return 0
+    rc = 0
+    for name, run_step in (
+        ("normalize_names", lambda: normalize_names.run(days=days, dry_run=False, debug=debug)),
+        ("normalize_url", lambda: normalize_url.run(days=days, dry_run=False, testing_mode=False, debug=debug)),
+    ):
+        _banner(f"{name} (last {days} days)")
+        try:
+            run_step()
+        except UpdateFailedError as err:
+            logger.error("❌ %s: %s", name, err)
+            rc = 1
+    return rc
 
 
 def step_build(newsletter_number: str | None, debug: bool, *,

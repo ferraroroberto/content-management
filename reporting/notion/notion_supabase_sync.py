@@ -385,8 +385,8 @@ class NotionSupabaseSync:
             logger.error(f"❌ Error getting last sync time: {e}")
             return None
     
-    def sync_database(self, database_config: dict, connection, force_full_sync: bool = False):
-        """Sync a single Notion database to Supabase."""
+    def sync_database(self, database_config: dict, connection, force_full_sync: bool = False) -> bool:
+        """Sync a single Notion database to Supabase; False when the Notion read failed."""
         database_id = database_config["id"]
         database_name = database_config["name"]
         table_name = database_config["supabase_table"]
@@ -404,7 +404,7 @@ class NotionSupabaseSync:
         schema = self._get_database_schema(database_id)
         if not schema:
             logger.error(f"❌ Failed to get schema for database {database_id}")
-            return
+            return False
         
         # Query pages
         all_rows = []
@@ -415,8 +415,9 @@ class NotionSupabaseSync:
         while has_more:
             result = self._query_database(database_id, start_cursor, last_sync)
             if not result:
+                # A partial fetch is never upserted: the sync cursor would then skip the pages it missed.
                 logger.error(f"❌ Failed to query database {database_id}")
-                break
+                return False
             
             pages = result.get("results", [])
             pages_fetched += len(pages)
@@ -433,7 +434,7 @@ class NotionSupabaseSync:
         
         if not all_rows:
             logger.info(f"✅ No new or updated pages found for '{database_name}'")
-            return
+            return True
         
         logger.info(f"📊 Found {len(all_rows)} new/updated pages")
         
@@ -443,9 +444,10 @@ class NotionSupabaseSync:
         # Upsert rows
         upserted = self._upsert_rows(connection, table_name, all_rows)
         logger.info(f"✅ Successfully synced {upserted} pages to '{table_name}'")
+        return True
     
-    def run_sync_cycle(self, force_full_sync: bool = False):
-        """Run a single sync cycle for all configured databases."""
+    def run_sync_cycle(self, force_full_sync: bool = False) -> bool:
+        """Run a single sync cycle for all configured databases; True only when every one synced."""
         logger.info("🚀 Starting sync cycle" + (" (full sync forced)" if force_full_sync else ""))
         
         # Get database connection
@@ -454,23 +456,29 @@ class NotionSupabaseSync:
         
         if not connection:
             logger.error("❌ Failed to connect to database")
-            return
+            return False
         
         try:
             # Sync each database
             synced_count = 0
-            for db_config in self.databases:
+            for position, db_config in enumerate(self.databases, start=1):
                 try:
                     logger.info(f"{'='*60}")
-                    logger.info(f"Database {synced_count + 1}/{len(self.databases)}: {db_config['name']}")
+                    logger.info(f"Database {position}/{len(self.databases)}: {db_config['name']}")
                     logger.info(f"{'='*60}")
-                    self.sync_database(db_config, connection, force_full_sync)
-                    synced_count += 1
+                    if self.sync_database(db_config, connection, force_full_sync):
+                        synced_count += 1
                 except Exception as e:
                     logger.error(f"❌ Error syncing database {db_config['name']}: {e}")
                     continue
             
-            logger.info(f"\n✅ Sync cycle completed - {synced_count}/{len(self.databases)} databases synced successfully")
+            all_synced = synced_count == len(self.databases)
+            logger.log(
+                logging.INFO if all_synced else logging.ERROR,
+                f"\n{'✅' if all_synced else '❌'} Sync cycle completed - "
+                f"{synced_count}/{len(self.databases)} databases synced successfully",
+            )
+            return all_synced
         finally:
             connection.close()
     
@@ -516,7 +524,8 @@ def main():
         
         if args.once:
             # Run single sync cycle
-            sync.run_sync_cycle(force_full_sync=args.full_sync)
+            if not sync.run_sync_cycle(force_full_sync=args.full_sync):
+                sys.exit(1)
         else:
             # Run continuous sync
             sync.run_continuous(force_full_sync_first=args.full_sync)

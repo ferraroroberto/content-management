@@ -60,7 +60,7 @@ from planning.substack.substack_session import (  # noqa: E402
 logger = logging.getLogger("substack_post_note")
 
 # Exit code: the Note is live on Substack but its link column is still empty.
-# Kept apart from a failed post (6–10) and from the daily pipeline's rc 99 (a
+# Kept apart from a failed post (6–9) and from the daily pipeline's rc 99 (a
 # branch raised): nothing needs re-posting, but the link must be filled in by
 # hand, or the next run will post the Note a second time.
 RC_POSTED_LINK_NOT_WRITTEN = 11
@@ -430,8 +430,10 @@ def publish_note_flow(
 
         note_url = _resolve_published_note_url(s.page, cfg["profile_url"])
         if not note_url:
-            logger.warning("⚠️ %s appears published but URL could not be resolved.", note.noun)
-            return 10
+            logger.error("❌ %s POSTED, LINK NOT WRITTEN: the dialog closed but its URL could not be "
+                         "read back — fill the link column by hand or the next run posts it again.",
+                         note.noun)
+            return RC_POSTED_LINK_NOT_WRITTEN
         logger.info("🔗 Published %s URL: %s", note.noun.lower(), note_url)
         return _write_link(note, note_url)
 

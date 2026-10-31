@@ -119,19 +119,20 @@ def _search_image(conn: sqlite3.Connection, lens: LensClient, imgur: ImgurClient
         logger.info("♻️  %s — reusing hosted copy", filename)
 
     stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # The hosted URL is kept right away so a failed search never re-uploads, but the
+    # re-search window only starts once a search succeeded (below).
     conn.execute(
         """
-        insert into images (filename, imgur_url, last_processed_date)
-        values (?, ?, ?)
-        on conflict(filename) do update set
-            imgur_url           = excluded.imgur_url,
-            last_processed_date = excluded.last_processed_date
+        insert into images (filename, imgur_url)
+        values (?, ?)
+        on conflict(filename) do update set imgur_url = excluded.imgur_url
         """,
-        (filename, image_url, stamp),
+        (filename, image_url),
     )
     conn.commit()
 
     existing = _existing_pairs(conn, filename)
+    searched_ok = False
     for search_type in search_types:
         data = lens.search(conn, image_url, filename, search_type)
         if data is None:
@@ -144,6 +145,13 @@ def _search_image(conn: sqlite3.Connection, lens: LensClient, imgur: ImgurClient
         tally["added"] += new
         tally["skipped"] += dupes
         logger.info("   %s: +%s new, %s already known", search_type, new, dupes)
+        searched_ok = True
+
+    if searched_ok:
+        conn.execute("update images set last_processed_date = ? where filename = ?", (stamp, filename))
+        conn.commit()
+    else:
+        logger.warning("⚠️ %s — every search failed; it stays due for the next run", filename)
 
 
 def _log_summary(due: list[Path], tally: Counter, dupes: dict) -> None:
@@ -231,7 +239,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     db.refresh_poster_keys(conn)
 
     _log_summary(due, tally, dupes)
-    return 0
+    return 1 if tally["failed"] else 0
 
 
 if __name__ == "__main__":

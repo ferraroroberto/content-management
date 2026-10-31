@@ -287,5 +287,11 @@ class AttemptRowTests(unittest.TestCase):
         )
 
 
+    def test_skip_is_not_a_failure(self):
+        """The videos orchestrator emits SKIP for a row whose every leg is already scheduled."""
+        self.assertEqual(classify("SKIP", "all legs already scheduled"), "none")
+        self.assertEqual(classify("skip", ""), "none")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -232,7 +232,7 @@ class EquivalenceTests(unittest.TestCase):
     def test_unresolved_url(self) -> None:
         for _, run, _ in self.each():
             r = run(url=None)
-            self.assertEqual(r.rc, 10)
+            self.assertEqual(r.rc, sn.RC_POSTED_LINK_NOT_WRITTEN)
             r.m["set_field"].assert_not_called()
 
     def test_published_note_writes_its_link_column(self) -> None:
