@@ -12,7 +12,7 @@ decide whether it is safe to touch:
 - **data-error** — the content/payload could not be resolved (empty caption,
   missing illustration, Notion lookup miss). A human decision, never auto-fixed.
 - **other** — anything unclassified; treated as human-only.
-- **none** — not a failure (``LIVE`` / ``DRY``).
+- **none** — not a failure (``LIVE`` / ``DRY`` / ``SKIP``).
 
 The classification lives here so the pipeline (which writes ``failure_kind`` into
 the machine-readable result JSON) and the skill (which reads it) can never drift
@@ -63,7 +63,7 @@ def classify(status: str, detail: str) -> FailureKind:
     statuses short-circuit to ``none``.
     """
     status_up = (status or "").upper()
-    if status_up in ("LIVE", "DRY"):
+    if status_up in ("LIVE", "DRY", "SKIP"):
         return "none"
     if status_up == "LOGIN-REQUIRED":
         return "login-required"

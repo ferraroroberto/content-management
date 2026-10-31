@@ -689,10 +689,15 @@ def _persist(persistable_comments: list[dict], all_commenters: dict[str, dict]) 
         logger.info("✓ auto-marked %d already-replied row(s) as ignored", flipped)
     # Chain: apply the rule classifier so new comments from whitelist/
     # blacklist commenters get cascaded immediately (no manual click).
+    from engagement.classify.local_model import ModelVersionMismatch  # late import
     try:
         from engagement.classify.rules import classify_pending  # late import
         res = classify_pending(platform="linkedin")
         logger.info("🧮 post-scrape classify: %s", res)
+    except ModelVersionMismatch:
+        # Raised on purpose: a version-skewed model must abort the run, not leave
+        # the new rows 'unknown' behind a green exit. The scrape is already upserted.
+        raise
     except Exception as err:  # never let classify failure mask scrape success
         logger.warning("post-scrape classify failed: %s", err)
     return persistable_comments

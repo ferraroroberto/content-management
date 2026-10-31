@@ -363,6 +363,7 @@ def cascade_whitelist_pending(platform: str, account_url: str) -> int:
                 "classification": "human",
                 "verdict_source": "whitelist_cascade",
                 "suggested_action": "surface_to_me",
+                "suggested_reply": None,
                 "confidence": 1.0,
             }
         )

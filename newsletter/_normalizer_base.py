@@ -19,6 +19,10 @@ from config.logger_config import configure_root_logging
 from newsletter import notion_io
 
 
+class UpdateFailedError(RuntimeError):
+    """Some Notion writes of a batch failed; the rest of the batch was still written."""
+
+
 class NotionArticleNormalizer:
     """Base class: subclasses implement the per-property hooks below."""
 
@@ -95,12 +99,14 @@ class NotionArticleNormalizer:
     ) -> List[Dict[str, Any]]:
         """Normalise every article created in the last ``days`` days.
 
+        Raises ``UpdateFailedError`` after the summary when any Notion write failed.
+
         ``note(new_value)`` optionally returns a suffix appended to each log line
         (``normalize_url``'s ``--testing`` reachability check).
         """
         pages = self._query_notion_database(days)
         results: List[Dict[str, Any]] = []
-        stats = {"processed": 0, "updated": 0, "unchanged": 0, "would_update": 0}
+        stats = {"processed": 0, "updated": 0, "unchanged": 0, "would_update": 0, "failed": 0}
         if dry_run:
             logging.info("🔍 DRY RUN MODE: no Notion writes")
         for page in pages:
@@ -120,6 +126,7 @@ class NotionArticleNormalizer:
                     stats["updated"] += 1
                     logging.info(f'📝 {self.changed_log_prefix}"{original}" → "{new_value}"{suffix}')
                 else:
+                    stats["failed"] += 1
                     logging.error(f'❌ Failed to update: "{original}"')
             else:
                 stats["unchanged"] += 1
@@ -127,8 +134,10 @@ class NotionArticleNormalizer:
         changed_word, changed_key = ("would update", "would_update") if dry_run else ("updated", "updated")
         logging.info(
             f"✅ Processed {stats['processed']} pages — {changed_word} {stats[changed_key]}, "
-            f"unchanged {stats['unchanged']}"
+            f"unchanged {stats['unchanged']}, failed {stats['failed']}"
         )
+        if stats["failed"]:
+            raise UpdateFailedError(f"{stats['failed']} of {stats['processed']} Notion updates failed")
         return results
 
 

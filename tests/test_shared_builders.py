@@ -165,11 +165,16 @@ class NormalizerBaseTests(unittest.TestCase):
         _, upd = self._process(True)
         upd.assert_not_called()
 
-    def test_update_failure_is_logged_not_raised(self):
-        with self.assertLogs(level="ERROR") as logs:
-            results, _ = self._process(False, update_ok=False)
-        self.assertEqual(len(results), 2)
+    def test_update_failure_is_counted_and_raised_after_the_summary(self):
+        with self.assertLogs(level="INFO") as logs,                 self.assertRaisesRegex(nb.UpdateFailedError, "1 of 2 Notion updates failed"):
+            self._process(False, update_ok=False)
         self.assertTrue(any("Failed to update" in m for m in logs.output))
+        self.assertTrue(any("failed 1" in m for m in logs.output))
+
+    def test_dry_run_reports_no_failures(self):
+        with self.assertLogs(level="INFO") as logs:
+            self._process(True)
+        self.assertTrue(any("failed 0" in m for m in logs.output))
 
     def test_note_suffix_is_appended_to_log_lines(self):
         with self.assertLogs(level="INFO") as logs:
@@ -204,6 +209,14 @@ class ConcreteNormalizerHooksTests(unittest.TestCase):
         self.assertEqual(n._result_row("id", "t", "o", "n"), {
             "page_id": "id", "last_edited_time": "t", "original_name": "o", "normalized_name": "n"})
 
+    def test_url_preserve_list_matches_on_a_dot_boundary(self):
+        n = self._bare(NotionURLNormalizer)
+        n.domains_preserving_params = {"x.com", "youtube.com"}
+        self.assertEqual(n._transform("https://dropbox.com/s?a=1"), "https://dropbox.com/s")
+        self.assertEqual(n._transform("https://www.netflix.com/t?a=1"), "https://www.netflix.com/t")
+        self.assertEqual(n._transform("https://x.com/u/status/1?s=20"), "https://x.com/u/status/1?s=20")
+        self.assertEqual(n._transform("https://m.youtube.com/watch?v=1"), "https://m.youtube.com/watch?v=1")
+
     def test_url_testing_mode_builds_a_validity_note(self):
         n = self._bare(NotionURLNormalizer)
         with mock.patch.object(n, "_check_url_validity", return_value=(True, "OK (200)")), \
@@ -214,6 +227,26 @@ class ConcreteNormalizerHooksTests(unittest.TestCase):
         with mock.patch.object(nb.NotionArticleNormalizer, "process_database", return_value=[]) as base:
             n.process_database(5, dry_run=True)
         self.assertIsNone(base.call_args.kwargs["note"])
+
+
+class NormalizeStepTests(unittest.TestCase):
+    """``newsletter_pipeline.step_normalize`` (and so ``create``) fails when a Notion write did."""
+
+    def _step(self, names_err=None, url_err=None):
+        import newsletter_pipeline as np_
+        with mock.patch.object(np_.normalize_names, "run", side_effect=names_err) as names,                 mock.patch.object(np_.normalize_url, "run", side_effect=url_err) as url,                 mock.patch.object(np_, "_banner"):
+            return np_.step_normalize(days=3, debug=False), names, url
+
+    def test_clean_run_is_zero(self):
+        self.assertEqual(self._step()[0], 0)
+
+    def test_failed_names_update_is_non_zero_and_url_step_still_runs(self):
+        rc, _, url = self._step(names_err=nb.UpdateFailedError("1 of 5 Notion updates failed"))
+        self.assertEqual(rc, 1)
+        url.assert_called_once()
+
+    def test_failed_url_update_is_non_zero(self):
+        self.assertEqual(self._step(url_err=nb.UpdateFailedError("2 of 5 Notion updates failed"))[0], 1)
 
 
 if __name__ == "__main__":

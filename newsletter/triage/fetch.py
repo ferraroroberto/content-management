@@ -26,6 +26,7 @@ import requests
 from lxml import html as lxml_html
 from readability import Document
 
+from newsletter.cache import host_matches
 from newsletter.extractor import _AUTHOR_META_NAMES, _meta, _normalise_author
 from newsletter.triage.json_cache import JsonFileCache
 
@@ -81,7 +82,7 @@ def detect_paywall(html: str, body_text: str, url: str) -> tuple[Optional[bool],
     sentence = _PAYWALL_HARD.search(html or "")
     markup = _SUBSTACK_PAYWALL_MARKUP.search(html or "")
     if sentence or markup:
-        if any(dom.endswith(m) for m in METERED_OK):
+        if host_matches(dom, METERED_OK):
             return False, "metered-ok"
         marker = sentence.group(0).lower() if sentence else "paywall markup"
         # the explicit paid-subscriber sentence / Substack paywall block is decisive;

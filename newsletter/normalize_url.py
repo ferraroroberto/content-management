@@ -31,6 +31,7 @@ import requests
 from config.loader import load_full_config
 from config.logger_config import configure_root_logging
 from newsletter._normalizer_base import NotionArticleNormalizer, run_cli
+from newsletter.cache import host_matches
 
 
 class NotionURLNormalizer(NotionArticleNormalizer):
@@ -62,8 +63,7 @@ class NotionURLNormalizer(NotionArticleNormalizer):
             return original_url
         try:
             parsed = urlparse(original_url)
-            domain = parsed.netloc.lower()
-            if any(p in domain for p in self.domains_preserving_params):
+            if host_matches(parsed.hostname or "", self.domains_preserving_params):
                 return original_url
             return urlunparse(
                 (parsed.scheme, parsed.netloc, parsed.path, parsed.params, "", "")
