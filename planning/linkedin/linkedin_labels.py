@@ -180,17 +180,25 @@ DONE_CTRL_SEL = ", ".join(
 
 # ---------- Schedule dialog ----------
 
-# The composer's clock affordance, which opens the Schedule dialog. It used to
-# be a button with aria-label 'Schedule post'; the rebuild made it an
-# ``<a aria-haspopup="dialog">`` whose accessible name is a *dynamic counter*
-# ("Scheduled (2)" — it grows as posts are queued), so neither a fixed name nor
-# a role anchor survives. It is matched structurally instead, by the LinkedIn
-# icon id it wraps: ``svg#clock-medium`` is part of LI's icon system, so it is
-# both locale-proof and counter-proof.
+# The composer's clock affordance, which opens the Schedule dialog. It is an
+# ``<a aria-haspopup="dialog">`` whose accessible name (via ``aria-labelledby``)
+# is a *dynamic counter* — "Scheduled (2)", growing as posts are queued — and
+# whose visible text is just that number. It has been both a ``<button
+# aria-label="Schedule post">`` and an ``<a>``, so it is looked up by two
+# independent anchors, tried in order (``linkedin_composer.schedule_clock``):
+#
+# 1. its accessible name, matched by prefix so the counter and the locale
+#    ("Schedule post" / "Scheduled (N)" / "Programar…") do not matter;
+SCHEDULE_CLOCK_NAME_RE = re.compile(r"^\s*(?:schedule[d]?\b|programa(?:r|d[oa]s?)\b)", re.I)
+
+# 2. the icon it wraps, matched by id *prefix*: LinkedIn's icon ids carry a
+#    style infix that changes between rebuilds (``clock-medium`` became
+#    ``clock-outline-medium``), so ``svg#clock-medium`` silently matched
+#    nothing while the control sat in plain view.
 SCHEDULE_CLOCK_SEL = (
-    'a:has(svg#clock-medium), '
-    'button:has(svg#clock-medium), '
-    '[role="button"]:has(svg#clock-medium)'
+    'a:has(svg[id^="clock"]), '
+    'button:has(svg[id^="clock"]), '
+    '[role="button"]:has(svg[id^="clock"])'
 )
 
 # Inside the Schedule dialog, LinkedIn ships stable ``data-testid`` hooks —
@@ -313,6 +321,7 @@ __all__ = [
     "CHOOSE_FILE_BTN_RE",
     "DONE_CTRL_SEL",
     "DONE_TEXTS",
+    "SCHEDULE_CLOCK_NAME_RE",
     "SCHEDULE_CLOCK_SEL",
     "DATE_INPUT_SEL",
     "TIME_INPUT_SEL",
