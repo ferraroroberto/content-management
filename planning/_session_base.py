@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from playwright.sync_api import BrowserContext, Page, Playwright, sync_playwright
+from playwright.sync_api import TimeoutError as PWTimeoutError
 
 from config.chrome_launch import STEALTH_INIT_SCRIPT
 from config.chrome_profile_lock import launch_persistent_context_with_lock_wait
@@ -54,6 +55,18 @@ class LoginRequiredError(RuntimeError):
     Single-source for every platform — modules re-export this name so existing
     ``from planning.<P>.<P>_session import LoginRequiredError`` imports and
     ``except LoginRequiredError`` handlers keep working unchanged.
+    """
+
+
+#: Navigation attempts per ``goto_with_login_check`` call (one retry after a timeout).
+NAVIGATION_ATTEMPTS = 2
+
+
+class NavigationTimeoutError(RuntimeError, PWTimeoutError):
+    """Raised when a page load times out on every attempt.
+
+    Also a Playwright ``TimeoutError`` so the existing ``except (RuntimeError,
+    PWTimeoutError)`` row handlers treat it exactly as the raw timeout before.
     """
 
 
@@ -208,9 +221,30 @@ class PlatformSession:
             self.logger.info("👋 %s session closed", self._display)
 
     def goto_with_login_check(self, url: str, *, timeout_ms: Optional[int] = None) -> None:
-        """Navigate to ``url``. Raise :class:`LoginRequiredError` on a login redirect."""
-        self.logger.debug("➡️ Navigating to %s", url)
-        self.page.goto(url, timeout=timeout_ms or self.default_timeout_ms, wait_until="domcontentloaded")
+        """Navigate to ``url``. Raise :class:`LoginRequiredError` on a login redirect.
+
+        A navigation timeout is retried once with a fresh ``goto``: a single
+        slow load is transient (the same site loads fine minutes later) and
+        would otherwise abort every row for the platform. A second timeout
+        raises :class:`NavigationTimeoutError`.
+        """
+        timeout = timeout_ms or self.default_timeout_ms
+        for attempt in range(1, NAVIGATION_ATTEMPTS + 1):
+            self.logger.debug("➡️ Navigating to %s", url)
+            try:
+                self.page.goto(url, timeout=timeout, wait_until="domcontentloaded")
+                break
+            except PWTimeoutError as err:
+                if attempt == NAVIGATION_ATTEMPTS:
+                    raise NavigationTimeoutError(
+                        f"{self._display} page load timed out after {NAVIGATION_ATTEMPTS} attempts "
+                        f"({timeout} ms each) navigating to {url} — the site is stalled or "
+                        f"unreachable, not a login or selector problem."
+                    ) from err
+                self.logger.info(
+                    "ℹ️ Navigation to %s timed out after %d ms (attempt %d/%d) — retrying",
+                    url, timeout, attempt, NAVIGATION_ATTEMPTS,
+                )
         self.raise_if_login_page()
 
     def raise_if_login_page(self) -> None:
@@ -246,6 +280,7 @@ __all__ = [
     "CONFIG_PATH",
     "REPO_ROOT",
     "LoginRequiredError",
+    "NavigationTimeoutError",
     "PlatformSession",
     "configure_logger",
     "load_config_block",
