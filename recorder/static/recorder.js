@@ -385,7 +385,15 @@ async function capVideo(sender) {
   const params = sender.getParameters();
   if (!params.encodings || !params.encodings.length) return;
   Object.assign(params.encodings[0], videoEncoding(sender.track));
-  await sender.setParameters(params).catch((err) => console.warn("[recorder] call cap", err));
+  await sender.setParameters(params).catch((err) => warn(`The call picture could not be capped: ${err}`));
+}
+
+// An answerer's sender takes its encodings from the answer, which overwrites a cap
+// set while the offer was still being answered; so it is capped again once the answer is set.
+function capCall() {
+  for (const t of pc.getTransceivers()) {
+    if (t.sender.track && t.sender.track.kind === "video") capVideo(t.sender);
+  }
 }
 
 async function onSignal(message) {
@@ -414,6 +422,7 @@ async function onSignal(message) {
     if (message.type === "offer") {
       attachToCall();
       await pc.setLocalDescription();
+      capCall();
       send({ type: pc.localDescription.type, sdp: pc.localDescription.sdp });
     }
   } else if (message.type === "candidate") {
