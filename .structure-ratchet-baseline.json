@@ -1,5 +1,6 @@
 {
   "version": 1,
   "band": {"files": 3, "functions": 16},
+  "root_extras": ["app", "check_ip", "demo_video", "engagement", "gmail_readonly", "google_oauth_common", "newsletter", "planning", "podcast", "recorder", "reporting"],
   "entries": []
 }
