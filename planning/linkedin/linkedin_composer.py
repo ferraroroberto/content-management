@@ -47,6 +47,7 @@ from planning.linkedin.linkedin_labels import (
     DISCARD_BTN_RE,
     FINAL_SCHEDULE_BTN_RE,
     POST_SCHEDULED_TOAST_RE,
+    SCHEDULE_CLOCK_NAME_RE,
     SCHEDULE_CLOCK_SEL,
 )
 
@@ -693,12 +694,31 @@ def button_is_enabled(btn) -> bool:
         return False
 
 
+def schedule_clock(page: Page):
+    """Locator for the composer's clock affordance, by the first anchor that matches.
+
+    Anchors, in order: the accessible name as a link or a button, then the icon
+    id prefix (``SCHEDULE_CLOCK_SEL``). Each is scoped to the open dialog so the
+    feed behind the modal cannot win. When none matches, the icon locator is
+    returned so the caller's click fails with a timeout naming the selector.
+    """
+    dialog = dialog_locator(page)
+    candidates = (
+        ("role=link", dialog.get_by_role("link", name=SCHEDULE_CLOCK_NAME_RE)),
+        ("role=button", dialog.get_by_role("button", name=SCHEDULE_CLOCK_NAME_RE)),
+    )
+    for anchor, locator in candidates:
+        if locator.count() > 0:
+            logger.info("ℹ️ Schedule clock matched by %s", anchor)
+            return locator.first
+    logger.info("ℹ️ Schedule clock matched by icon id prefix")
+    return dialog.locator(SCHEDULE_CLOCK_SEL).first
+
+
 def open_schedule_dialog(page: Page) -> None:
     """Click the composer's clock affordance to open the Schedule dialog."""
-    # Matched structurally by the icon it wraps — its accessible name is a
-    # live counter ("Scheduled (2)"), see ``SCHEDULE_CLOCK_SEL``.
     try:
-        dialog_locator(page).locator(SCHEDULE_CLOCK_SEL).first.click(timeout=10000)
+        schedule_clock(page).click(timeout=10000)
     except Exception as err:
         raise RuntimeError(f"Could not open the Schedule dialog: {err}")
 
