@@ -25,8 +25,8 @@ first run downloads it) and `ruff` in the venv
 could not run as **NOT CONFIRMED** (a failure, never a pass or a skip).
 
 After removing baselined debt, shrink the baseline in the same PR with
-`scripts/static_ratchet.py --update-baseline`. `gmail_readonly/` and
-`google_oauth_common/` are excluded: they are vendored copies. See the
+`scripts/static_ratchet.py --update-baseline`. `src/gmail_readonly/` and
+`src/google_oauth_common/` are excluded: they are vendored copies. See the
 scaffold's `docs/static-ratchet.md` for the exit codes and keys.
 
 ## 2. Docs ratchet (`scripts/docs_ratchet_gate.py`)
@@ -50,8 +50,8 @@ and fails when a file's count rises above `.comment-ratchet-baseline.json`.
 The wrapper reports a file it could not scan as **NOT CONFIRMED**.
 
 After rewording a reference away, shrink the baseline in the same PR with
-`scripts/comment_ratchet.py --update-baseline`. `gmail_readonly/` and
-`google_oauth_common/` are excluded: they are vendored copies. See the
+`scripts/comment_ratchet.py --update-baseline`. `src/gmail_readonly/` and
+`src/google_oauth_common/` are excluded: they are vendored copies. See the
 scaffold's `docs/comment-ratchet.md` for the exit codes and keys.
 
 ## 4. Structure ratchet (`scripts/structure_ratchet_gate.py`)
@@ -64,8 +64,8 @@ CONFIRMED**.
 
 After splitting a baselined file or function, shrink the baseline in the
 same PR with `scripts/structure_ratchet.py --update-baseline`; only
-`--allow-additions` adds an entry. `gmail_readonly/` and
-`google_oauth_common/` are excluded: they are vendored copies. See the
+`--allow-additions` adds an entry. `src/gmail_readonly/` and
+`src/google_oauth_common/` are excluded: they are vendored copies. See the
 scaffold's `docs/structure-ratchet.md` for the exit codes and keys.
 
 ## 5. Instruction ratchet (`scripts/instruction_ratchet_gate.py`)
@@ -102,7 +102,7 @@ Fails when a new function, class or method appears that nothing in the repo
 refers to and that is not recorded in `.dead-code-ratchet-baseline.json`.
 Routes, decorated hooks, `__all__` exports and tests are never reported, and
 a name used dynamically stays below the confidence floor. The vendored
-`gmail_readonly/` and `google_oauth_common/` copies are excluded from
+`src/gmail_readonly/` and `src/google_oauth_common/` copies are excluded from
 reporting but still read for references: their unused API
 (`GmailMailbox.messages_by_ids`) belongs to the repo they were copied from.
 The wrapper reports git or a Python file it could not read or parse as **NOT

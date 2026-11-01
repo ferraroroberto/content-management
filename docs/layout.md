@@ -10,6 +10,7 @@ The preset folders:
 - `scripts/` — the vendored ratchets (`*_ratchet.py`, never edited) and the gate wrappers that map their exit codes (`*_ratchet_gate.py`).
 - `config/` — `config.json`, `mapping.json`, logging, Chrome launch and shared helpers; `config/doc_capture/` is the control-panel screenshot engine.
 - `docs/` — durable topic reference; `docs/screenshots/` holds the capture manifest and generated per-tab images.
+- `src/` — the vendored Google client packages, byte-identical to their source repo and excluded from the ratchets: `src/gmail_readonly/` (read-only Gmail OAuth + search) and `src/google_oauth_common/` (the shared installed-app OAuth bootstrap). They import each other by bare name, so `newsletter/triage/gmail.py`, their one caller, puts `src/` on `sys.path`.
 
 Declared tool roots (`extra_roots`):
 
@@ -22,8 +23,6 @@ Declared tool roots (`extra_roots`):
 - `demo_video/` — demo videos: storyboard → Remotion template (`remotion/`) → MP4 per cut; `examples/` holds a sample storyboard.
 - `recorder/` — the self-hosted two-side recorder; `static/` is its page and chunk-upload script.
 - `app/` — the Streamlit control panel: one `tab_*.py` per tool, routed from `app.py`. UI code lives here and in `engagement/ui.py` and `engagement/review_app.py`.
-- `gmail_readonly/` — portable read-only Gmail OAuth + search component, vendored; excluded from the ratchet.
-- `google_oauth_common/` — shared installed-app OAuth bootstrap for the portable Google packages, vendored; excluded from the ratchet.
 
 Hidden folders: `.streamlit/` (Streamlit config), `.claude/skills/` (the repo's skills; Codex and Pi reach them through per-skill discovery links that fleet-config generates and git ignores, so a new skill needs no second copy).
 

@@ -92,7 +92,7 @@ episode / covers / package / score"]
   NPIPE --> NBOOT --> NARCHIVE --> NNORM --> NBUILD
   NARCHIVE -.->|"one matcher, no guessed topic"| NTOPICS
   NTRIAGERUN -.->|"same matcher"| NTOPICS
-  NTRIAGE -->|"gmail.readonly via vendored\ngmail_readonly/ + google_oauth_common/"| GMAILAPI[("Gmail API\nlabel 'newsletters'")]
+  NTRIAGE -->|"gmail.readonly via vendored\nsrc/gmail_readonly/ + src/google_oauth_common/"| GMAILAPI[("Gmail API\nlabel 'newsletters'")]
   NTRIAGE -->|"positives: articles + editions"| NOTION
   NTRIAGE --> RESULTSTRIAGE[["results/newsletter/triage/\nhistory/ + redirects.json"]]
   NTRIAGE -->|"criteria.json"| NTRIAGERUN

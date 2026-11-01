@@ -16,8 +16,6 @@ extra_roots = [
     "check_ip",
     "demo_video",
     "engagement",
-    "gmail_readonly",
-    "google_oauth_common",
     "newsletter",
     "planning",
     "podcast",
@@ -42,24 +40,24 @@ conventions_ratchet = { src = "scripts/conventions_ratchet.py", sha = "9d0fd2777
 # Comment ratchet (project-scaffolding docs/comment-ratchet.md): fails the pre-ship
 # gate when a file's count of `#NNN` issue references inside comments rises above
 # the baseline, never on the baselined debt — a comment states the present-tense
-# why, not the change's history. gmail_readonly/ and google_oauth_common/ are
-# vendored copies, so they are excluded like the static ratchet above.
+# why, not the change's history. src/gmail_readonly/ and src/google_oauth_common/
+# are vendored copies, so they are excluded like the static ratchet above.
 [comment_ratchet]
 enabled  = true
 baseline = ".comment-ratchet-baseline.json"
-exclude  = ["gmail_readonly/**", "google_oauth_common/**"]
+exclude  = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
 
 # Static-analysis ratchet (project-scaffolding docs/static-ratchet.md): fails the
 # pre-ship gate on a new duplicate block, unused import/variable or curated ruff bug
-# (B) / security (S) finding, never on the baselined debt. gmail_readonly/ and
-# google_oauth_common/ are vendored copies (duplicates of their source repo by
+# (B) / security (S) finding, never on the baselined debt. src/gmail_readonly/ and
+# src/google_oauth_common/ are vendored copies (duplicates of their source repo by
 # design), so they cannot be fixed here.
 [static_ratchet]
 enabled    = true
 baseline   = ".static-ratchet-baseline.json"
 min_lines  = 10
 min_tokens = 100
-exclude    = ["gmail_readonly/**", "google_oauth_common/**"]
+exclude    = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
 
 # Docs ratchet (project-scaffolding docs/docs-ratchet.md): fails the pre-ship gate
 # when README.md grows past 40 KiB or its baselined size, or when README.md or an
@@ -96,13 +94,13 @@ include = [
 # Structure ratchet (project-scaffolding docs/structure-ratchet.md): fails the
 # pre-ship gate when a file passes 1,000 lines, a function 100 lines or a
 # directory 40 modules and is new or above its baselined size, or when the root
-# folders stop matching `shape` + `extra_roots`. gmail_readonly/ and
-# google_oauth_common/ are vendored copies, so they are excluded like the other
+# folders stop matching `shape` + `extra_roots`. src/gmail_readonly/ and
+# src/google_oauth_common/ are vendored copies, so they are excluded like the other
 # ratchets above.
 [structure_ratchet]
 enabled  = true
 baseline = ".structure-ratchet-baseline.json"
-exclude  = ["gmail_readonly/**", "google_oauth_common/**"]
+exclude  = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
 
 # Instruction ratchet (project-scaffolding docs/instruction-ratchet.md): fails the
 # pre-ship gate when a count of the weekly prompt audit's deterministic rule hits
@@ -126,21 +124,21 @@ allow_refs = []
 
 # Dead code ratchet (project-scaffolding docs/dead-code-ratchet.md): fails the pre-ship
 # gate when a new function, class or method appears that nothing in the repo refers
-# to, beyond the baseline. gmail_readonly/ and google_oauth_common/ are vendored
-# copies that must stay byte-identical to whatsapp-radar, so their unused API belongs
+# to, beyond the baseline. src/gmail_readonly/ and src/google_oauth_common/ are
+# vendored copies that must stay byte-identical to whatsapp-radar, so their unused API belongs
 # to that repo: excluded from reporting, still read for references. They sit outside
 # [vendored] because that table tracks project-scaffolding copies by commit sha.
 [dead_code_ratchet]
 enabled  = true
 baseline = ".dead-code-ratchet-baseline.json"
-exclude  = ["gmail_readonly/**", "google_oauth_common/**"]
+exclude  = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
 
 # Conventions ratchet (project-scaffolding docs/conventions-ratchet.md): fails the
 # pre-ship gate when a file's count of hits for an enabled fleet-convention rule rises
 # above the baseline. no-window: the repo runs on Windows and spawns subprocesses.
 # logging-not-print and no-drive-path: it is library code. secret-compare and
 # git-wrapper stay off because the repo has no helper for either. Nothing is excluded:
-# the vendored gmail_readonly/ and google_oauth_common/ copies carry no hits.
+# the vendored src/gmail_readonly/ and src/google_oauth_common/ copies carry no hits.
 [conventions_ratchet]
 enabled  = true
 baseline = ".conventions-ratchet-baseline.json"

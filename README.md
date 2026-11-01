@@ -186,8 +186,9 @@ content-management/                   # repo root
 ├── app/                              # Streamlit control panel (tabs: reporting/editorial/planning/newsletter/triage/engagement/check-IP/podcast/demo-video)
 ├── config/                           # config.json, mapping.json, logger_config, chrome_launch, console
 │   └── doc_capture/                  # deterministic control-panel screenshot engine (README tour)
-├── gmail_readonly/                   # portable, read-only Gmail OAuth + search component (vendored)
-├── google_oauth_common/              # shared installed-app OAuth bootstrap for the portable Google packages (vendored)
+├── src/                              # vendored Google client packages
+│   ├── gmail_readonly/               # portable, read-only Gmail OAuth + search component
+│   └── google_oauth_common/          # shared installed-app OAuth bootstrap for the portable Google packages
 ├── results/                          # outputs — planning summaries + raw API JSON
 ├── logs/                             # per-module .log files
 ├── docs/                             # durable topic reference docs (tracked)
