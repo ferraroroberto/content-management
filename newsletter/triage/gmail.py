@@ -20,6 +20,7 @@ import base64
 import json
 import logging
 import re
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
@@ -32,15 +33,21 @@ from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 import requests
 
-from config.loader import load_block
-from gmail_readonly.core import GmailLabel, GmailMailbox, GmailSearch
-from gmail_readonly.google_client import build_google_read_client
-from newsletter.cache import canonicalize_url
-from newsletter.triage.json_cache import JsonFileCache
+REPO_ROOT = Path(__file__).resolve().parents[2]
+# The vendored Google packages live under src/ and import each other by their
+# bare names, so src/ must be importable for every caller of this adapter.
+_SRC_DIR = str(REPO_ROOT / "src")
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+
+from config.loader import load_block  # noqa: E402
+from gmail_readonly.core import GmailLabel, GmailMailbox, GmailSearch  # noqa: E402
+from gmail_readonly.google_client import build_google_read_client  # noqa: E402
+from newsletter.cache import canonicalize_url  # noqa: E402
+from newsletter.triage.json_cache import JsonFileCache  # noqa: E402
 
 logger = logging.getLogger("newsletter_triage.gmail")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MIN_ANCHOR_CHARS = 12
 
 # ---------------------------------------------------------------------------
@@ -123,7 +130,7 @@ def build_mailbox(cfg: Optional[Dict[str, Any]] = None) -> TriageMailbox:
     if not token_path.exists():
         raise FileNotFoundError(
             f"Gmail token not found at {token_path} — copy auth/gmail/credentials.json + "
-            f"token.json from the sibling repo or run `python -m gmail_readonly.oauth` "
+            f"token.json from the sibling repo or run `python -m gmail_readonly.oauth` with src/ on PYTHONPATH "
             f"(see newsletter/README.md)")
     client = build_google_read_client(token_path)
     return TriageMailbox(client=client, mailbox=GmailMailbox(client))

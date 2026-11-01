@@ -1,14 +1,21 @@
-"""Portable offline contract tests for the root-level Gmail component."""
+"""Portable offline contract tests for the vendored Gmail component under src/."""
 
 from __future__ import annotations
 
 import ast
 import base64
+import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
-from gmail_readonly import (
+
+# The vendored packages live under src/ and import each other by bare name.
+_SRC_DIR = str(Path(__file__).resolve().parents[1] / "src")
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+
+from gmail_readonly import (  # noqa: E402
     GMAIL_READONLY_SCOPE,
     GmailLabel,
     GmailMailbox,
@@ -19,7 +26,7 @@ from gmail_readonly import (
     build_google_read_client,
     masked_email_address,
 )
-from gmail_readonly.oauth import authorize
+from gmail_readonly.oauth import authorize  # noqa: E402
 
 
 def _encoded(value: str) -> str:
@@ -110,7 +117,7 @@ class _FakeClient:
 
 
 def test_component_imports_no_application_modules() -> None:
-    component_root = Path(__file__).parents[1] / "gmail_readonly"
+    component_root = Path(__file__).parents[1] / "src" / "gmail_readonly"
     imported_modules: set[str] = set()
     for path in component_root.glob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"))

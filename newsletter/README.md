@@ -297,7 +297,7 @@ never inventing people.
 - `_normalizer_base.py` — shared query → transform → dry-run/update → stats workflow and CLI shell behind `normalize_names` and `normalize_url`.
 - `build_newsletter.py` — HTML builder + must-read line; writes the `N{NNN}.topics.json` sidecar the app's must-read picker reads.
 - `substack_draft.py` — pushes the same grouped article lists into a private Substack draft edition over the native HTTP API.
-- `triage/gmail.py` — read-only Gmail label ingestion + link extraction / redirect decoding (adapter over the vendored `gmail_readonly/`).
+- `triage/gmail.py` — read-only Gmail label ingestion + link extraction / redirect decoding (adapter over the vendored `src/gmail_readonly/`).
 - `triage/history.py` — 54-week ground-truth dataset (Notion positives ⋈ Gmail offered links) + `stats.md`.
 - `results/newsletter/triage/criteria.json` — machine-readable selection criteria (twin of `docs/newsletter-triage-criteria.md`), rebuilt by `python -m newsletter.triage.criteria`. Gitignored — a build artifact merging the hand-written `RULES` in `triage/criteria.py` with data priors that carry real sender addresses.
 - `results/newsletter/triage/overrides.json` — owner-maintained sender decisions (tier `never|rarely|usually|always|review`, e.g. paywalled publications); applied before the data priors, updated by the feedback loop. Gitignored for the same reason as `triage/lessons.json` — regenerated/appended locally, carries real sender addresses.
@@ -311,8 +311,8 @@ against; the store + control-panel tab (below) holds every run and
 owner decision and also carries the Chrome hand-off + watermark step.
 The ground-truth build lives under `newsletter/triage/`:
 
-- `gmail.py` — read-only Gmail adapter over the vendored `gmail_readonly/` +
-  `google_oauth_common/` packages (byte-for-byte from whatsapp-radar — never
+- `gmail.py` — read-only Gmail adapter over the vendored `src/gmail_readonly/` +
+  `src/google_oauth_common/` packages (byte-for-byte from whatsapp-radar — never
   edit them here; extend in this adapter). Raw MIME walk, `<a href>` extraction,
   noise filter (unsubscribe / share / social / app-store / …), tracking-redirect
   decoding: local first (ConvertKit/Kit/HBR base64 path, Substack `redirect/2/`
@@ -469,7 +469,7 @@ token is missing or revoked, re-consent (opens a browser, requests
 `gmail.readonly` only):
 
 ```powershell
-& .\.venv\Scripts\python.exe -m gmail_readonly.oauth --credentials auth\gmail\credentials.json --token auth\gmail\token.json
+$env:PYTHONPATH = "src"; & .\.venv\Scripts\python.exe -m gmail_readonly.oauth --credentials auth\gmail\credentials.json --token auth\gmail\token.json
 ```
 
 Gotchas: an OAuth app left in *Testing* issues refresh tokens that expire after
@@ -477,7 +477,7 @@ Gotchas: an OAuth app left in *Testing* issues refresh tokens that expire after
 revocation, a Google password change, or 6 months unused; recovery = remove the
 grant at `myaccount.google.com/connections`, delete only `auth/gmail/token.json`,
 re-run the command above. Vendored-package drift check:
-`git diff --no-index -- E:\automation\whatsapp-radar\gmail_readonly gmail_readonly`
+`git diff --no-index -- E:\automation\whatsapp-radar\gmail_readonly src\gmail_readonly`
 (and the same for `google_oauth_common`) — empty output means byte-identical.
 The portable contract test `tests/test_gmail_readonly.py` is pytest-style
 (`& .\.venv\Scripts\python.exe -m pytest tests\test_gmail_readonly.py`).
