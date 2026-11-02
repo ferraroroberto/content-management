@@ -13,6 +13,11 @@ Most of `tests/` is `unittest.TestCase`-based and picked up by discovery.
 separately with pytest, or run the whole suite through pytest instead, which
 understands both styles.
 
+Both runs sit inside the runtime write probe: `scripts/runtime_write_ratchet.py
+--snapshot <file>` before them records what already sits untracked or ignored
+under the code folders, and `--probe <file>` after them fails on any file the
+tests left there. Runtime output belongs outside the code folders.
+
 ## 1. Static-analysis ratchet (`scripts/static_ratchet_gate.py`)
 
 Compares the repo's unused imports, unused variables, duplicated blocks and a
@@ -131,3 +136,21 @@ Follow the convention; a call that must break it keeps a reasoned
 `scripts/conventions_ratchet.py --update-baseline --allow-additions` adds an
 entry. See the scaffold's `docs/conventions-ratchet.md` for the exit codes
 and keys.
+
+## 9. Runtime write ratchet (`scripts/runtime_write_ratchet_gate.py`)
+
+Fails when a Python file's count of write targets (open for writing,
+`Path.write_*`, `mkdir`, a log `FileHandler`, `sqlite3.connect`, a copy
+destination) resolving under a code folder rises above
+`.runtime-write-ratchet-baseline.json`. The code folders are `src/`, `scripts/`,
+`config/` and the tool packages, set in `code_folders` of
+`[runtime_write_ratchet]`; `src/gmail_readonly/` and `src/google_oauth_common/`
+are excluded as vendored copies. A target the resolver cannot place is counted
+as `unresolved`, and a new one is **NOT CONFIRMED**. The script imports its
+vendored sibling, `scripts/runtime_write_resolve.py`.
+
+Move the write under `data/` or the runtime root, or mark a deliberate one
+`# runtime-write-exempt: <reason>`, then shrink the baseline in the same PR with
+`scripts/runtime_write_ratchet.py --update-baseline`; only `--allow-additions`
+adds. See the scaffold's `docs/runtime-write-ratchet.md` for the exit codes and
+keys.
