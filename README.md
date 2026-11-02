@@ -533,8 +533,10 @@ each stage checks, its baseline file, and how to shrink it after a fix:
 [`docs/verification-gates.md`](docs/verification-gates.md).
 
 ```powershell
+& .\.venv\Scripts\python.exe scripts/runtime_write_ratchet.py --snapshot $env:TEMP\rw-snapshot.json  # what already sits under the code folders
 & .\.venv\Scripts\python.exe -m unittest discover tests -v          # most of tests/
 & .\.venv\Scripts\python.exe -m pytest tests/test_gmail_readonly.py -v  # pytest-style, skipped by discover
+& .\.venv\Scripts\python.exe scripts/runtime_write_ratchet.py --probe $env:TEMP\rw-snapshot.json     # fails on a file the tests left there
 & .\.venv\Scripts\python.exe -m scripts.static_ratchet_gate         # unused code, duplication, ruff B/S
 & .\.venv\Scripts\python.exe -m scripts.docs_ratchet_gate           # README size cap, history markers
 & .\.venv\Scripts\python.exe -m scripts.comment_ratchet_gate        # #NNN issue refs in comments
@@ -543,6 +545,7 @@ each stage checks, its baseline file, and how to shrink it after a fix:
 & .\.venv\Scripts\python.exe -m scripts.doc_refs_ratchet_gate       # dangling repo paths/links in docs
 & .\.venv\Scripts\python.exe -m scripts.dead_code_ratchet_gate      # unreferenced functions/classes/methods
 & .\.venv\Scripts\python.exe -m scripts.conventions_ratchet_gate    # no-window, logging-not-print, no-drive-path
+& .\.venv\Scripts\python.exe -m scripts.runtime_write_ratchet_gate  # writes resolving under a code folder
 ```
 
 ## 📝 License and contact
