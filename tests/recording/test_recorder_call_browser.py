@@ -58,6 +58,14 @@ CALL_SENDER_JS = """async () => {
 }"""
 
 
+# Records every AudioContext the page creates, to count the ones a take opens.
+COUNT_CONTEXTS_JS = """
+window.__contexts = [];
+const Native = window.AudioContext;
+window.AudioContext = class extends Native { constructor(...a) { super(...a); window.__contexts.push(this); } };
+"""
+
+
 def _probe(path: Path) -> dict:
     out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,width,height:format=duration",
                           "-of", "json", str(path)], check=True, capture_output=True, text=True,
@@ -113,8 +121,10 @@ class CallInTheBrowserTests(unittest.TestCase):
         app = server.create_app(self.episode, ChunkStore(Path(self.tmp.name) / "staging"), links, ICE)
         self.web = self.enterContext(_Server(app))
 
-    def _open(self, side: str):
+    def _open(self, side: str, init_script: str = ""):
         page = self.browser.new_context().new_page()
+        if init_script:
+            page.add_init_script(init_script)
         page.goto(f"http://127.0.0.1:{self.web.port}/r/{self.token[side]}")
         return page
 
@@ -170,6 +180,29 @@ class CallInTheBrowserTests(unittest.TestCase):
             ref_probe = _probe(out / ref["file"])
             self.assertEqual([s["codec_type"] for s in ref_probe["streams"]], ["audio"], f"{side} reference streams")
             self.assertGreater(float(ref_probe["format"]["duration"]), RECORD_S - 2, f"{side} reference duration")
+
+    def _record_one_take(self, page) -> None:
+        page.wait_for_function("!document.getElementById('start').disabled", timeout=TIMEOUT_S * 1000)
+        page.click("#start")
+        page.wait_for_function("window.__recorder && window.__recorder.recording", timeout=TIMEOUT_S * 1000)
+
+    def test_a_take_shows_the_level_strip_on_one_audio_context_and_releases_it(self) -> None:
+        page = self._open("host", COUNT_CONTEXTS_JS)
+        self._record_one_take(page)
+        page.wait_for_selector("#wave[data-rec-wave=on] .rec-wave", timeout=TIMEOUT_S * 1000)
+        self.assertEqual(page.evaluate("window.__contexts.length"), 1, "one AudioContext for the take")
+        page.click("#stop")
+        page.wait_for_function("!document.querySelector('#wave[data-rec-wave]')", timeout=TIMEOUT_S * 1000)
+        page.wait_for_function("window.__contexts.every((c) => c.state === 'closed')", timeout=TIMEOUT_S * 1000)
+
+    def test_a_take_records_without_audio_context(self) -> None:
+        page = self._open("host", "delete window.AudioContext; delete window.webkitAudioContext;")
+        self._record_one_take(page)
+        page.wait_for_selector("#wave[data-rec-wave=on] .rec-wave", timeout=TIMEOUT_S * 1000)
+        time.sleep(1)
+        page.click("#stop")
+        state = self._wait({"host": page}, "the upload to finish", lambda s: not s["recording"] and s["results"])
+        self.assertEqual(state["host"]["errors"], [])
 
 
 def page_constant(name: str) -> int:

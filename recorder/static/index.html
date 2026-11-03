@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Podcast recorder</title>
+<link rel="stylesheet" href="/static/_vendored/rec-wave/rec-wave.css">
 <style>
   :root {
     --canvas: #ffffff; --canvas-subtle: #f6f8fa; --card: #ffffff; --border: #d1d9e0;
@@ -12,6 +13,7 @@
     --success: #1a7f37; --danger: #cf222e; --attention: #9a6700;
     --success-text: #116329; --danger-text: #a40e26; --attention-text: #7d4e00; --control-border: #818b98;
     --radius-md: 12px; --radius-lg: 16px; --gutter: 12px;
+    --space-sm: 8px; --radius-pill: 9999px; --font-label: 0.875rem;
     color-scheme: light dark;
   }
   @media (prefers-color-scheme: dark) {
@@ -35,7 +37,7 @@
   select { height: 36px; border-radius: var(--radius-md); border: 1px solid var(--control-border);
            background: var(--canvas-subtle); color: var(--fg); padding: 0 8px; flex: 1 1 200px; min-width: 0; }
   .choice { display: inline-flex; gap: 6px; align-items: center; min-height: 44px; padding: 0 8px; }
-  button { height: 48px; border-radius: var(--radius-md); font: 600 0.875rem/1.1 inherit; padding: 0 20px;
+  button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 48px; border-radius: var(--radius-md); font: 600 0.875rem/1.1 inherit; padding: 0 20px;
            border: 1px solid var(--border); background: var(--canvas-subtle); color: var(--fg); cursor: pointer; }
   button.primary { background: var(--accent-fill); color: var(--accent-fg);
                    border-color: color-mix(in srgb, var(--accent) 28%, transparent); }
@@ -81,7 +83,7 @@
     <p class="meta" id="settings"></p>
     <div class="row">
       <button class="primary" id="start" disabled>Start recording</button>
-      <button class="danger" id="stop" disabled>Stop</button>
+      <button class="danger" id="stop" disabled><span id="wave" aria-hidden="true">■</span> Stop</button>
       <span class="badge" id="state">idle</span>
     </div>
   </section>

@@ -23,7 +23,10 @@ A request with an unknown token gets a 404.
 Each side opens its link in **Chrome or Edge**. The call starts as soon as
 both pages are open. Each side picks camera and microphone, chooses 1080p
 (default) or 4K, and presses *Start recording*; *Stop* ends it. The page shows
-how much is uploaded. The files, per side:
+how much is uploaded. While a take records, the Stop button shows the fleet's
+live level strip and the elapsed time, read from the stream the page already
+holds (`static/_vendored/rec-wave/`, vendored verbatim from
+`project-scaffolding`; recording works without it). The files, per side:
 
 - `video editing/recorder - <side> - <date time>.mp4`: this side's camera
   and mic, full quality.
