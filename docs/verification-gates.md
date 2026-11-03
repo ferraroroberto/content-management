@@ -154,3 +154,23 @@ Move the write under `data/` or the runtime root, or mark a deliberate one
 `scripts/runtime_write_ratchet.py --update-baseline`; only `--allow-additions`
 adds. See the scaffold's `docs/runtime-write-ratchet.md` for the exit codes and
 keys.
+
+## 10. Usage track ratchet (`scripts/usage_track_ratchet_gate.py`)
+
+Holds the recorder page (`recorder/static/**`) to the fleet usage log and fails
+when a file's count for a rule rises above `.usage-track-ratchet-baseline.json`,
+which is empty today: `untracked-control` (a button, select, radio group or
+other control with no constant `data-track` id), `untracked-sheet` (a `<dialog>`
+with no `data-track-view`) and `dynamic-id` (a tracking id built at run time).
+The fourth rule, `usage-log-wired`, is never baselined: it fails when the
+`usage-log` client and `usage_log` server are not both declared in `[vendored]`,
+no page script calls `initUsageLog(`, or no tracked Python file calls
+`usage_router(`. The wrapper reports git or a page file it could not read as
+**NOT CONFIRMED**. The script imports its vendored sibling,
+`scripts/usage_track_scan.py`.
+
+Give a new control its `data-track` id; a control that must stay untracked keeps
+a reasoned `<rule>-exempt: <reason>` marker. Only
+`scripts/usage_track_ratchet.py --update-baseline --allow-additions` adds an
+entry. See the scaffold's `docs/usage-track-ratchet.md` for the rules, exit codes
+and keys.

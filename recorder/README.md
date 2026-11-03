@@ -107,6 +107,30 @@ server says so at start, and some guests may not connect.
   is needed because neither container `MediaRecorder` writes carries a
   usable duration.
 
+## Usage log
+
+The page records which of its controls get used, with the fleet's usage log
+(`static/_vendored/usage-log/` and `src/usage_log.py`, both vendored verbatim
+from `project-scaffolding`). It stores event kind, control id, a random
+per-visit id, device class and a timestamp, never an address, a name, a token
+or a file name. The database is `recorder/usage.sqlite3` under the fleet
+runtime-data root (`src/runtime_data.py`), outside git.
+
+- `POST /api/usage/events` takes batches from every caller of the page, guests
+  included. It is matched before the `/api/{token}` routes, so no link route
+  sees a different request.
+- `GET /api/usage/summary` and `GET /api/usage/time` answer only the owner, and
+  everyone else gets 403. A guest reaches the server through Funnel, which
+  connects from this machine, so the address cannot tell the two apart; the
+  `Tailscale-Funnel-Request` and `X-Forwarded-For` headers Tailscale's proxy
+  sets do (`recorder/usage.py`). A request with neither header, or whose
+  forwarded address is loopback or on the tailnet, is the owner.
+- A server started without a usage database serves no `/api/usage/...` route;
+  the tests pass a temp file, never the real database.
+- Every control on the page carries a `data-track` id, and the usage track
+  ratchet (`scripts/usage_track_ratchet_gate.py`) fails the gate on a new one
+  without it.
+
 ## Config (`config.json` → `podcast.recorder`)
 
 | Key | Default | What |
@@ -136,6 +160,10 @@ server says so at start, and some guests may not connect.
   arbitrary bytes and rejoined to their duration), the server (token refusal,
   upload/resume/finish, the reference file's name) and the signalling (bad
   link or peer id refused, presence, relay, one socket per side, ICE config).
+- `tests/recording/test_recorder_usage.py` covers the usage log: events from a funnelled
+  guest, the owner-only summary and time (200 on loopback and the tailnet, 403
+  for a funnelled guest or an off-machine peer), and every token route answering
+  the same with the log mounted.
 - `tests/recording/test_recorder_call_browser.py` runs the call end to end against a
   local server: two pages in Playwright's Chromium with a fake camera and mic
   connect, the call sender carries the 720p / 1.5 Mbps cap while each side

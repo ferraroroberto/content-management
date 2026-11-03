@@ -64,7 +64,7 @@
       <strong>Call</strong><span class="badge" id="call">connecting</span>
     </div>
     <video id="remote" autoplay playsinline style="margin-top:8px"></video>
-    <button id="hear" hidden>Play the other side's sound</button>
+    <button id="hear" data-track="hear-remote" hidden>Play the other side's sound</button>
     <p class="meta">You see and hear the other side here. The call is only for talking: each side's own
       recording is made on its own computer, in full quality.</p>
   </section>
@@ -72,19 +72,19 @@
   <section class="card">
     <video id="preview" autoplay muted playsinline></video>
     <div class="row" style="margin-top:12px">
-      <label for="camera">Camera</label><select id="camera"></select>
+      <label for="camera">Camera</label><select id="camera" data-track="camera"></select>
     </div>
     <div class="row" style="margin-top:8px">
-      <label for="mic">Microphone</label><select id="mic"></select>
+      <label for="mic">Microphone</label><select id="mic" data-track="mic"></select>
     </div>
-    <div class="row" style="margin-top:8px" role="radiogroup" aria-label="Resolution">
+    <div class="row" style="margin-top:8px" role="radiogroup" aria-label="Resolution" data-track="resolution">
       <span class="choice"><input type="radio" name="res" id="res1080" value="1080" checked><label for="res1080">1080p</label></span>
       <span class="choice"><input type="radio" name="res" id="res2160" value="2160"><label for="res2160">4K (if the camera allows; large upload)</label></span>
     </div>
     <p class="meta" id="settings"></p>
     <div class="row">
-      <button class="primary" id="start" disabled>Start recording</button>
-      <button class="danger" id="stop" disabled><span id="wave" aria-hidden="true">■</span> Stop</button>
+      <button class="primary" id="start" data-track="start" disabled>Start recording</button>
+      <button class="danger" id="stop" data-track="stop" disabled><span id="wave" aria-hidden="true">■</span> Stop</button>
       <span class="badge" id="state">idle</span>
     </div>
   </section>
@@ -106,5 +106,9 @@
   </footer>
 </main>
 <script src="/static/recorder.js"></script>
+<script type="module">
+  import { initUsageLog } from "/static/_vendored/usage-log/usage-log.js";
+  initUsageLog().trackView("recorder");
+</script>
 </body>
 </html>

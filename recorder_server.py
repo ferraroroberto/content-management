@@ -28,6 +28,7 @@ from config.logger_config import setup_logger  # noqa: E402
 from podcast.episode import load_podcast_config  # noqa: E402
 from recorder.server import create_app, ensure_links, ice_servers  # noqa: E402
 from recorder.store import ChunkStore  # noqa: E402
+from src.runtime_data import runtime_db_path  # noqa: E402
 
 DEFAULT_PORT = 8470
 
@@ -59,7 +60,10 @@ def main(argv: list[str] | None = None) -> int:
     ice = ice_servers(rcfg)
     logger.info("ℹ️ call relay: %s", "STUN + TURN" if len(ice) > 1 else "STUN only (no TURN configured: strict "
                 "networks may not connect)")
-    uvicorn.run(create_app(folder, ChunkStore(staging), links, ice), host=host, port=port, log_level="warning")
+    usage_db = runtime_db_path("recorder", "usage.sqlite3", create=True)
+    logger.info("ℹ️ usage log: %s", usage_db)
+    app = create_app(folder, ChunkStore(staging), links, ice, usage_db=usage_db)
+    uvicorn.run(app, host=host, port=port, log_level="warning")
     return 0
 
 
