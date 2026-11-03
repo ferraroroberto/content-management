@@ -29,6 +29,8 @@ extra_roots = [
 [contracts]
 ignore_refs = [
     { path = "newsletter/build_newsletter.py", repo = "automation", why = "docstring provenance note naming the legacy script path, not a runtime or build-time read" },
+    { path = "newsletter/normalize_names.py", repo = "automation", why = "docstring provenance note naming the legacy script path, not a runtime or build-time read" },
+    { path = "newsletter/normalize_url.py", repo = "automation", why = "docstring provenance note naming the legacy script path, not a runtime or build-time read" },
 ]
 
 # Vendored byte-for-byte from project-scaffolding. sha = the source repo commit
