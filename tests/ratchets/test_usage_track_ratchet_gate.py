@@ -103,6 +103,8 @@ class SeededViolationTurnsTheGateRedTests(unittest.TestCase):
         (self.repo / ".fleet.toml").write_text(
             '[vendored]\nusage-log = { src = "x", dest = "site/_vendored/usage-log" }\n'
             'usage_log = { src = "x", dest = "src/usage_log.py" }\n'
+            'usage_track_ratchet = { src = "x", dest = "scripts/usage_track_ratchet.py" }\n'
+            'usage_track_scan = { src = "x", dest = "scripts/usage_track_scan.py" }\n'
             '[usage_track_ratchet]\nenabled = true\npaths = ["site/**"]\n'
             'rules = ["untracked-control", "untracked-sheet", "dynamic-id", "usage-log-wired"]\n',
             encoding="utf-8",
