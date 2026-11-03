@@ -6,6 +6,7 @@ layer       = "working-pipe"
 icon        = "📝"
 description = "Content surfaces: reporting, planning, newsletter, podcast and video."
 tag         = ["→", "Notion"]
+depends_on  = ["local-llm-hub"]
 
 # Repo layout (project-scaffolding docs/repo-layout.md): a multi-tool pipeline-cli
 # repo keeps one root package per tool, so each tool folder below is a declared
@@ -21,6 +22,13 @@ extra_roots = [
     "podcast",
     "recorder",
     "reporting",
+]
+
+# Reviewed false positive: the docstring names the old location this module was
+# migrated from; nothing is read from that path at runtime or build time.
+[contracts]
+ignore_refs = [
+    { path = "newsletter/build_newsletter.py", repo = "automation", why = "docstring provenance note naming the legacy script path, not a runtime or build-time read" },
 ]
 
 # Vendored byte-for-byte from project-scaffolding. sha = the source repo commit
