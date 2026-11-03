@@ -195,6 +195,32 @@ async function openStream() {
     + `${mime || "no supported recording format"}`;
   $("start").disabled = !mime;
   attachToCall();
+  if (waveStop) await mountWave();
+}
+
+// The level strip on the Stop button while a take records. It reads the audio of
+// the stream openStream() holds (no second getUserMedia) and owns one AudioContext
+// per mount; a reopened stream gets a fresh mount, since a level source connects once.
+const waveModule = import("/static/_vendored/rec-wave/rec-wave.js").catch((err) => {
+  console.info("[recorder] level strip unavailable", err);
+  return null;
+});
+let waveStop = null;
+let waveSource = null;
+
+function unmountWave() {
+  if (waveStop) waveStop();
+  if (waveSource) waveSource.close();
+  waveStop = waveSource = null;
+}
+
+async function mountWave() {
+  const mod = await waveModule;
+  if (!mod || !stream || !stream.getAudioTracks().length) return;
+  if (waveStop) { waveStop(); if (waveSource) waveSource.close(); }
+  // A null source (no Web Audio) leaves the strip showing the timer alone; recording is unaffected.
+  waveSource = mod.createLevelSource(stream);
+  waveStop = mod.attachRecWave($("wave"), stream, { source: waveSource });
 }
 
 async function listDevices() {
@@ -246,7 +272,7 @@ async function start() {
   const [mime, ext] = pickMime();
   const p = PROFILES[resolution()];
   const [mr, rec] = await record(stream, "main", mime, ext, { videoBitsPerSecond: p.bps, audioBitsPerSecond: 192000 },
-    () => { current = null; stopRef(); releaseWakeLock(); setControls(); });
+    () => { current = null; unmountWave(); stopRef(); releaseWakeLock(); setControls(); });
   recorder = mr;
   current = rec;
   recorder.onerror = (e) => warn(`recording error: ${e.error ? e.error.name : "unknown"}; what was recorded is kept`);
@@ -257,6 +283,7 @@ async function start() {
         + "taken by another app); the recording ended there and is being uploaded");
     });
   }
+  await mountWave();
   startRef();
   try { wakeLock = await navigator.wakeLock.request("screen"); } catch { wakeLock = null; }
   setControls();
