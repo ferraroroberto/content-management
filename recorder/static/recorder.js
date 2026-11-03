@@ -531,8 +531,21 @@ async function render() {
                         errors: recs.filter((r) => r.error).map((r) => r.error) };
 }
 
+// The footer shows which build serves this page; it stays empty when the
+// version cannot be read.
+async function showBuild() {
+  try {
+    const [{ buildReadoutText }, body] = await Promise.all([
+      import("/static/_vendored/page-foot/page-foot.js"), call("/version")]);
+    $("buildReadout").textContent = buildReadoutText(body.git_sha || "unknown", body.built_at || "");
+  } catch (err) {
+    console.info("[recorder] build footer unavailable", err);
+  }
+}
+
 async function main() {
   db = await openDb();
+  showBuild();
   try {
     const { side } = await call("");
     polite = side === "guest";

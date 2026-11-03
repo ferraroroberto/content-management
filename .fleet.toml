@@ -49,6 +49,7 @@ conventions_ratchet = { src = "scripts/conventions_ratchet.py", sha = "5505185c5
 runtime_write_ratchet = { src = "scripts/runtime_write_ratchet.py", sha = "5505185c5f4b10eea5ab268e7b6676c6c54340c4", dest = "scripts/runtime_write_ratchet.py" }
 runtime_write_resolve = { src = "scripts/runtime_write_resolve.py", sha = "5505185c5f4b10eea5ab268e7b6676c6c54340c4", dest = "scripts/runtime_write_resolve.py" }
 rec-wave = { src = "app/webapp/static/_vendored/rec-wave", sha = "35c1f11348e100fa6b5da487411424c6d6ced43c", dest = "recorder/static/_vendored/rec-wave" }
+page-foot = { src = "app/webapp/static/_vendored/page-foot", sha = "35c1f11348e100fa6b5da487411424c6d6ced43c", dest = "recorder/static/_vendored/page-foot" }
 
 # Comment ratchet (project-scaffolding docs/comment-ratchet.md): fails the pre-ship
 # gate when a file's count of `#NNN` issue references inside comments rises above
