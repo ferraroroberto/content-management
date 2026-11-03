@@ -19,6 +19,8 @@ Routes (``{token}`` is a link token, ``{rid}`` a recording id the page makes):
 * ``GET  /api/{token}/ice`` — the STUN/TURN servers for the call
 * ``WS   /ws/{token}`` — signalling: the page's offers, answers and ICE
   candidates are relayed to the other side (#342)
+* ``POST /api/usage/events``, ``GET /api/usage/summary`` and ``/time`` — the usage
+  log, matched before the token routes (``recorder/usage.py``)
 
 ``kind`` is ``main`` (this side's camera and mic) or ``ref`` (the other side's
 voice as received over the call, low quality: the reference the sync stage
@@ -52,6 +54,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from config.no_window import NO_WINDOW
 from recorder.store import RECORDING_ID, ChunkStore, MissingChunks
+from recorder.usage import usage_route
 
 logger = logging.getLogger("recorder.server")
 
@@ -189,8 +192,9 @@ async def _join_call(ws: WebSocket, side: str, peer: str, room: Room) -> None:
 
 
 def create_app(episode: Path, store: ChunkStore, links: dict[str, str],
-               ice: Optional[list[dict]] = None) -> Starlette:
-    """The app for one episode folder."""
+               ice: Optional[list[dict]] = None, usage_db: Optional[Path] = None) -> Starlette:
+    """The app for one episode folder. ``usage_db`` turns the usage log on
+    (``recorder/usage.py``); without it ``/api/usage/...`` is not served."""
     out_dir = episode / OUTPUT_DIR
     ice = ice or [{"urls": DEFAULT_STUN}]
     room = Room()
@@ -274,6 +278,7 @@ def create_app(episode: Path, store: ChunkStore, links: dict[str, str],
         return JSONResponse(result)
 
     routes = [
+        *([usage_route(usage_db)] if usage_db else []),
         Route("/r/{token}", page),
         Route("/api/{token}", info),
         Route("/api/{token}/version", guarded(version)),

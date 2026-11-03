@@ -199,9 +199,11 @@ the clip review from a terminal"]
   RECSRV["recorder_server.py + recorder/
 browser page (MediaRecorder, IndexedDB),
 P2P call + WebSocket signalling,
-chunk upload, join + remux"]
+chunk upload, join + remux,
+usage log (events open, reads owner-only)"]
   RECSRV -->|"host + guest tracks"| EPVID[["<episode>/video editing/"]]
   RECSRV -.->|"ffmpeg helpers"| podcast_mod
+  RECSRV -->|"control taps, device class"| USAGEDB[("usage.sqlite3 (runtime-data root)")]
   EPVID --> PINIT
   PINIT -->|"episode.json"| PODPIPE
   EPVID --> PODPIPE

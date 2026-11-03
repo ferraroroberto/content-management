@@ -42,6 +42,8 @@ streamlit
 # Both already come with Streamlit; listed because recorder/ imports them.
 starlette
 uvicorn
+# The recorder mounts the fleet usage log, a FastAPI router (recorder/usage.py).
+fastapi
 # Local sklearn classifier (Phase 2a) trained on accumulated whitelist/blacklist
 # labels; runs as a layered pass after rules.py on rows the rules left as 'unknown'.
 # Pinned to one minor line because the trained pipeline is persisted as a pickle
