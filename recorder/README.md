@@ -26,7 +26,10 @@ both pages are open. Each side picks camera and microphone, chooses 1080p
 how much is uploaded. While a take records, the Stop button shows the fleet's
 live level strip and the elapsed time, read from the stream the page already
 holds (`static/_vendored/rec-wave/`, vendored verbatim from
-`project-scaffolding`; recording works without it). The files, per side:
+`project-scaffolding`; recording works without it). The page ends with the
+fleet's build footer (`static/_vendored/page-foot/`, also vendored verbatim),
+filled from `GET /api/<token>/version`: the commit the running server was
+started from, so a stale process shows. The files, per side:
 
 - `video editing/recorder - <side> - <date time>.mp4`: this side's camera
   and mic, full quality.

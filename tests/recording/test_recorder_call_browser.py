@@ -195,6 +195,13 @@ class CallInTheBrowserTests(unittest.TestCase):
         page.wait_for_function("!document.querySelector('#wave[data-rec-wave]')", timeout=TIMEOUT_S * 1000)
         page.wait_for_function("window.__contexts.every((c) => c.state === 'closed')", timeout=TIMEOUT_S * 1000)
 
+    def test_the_page_ends_with_one_build_footer(self) -> None:
+        page = self._open("host")
+        page.wait_for_function("document.getElementById('buildReadout').textContent.startsWith('Build: ')",
+                               timeout=TIMEOUT_S * 1000)
+        self.assertEqual(page.evaluate("document.querySelectorAll('footer.page-foot').length"), 1)
+        self.assertTrue(page.evaluate("document.querySelector('main.app').lastElementChild.matches('footer.page-foot')"))
+
     def test_a_take_records_without_audio_context(self) -> None:
         page = self._open("host", "delete window.AudioContext; delete window.webkitAudioContext;")
         self._record_one_take(page)

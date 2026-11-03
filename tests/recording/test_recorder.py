@@ -139,6 +139,12 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.client.get(f"/api/{self.token['guest']}").json(), {"side": "guest"})
         self.assertEqual(self.client.get("/static/recorder.js").status_code, 200)
 
+    def test_version_reports_the_build_to_a_link_holder_only(self) -> None:
+        body = self.client.get(f"/api/{self.token['host']}/version").json()
+        self.assertEqual(set(body), {"git_sha", "built_at"})
+        self.assertTrue(body["git_sha"])
+        self.assertEqual(self.client.get("/api/nope/version").status_code, 404)
+
     def test_upload_resume_and_finish(self) -> None:
         api, rid = f"/api/{self.token['host']}/rec", _rid()
         self.assertEqual(self.client.put(f"{api}/{rid}/chunk/0", content=b"A").json(), {"ok": True, "duplicate": False})

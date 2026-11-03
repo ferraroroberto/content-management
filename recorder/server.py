@@ -11,6 +11,7 @@ Routes (``{token}`` is a link token, ``{rid}`` a recording id the page makes):
 
 * ``GET  /r/{token}`` — the recorder page
 * ``GET  /api/{token}`` — which side this link records
+* ``GET  /api/{token}/version`` — ``{git_sha, built_at}``: the build the page footer shows
 * ``PUT  /api/{token}/rec/{rid}/chunk/{seq}`` — one chunk (body = bytes), idempotent
 * ``GET  /api/{token}/rec/{rid}/have`` — chunk numbers the server holds
 * ``POST /api/{token}/rec/{rid}/finish`` — ``{"total", "ext", "kind"}``: join, remux into
@@ -37,6 +38,7 @@ import logging
 import os
 import re
 import secrets
+import subprocess
 from pathlib import Path
 from typing import Optional
 
@@ -48,6 +50,7 @@ from starlette.routing import Mount, Route, WebSocketRoute
 from starlette.staticfiles import StaticFiles
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
+from config.no_window import NO_WINDOW
 from recorder.store import RECORDING_ID, ChunkStore, MissingChunks
 
 logger = logging.getLogger("recorder.server")
@@ -64,6 +67,29 @@ DEFAULT_STUN = ["stun:stun.l.google.com:19302"]
 UNKNOWN_LINK = 4404  # WebSocket close code for a bad token
 PEER_ID = re.compile(r"^[0-9a-f-]{8,64}$")
 REPLACED = 4001      # ... for a socket its side opened again
+
+
+def _build_identity() -> dict[str, str]:
+    """The checkout's short SHA and commit time, read once at import: the running
+    process shows the build it was started from, so a stale process is visible."""
+    root = Path(__file__).resolve().parent.parent
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(root), "log", "-1", "--format=%h%n%cI"],
+            capture_output=True, text=True, timeout=10, check=True,
+            stdin=subprocess.DEVNULL, creationflags=NO_WINDOW,
+        ).stdout.split()
+        return {"git_sha": out[0], "built_at": out[1]}
+    except (OSError, subprocess.SubprocessError, IndexError) as exc:
+        logger.warning("⚠️ build identity unavailable: %s", exc)
+        return {"git_sha": "unknown", "built_at": ""}
+
+
+BUILD = _build_identity()
+
+
+async def version(request: Request, side: str) -> Response:
+    return JSONResponse(BUILD, headers={"Cache-Control": "no-store"})
 
 
 def reference_of(payload: dict) -> dict:
@@ -250,6 +276,7 @@ def create_app(episode: Path, store: ChunkStore, links: dict[str, str],
     routes = [
         Route("/r/{token}", page),
         Route("/api/{token}", info),
+        Route("/api/{token}/version", guarded(version)),
         Route("/api/{token}/ice", ice_config),
         WebSocketRoute("/ws/{token}", signal),
         Route("/api/{token}/rec/{rid}/chunk/{seq:int}", chunk, methods=["PUT"]),

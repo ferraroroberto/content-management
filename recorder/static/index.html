@@ -6,10 +6,11 @@
 <meta name="robots" content="noindex">
 <title>Podcast recorder</title>
 <link rel="stylesheet" href="/static/_vendored/rec-wave/rec-wave.css">
+<link rel="stylesheet" href="/static/_vendored/page-foot/page-foot.css">
 <style>
   :root {
     --canvas: #ffffff; --canvas-subtle: #f6f8fa; --card: #ffffff; --border: #d1d9e0;
-    --fg: #1f2328; --fg-muted: #656d76; --accent: #0969da; --accent-fg: #ffffff; --accent-fill: #0969da;
+    --fg: #1f2328; --fg-muted: #656d76; --muted: #656d76; --accent: #0969da; --accent-fg: #ffffff; --accent-fill: #0969da;
     --success: #1a7f37; --danger: #cf222e; --attention: #9a6700;
     --success-text: #116329; --danger-text: #a40e26; --attention-text: #7d4e00; --control-border: #818b98;
     --radius-md: 12px; --radius-lg: 16px; --gutter: 12px;
@@ -19,7 +20,7 @@
   @media (prefers-color-scheme: dark) {
     :root {
       --canvas: #0d1117; --canvas-subtle: #010409; --card: #161b22; --border: #30363d;
-      --fg: #e6edf3; --fg-muted: #7d8590; --accent: #2f81f7; --accent-fill: #1f6feb;
+      --fg: #e6edf3; --fg-muted: #7d8590; --muted: #7d8590; --accent: #2f81f7; --accent-fill: #1f6feb;
       --success: #3fb950; --danger: #f85149; --attention: #d29922;
       --success-text: #56d364; --danger-text: #ff7b72; --attention-text: #e3b341; --control-border: #6e7681;
     }
@@ -54,7 +55,7 @@
 </style>
 </head>
 <body>
-<main>
+<main class="app">
   <h1>Podcast recorder</h1>
   <p class="muted" id="intro">Loading…</p>
 
@@ -99,6 +100,10 @@
       reloads, the recording is kept on this computer and the upload resumes when you come back.
       Use Chrome or Edge.</p>
   </section>
+
+  <footer class="page-foot">
+    <p id="buildReadout"></p>
+  </footer>
 </main>
 <script src="/static/recorder.js"></script>
 </body>
