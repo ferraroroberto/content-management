@@ -1,23 +1,36 @@
-"""The recorder's usage log: the fleet's vendored router behind a Starlette route,
-with reads limited to the owner.
+"""The usage log behind a Starlette route, with reads limited to the owner.
 
-``src/usage_log.py`` (vendored verbatim) is a FastAPI router. The recorder is a
-Starlette app, so the router lives in a small FastAPI app that one route hands
-every ``/api/usage/...`` request to. That route comes before the ``/api/{token}``
-ones, so a usage request is never read as a link token and no token route sees
-a different request than it did.
+``src/usage_log.py`` is a FastAPI router. A Starlette app with no FastAPI of its
+own cannot ``include_router`` it, so the router lives in a small FastAPI app
+that one Starlette ``Route`` hands every ``/api/usage/...`` request to. Put that
+route before any catch-all or parameterised ``/api/...`` route, so a usage
+request is never read as something else and no other route sees a different
+request than it did.
+
+    from src.runtime_data import runtime_db_path
+    from src.usage_log_starlette import usage_route
+
+    routes = [
+        usage_route(runtime_db_path("my-app", "usage.sqlite3", create=True)),
+        ...,  # the app's other routes
+    ]
 
 ``POST /api/usage/events`` is open to every caller of the page, guests included:
 the page's controls are what the log counts. ``GET /api/usage/summary`` and
 ``/time`` answer only the owner, because they show how the owner uses the tool.
 
-Who is the owner: the server binds loopback and a guest arrives through
+Who is the owner: a server bound to loopback is reached by a guest through
 Tailscale Funnel, which connects from the machine itself. The peer address
 therefore cannot tell them apart, so the headers Tailscale's proxy sets decide
-(``Tailscale-Funnel-Request`` marks a funnelled request and
-``X-Forwarded-For`` carries the caller's address, replaced, never appended).
-A request with no proxy header, or whose forwarded address is loopback or on the
-tailnet, is the owner; anything else, or an address that does not parse, is not.
+(``Tailscale-Funnel-Request`` marks a funnelled request and ``X-Forwarded-For``
+carries the caller's address, replaced, never appended). A request with no
+proxy header, or whose forwarded address is loopback or on the tailnet, is the
+owner; anything else, or an address that does not parse, is not.
+
+Vendor-verbatim: adopters copy this file byte-identical into their own ``src/``
+beside ``src/usage_log.py`` (manifest key ``usage_log_starlette``). It imports
+that sibling as ``src.usage_log`` and needs FastAPI, which ``usage_router``
+needs anyway.
 """
 
 from __future__ import annotations
@@ -51,7 +64,11 @@ def _local_or_tailnet(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool
 
 
 def is_owner(peer: str | None, headers: Mapping[str, str]) -> bool:
-    """Whether a request comes from this machine or the owner's tailnet."""
+    """Whether a request comes from this machine or the owner's tailnet.
+
+    ``headers`` is looked up with lower-case names, as Starlette's ``Headers``
+    does; pass a plain ``dict`` with lower-case keys in a test.
+    """
     peer_ip = _address(peer)
     if peer_ip is None:
         return False

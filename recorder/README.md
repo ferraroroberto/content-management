@@ -123,7 +123,7 @@ runtime-data root (`src/runtime_data.py`), outside git.
   everyone else gets 403. A guest reaches the server through Funnel, which
   connects from this machine, so the address cannot tell the two apart; the
   `Tailscale-Funnel-Request` and `X-Forwarded-For` headers Tailscale's proxy
-  sets do (`recorder/usage.py`). A request with neither header, or whose
+  sets do (`src/usage_log_starlette.py`). A request with neither header, or whose
   forwarded address is loopback or on the tailnet, is the owner.
 - A server started without a usage database serves no `/api/usage/...` route;
   the tests pass a temp file, never the real database.
