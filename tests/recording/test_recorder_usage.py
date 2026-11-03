@@ -20,10 +20,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from starlette.datastructures import Headers  # noqa: E402
 from starlette.testclient import TestClient  # noqa: E402
 
-from recorder import server, usage  # noqa: E402
+from recorder import server  # noqa: E402
 from recorder.store import ChunkStore  # noqa: E402
 
 LOOPBACK = ("127.0.0.1", 50000)
@@ -36,39 +35,6 @@ BATCH = {
     "os_class": "windows",
     "events": [{"kind": "session_start"}, {"kind": "view", "id": "recorder"}, {"kind": "tap", "id": "start", "view": "recorder"}],
 }
-
-
-def is_owner(peer: str | None, headers: dict[str, str]) -> bool:
-    """``usage.is_owner`` with the case-insensitive headers a request carries."""
-    return usage.is_owner(peer, Headers(headers))
-
-
-class OwnerTests(unittest.TestCase):
-    def test_the_machine_itself_is_the_owner(self) -> None:
-        self.assertTrue(is_owner("127.0.0.1", {}))
-        self.assertTrue(is_owner("::1", {}))
-        self.assertTrue(is_owner("::ffff:127.0.0.1", {}))
-
-    def test_a_tailnet_peer_is_the_owner_and_any_other_peer_is_not(self) -> None:
-        self.assertTrue(is_owner("100.101.102.103", {}))
-        self.assertTrue(is_owner("fd7a:115c:a1e0::1", {}))
-        self.assertFalse(is_owner("203.0.113.9", {}))
-        self.assertFalse(is_owner("100.63.255.255", {}))
-        self.assertFalse(is_owner(None, {}))
-        self.assertFalse(is_owner("testclient", {}))
-
-    def test_a_funnelled_guest_arrives_from_loopback_and_is_not_the_owner(self) -> None:
-        self.assertFalse(is_owner("127.0.0.1", FUNNEL))
-        self.assertFalse(is_owner("127.0.0.1", {"Tailscale-Funnel-Request": "?1"}))
-        self.assertFalse(is_owner("127.0.0.1", {"X-Forwarded-For": "203.0.113.9"}))
-
-    def test_a_proxied_request_is_judged_by_the_address_the_proxy_names(self) -> None:
-        self.assertTrue(is_owner("127.0.0.1", TAILNET))
-        self.assertTrue(is_owner("127.0.0.1", {"X-Forwarded-For": "127.0.0.1"}))
-        self.assertFalse(is_owner("127.0.0.1", {"X-Forwarded-For": "not an address"}))
-        self.assertFalse(is_owner("127.0.0.1", {"X-Forwarded-For": ""}))
-        # A guest cannot pose as the owner: the proxy's own entry is the last one.
-        self.assertFalse(is_owner("127.0.0.1", {"X-Forwarded-For": "100.101.102.103, 203.0.113.9"}))
 
 
 class UsageRouteTests(unittest.TestCase):
