@@ -1,4 +1,7 @@
 # BEGIN vendored-copies (generated from .fleet.toml [vendored]; edit the manifest, not this block)
+/recorder/static/_vendored/page-foot
+/recorder/static/_vendored/rec-wave
+/recorder/static/_vendored/usage-log
 /scripts/comment_ratchet.py
 /scripts/conventions_ratchet.py
 /scripts/dead_code_ratchet.py
@@ -11,4 +14,9 @@
 /scripts/structure_band.py
 /scripts/structure_layout.py
 /scripts/structure_ratchet.py
+/scripts/usage_track_ratchet.py
+/scripts/usage_track_scan.py
+/src/runtime_data.py
+/src/usage_log.py
+/src/usage_log_starlette.py
 # END vendored-copies
