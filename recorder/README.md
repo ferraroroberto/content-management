@@ -29,7 +29,11 @@ holds (`static/_vendored/rec-wave/`, vendored verbatim from
 `project-scaffolding`; recording works without it). The page ends with the
 fleet's build footer (`static/_vendored/page-foot/`, also vendored verbatim),
 filled from `GET /api/<token>/version`: the commit the running server was
-started from, so a stale process shows. The files, per side:
+started from, so a stale process shows. Every `/static` URL on the page
+carries a `?v=` hash of the page's scripts and styles
+(`src/static_versioning.py`): `.js` and `.css` are served `immutable`, the
+page itself `no-store`, so an installed phone page picks up a new build on a
+normal reload. The files, per side:
 
 - `video editing/recorder - <side> - <date time>.mp4`: this side's camera
   and mic, full quality.
