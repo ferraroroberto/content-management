@@ -39,6 +39,9 @@ logger = logging.getLogger("demo_video.driver.facilitation_suite")
 
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 LOOP_FACTORY = "app.webapp.event_loop:selector_loop_factory"
+# The demo fixture seeds one small session on disk; two minutes is far past a healthy run
+# and ends a hung child instead of stalling the recording.
+FIXTURE_TIMEOUT_S = 120
 
 
 def _free_port() -> int:
@@ -76,7 +79,8 @@ class FacilitationSuiteDriver:
         folder.parent.mkdir(parents=True, exist_ok=True)
         env = self._env(root)
         subprocess.run([str(self.python), "-m", "tests.fixtures.demo", "--root", str(folder), "--ledger", str(ledger)],
-                       cwd=self.repo, env=env, check=True, capture_output=True, creationflags=NO_WINDOW)
+                       cwd=self.repo, env=env, check=True, capture_output=True, creationflags=NO_WINDOW,
+                       timeout=FIXTURE_TIMEOUT_S)
         self.session = _session_id(folder)
         self._patch_plan(folder / "session.yaml")
         port = _free_port()

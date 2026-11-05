@@ -42,6 +42,9 @@ from newsletter import notion_io
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = REPO_ROOT / "results" / "newsletter"
+# `clip` copies one short line and returns at once; ten seconds means it is wedged, and the
+# build stops with a TimeoutExpired naming the call rather than hanging on the prompt.
+CLIP_TIMEOUT_S = 10
 
 # The published newsletter's section order: a presentation choice, deliberately
 # not ``newsletter.topics.TOPICS`` (same labels, different order). Paired
@@ -364,6 +367,7 @@ def copy_to_clipboard(text: str) -> None:
             input=text, text=True, encoding="utf-8", check=True,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             creationflags=NO_WINDOW,
+            timeout=CLIP_TIMEOUT_S,
         )
         return
     import tkinter as tk
