@@ -167,6 +167,12 @@ rules = ["no-window", "logging-not-print", "no-drive-path", "subprocess-timeout"
 # the default print_paths (app/, src/) would skip every library package but app/
 print_paths = ["app/", "check_ip/", "config/", "demo_video/", "engagement/", "newsletter/", "planning/", "podcast/", "recorder/", "reporting/"]
 
+# A raw connect skips the WAL pragma and the schema bootstrap.
+[[conventions_ratchet.must_use]]
+call   = "sqlite3.connect"
+helper = ["check_ip/db.py"]
+why    = "check_ip/db.py is the one SQLite connection helper (WAL, schema)"
+
 # must-use: the recorder's /static mount goes through CachingStaticFiles, which stamps
 # the asset URLs with the fleet hash and sets an explicit Cache-Control; a bare
 # StaticFiles leaves an installed iOS PWA running the old build after a deploy.
