@@ -43,6 +43,9 @@ from config.no_window import NO_WINDOW
 REPO_ROOT = Path(__file__).resolve().parent.parent
 VENV_PY = REPO_ROOT / ".venv" / "Scripts" / "python.exe"
 LOG_TAIL_MAX = 800  # lines kept in memory per pipeline
+# `taskkill /T /F` on one process tree answers in well under a second; 15 s means it is
+# wedged, and the stop button reports that instead of freezing the UI thread.
+TASKKILL_TIMEOUT_S = 15
 
 logger = logging.getLogger("app.process_runner")
 
@@ -250,6 +253,7 @@ def stop_pipeline(name: str) -> None:
                 capture_output=True,
                 text=True,
                 check=True,
+                timeout=TASKKILL_TIMEOUT_S,
             )
         else:
             proc.terminate()

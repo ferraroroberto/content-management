@@ -45,7 +45,8 @@ structure_band = { src = "scripts/structure_band.py", sha = "3b708fd3c54ab7b93b0
 instruction_ratchet = { src = "scripts/instruction_ratchet.py", sha = "5505185c5f4b10eea5ab268e7b6676c6c54340c4", dest = "scripts/instruction_ratchet.py" }
 doc_refs_ratchet = { src = "scripts/doc_refs_ratchet.py", sha = "5505185c5f4b10eea5ab268e7b6676c6c54340c4", dest = "scripts/doc_refs_ratchet.py" }
 dead_code_ratchet = { src = "scripts/dead_code_ratchet.py", sha = "5505185c5f4b10eea5ab268e7b6676c6c54340c4", dest = "scripts/dead_code_ratchet.py" }
-conventions_ratchet = { src = "scripts/conventions_ratchet.py", sha = "41ca8abd5a2755a06bd8a620a72967211161d58e", dest = "scripts/conventions_ratchet.py" }
+conventions_ratchet = { src = "scripts/conventions_ratchet.py", sha = "39ae7582b35fe8ef05441bb5cba65c38b0dfad3f", dest = "scripts/conventions_ratchet.py" }
+conventions_readers = { src = "scripts/conventions_readers.py", sha = "39ae7582b35fe8ef05441bb5cba65c38b0dfad3f", dest = "scripts/conventions_readers.py" }
 runtime_write_ratchet = { src = "scripts/runtime_write_ratchet.py", sha = "5505185c5f4b10eea5ab268e7b6676c6c54340c4", dest = "scripts/runtime_write_ratchet.py" }
 runtime_write_resolve = { src = "scripts/runtime_write_resolve.py", sha = "5505185c5f4b10eea5ab268e7b6676c6c54340c4", dest = "scripts/runtime_write_resolve.py" }
 rec-wave = { src = "app/webapp/static/_vendored/rec-wave", sha = "35c1f11348e100fa6b5da487411424c6d6ced43c", dest = "recorder/static/_vendored/rec-wave" }
@@ -162,7 +163,7 @@ exclude  = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
 [conventions_ratchet]
 enabled  = true
 baseline = ".conventions-ratchet-baseline.json"
-rules    = ["no-window", "logging-not-print", "no-drive-path"]
+rules = ["no-window", "logging-not-print", "no-drive-path", "subprocess-timeout"]
 # the default print_paths (app/, src/) would skip every library package but app/
 print_paths = ["app/", "check_ip/", "config/", "demo_video/", "engagement/", "newsletter/", "planning/", "podcast/", "recorder/", "reporting/"]
 

@@ -544,7 +544,7 @@ each stage checks, its baseline file, and how to shrink it after a fix:
 & .\.venv\Scripts\python.exe -m scripts.instruction_ratchet_gate    # prompt-audit rules on CLAUDE.md/SKILL.md
 & .\.venv\Scripts\python.exe -m scripts.doc_refs_ratchet_gate       # dangling repo paths/links in docs
 & .\.venv\Scripts\python.exe -m scripts.dead_code_ratchet_gate      # unreferenced functions/classes/methods
-& .\.venv\Scripts\python.exe -m scripts.conventions_ratchet_gate    # no-window, logging-not-print, no-drive-path
+& .\.venv\Scripts\python.exe -m scripts.conventions_ratchet_gate    # no-window, logging-not-print, no-drive-path, subprocess-timeout
 & .\.venv\Scripts\python.exe -m scripts.runtime_write_ratchet_gate  # writes resolving under a code folder
 & .\.venv\Scripts\python.exe -m scripts.usage_track_ratchet_gate    # recorder controls tracked, usage log wired
 ```

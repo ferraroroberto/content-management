@@ -61,7 +61,7 @@ class WiringTests(unittest.TestCase):
         fleet = tomllib.loads((REPO_ROOT / ".fleet.toml").read_text(encoding="utf-8"))
         table = fleet["conventions_ratchet"]
         self.assertIs(table["enabled"], True)
-        self.assertEqual(table["rules"], ["no-window", "logging-not-print", "no-drive-path"])
+        self.assertEqual(table["rules"], ["no-window", "logging-not-print", "no-drive-path", "subprocess-timeout"])
         self.assertTrue((REPO_ROOT / table["baseline"]).is_file())
         entry = fleet["vendored"]["conventions_ratchet"]
         self.assertEqual(entry["dest"], "scripts/conventions_ratchet.py")
@@ -80,6 +80,9 @@ class SeededViolationTurnsTheGateRedTests(unittest.TestCase):
         "no-window": CLEAN + "\n\ndef spawn() -> None:\n    import subprocess\n\n    subprocess.run(['echo', 'x'], check=False)\n",
         "logging-not-print": CLEAN + "\n\ndef shout() -> None:\n    print('diagnostic')\n",
         "no-drive-path": CLEAN + "\nDATA = 'E:/data/out'\n",
+        "subprocess-timeout": CLEAN
+        + "\n\ndef spawn() -> None:\n    import subprocess\n\n"
+        + "    subprocess.run(['echo', 'x'], check=False, creationflags=0)\n",
     }
 
     # the sibling stage's throwaway-repo helpers, shared rather than copied
@@ -92,11 +95,14 @@ class SeededViolationTurnsTheGateRedTests(unittest.TestCase):
         self.repo = Path(tmp.name)
         (self.repo / "scripts").mkdir()
         (self.repo / "scripts" / "conventions_ratchet.py").write_bytes(gate.SCRIPT.read_bytes())
+        # the ratchet loads its sibling reader module from beside itself
+        readers = gate.SCRIPT.with_name("conventions_readers.py")
+        (self.repo / "scripts" / readers.name).write_bytes(readers.read_bytes())
         (self.repo / "lib").mkdir()
         self.module = self.repo / "lib" / "tool.py"
         self.module.write_text(self.CLEAN, encoding="utf-8")
         (self.repo / ".fleet.toml").write_text(
-            '[conventions_ratchet]\nenabled = true\nrules = ["no-window", "logging-not-print", "no-drive-path"]\n'
+            '[conventions_ratchet]\nenabled = true\nrules = ["no-window", "logging-not-print", "no-drive-path", "subprocess-timeout"]\n'
             'print_paths = ["lib/"]\n',
             encoding="utf-8",
         )
