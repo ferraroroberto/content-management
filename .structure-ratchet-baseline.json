@@ -2,5 +2,13 @@
   "version": 1,
   "band": {"files": 3, "functions": 16},
   "root_extras": ["app", "check_ip", "demo_video", "engagement", "newsletter", "planning", "podcast", "recorder", "reporting"],
+  "shape_contract": {
+    "root_files": ["demo_video_pipeline.py", "newsletter_pipeline.py", "planning_pipeline.py", "podcast_pipeline.py", "recorder_server.py", "reporting_pipeline.py", "run_app.py"],
+    "redundant": [],
+    "folder_types": {
+      "config": 8,
+      "config/doc_capture": 3
+    }
+  },
   "entries": []
 }
