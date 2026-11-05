@@ -47,13 +47,13 @@ from typing import Optional
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
-from starlette.responses import FileResponse, JSONResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Mount, Route, WebSocketRoute
-from starlette.staticfiles import StaticFiles
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from config.no_window import NO_WINDOW
 from recorder.store import RECORDING_ID, ChunkStore, MissingChunks
+from src.static_versioning import CachingStaticFiles, fleet_hash, stamp_assets
 from src.usage_log_starlette import usage_route
 
 logger = logging.getLogger("recorder.server")
@@ -89,6 +89,14 @@ def _build_identity() -> dict[str, str]:
 
 
 BUILD = _build_identity()
+ASSET_HASH = fleet_hash(STATIC)  # the cache key stamped on every /static URL; one edit rotates them all
+
+
+def shell() -> Response:
+    """The recorder page with the hash on its asset URLs; ``no-store`` so the phone
+    fetches it afresh on every load and finds the current hash."""
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    return HTMLResponse(stamp_assets(html, ASSET_HASH), headers={"Cache-Control": "no-store"})
 
 
 async def version(request: Request, side: str) -> Response:
@@ -222,7 +230,7 @@ def create_app(episode: Path, store: ChunkStore, links: dict[str, str],
 
     @guarded
     async def page(request: Request, side: str) -> Response:
-        return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-store"})
+        return await run_in_threadpool(shell)
 
     @guarded
     async def info(request: Request, side: str) -> Response:
@@ -287,6 +295,6 @@ def create_app(episode: Path, store: ChunkStore, links: dict[str, str],
         Route("/api/{token}/rec/{rid}/chunk/{seq:int}", chunk, methods=["PUT"]),
         Route("/api/{token}/rec/{rid}/have", have),
         Route("/api/{token}/rec/{rid}/finish", finish, methods=["POST"]),
-        Mount("/static", StaticFiles(directory=STATIC), name="static"),
+        Mount("/static", CachingStaticFiles(directory=STATIC, asset_hash=ASSET_HASH), name="static"),
     ]
     return Starlette(routes=routes)

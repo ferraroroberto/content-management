@@ -131,6 +131,10 @@ starts with a drive letter). The `secret-compare` and `git-wrapper` rules
 stay off because the repo has no helper for either. The wrapper reports git
 or a Python file it could not read or parse as **NOT CONFIRMED**.
 
+The `must-use` entry in `.fleet.toml` holds one more: a call to Starlette's
+`StaticFiles` outside `src/static_versioning.py` is a hit, so the recorder's
+`/static` mount keeps going through `CachingStaticFiles`.
+
 Follow the convention; a call that must break it keeps a reasoned
 `# <rule>-exempt: <reason>` marker on one of its lines. Only
 `scripts/conventions_ratchet.py --update-baseline --allow-additions` adds an
