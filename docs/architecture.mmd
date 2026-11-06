@@ -281,6 +281,14 @@ prep / check / preview / render / status"| DEMOPIPE
   demo_mod -.-> shared
   APP -.-> shared
 
+  subgraph common_mod["common/ — code shared by two or more tools"]
+    ATOMICW["atomic_write.py
+the one atomic file writer"]
+  end
+  engagement_mod -.-> common_mod
+  planning_mod -.-> common_mod
+  podcast_mod -.-> common_mod
+
   AUTOHEALSKILL["schedule-autoheal skill\n(.claude/skills/)\nprobe live DOM -> selector-only fix ->\ndry-run revalidate -> issue + PR"]
   AUTOHEAL --> AUTOHEALSKILL
   AUTOHEALSKILL -.->|"on confident fix"| GH[("GitHub\n(issue + PR)")]
