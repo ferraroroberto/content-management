@@ -173,6 +173,12 @@ call   = "sqlite3.connect"
 helper = ["check_ip/db.py"]
 why    = "check_ip/db.py is the one SQLite connection helper (WAL, schema)"
 
+# A raw replace skips the unique temp name and the cleanup on a failed write.
+[[conventions_ratchet.must_use]]
+call   = "os.replace"
+helper = ["common/atomic_write.py"]
+why    = "common/atomic_write.py is the one atomic file writer (unique temp, cleanup on failure)"
+
 # must-use: the recorder's /static mount goes through CachingStaticFiles, which stamps
 # the asset URLs with the fleet hash and sets an explicit Cache-Control; a bare
 # StaticFiles leaves an installed iOS PWA running the old build after a deploy.

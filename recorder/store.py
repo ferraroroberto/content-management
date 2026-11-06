@@ -19,13 +19,13 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import shutil
 import time
 from pathlib import Path
 from typing import Optional
 
+from common.atomic_write import atomic_write_bytes, atomic_write_text
 from podcast.media import ffprobe_json, run_ffmpeg
 
 logger = logging.getLogger("recorder.store")
@@ -57,9 +57,7 @@ class ChunkStore:
         return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
 
     def _save_meta(self, folder: Path, meta: dict) -> None:
-        tmp = folder / "meta.json.tmp"
-        tmp.write_text(json.dumps(meta), encoding="utf-8")
-        os.replace(tmp, folder / "meta.json")
+        atomic_write_text(folder / "meta.json", json.dumps(meta))
 
     def put(self, side: str, rid: str, seq: int, data: bytes) -> bool:
         """Store chunk ``seq``; returns False when an identical copy was already there."""
@@ -72,9 +70,7 @@ class ChunkStore:
         path = folder / f"{seq:07d}.part"
         if path.exists() and path.stat().st_size == len(data):
             return False
-        tmp = path.with_suffix(".tmp")
-        tmp.write_bytes(data)
-        os.replace(tmp, path)  # a reader never sees half a chunk
+        atomic_write_bytes(path, data)  # a reader never sees half a chunk
         return True
 
     def have(self, side: str, rid: str) -> list[int]:

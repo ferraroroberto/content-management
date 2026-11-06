@@ -12,11 +12,11 @@ what could not be mapped, and the version it produced. A round without
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
+from common.atomic_write import atomic_write_text
 from podcast.episode import Episode
 
 REVIEW_FILE = "review.json"
@@ -39,10 +39,7 @@ def load_review(ep: Episode) -> dict:
 
 def save_review(ep: Episode, state: dict) -> None:
     """Write via a temp file and an atomic replace, so a reader never sees half a file."""
-    path = _path(ep)
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(state, indent=1, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, path)
+    atomic_write_text(_path(ep), json.dumps(state, indent=1, ensure_ascii=False))
 
 
 def clip_state(state: dict, number: int) -> dict:

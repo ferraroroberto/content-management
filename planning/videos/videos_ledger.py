@@ -27,20 +27,20 @@ deliberately asymmetric:
   the missing entry.
 
 Concurrency: ``record`` re-reads the file and merges before writing, and
-publishes via ``os.replace`` so a reader never observes a half-written file. A
-videos run spans several minutes across four browser sessions, which is long
-enough for a second invocation to overlap.
+publishes through ``common.atomic_write`` so a reader never observes a
+half-written file. A videos run spans several minutes across four browser
+sessions, which is long enough for a second invocation to overlap.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from common.atomic_write import atomic_write_text
 from planning._session_base import results_dir
 
 logger = logging.getLogger("videos_schedule")
@@ -133,14 +133,12 @@ class TagAlongLedger:
     def _write(self, data: dict) -> None:
         """Publish the ledger atomically so a reader never sees a partial file.
 
-        The temp file is per-process: two runs sharing one temp name could
-        interleave their writes and publish a corrupt file, which would defeat
-        the point of staging it at all.
+        The helper stages each write in its own unique temp file: two runs
+        sharing one temp name could interleave their writes and publish a
+        corrupt file, which would defeat the point of staging it at all.
         """
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(f"{self.path.suffix}.{os.getpid()}.tmp")
-        tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
-        os.replace(tmp, self.path)
+        atomic_write_text(self.path, json.dumps(data, indent=2, sort_keys=True))
 
 
 __all__ = ["DEFAULT_LEDGER_PATH", "LEDGER_VERSION", "TagAlongLedger"]

@@ -19,12 +19,12 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import re
-import tempfile
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
+
+from common.atomic_write import atomic_write_text
 
 logger = logging.getLogger("engagement.classify.llm_fallback")
 
@@ -90,17 +90,7 @@ def _load_cache() -> dict:
 def _save_cache(cache: dict) -> None:
     p = _cache_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=".llm_cache.", suffix=".tmp", dir=str(p.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fp:
-            json.dump(cache, fp, ensure_ascii=False, indent=2)
-        os.replace(tmp, p)
-    except Exception:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    atomic_write_text(p, json.dumps(cache, ensure_ascii=False, indent=2))
 
 
 def _cache_key(comment: dict) -> str:
