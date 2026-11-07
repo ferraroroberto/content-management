@@ -84,7 +84,8 @@ class RuleHitTurnsTheGateRedTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.repo = Path(tmp.name)
         (self.repo / "scripts").mkdir()
-        (self.repo / "scripts" / "instruction_ratchet.py").write_bytes(gate.SCRIPT.read_bytes())
+        for name in ("instruction_ratchet", "instruction_frontmatter", "instruction_repeats"):
+            (self.repo / "scripts" / f"{name}.py").write_bytes(gate.SCRIPT.with_name(f"{name}.py").read_bytes())
         self.claude_md = self.repo / "CLAUDE.md"
         self.claude_md.write_text(self.CLEAN, encoding="utf-8")
         (self.repo / ".fleet.toml").write_text("[instruction_ratchet]\nenabled = true\n", encoding="utf-8")
