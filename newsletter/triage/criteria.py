@@ -226,8 +226,8 @@ def main(argv=None) -> int:
     stats = json.loads(stats_path.read_text(encoding="utf-8"))
     crit = build_criteria(stats)
     out_path = Path(args.out)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(crit, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    out_path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: output path is the --out argument
+    out_path.write_text(json.dumps(crit, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")  # runtime-write-exempt: output path is the --out argument
     print(f"✅ criteria.json written: {len(crit['sender_priors']['ranked'])} ranked senders, "
           f"{len(crit['sender_priors']['floor'])} floor senders, {len(crit['sender_overrides'])} overrides, "
           f"{len(crit['domain_priors'])} domains → {args.out}")

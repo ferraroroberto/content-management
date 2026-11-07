@@ -467,8 +467,8 @@ def raw_sidecar(api_id: str) -> Path:
 def connect(path: Optional[Path] = None) -> sqlite3.Connection:
     """Open the store, creating the directory and schema on first use."""
     target = Path(path) if path else db_path()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(target)
+    target.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path argument, else db_path() under the check_ip store_folder (default results/check_ip)
+    conn = sqlite3.connect(target)  # runtime-write-exempt: path argument, else db_path() under the check_ip store_folder (default results/check_ip)
     conn.row_factory = sqlite3.Row
     # WAL keeps the Streamlit tab readable while a run writes. The store is
     # repo-local by design — never put it on a synced folder, where the -wal

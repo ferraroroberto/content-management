@@ -76,7 +76,7 @@ class FacilitationSuiteDriver:
         root = workdir / "fs"
         folder = root / "sessions" / "demo"
         ledger = root / "sessions.local.yaml"
-        folder.parent.mkdir(parents=True, exist_ok=True)
+        folder.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: throwaway work dir the driver is handed, outside the repo tree
         env = self._env(root)
         subprocess.run([str(self.python), "-m", "tests.fixtures.demo", "--root", str(folder), "--ledger", str(ledger)],
                        cwd=self.repo, env=env, check=True, capture_output=True, creationflags=NO_WINDOW,
@@ -89,8 +89,8 @@ class FacilitationSuiteDriver:
         cfg["obs"]["enabled"] = False
         cfg["reader"]["enabled"] = False
         cfg["quiz"]["public_port"] = 0
-        (root / "config.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-        log = open(root / "server.log", "wb")  # noqa: SIM115 — closed in stop()
+        (root / "config.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")  # runtime-write-exempt: throwaway work dir the driver is handed, outside the repo tree
+        log = open(root / "server.log", "wb")  # noqa: SIM115 — closed in stop()  # runtime-write-exempt: throwaway work dir the driver is handed, outside the repo tree
         self.proc = subprocess.Popen(
             [str(self.python), "-m", "uvicorn", "app.webapp.server:app", "--host", "127.0.0.1", "--port", str(port),
              "--loop", LOOP_FACTORY, "--log-level", "warning"],
@@ -142,7 +142,7 @@ class FacilitationSuiteDriver:
                 it.pop("include", None)
         for number, timer in (self.args.get("timers") or {}).items():
             items[int(number) - 1].setdefault("timer", {}).update(timer)
-        path.write_text(yaml.safe_dump(plan, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        path.write_text(yaml.safe_dump(plan, allow_unicode=True, sort_keys=False), encoding="utf-8")  # runtime-write-exempt: throwaway work dir the driver is handed, outside the repo tree
 
     # --------------------------------------------------------------- actions
 

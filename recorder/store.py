@@ -64,7 +64,7 @@ class ChunkStore:
         if not 0 <= seq < MAX_SEQ:
             raise ValueError(f"bad chunk number {seq}")
         folder = self._dir(side, rid)
-        folder.mkdir(parents=True, exist_ok=True)
+        folder.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: chunk and destination folders are the caller's arguments, outside the repo tree
         if not (folder / "meta.json").exists():
             self._save_meta(folder, {"started": time.time()})
         path = folder / f"{seq:07d}.part"
@@ -99,16 +99,16 @@ class ChunkStore:
         if total <= 0 or missing:
             raise MissingChunks(missing or [0])
         joined = folder / f"joined.{ext}"
-        with joined.open("wb") as out:
+        with joined.open("wb") as out:  # runtime-write-exempt: chunk and destination folders are the caller's arguments, outside the repo tree
             for n in range(total):
                 with (folder / f"{n:07d}.part").open("rb") as part:
                     shutil.copyfileobj(part, out)
         started = time.strftime("%Y-%m-%d %H%M%S", time.localtime(meta.get("started", time.time())))
-        dst_dir.mkdir(parents=True, exist_ok=True)
+        dst_dir.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: chunk and destination folders are the caller's arguments, outside the repo tree
         dst = dst_dir / f"recorder - {label} - {started}.mp4"
         remux(joined, dst)
         result = {"file": dst.name, "duration_s": probe_duration(dst), "bytes": dst.stat().st_size}
-        dst.with_suffix(".json").write_text(json.dumps({**(sidecar or {}), "side": side, "rid": rid, "file": dst.name,
+        dst.with_suffix(".json").write_text(json.dumps({**(sidecar or {}), "side": side, "rid": rid, "file": dst.name,  # runtime-write-exempt: chunk and destination folders are the caller's arguments, outside the repo tree
                                                         "duration_s": result["duration_s"]}, indent=1),
                                             encoding="utf-8")
         meta["result"] = result

@@ -126,7 +126,7 @@ def run(ep: Episode, cfg: dict, rec: StageRecord) -> list[dict]:
         results.append(row)
         logger.info("ℹ️ clip %d scored %s", c["number"], row["mean"])
 
-    (ep.package / SCORES_FILE).write_text(json.dumps(results, indent=1, ensure_ascii=False), encoding="utf-8")
+    (ep.package / SCORES_FILE).write_text(json.dumps(results, indent=1, ensure_ascii=False), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
     save_clips(ep, clips)
     write_clips_md(ep, clips)
     logger.info("✅ scored %d clips", len(results))

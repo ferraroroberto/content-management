@@ -253,6 +253,6 @@ def run_checks(demo: Demo, folder: Path, cuts: list[Cut]) -> list[Result]:
 
 def write_report(folder: Path, results: list[Result]) -> Path:
     path = folder / "out" / "prep" / "checks.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps([r.__dict__ for r in results], ensure_ascii=False, indent=1), encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the demo folder the operator names, outside the repo tree
+    path.write_text(json.dumps([r.__dict__ for r in results], ensure_ascii=False, indent=1), encoding="utf-8")  # runtime-write-exempt: path sits under the demo folder the operator names, outside the repo tree
     return path

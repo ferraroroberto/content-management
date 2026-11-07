@@ -166,7 +166,7 @@ def start_skill_console(name: str, skill_cmd: str, *, model: str = DEFAULT_MODEL
 
     ts = datetime.now().strftime("%Y-%m-%d-%H%M%S")
     log_path = REPO_ROOT / "results" / "planning" / f"autoheal-{ts}.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: log lives under results/planning; REPO_ROOT is an import the check does not follow
     # Create the file now, before the tail thread starts. The wrapper opens it
     # with "wb" only after its own (new-console) Python startup, so if that child
     # dies early the file would never exist and the tail's open() would raise

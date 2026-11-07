@@ -413,7 +413,7 @@ def _run_ffmpeg_transcode(src: Path, dst: Path, tcfg: dict) -> bool:
     output is removed and False is returned so the caller falls back to the master.
     """
     target = tcfg["target_bitrate_mbps"]
-    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: dst is the caller's transcode target under results/videos
     cmd = [
         "-i", str(src),
         "-map", "0:v:0", "-map", "0:a:0?",

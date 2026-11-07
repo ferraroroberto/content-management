@@ -325,10 +325,10 @@ def run(ep: Episode, cfg: dict, rec: StageRecord) -> Optional[dict]:
     # Into this episode's own folder, never beside a source track it may only
     # read (a trial episode points at another folder's recording).
     dst = ep.folder / VIDEO_DIR / OUTPUT
-    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
     retime(ep.tracks["guest"], dst, report["offset_s"], report["drift_ppm"] / 1e6, cfg.get("video_encoder", "libx264"))
     report["tracks"] = {"host": episode_path(ep.folder, ep.tracks["host"]), "guest": episode_path(ep.folder, dst)}
-    ep.package.mkdir(parents=True, exist_ok=True)
-    (ep.package / SYNC_FILE).write_text(json.dumps(report, indent=1), encoding="utf-8")
+    ep.package.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    (ep.package / SYNC_FILE).write_text(json.dumps(report, indent=1), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
     logger.info("✅ sync: %s written; the episode now reads %s", SYNC_FILE, OUTPUT)
     return report

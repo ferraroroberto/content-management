@@ -204,7 +204,7 @@ def main(argv: list[str] | None = None) -> int:
     ep = load_episode(Path(args.episode), cfg)
     if args.status:
         return status(ep)
-    ep.package.mkdir(parents=True, exist_ok=True)
+    ep.package.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
     logger.info("ℹ️ episode: %s → %s", ep.folder.name, ep.package)
 
     for name in STAGES:

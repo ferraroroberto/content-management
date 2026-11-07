@@ -67,14 +67,14 @@ def measure_states(demo: Demo, folder: Path) -> dict[str, int]:
             changed = True
             logger.info("ℹ️ %s %s: states %s", lang, s.id, timeline)
         if changed:
-            marks_path.write_text(json.dumps(marks, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+            marks_path.write_text(json.dumps(marks, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")  # runtime-write-exempt: path sits under the demo folder the operator names, outside the repo tree
     return counts
 
 
 def read_music(demo: Demo, folder: Path) -> dict[str, list]:
     """Loudness envelopes per track and, for a track that ends with the video, the best scenes to bring it in."""
     out_dir = folder / "out" / "prep"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the demo folder the operator names, outside the repo tree
     fps = demo.fps
     total = sum(d for _, d in scene_frames(demo)) / fps
     boundaries = [(s.id, f / fps) for s, (f, _) in zip(demo.scenes, scene_frames(demo))][1:]
@@ -94,7 +94,7 @@ def read_music(demo: Demo, folder: Path) -> dict[str, list]:
                 for sc, at, db in ranked[:3]:
                     logger.info("ℹ️ %s %s: bring it in at scene %s (%.1f s): builds %+.1f dB", cut.id, t.file, sc, at, db)
             report["tracks"].append(entry)
-        (out_dir / f"music-{cut.id}.json").write_text(json.dumps(report, indent=1), encoding="utf-8")
+        (out_dir / f"music-{cut.id}.json").write_text(json.dumps(report, indent=1), encoding="utf-8")  # runtime-write-exempt: path sits under the demo folder the operator names, outside the repo tree
     return suggestions
 
 

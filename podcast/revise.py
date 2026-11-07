@@ -343,16 +343,16 @@ def archive_version(ep: Episode, clip: dict, words: list[dict], version: int) ->
     """Copy the clip's current crops, cover and record into its version folder
     (once: a re-run after a failed render keeps the first copy)."""
     dst = version_dir(ep, clip["number"], version)
-    dst.mkdir(parents=True, exist_ok=True)
+    dst.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
     sources = dict(zip(LAYOUTS, clip_outputs(ep, clip, "videos")))
     sources["cover"] = clip_outputs(ep, clip, "covers")[0]
     for name, src in sources.items():
         out = dst / f"{name}{src.suffix}"
         if src.exists() and not out.exists():
-            shutil.copy2(src, out)
+            shutil.copy2(src, out)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
     record = dst / "clip.json"
     if not record.exists():
-        record.write_text(json.dumps({"clip": clip, "words": words}, indent=1, ensure_ascii=False),
+        record.write_text(json.dumps({"clip": clip, "words": words}, indent=1, ensure_ascii=False),  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
                           encoding="utf-8")
     return dst
 
@@ -441,7 +441,7 @@ def _revise_one(ep: Episode, cfg: dict, rec: StageRecord, clips: list[dict], cli
     clips[index] = clip
     clip_words[str(number)] = words
     save_clips(ep, clips)
-    (ep.package / CLIP_WORDS_FILE).write_text(json.dumps(clip_words, ensure_ascii=False), encoding="utf-8")
+    (ep.package / CLIP_WORDS_FILE).write_text(json.dumps(clip_words, ensure_ascii=False), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
 
     def close(c: dict) -> None:
         last = open_round(c)

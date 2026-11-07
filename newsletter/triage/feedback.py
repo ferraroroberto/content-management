@@ -93,8 +93,8 @@ def apply_tiers(counts: Dict[str, Tuple[int, int]], *, overrides_path: Path = OV
             senders[addr] = {"tier": new_tier, "reason": f"feedback {yes}/{n} yes", "since": now[:10], "source": "feedback"}
             changes.append(f"{addr}: → {new_tier} ({yes}/{n})")
     if not dry_run and changes:
-        overrides_path.parent.mkdir(parents=True, exist_ok=True)
-        overrides_path.write_text(json.dumps(ov, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        overrides_path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: overrides_path is the caller's argument, default under results/newsletter/triage
+        overrides_path.write_text(json.dumps(ov, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")  # runtime-write-exempt: overrides_path is the caller's argument, default under results/newsletter/triage
     return changes
 
 

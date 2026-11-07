@@ -46,5 +46,5 @@ def save_state(state: Dict[str, Any], path: Path = STATE_PATH) -> None:
         logger.error("❌ refusing to overwrite unreadable triage state %s (%s) — fix or delete it first",
                      path, type(exc).__name__)
         raise StateUnreadableError(f"{path} exists but cannot be parsed ({type(exc).__name__})") from exc
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path is the caller's argument, default STATE_PATH under results/newsletter/triage
+    path.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")  # runtime-write-exempt: path is the caller's argument, default STATE_PATH under results/newsletter/triage

@@ -275,7 +275,7 @@ def run(ep: Episode, cfg: dict, rec: StageRecord) -> Path:
     """Transcribe both tracks; write ``transcript/words.json`` + ``turns.json`` + raw md."""
     scratch = work_dir(cfg, ep)
     out_dir = ep.package / "transcript"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
 
     audio: dict[str, tuple[np.ndarray, int]] = {}
     for spk in SPEAKERS:
@@ -297,10 +297,10 @@ def run(ep: Episode, cfg: dict, rec: StageRecord) -> Path:
 
     words.sort(key=lambda w: w["s"])
     turns = build_turns(words)
-    (out_dir / "words.json").write_text(json.dumps(words), encoding="utf-8")
-    (out_dir / "turns.json").write_text(json.dumps(turns, indent=1), encoding="utf-8")
+    (out_dir / "words.json").write_text(json.dumps(words), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    (out_dir / "turns.json").write_text(json.dumps(turns, indent=1), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
     lines = [f"[{fmt_ts(t['start'])}] {ep.label(t['speaker'])}: {t['text']}" for t in turns]
-    (out_dir / "raw transcript.md").write_text("\n\n".join(lines) + "\n", encoding="utf-8")
+    (out_dir / "raw transcript.md").write_text("\n\n".join(lines) + "\n", encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
     logger.info("✅ transcript: %d words, %d turns", len(words), len(turns))
     return out_dir
 

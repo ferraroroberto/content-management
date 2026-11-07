@@ -288,7 +288,7 @@ def write_shadow(path: Path, rows: Sequence[Dict[str, Any]], *, window: Tuple[st
     data = {"window": list(window), "written_at": datetime.now(timezone.utc).isoformat(), "engine": engine,
             "evaluated": sum(1 for r in rows if r["status"] == "ok"), "rows": list(rows)}
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")  # runtime-write-exempt: path is the caller's argument, a results/newsletter/triage report
     tmp.replace(path)
 
 

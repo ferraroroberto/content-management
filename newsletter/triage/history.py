@@ -63,10 +63,10 @@ REDIRECT_CACHE = REPO_ROOT / "results" / "newsletter" / "triage" / "redirects.js
 
 
 def _write_jsonl(path: Path, rows: Iterable[Dict[str, Any]]) -> int:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path is the caller's argument, under results/newsletter/triage/history
     tmp = path.with_suffix(path.suffix + ".tmp")
     n = 0
-    with tmp.open("w", encoding="utf-8") as fp:
+    with tmp.open("w", encoding="utf-8") as fp:  # runtime-write-exempt: path is the caller's argument, under results/newsletter/triage/history
         for row in rows:
             fp.write(json.dumps(row, ensure_ascii=False) + "\n")
             n += 1

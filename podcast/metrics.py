@@ -48,8 +48,8 @@ def stage_timer(package: Path, stage: str) -> Iterator[StageRecord]:
         "llm": rec.llm,
         "finished_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
-    package.mkdir(parents=True, exist_ok=True)
-    (package / METRICS_FILE).write_text(json.dumps(data, indent=2), encoding="utf-8")
+    package.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    (package / METRICS_FILE).write_text(json.dumps(data, indent=2), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
 
 
 def llm_cost_usd(call: dict, rates: dict) -> Optional[float]:
