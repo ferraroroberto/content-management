@@ -40,8 +40,16 @@ from podcast.episode import Episode, work_dir
 from podcast.media import extract_mix_wav, extract_wav, read_wav, write_wav
 from podcast.metrics import StageRecord
 from podcast.review import review_clip
-from podcast.transcribe import (BLEED_RATIO, FRAME_MS, find_loops, frame_rms, load_words, segment_words,
-                                whisper_segments, words_between)
+from podcast.transcribe import (
+    BLEED_RATIO,
+    FRAME_MS,
+    find_loops,
+    frame_rms,
+    load_words,
+    segment_words,
+    whisper_segments,
+    words_between,
+)
 
 logger = logging.getLogger("podcast.edit")
 
@@ -406,8 +414,8 @@ def run(ep: Episode, cfg: dict, rec: StageRecord) -> list[dict]:
     for clip, (words, review) in zip(clips, reviews):
         clip_words[str(clip["number"])] = words
         clip["caption_review"] = review
-    (ep.package / CLIP_WORDS_FILE).parent.mkdir(parents=True, exist_ok=True)
-    (ep.package / CLIP_WORDS_FILE).write_text(json.dumps(clip_words, ensure_ascii=False), encoding="utf-8")
+    (ep.package / CLIP_WORDS_FILE).parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    (ep.package / CLIP_WORDS_FILE).write_text(json.dumps(clip_words, ensure_ascii=False), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
     save_clips(ep, clips)
     logger.info("✅ edit decisions and caption review for %d clips", len(clips))
     return clips

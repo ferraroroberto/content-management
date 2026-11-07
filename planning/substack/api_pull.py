@@ -42,13 +42,13 @@ def main() -> int:
         if args.out
         else results_dir("substack") / f"archive_{datetime.now():%Y%m%d}.json"
     )
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: --out argument, else results_dir('substack')
 
     logger.info("🚀 Substack archive pull — limit=%d with_body=%s", args.limit, args.with_body)
     api = SubstackAPI(publication_url=cfg.get("publish_url"))
     archive = api.build_archive(limit=args.limit, with_body=args.with_body)
 
-    out_path.write_text(json.dumps(archive, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+    out_path.write_text(json.dumps(archive, indent=2, ensure_ascii=False, default=str), encoding="utf-8")  # runtime-write-exempt: --out argument, else results_dir('substack')
     logger.info("✅ Wrote %d posts → %s", len(archive), out_path)
     if archive:
         newest = archive[0]

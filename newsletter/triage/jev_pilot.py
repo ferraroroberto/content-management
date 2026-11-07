@@ -595,22 +595,22 @@ def render_md(result: Dict[str, Any]) -> str:
 
 def write_artefact(result: Dict[str, Any], out_root: Path = OUT_ROOT) -> Path:
     out = out_root / result["generated_at"].replace(":", "")
-    out.mkdir(parents=True, exist_ok=True)
+    out.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: out_root is the caller's argument, default REPO_ROOT/tmp/jev_pilot
     for rid, r in result["runs"].items():
         items = r.pop("_items")
-        (out / f"items-run-{rid}.json").write_text(json.dumps(items, ensure_ascii=False, indent=1), encoding="utf-8")
+        (out / f"items-run-{rid}.json").write_text(json.dumps(items, ensure_ascii=False, indent=1), encoding="utf-8")  # runtime-write-exempt: out_root is the caller's argument, default REPO_ROOT/tmp/jev_pilot
     for r in result["runs"].values():
         r["measures"].pop("_disagreements")
         (r.get("fresh_legacy_measures") or {}).pop("_disagreements", None)
     (result.get("pooled_fresh_legacy") or {}).pop("_disagreements", None)
     if "capture" in result:
-        (out / "capture.json").write_text(json.dumps(result.pop("capture"), ensure_ascii=False, indent=1),
+        (out / "capture.json").write_text(json.dumps(result.pop("capture"), ensure_ascii=False, indent=1),  # runtime-write-exempt: out_root is the caller's argument, default REPO_ROOT/tmp/jev_pilot
                                           encoding="utf-8")
     pooled = result.get("pooled") or {}
-    (out / "disagreements.json").write_text(json.dumps(pooled.pop("_disagreements", []), ensure_ascii=False, indent=1),
+    (out / "disagreements.json").write_text(json.dumps(pooled.pop("_disagreements", []), ensure_ascii=False, indent=1),  # runtime-write-exempt: out_root is the caller's argument, default REPO_ROOT/tmp/jev_pilot
                                             encoding="utf-8")
-    (out / "summary.json").write_text(json.dumps(result, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
-    (out / "summary.md").write_text(render_md(result), encoding="utf-8")
+    (out / "summary.json").write_text(json.dumps(result, ensure_ascii=False, indent=1, default=str), encoding="utf-8")  # runtime-write-exempt: out_root is the caller's argument, default REPO_ROOT/tmp/jev_pilot
+    (out / "summary.md").write_text(render_md(result), encoding="utf-8")  # runtime-write-exempt: out_root is the caller's argument, default REPO_ROOT/tmp/jev_pilot
     return out
 
 

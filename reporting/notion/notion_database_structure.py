@@ -1,12 +1,13 @@
+import argparse
 import json
 import logging
-import sys
-import argparse
-from pathlib import Path
 import os
+import sys
+from pathlib import Path
+from typing import Any, Optional
+
 import pandas as pd
 from notion_client import Client
-from typing import Any, Optional
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))

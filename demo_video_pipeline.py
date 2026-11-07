@@ -53,7 +53,16 @@ from demo_video.media import contact_sheet, verify_output  # noqa: E402
 from demo_video.prep import run_prep  # noqa: E402
 from demo_video.record import run_recording  # noqa: E402
 from demo_video.render import load_config, output_path, render_cut  # noqa: E402
-from demo_video.storyboard import ASPECTS, Cut, Demo, load_demo, missing_media, scene_frames, total_frames, validate  # noqa: E402
+from demo_video.storyboard import (  # noqa: E402
+    ASPECTS,
+    Cut,
+    Demo,
+    load_demo,
+    missing_media,
+    scene_frames,
+    total_frames,
+    validate,
+)
 
 logger: logging.Logger = logging.getLogger("demo_video")
 

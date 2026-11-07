@@ -14,7 +14,13 @@ from typing import Optional
 import streamlit as st
 from pydantic import ValidationError
 
-from app.process_runner import VENV_PY, is_running, render_log_panel, render_status_badge, start_pipeline
+from app.process_runner import (
+    VENV_PY,
+    is_running,
+    render_log_panel,
+    render_status_badge,
+    start_pipeline,
+)
 from demo_video.render import output_path
 from demo_video.storyboard import DEMO_FILE, Demo, load_demo, total_frames, validate
 

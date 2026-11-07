@@ -33,7 +33,11 @@ import webbrowser
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from notion_client.errors import APIResponseError, HTTPResponseError, RequestTimeoutError
+from notion_client.errors import (
+    APIResponseError,
+    HTTPResponseError,
+    RequestTimeoutError,
+)
 
 from config.loader import load_full_config
 from config.logger_config import configure_root_logging
@@ -356,7 +360,7 @@ def _write_topics_sidecar(
         "headings": list(headings),
         "top_names": list(top_names) if top_names is not None else None,
     }
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")  # runtime-write-exempt: sidecar under RESULTS_DIR = REPO_ROOT/results/newsletter; REPO_ROOT is an import the check does not follow
     return path
 
 

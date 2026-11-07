@@ -32,7 +32,13 @@ force_utf8_stdio()
 from config.logger_config import setup_logger  # noqa: E402
 from podcast.episode import Episode, load_episode, load_podcast_config  # noqa: E402
 from podcast.metrics import stage_timer  # noqa: E402
-from podcast.review_state import kept_clips, load_review, review_done, summary, to_revise  # noqa: E402
+from podcast.review_state import (  # noqa: E402
+    kept_clips,
+    load_review,
+    review_done,
+    summary,
+    to_revise,
+)
 
 logger: logging.Logger = logging.getLogger("podcast")
 
@@ -198,7 +204,7 @@ def main(argv: list[str] | None = None) -> int:
     ep = load_episode(Path(args.episode), cfg)
     if args.status:
         return status(ep)
-    ep.package.mkdir(parents=True, exist_ok=True)
+    ep.package.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
     logger.info("ℹ️ episode: %s → %s", ep.folder.name, ep.package)
 
     for name in STAGES:

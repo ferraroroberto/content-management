@@ -42,7 +42,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from rapidfuzz import fuzz, utils as rf_utils  # noqa: E402
+from rapidfuzz import fuzz  # noqa: E402
+from rapidfuzz import utils as rf_utils
 
 from config.console import force_utf8_stdio  # noqa: E402
 from config.loader import load_block, load_full_config  # noqa: E402
@@ -62,10 +63,10 @@ REDIRECT_CACHE = REPO_ROOT / "results" / "newsletter" / "triage" / "redirects.js
 
 
 def _write_jsonl(path: Path, rows: Iterable[Dict[str, Any]]) -> int:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path is the caller's argument, under results/newsletter/triage/history
     tmp = path.with_suffix(path.suffix + ".tmp")
     n = 0
-    with tmp.open("w", encoding="utf-8") as fp:
+    with tmp.open("w", encoding="utf-8") as fp:  # runtime-write-exempt: path is the caller's argument, under results/newsletter/triage/history
         for row in rows:
             fp.write(json.dumps(row, ensure_ascii=False) + "\n")
             n += 1

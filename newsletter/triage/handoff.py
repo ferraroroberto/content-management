@@ -31,7 +31,11 @@ if str(REPO_ROOT) not in sys.path:
 
 from config.console import force_utf8_stdio  # noqa: E402
 from config.loader import load_block, load_full_config  # noqa: E402
-from newsletter.cache import TRACKING_PARAM_EXACT, TRACKING_PARAM_PREFIXES, canonicalize_url  # noqa: E402
+from newsletter.cache import (  # noqa: E402
+    TRACKING_PARAM_EXACT,
+    TRACKING_PARAM_PREFIXES,
+    canonicalize_url,
+)
 from newsletter.triage import db  # noqa: E402
 from newsletter.triage.state import load_state, save_state  # noqa: E402
 

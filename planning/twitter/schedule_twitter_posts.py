@@ -33,6 +33,11 @@ from typing import Optional
 from playwright.sync_api import Page
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from planning._failure import PostMayBeLiveError  # noqa: E402
+from planning._scheduler_main import (  # noqa: E402
+    build_scheduler_parser,
+    run_single_post_scheduler,
+)
 from planning._session_base import results_dir  # noqa: E402
 from planning.twitter.twitter_composer import (  # noqa: E402
     cancel_composer,
@@ -53,11 +58,6 @@ from planning.twitter.twitter_session import (  # noqa: E402
     load_notion_token,
     load_twitter_config,
 )
-from planning._failure import PostMayBeLiveError  # noqa: E402
-from planning._scheduler_main import (  # noqa: E402
-    build_scheduler_parser,
-    run_single_post_scheduler,
-)
 
 logger = logging.getLogger("twitter_schedule")
 
@@ -67,7 +67,11 @@ logger = logging.getLogger("twitter_schedule")
 from planning._wip_rows import (  # noqa: E402
     PostPayload,
     ScheduleRow,
+)
+from planning._wip_rows import (
     fetch_wip_rows as _fetch_wip_rows,
+)
+from planning._wip_rows import (
     resolve_payload as _resolve_payload,
 )
 

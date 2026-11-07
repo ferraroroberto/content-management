@@ -50,14 +50,19 @@ if str(REPO_ROOT) not in sys.path:
 # Force UTF-8 stdio so emoji log lines don't crash Windows' cp1252 console.
 from config.console import force_utf8_stdio  # noqa: E402
 from config.logger_config import configure_root_logging  # noqa: E402
+
 force_utf8_stdio()
 
-from newsletter import bootstrap_chrome  # noqa: E402
-from newsletter import build_newsletter, normalize_names, normalize_url  # noqa: E402
-from newsletter._normalizer_base import UpdateFailedError  # noqa: E402
+from newsletter import (  # noqa: E402
+    bootstrap_chrome,  # noqa: E402
+    build_newsletter,
+    normalize_names,
+    normalize_url,
+    schedule_editions,  # noqa: E402
+    substack_draft,  # noqa: E402
+)
 from newsletter import pipeline as archive_pipeline  # noqa: E402
-from newsletter import schedule_editions  # noqa: E402
-from newsletter import substack_draft  # noqa: E402
+from newsletter._normalizer_base import UpdateFailedError  # noqa: E402
 
 logger = logging.getLogger("newsletter_pipeline")
 

@@ -17,7 +17,14 @@ if str(REPO_ROOT) not in sys.path:
 from pydantic import ValidationError  # noqa: E402
 
 import demo_video_pipeline  # noqa: E402
-from demo_video.storyboard import Demo, load_demo, missing_media, resolve_cut, total_frames, validate  # noqa: E402
+from demo_video.storyboard import (  # noqa: E402
+    Demo,
+    load_demo,
+    missing_media,
+    resolve_cut,
+    total_frames,
+    validate,
+)
 
 EXAMPLE = REPO_ROOT / "demo_video" / "examples" / "facilitation-suite"
 

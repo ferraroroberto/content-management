@@ -136,7 +136,7 @@ def ensure_links(folder: Path) -> dict[str, str]:
     for side in SIDES:
         if side not in links.values():
             links[secrets.token_urlsafe(18)] = side
-    path.write_text(json.dumps(data, indent=1), encoding="utf-8")
+    path.write_text(json.dumps(data, indent=1), encoding="utf-8")  # runtime-write-exempt: folder is the recording folder the caller names
     return dict(links)
 
 

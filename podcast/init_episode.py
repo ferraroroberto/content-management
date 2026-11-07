@@ -236,10 +236,10 @@ def trial_spec(trial: Path, source: Path) -> Optional[dict]:
 
 def write_episode(folder: Path, spec: dict, *, force: bool = False) -> Path:
     path = folder / "episode.json"
-    folder.mkdir(parents=True, exist_ok=True)
+    folder.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
     if path.exists() and not force:
         raise FileExistsError(f"{path} already exists; pass --force to overwrite it")
-    path.write_text(json.dumps(spec, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(spec, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
     return path
 
 

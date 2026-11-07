@@ -1,12 +1,13 @@
+import argparse
 import json
+import logging
 import os
 import sys
 import time
-import argparse
-import logging
-from pathlib import Path
 from datetime import datetime, timezone
-from typing import List, Any, Optional
+from pathlib import Path
+from typing import Any, List, Optional
+
 import requests
 from dotenv import load_dotenv
 

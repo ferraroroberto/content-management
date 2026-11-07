@@ -137,7 +137,7 @@ class TagAlongLedger:
         sharing one temp name could interleave their writes and publish a
         corrupt file, which would defeat the point of staging it at all.
         """
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: ledger path is the constructor argument, default under results/videos
         atomic_write_text(self.path, json.dumps(data, indent=2, sort_keys=True))
 
 

@@ -30,7 +30,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 # Init script injected into every page before any site script runs.
 # Removes the most commonly fingerprinted automation tell.
 STEALTH_INIT_SCRIPT = """

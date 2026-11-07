@@ -128,7 +128,7 @@ def _emit(fh: Any, text: str) -> None:
 
 def run(skill_cmd: str, log_path: Path, model: str, claude_exe: str,
         remote_control: bool = True, remote_name: str = "autoheal") -> int:
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: log_path is the caller's argument; process_runner passes a results/ path
     argv = [
         claude_exe, "-p", skill_cmd,
         "--model", model,
@@ -143,7 +143,7 @@ def run(skill_cmd: str, log_path: Path, model: str, claude_exe: str,
         # driven remotely (e.g. answering the "not confident" escalation from the
         # phone instead of only via Telegram). Optional name makes it findable.
         argv += ["--remote-control", remote_name]
-    with log_path.open("wb") as fh:
+    with log_path.open("wb") as fh:  # runtime-write-exempt: log_path is the caller's argument; process_runner passes a results/ path
         _emit(fh, f"$ {' '.join(argv)}")
         _emit(fh, f"# started {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         _emit(fh, "")

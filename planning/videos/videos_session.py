@@ -41,8 +41,12 @@ from playwright.sync_api import TimeoutError as PWTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.no_window import NO_WINDOW  # noqa: E402
+from planning._session_base import (  # noqa: E402
+    LoginRequiredError,
+    load_config_block,
+    load_notion_token,
+)
 from planning._session_base import configure_logger as _configure_logger  # noqa: E402
-from planning._session_base import LoginRequiredError, load_config_block, load_notion_token  # noqa: E402
 from podcast.media import ffprobe_json, run_ffmpeg  # noqa: E402
 from reporting.notion._client import page_title  # noqa: E402
 from reporting.notion.editorial import (  # noqa: E402
@@ -409,7 +413,7 @@ def _run_ffmpeg_transcode(src: Path, dst: Path, tcfg: dict) -> bool:
     output is removed and False is returned so the caller falls back to the master.
     """
     target = tcfg["target_bitrate_mbps"]
-    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: dst is the caller's transcode target under results/videos
     cmd = [
         "-i", str(src),
         "-map", "0:v:0", "-map", "0:a:0?",

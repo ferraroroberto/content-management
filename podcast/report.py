@@ -65,5 +65,5 @@ def write_report(ep: Episode, cfg: dict) -> Path:
         scores = json.loads(scores_path.read_text(encoding="utf-8"))
         parts += ["\n## Clip quality (1-5)\n", score_table(scores)]
     path = ep.package / "metrics.md"
-    path.write_text("\n".join(parts) + "\n", encoding="utf-8")
+    path.write_text("\n".join(parts) + "\n", encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
     return path

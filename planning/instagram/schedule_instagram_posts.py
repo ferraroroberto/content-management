@@ -34,10 +34,24 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
-from playwright.sync_api import Page, TimeoutError as PWTimeoutError
+from playwright.sync_api import Page
+from playwright.sync_api import TimeoutError as PWTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from planning._scheduler_main import (  # noqa: E402
+    build_scheduler_parser,
+    drop_already_scheduled,
+    notion_or_none,
+    resolve_scope,
+    untick_wip,
+)
 from planning._session_base import results_dir  # noqa: E402
+from planning._wip_rows import (  # noqa: E402
+    IgRow,
+    fetch_wip_ig_rows,
+    illustration_filename,
+    resolve_image_path,
+)
 from planning.instagram.instagram_composer import (  # noqa: E402
     cancel_composer,
     dismiss_meta_verified_modal,
@@ -50,7 +64,6 @@ from planning.instagram.instagram_labels import (  # noqa: E402
     SCHEDULE_TEXT_RE,
     SET_DATE_TIME_TEXT_RE,
 )
-from planning.instagram.instagram_upload import upload_files  # noqa: E402
 from planning.instagram.instagram_session import (  # noqa: E402
     InstagramSession,
     LoginRequiredError,
@@ -58,21 +71,9 @@ from planning.instagram.instagram_session import (  # noqa: E402
     load_instagram_config,
     load_notion_token,
 )
+from planning.instagram.instagram_upload import upload_files  # noqa: E402
 from reporting.notion.editorial import retrieve_page  # noqa: E402
 from reporting.notion.notion_update import format_database_id  # noqa: E402
-from planning._scheduler_main import (  # noqa: E402
-    build_scheduler_parser,
-    drop_already_scheduled,
-    notion_or_none,
-    resolve_scope,
-    untick_wip,
-)
-from planning._wip_rows import (  # noqa: E402
-    illustration_filename,
-    IgRow,
-    fetch_wip_ig_rows,
-    resolve_image_path,
-)
 
 logger = logging.getLogger("instagram_schedule")
 

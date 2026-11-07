@@ -17,7 +17,14 @@ from typing import Literal, Optional
 
 import numpy as np
 
-from podcast.media import extract_wav, ffprobe_json, frame_at, probe, read_wav, run_ffmpeg
+from podcast.media import (
+    extract_wav,
+    ffprobe_json,
+    frame_at,
+    probe,
+    read_wav,
+    run_ffmpeg,
+)
 
 logger = logging.getLogger("demo_video.media")
 
@@ -43,7 +50,7 @@ class Result:
 
 def transcode(rec: Path, clip: Path) -> Path:
     """A screen recording (Playwright VP8 ``.webm``, variable rate) → 30 fps CFR H.264, no audio, seekable."""
-    clip.parent.mkdir(parents=True, exist_ok=True)
+    clip.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the demo folder the operator names, outside the repo tree
     run_ffmpeg(["-i", str(rec), "-vf", "fps=30,format=yuv420p", "-c:v", "libx264", "-preset", "medium",
                 "-crf", "14", "-g", "15", "-an", str(clip)])
     return clip
@@ -92,7 +99,7 @@ def suggest_swaps(envelope: list[float], track_end_s: float, video_s: float, bou
 
 def contact_sheet(video: Path, times: list[float], dst: Path, *, cols: int = 4, width: int = 480) -> Path:
     """Frames of ``video`` at ``times`` tiled into one PNG (numbered inputs: this ffmpeg has no glob)."""
-    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the demo folder the operator names, outside the repo tree
     with tempfile.TemporaryDirectory() as tmp:
         for i, t in enumerate(times):
             frame_at(video, max(0.0, t), Path(tmp) / f"f-{i:03d}.png")

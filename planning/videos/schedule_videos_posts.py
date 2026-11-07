@@ -39,6 +39,14 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from planning._dates import date_to_day_title  # noqa: E402
+from planning._scheduler_main import (  # noqa: E402
+    build_scheduler_parser,
+    notion_or_none,
+    resolve_scope,
+    untick_wip,
+)
+from planning._wip_rows import iter_wip_pages  # noqa: E402
 from planning.videos.videos_ledger import TagAlongLedger  # noqa: E402
 from planning.videos.videos_session import (  # noqa: E402
     ClipPayload,
@@ -52,14 +60,6 @@ from reporting.notion.editorial import (  # noqa: E402
     set_field,
 )
 from reporting.notion.notion_update import format_database_id  # noqa: E402
-from planning._dates import date_to_day_title  # noqa: E402
-from planning._scheduler_main import (  # noqa: E402
-    build_scheduler_parser,
-    notion_or_none,
-    resolve_scope,
-    untick_wip,
-)
-from planning._wip_rows import iter_wip_pages  # noqa: E402
 
 logger = logging.getLogger("videos_schedule")
 

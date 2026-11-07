@@ -1,14 +1,15 @@
-import os
-import pandas as pd
+import argparse
 import logging
-from pathlib import Path
+import os
 import sys
+from pathlib import Path
+from typing import Any, Optional, Union
+
+import pandas as pd
 import psycopg2
 import psycopg2.extras
-from psycopg2.extensions import connection as PgConnection
-import argparse
-from typing import Any, Optional, Union
 from dotenv import load_dotenv
+from psycopg2.extensions import connection as PgConnection
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))

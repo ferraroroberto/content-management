@@ -24,6 +24,7 @@ from pathlib import Path
 
 from playwright.sync_api import Page
 
+from planning._waits import CLICK_TIMEOUT_MS, click_until_effect, wait_for_first_ready
 from planning.threads.threads_labels import (
     ATTACH_MEDIA_BTN_RE,
     CANCEL_DISCARD_BTN_RES,
@@ -37,7 +38,6 @@ from planning.threads.threads_labels import (
     WHATS_NEW_TEXTBOX_RE,
     calendar_header,
 )
-from planning._waits import CLICK_TIMEOUT_MS, click_until_effect, wait_for_first_ready
 
 logger = logging.getLogger("threads_composer")
 

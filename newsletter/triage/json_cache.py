@@ -34,9 +34,9 @@ class JsonFileCache:
             self._flush_locked()
 
     def _flush_locked(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: cache path is the caller's argument, under results/newsletter/triage
         tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self._data, ensure_ascii=False), encoding="utf-8")
+        tmp.write_text(json.dumps(self._data, ensure_ascii=False), encoding="utf-8")  # runtime-write-exempt: cache path is the caller's argument, under results/newsletter/triage
         tmp.replace(self.path)
 
     def __len__(self) -> int:

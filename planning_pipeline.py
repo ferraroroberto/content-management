@@ -40,16 +40,17 @@ from typing import Callable, Optional
 sys.path.append(str(Path(__file__).parent))
 # Console can be cp1252 on Windows; force UTF-8 so emoji in summaries don't blow up.
 from config.console import force_utf8_stdio  # noqa: E402
+
 force_utf8_stdio()
 from config.logger_config import setup_logger  # noqa: E402
-from planning._failure import classify as classify_failure, extract_screenshot  # noqa: E402
+from planning._failure import classify as classify_failure  # noqa: E402
+from planning._failure import extract_screenshot
 from planning.instagram.clone_to_other_platforms import main as run_clone  # noqa: E402
-from planning.linkedin.schedule_linkedin_posts import main as run_linkedin  # noqa: E402
 from planning.instagram.schedule_instagram_posts import main as run_instagram  # noqa: E402
-from planning.twitter.schedule_twitter_posts import main as run_twitter  # noqa: E402
+from planning.linkedin.schedule_linkedin_posts import main as run_linkedin  # noqa: E402
 from planning.threads.schedule_threads_posts import main as run_threads  # noqa: E402
+from planning.twitter.schedule_twitter_posts import main as run_twitter  # noqa: E402
 from planning.videos.schedule_videos_posts import main as run_videos  # noqa: E402
-
 
 logger: Optional[logging.Logger] = None
 

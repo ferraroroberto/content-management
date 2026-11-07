@@ -35,7 +35,9 @@ def build_supabase_client(
     Falling back to ``anon_key`` logs a warning (issue #51). Raises
     ``RuntimeError`` when ``supabase.url`` is missing or no key works.
     """
-    from supabase import create_client  # local import — keep the dependency lazy for tests
+    from supabase import (
+        create_client,  # local import — keep the dependency lazy for tests
+    )
 
     url = cfg.get("url")
     if not url:

@@ -70,7 +70,7 @@ def load_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
 
 
 def save_manifest(manifest: dict[str, Any], path: Path = MANIFEST_PATH) -> None:
-    path.write_text(
+    path.write_text(  # runtime-write-exempt: path is the caller's argument; defaults point at docs/screenshots and README.md
         json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
         newline="\n",
@@ -346,6 +346,6 @@ def regenerate_readme(
     if new == text:
         logger.info("✅ README unchanged")
         return False
-    readme_path.write_text(new, encoding="utf-8", newline="\n")
+    readme_path.write_text(new, encoding="utf-8", newline="\n")  # runtime-write-exempt: path is the caller's argument; defaults point at docs/screenshots and README.md
     logger.info("✅ README screenshots section regenerated")
     return True

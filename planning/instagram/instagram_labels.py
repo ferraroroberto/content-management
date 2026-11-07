@@ -27,7 +27,6 @@ from __future__ import annotations
 import re
 from datetime import date
 
-
 # ---------- Dialog dismissals ----------
 
 # 'Not now' dismisses the first-load 'Get Meta Verified' upsell modal.

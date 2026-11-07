@@ -41,7 +41,11 @@ from newsletter.substack_draft import (
     compose_must_read_article,
     compose_title_line,
 )
-from planning.substack.api_client import build_book_nodes, build_must_read_nodes, build_section_nodes
+from planning.substack.api_client import (
+    build_book_nodes,
+    build_must_read_nodes,
+    build_section_nodes,
+)
 
 TOPICS = ["personal development", "innovation", "leadership and management"]
 

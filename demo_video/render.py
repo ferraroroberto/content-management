@@ -64,8 +64,8 @@ def track_seconds(folder: Path, demo: Demo, cut: Cut) -> dict[str, float]:
 def write_props(folder: Path, demo: Demo, cut: Cut) -> Path:
     props = resolve_cut(demo, folder, cut, track_seconds=track_seconds(folder, demo, cut))
     path = folder / "out" / ".props" / f"{cut.id}.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(props, ensure_ascii=False, indent=1), encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the demo folder the operator names, outside the repo tree
+    path.write_text(json.dumps(props, ensure_ascii=False, indent=1), encoding="utf-8")  # runtime-write-exempt: path sits under the demo folder the operator names, outside the repo tree
     return path
 
 
@@ -75,7 +75,7 @@ def render_cut(folder: Path, demo: Demo, cut: Cut, *, preview: bool = False, cfg
     root = node_root(cfg if cfg is not None else load_config())
     props = write_props(folder, demo, cut)
     out = output_path(folder, cut, preview=preview)
-    out.parent.mkdir(parents=True, exist_ok=True)
+    out.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the demo folder the operator names, outside the repo tree
     cmd = [*remotion_cli(root), "render", ENTRY, COMPOSITION, str(out), f"--props={props}",
            f"--public-dir={media_root(folder, demo)}", "--log=error"]
     cmd += ["--scale=0.5"] if preview else ["--crf=18"]

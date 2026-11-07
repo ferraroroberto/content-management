@@ -46,17 +46,21 @@ from pathlib import Path
 from typing import Literal, Optional
 
 from notion_client.errors import HTTPResponseError
-from playwright.sync_api import Page, TimeoutError as PWTimeoutError
+from playwright.sync_api import Page
+from playwright.sync_api import TimeoutError as PWTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from planning._session_base import results_dir  # noqa: E402
-from planning.linkedin.linkedin_session import (  # noqa: E402
-    LinkedInSession,
-    LoginRequiredError,
-    configure_logger,
-    load_linkedin_config,
-    load_notion_token,
+from planning._captions import canonical_caption_from_publish_ig  # noqa: E402
+from planning._dates import date_to_day_title  # noqa: E402
+from planning._scheduler_main import (  # noqa: E402
+    build_scheduler_parser,
+    drop_already_scheduled,
+    notion_or_none,
+    resolve_scope,
+    untick_wip,
 )
+from planning._session_base import results_dir  # noqa: E402
+from planning._wip_rows import iter_wip_pages, resolve_image_path  # noqa: E402
 from planning.linkedin.linkedin_carousel_pdf import (  # noqa: E402
     CarouselDoc,
     locate_pdf,
@@ -74,7 +78,6 @@ from planning.linkedin.linkedin_composer import (  # noqa: E402
     finalize_schedule,
     open_schedule_dialog,
 )
-from planning.linkedin.linkedin_schedule_picker import set_schedule_datetime  # noqa: E402
 from planning.linkedin.linkedin_labels import (  # noqa: E402
     ADD_BTN_RE,
     ALT_TEXT_BTN_RE,
@@ -92,20 +95,18 @@ from planning.linkedin.linkedin_posts_body import (  # noqa: E402
     assert_caption_within_linkedin_limit,
     load_post_payload,
 )
+from planning.linkedin.linkedin_schedule_picker import set_schedule_datetime  # noqa: E402
+from planning.linkedin.linkedin_session import (  # noqa: E402
+    LinkedInSession,
+    LoginRequiredError,
+    configure_logger,
+    load_linkedin_config,
+    load_notion_token,
+)
 from reporting.notion.editorial import (  # noqa: E402
     get_field,
     retrieve_page,
 )
-from planning._dates import date_to_day_title  # noqa: E402
-from planning._scheduler_main import (  # noqa: E402
-    build_scheduler_parser,
-    drop_already_scheduled,
-    notion_or_none,
-    resolve_scope,
-    untick_wip,
-)
-from planning._wip_rows import iter_wip_pages, resolve_image_path  # noqa: E402
-from planning._captions import canonical_caption_from_publish_ig  # noqa: E402
 
 Route = Literal["ILL", "POST", "CAROUSEL"]
 

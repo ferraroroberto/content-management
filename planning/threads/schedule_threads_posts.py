@@ -62,16 +62,20 @@ logger = logging.getLogger("threads_schedule")
 
 # ---------- Row model / payload resolution ----------
 
-from planning._wip_rows import (  # noqa: E402
-    PostPayload,
-    ScheduleRow,
-    fetch_wip_rows as _fetch_wip_rows,
-    resolve_payload as _resolve_payload,
-)
 from planning._failure import PostMayBeLiveError  # noqa: E402
 from planning._scheduler_main import (  # noqa: E402
     build_scheduler_parser,
     run_single_post_scheduler,
+)
+from planning._wip_rows import (  # noqa: E402
+    PostPayload,
+    ScheduleRow,
+)
+from planning._wip_rows import (
+    fetch_wip_rows as _fetch_wip_rows,
+)
+from planning._wip_rows import (
+    resolve_payload as _resolve_payload,
 )
 
 

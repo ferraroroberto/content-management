@@ -154,8 +154,8 @@ def load_notion_urls(*, ttl_hours: int = 24, refresh: bool = False,
             if t:
                 titles[_norm(t)] = [c, day]
         data = {"fetched_at": time.time(), "created": created, "titles": titles}
-        NOTION_URLS_CACHE.parent.mkdir(parents=True, exist_ok=True)
-        NOTION_URLS_CACHE.write_text(json.dumps(data), encoding="utf-8")
+        NOTION_URLS_CACHE.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: under TRIAGE_DIR = REPO_ROOT/results/newsletter/triage or the caller's out_dir; REPO_ROOT is an import the check does not follow
+        NOTION_URLS_CACHE.write_text(json.dumps(data), encoding="utf-8")  # runtime-write-exempt: under TRIAGE_DIR = REPO_ROOT/results/newsletter/triage or the caller's out_dir; REPO_ROOT is an import the check does not follow
         logger.info("🗂️ Notion dedupe set: %d article URLs", len(created))
     created = data["created"]
     titles = data["titles"]
@@ -258,9 +258,9 @@ def stored_inputs(run: Dict[str, Any]) -> Dict[str, Any]:
     if cands:
         doc = {"run_id": run_id, "window": [run["window_start"], run["window_end"]],
                "emails": db.emails(run_id), "candidates": cands}
-        path.parent.mkdir(parents=True, exist_ok=True)
+        path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: under TRIAGE_DIR = REPO_ROOT/results/newsletter/triage or the caller's out_dir; REPO_ROOT is an import the check does not follow
         tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(doc, ensure_ascii=False, default=str), encoding="utf-8")
+        tmp.write_text(json.dumps(doc, ensure_ascii=False, default=str), encoding="utf-8")  # runtime-write-exempt: under TRIAGE_DIR = REPO_ROOT/results/newsletter/triage or the caller's out_dir; REPO_ROOT is an import the check does not follow
         tmp.replace(path)
         logger.info("📦 inputs of run %s: %d emails, %d links (snapshot %s)", run_id, len(doc["emails"]), len(cands),
                     path.name)
@@ -591,10 +591,10 @@ def _write_window_report(start: date, end: date, *, records: List[gm.EmailRecord
     md = rp.render_report(title=title, window_start=start.isoformat(), window_end=end.isoformat(), edition_hint=edition_hint,
                           sel=sel, emails=emails_view, cands_by_email=by_email, new_senders=list(new_senders.values()),
                           floor_senders=floor.most_common(), stats=stats, backtest=backtest)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: under TRIAGE_DIR = REPO_ROOT/results/newsletter/triage or the caller's out_dir; REPO_ROOT is an import the check does not follow
     name = f"triage-{start}_{end}" + (f"-backtest-{backtest['edition']}" if backtest else "") + ".md"
     path = out_dir / name
-    path.write_text(md, encoding="utf-8")
+    path.write_text(md, encoding="utf-8")  # runtime-write-exempt: under TRIAGE_DIR = REPO_ROOT/results/newsletter/triage or the caller's out_dir; REPO_ROOT is an import the check does not follow
     if shadow_rows is not None:
         _write_shadow(path, shadow_rows, start=start, end=end, stats=stats,
                       engine="legacy" if engine == "jev+legacy" else "jev")
@@ -874,7 +874,7 @@ def _main_runs(args: argparse.Namespace, *, cfg: Dict[str, Any], criteria: Dict[
         for r in results:
             print(f"{r['edition']}: precision {r['precision']:.0%} ({r['hits']}/{r['shortlist']}) · "
                   f"recall {r['recall']:.0%} ({r['recalled']}/{r['truth']}) · +runners {r['recall_runners']:.0%} · {r['report']}")
-        (out_dir / "backtest-summary.json").write_text(json.dumps(results, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+        (out_dir / "backtest-summary.json").write_text(json.dumps(results, ensure_ascii=False, indent=1, default=str), encoding="utf-8")  # runtime-write-exempt: under TRIAGE_DIR = REPO_ROOT/results/newsletter/triage or the caller's out_dir; REPO_ROOT is an import the check does not follow
         return 0
 
     state = load_state()

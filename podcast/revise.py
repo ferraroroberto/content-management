@@ -29,16 +29,41 @@ from pathlib import Path
 from typing import Optional
 
 from podcast.captions import LAYOUTS
-from podcast.clips import (clip_text, instagram_caption, linkedin_post, load_clips, save_clips,
-                           write_clips_md)
-from podcast.edit import (CLIP_WORDS_FILE, FPS, LEAD_S, TAIL_S, ZOOMS, _grid, edit_clip, is_filler,
-                          kept_seconds, load_clip_words, output_words, remap)
+from podcast.clips import (
+    clip_text,
+    instagram_caption,
+    linkedin_post,
+    load_clips,
+    save_clips,
+    write_clips_md,
+)
+from podcast.edit import (
+    CLIP_WORDS_FILE,
+    FPS,
+    LEAD_S,
+    TAIL_S,
+    ZOOMS,
+    _grid,
+    edit_clip,
+    is_filler,
+    kept_seconds,
+    load_clip_words,
+    output_words,
+    remap,
+)
 from podcast.episode import Episode, work_dir
 from podcast.hub import ask_json
 from podcast.metrics import StageRecord
 from podcast.render import clip_filename, clip_outputs, prepare_fonts, render_clip
 from podcast.review import _same, apply_corrections, review_clip
-from podcast.review_state import clip_state, load_review, now, open_round, to_revise, update
+from podcast.review_state import (
+    clip_state,
+    load_review,
+    now,
+    open_round,
+    to_revise,
+    update,
+)
 from podcast.transcribe import load_words
 
 logger = logging.getLogger("podcast.revise")
@@ -318,16 +343,16 @@ def archive_version(ep: Episode, clip: dict, words: list[dict], version: int) ->
     """Copy the clip's current crops, cover and record into its version folder
     (once: a re-run after a failed render keeps the first copy)."""
     dst = version_dir(ep, clip["number"], version)
-    dst.mkdir(parents=True, exist_ok=True)
+    dst.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
     sources = dict(zip(LAYOUTS, clip_outputs(ep, clip, "videos")))
     sources["cover"] = clip_outputs(ep, clip, "covers")[0]
     for name, src in sources.items():
         out = dst / f"{name}{src.suffix}"
         if src.exists() and not out.exists():
-            shutil.copy2(src, out)
+            shutil.copy2(src, out)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
     record = dst / "clip.json"
     if not record.exists():
-        record.write_text(json.dumps({"clip": clip, "words": words}, indent=1, ensure_ascii=False),
+        record.write_text(json.dumps({"clip": clip, "words": words}, indent=1, ensure_ascii=False),  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
                           encoding="utf-8")
     return dst
 
@@ -416,7 +441,7 @@ def _revise_one(ep: Episode, cfg: dict, rec: StageRecord, clips: list[dict], cli
     clips[index] = clip
     clip_words[str(number)] = words
     save_clips(ep, clips)
-    (ep.package / CLIP_WORDS_FILE).write_text(json.dumps(clip_words, ensure_ascii=False), encoding="utf-8")
+    (ep.package / CLIP_WORDS_FILE).write_text(json.dumps(clip_words, ensure_ascii=False), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
 
     def close(c: dict) -> None:
         last = open_round(c)

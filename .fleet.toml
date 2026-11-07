@@ -204,6 +204,10 @@ baseline = ".runtime-write-ratchet-baseline.json"
 code_folders = ["src", "scripts", "config", "app", "check_ip", "demo_video", "engagement",
                 "newsletter", "planning", "podcast", "recorder", "reporting"]
 exclude      = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
+# Each returns a path under results/ or docs/screenshots/ (never a code folder): results_dir() is
+# <repo>/results/<name>, db_path()/raw_sidecar() sit under the check_ip store_folder (default
+# results/check_ip), screenshot_path() is docs/screenshots/<name>-desktop.png.
+safe_calls   = ["results_dir", "db_path", "raw_sidecar", "screenshot_path"]
 
 # Usage track ratchet (project-scaffolding docs/usage-track-ratchet.md): fails the
 # pre-ship gate when the recorder page gains a control with no constant `data-track`

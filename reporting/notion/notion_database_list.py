@@ -1,10 +1,11 @@
+import argparse
 import json
+import logging
 import os
 import sys
-import argparse
-import logging
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
 import requests
 from dotenv import load_dotenv
 
