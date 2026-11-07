@@ -24,7 +24,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from playwright.sync_api import Page, TimeoutError as PWTimeoutError, sync_playwright
+from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import TimeoutError as PWTimeoutError
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO_ROOT))

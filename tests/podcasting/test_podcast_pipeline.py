@@ -14,7 +14,17 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import podcast_pipeline  # noqa: E402
-from podcast import captions, clips, covers, edit, metrics, package, review, score, transcribe  # noqa: E402
+from podcast import (  # noqa: E402
+    captions,
+    clips,
+    covers,
+    edit,
+    metrics,
+    package,
+    review,
+    score,
+    transcribe,
+)
 from podcast.episode import Episode  # noqa: E402
 
 
@@ -182,6 +192,7 @@ class MetricsTests(unittest.TestCase):
 
     def test_backend_without_usage_is_estimated_and_flagged(self) -> None:
         from unittest.mock import patch
+
         from podcast import hub
         rec = metrics.StageRecord("clean")
         empty = {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0,

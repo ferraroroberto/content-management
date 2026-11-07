@@ -29,8 +29,10 @@ if str(REPO_ROOT) not in sys.path:
 
 from newsletter.topics import TOPICS  # noqa: E402
 from newsletter.triage import jev as jx  # noqa: E402
-from newsletter.triage import review  # noqa: E402
-from newsletter.triage import run  # noqa: E402
+from newsletter.triage import (
+    review,  # noqa: E402
+    run,  # noqa: E402
+)
 
 RUN = {"id": 18, "window_start": "2026-10-03", "window_end": "2026-10-10", "kind": "live", "status": "done",
        "stats": {"stage_a_engine": "both", "links": 3}}

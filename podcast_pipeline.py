@@ -32,7 +32,13 @@ force_utf8_stdio()
 from config.logger_config import setup_logger  # noqa: E402
 from podcast.episode import Episode, load_episode, load_podcast_config  # noqa: E402
 from podcast.metrics import stage_timer  # noqa: E402
-from podcast.review_state import kept_clips, load_review, review_done, summary, to_revise  # noqa: E402
+from podcast.review_state import (  # noqa: E402
+    kept_clips,
+    load_review,
+    review_done,
+    summary,
+    to_revise,
+)
 
 logger: logging.Logger = logging.getLogger("podcast")
 

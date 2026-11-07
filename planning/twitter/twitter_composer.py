@@ -22,8 +22,10 @@ import logging
 from datetime import date
 from pathlib import Path
 
-from playwright.sync_api import Page, TimeoutError as PWTimeoutError
+from playwright.sync_api import Page
+from playwright.sync_api import TimeoutError as PWTimeoutError
 
+from planning._waits import CLICK_TIMEOUT_MS, click_until_effect, wait_for_first_ready
 from planning.twitter.twitter_labels import (
     CONFIRM_BTN_RE,
     DISCARD_BTN_RES,
@@ -31,7 +33,6 @@ from planning.twitter.twitter_labels import (
     FINAL_SCHEDULE_BTN_RE,
     SCHEDULE_TOOLBAR_BTN_RE,
 )
-from planning._waits import CLICK_TIMEOUT_MS, click_until_effect, wait_for_first_ready
 
 logger = logging.getLogger("twitter_composer")
 

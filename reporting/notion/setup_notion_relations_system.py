@@ -1,13 +1,17 @@
-import os
-import logging
-import sys
 import argparse
+import logging
+import os
+import sys
 from pathlib import Path
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.logger_config import setup_logger
-from reporting.process.supabase_uploader import execute_sql, get_db_connection, run_sql_file
+from reporting.process.supabase_uploader import (
+    execute_sql,
+    get_db_connection,
+    run_sql_file,
+)
 
 SQL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "setup_notion_relations_system.sql")
 

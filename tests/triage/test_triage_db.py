@@ -30,7 +30,6 @@ from newsletter.triage import rank as rk  # noqa: E402
 from newsletter.triage import review as rv  # noqa: E402
 from newsletter.triage.score import MetaScore  # noqa: E402
 
-
 # ---------------------------------------------------------------------------
 # fake supabase-py
 

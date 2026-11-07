@@ -44,7 +44,6 @@ from pathlib import Path
 from typing import Optional
 
 import requests
-
 from substack import Api
 from substack.post import Post, parse_inline
 

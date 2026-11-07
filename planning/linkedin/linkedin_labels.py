@@ -25,7 +25,6 @@ from __future__ import annotations
 import re
 from datetime import date
 
-
 # ---------- Modal container ----------
 
 # Every composer/editor helper scopes its search to the open modal so the feed

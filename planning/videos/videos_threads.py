@@ -15,10 +15,6 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from planning._session_base import results_dir  # noqa: E402
-from planning.threads.threads_session import (  # noqa: E402
-    ThreadsSession,
-    load_threads_config,
-)
 from planning.threads.schedule_threads_posts import return_to_profile  # noqa: E402
 from planning.threads.threads_composer import (  # noqa: E402
     cancel_composer,
@@ -35,6 +31,10 @@ from planning.threads.threads_composer import (  # noqa: E402
     wait_composer_closes,
 )
 from planning.threads.threads_labels import DISCARD_BTN_RE  # noqa: E402
+from planning.threads.threads_session import (  # noqa: E402
+    ThreadsSession,
+    load_threads_config,
+)
 from planning.videos.videos_session import (  # noqa: E402
     VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS,
     VideoRow,

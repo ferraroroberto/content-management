@@ -34,7 +34,8 @@ import time
 from pathlib import Path
 from typing import Sequence
 
-from playwright.sync_api import BrowserContext, Error as PlaywrightError, Playwright
+from playwright.sync_api import BrowserContext, Playwright
+from playwright.sync_api import Error as PlaywrightError
 
 from config.chrome_launch import stealth_launch_kwargs
 from config.no_window import NO_WINDOW

@@ -19,15 +19,16 @@ from typing import Optional
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.console import force_utf8_stdio  # noqa: E402
+
 force_utf8_stdio()
 from config.logger_config import setup_logger  # noqa: E402
+from reporting.notion._client import load_editorial_notion, page_title
 from reporting.notion.notion_update import (
     configure_logger,
     find_row_for_date,
     init_notion_client,
     parse_date,
 )
-from reporting.notion._client import load_editorial_notion, page_title
 
 
 def extract_next_relation_id(page: dict) -> Optional[str]:

@@ -33,7 +33,11 @@ import webbrowser
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from notion_client.errors import APIResponseError, HTTPResponseError, RequestTimeoutError
+from notion_client.errors import (
+    APIResponseError,
+    HTTPResponseError,
+    RequestTimeoutError,
+)
 
 from config.loader import load_full_config
 from config.logger_config import configure_root_logging

@@ -16,10 +16,12 @@ import logging
 import sys
 from pathlib import Path
 
-from playwright.sync_api import Page, TimeoutError as PWTimeoutError
+from playwright.sync_api import Page
+from playwright.sync_api import TimeoutError as PWTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from planning._session_base import results_dir  # noqa: E402
+from planning._waits import wait_for_first_ready  # noqa: E402
 from planning.linkedin.linkedin_composer import (  # noqa: E402
     FEED_ENTRY_CLICK_TIMEOUT_MS,
     FEED_ENTRY_EFFECT_TIMEOUT_MS,
@@ -31,15 +33,14 @@ from planning.linkedin.linkedin_composer import (  # noqa: E402
     finalize_schedule,
     open_schedule_dialog,
 )
-from planning.linkedin.linkedin_schedule_picker import set_schedule_datetime  # noqa: E402
 from planning.linkedin.linkedin_labels import MEDIA_FILE_INPUT_SEL, VIDEO_TEXT_RE  # noqa: E402
+from planning.linkedin.linkedin_schedule_picker import set_schedule_datetime  # noqa: E402
 from planning.linkedin.linkedin_session import (  # noqa: E402
     LinkedInSession,
     LoginRequiredError,
     load_linkedin_config,
 )
 from planning.videos.videos_session import VideoRow  # noqa: E402
-from planning._waits import wait_for_first_ready  # noqa: E402
 
 logger = logging.getLogger("videos_linkedin")
 

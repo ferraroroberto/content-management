@@ -21,9 +21,12 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from planning._session_base import results_dir  # noqa: E402
-from planning.instagram.instagram_session import (  # noqa: E402
-    InstagramSession,
-    load_instagram_config,
+from planning.instagram.instagram_composer import (  # noqa: E402
+    cancel_composer,
+    dismiss_meta_verified_modal,
+    fill_post_text,
+    open_day_schedule_menu,
+    return_to_planner,
 )
 from planning.instagram.instagram_reels import (  # noqa: E402
     click_reel_footer,
@@ -35,12 +38,9 @@ from planning.instagram.instagram_reels import (  # noqa: E402
     wait_reel_footer_enabled,
     wait_reels_composer_ready,
 )
-from planning.instagram.instagram_composer import (  # noqa: E402
-    cancel_composer,
-    dismiss_meta_verified_modal,
-    fill_post_text,
-    open_day_schedule_menu,
-    return_to_planner,
+from planning.instagram.instagram_session import (  # noqa: E402
+    InstagramSession,
+    load_instagram_config,
 )
 from planning.videos.videos_session import VideoRow, run_video_driver  # noqa: E402
 

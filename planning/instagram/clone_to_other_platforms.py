@@ -55,6 +55,13 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from planning._captions import canonical_caption_from_publish_ig  # noqa: E402
+from planning._scheduler_main import (  # noqa: E402
+    build_scheduler_parser,
+    notion_or_none,
+    resolve_scope,
+)
+from planning._wip_rows import IgRow, fetch_wip_ig_rows  # noqa: E402
 from planning.instagram.instagram_session import (  # noqa: E402
     configure_logger,
     load_clone_config,
@@ -66,13 +73,6 @@ from reporting.notion.notion_update import (  # noqa: E402
     format_database_id,
     prepare_notion_update,
 )
-from planning._scheduler_main import (  # noqa: E402
-    build_scheduler_parser,
-    notion_or_none,
-    resolve_scope,
-)
-from planning._wip_rows import IgRow, fetch_wip_ig_rows  # noqa: E402
-from planning._captions import canonical_caption_from_publish_ig  # noqa: E402
 
 logger = logging.getLogger("instagram_clone")
 

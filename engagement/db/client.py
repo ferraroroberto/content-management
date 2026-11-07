@@ -21,6 +21,7 @@ from typing import Any, Iterable, Optional
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from config.loader import load_full_config as load_config  # noqa: E402
 from config.supabase_client import build_supabase_client  # noqa: E402
+
 # Leaf module (no dependency on this module) — safe to import without a cycle.
 from engagement.classify.phrases_io import pick_thanks_reply  # noqa: E402
 

@@ -9,39 +9,57 @@ Initialization script to run the complete data processing pipeline:
 6. substack.daily_pipeline - Publish daily Substack Note (follower scrape now lives in reporting/scrape_client/substack.py)
 """
 
-import sys
-import re
-import json
 import argparse
+import json
 import logging
-from pathlib import Path
+import re
+import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Optional
 
 # Add the current directory to the Python path
 sys.path.append(str(Path(__file__).parent))
 # Console can be cp1252 on Windows; force UTF-8 so emoji in logs don't blow up.
 from config.console import force_utf8_stdio  # noqa: E402
+
 force_utf8_stdio()
-from config.logger_config import setup_logger  # noqa: E402
 from config.loader import load_full_config  # noqa: E402
-from reporting.social_client.social_api_client import (
-    main as run_social_api_client,
-    configure_logger as configure_social_logger,
-    check_file_exists_for_date,
+from config.logger_config import setup_logger  # noqa: E402
+from planning.substack.daily_pipeline import (
+    EXIT_CODE_NAMES as SUBSTACK_EXIT_CODE_NAMES,
+)
+from planning.substack.daily_pipeline import (
+    main as run_substack_daily_pipeline,
+)
+from reporting.notion.notion_update import configure_logger as configure_notion_logger
+from reporting.notion.notion_update import main as run_notion_update
+from reporting.process.data_processor import (
+    configure_logger as configure_data_processor_logger,
 )
 from reporting.process.data_processor import (
-    main as run_data_processor,
-    configure_logger as configure_data_processor_logger,
     load_mapping_config,
     process_json_file,
 )
-from reporting.process.profile_aggregator import main as run_profile_aggregator, configure_logger as configure_profile_logger
-from reporting.process.posts_consolidator import main as run_posts_consolidator, configure_logger as configure_posts_logger
-from reporting.notion.notion_update import main as run_notion_update, configure_logger as configure_notion_logger
-from planning.substack.daily_pipeline import (
-    EXIT_CODE_NAMES as SUBSTACK_EXIT_CODE_NAMES,
-    main as run_substack_daily_pipeline,
+from reporting.process.data_processor import (
+    main as run_data_processor,
+)
+from reporting.process.posts_consolidator import (
+    configure_logger as configure_posts_logger,
+)
+from reporting.process.posts_consolidator import main as run_posts_consolidator
+from reporting.process.profile_aggregator import (
+    configure_logger as configure_profile_logger,
+)
+from reporting.process.profile_aggregator import main as run_profile_aggregator
+from reporting.social_client.social_api_client import (
+    check_file_exists_for_date,
+)
+from reporting.social_client.social_api_client import (
+    configure_logger as configure_social_logger,
+)
+from reporting.social_client.social_api_client import (
+    main as run_social_api_client,
 )
 
 # Set up logger. Module-scope default is a real (unconfigured) Logger —
@@ -199,8 +217,15 @@ def _substack_had_editorial_content(day_yyyymmdd: str) -> Optional[bool]:
     downgrading it on an unverifiable guess.
     """
     try:
-        from planning.substack.substack_session import load_notion_token, load_substack_config
-        from reporting.notion.editorial import get_field, get_row_by_day, init_notion_client
+        from planning.substack.substack_session import (
+            load_notion_token,
+            load_substack_config,
+        )
+        from reporting.notion.editorial import (
+            get_field,
+            get_row_by_day,
+            init_notion_client,
+        )
         cfg = load_substack_config()
         notion = init_notion_client(load_notion_token())
         if notion is None:
@@ -287,8 +312,11 @@ def check_policy_drift_coverage(failures: "PipelineFailures") -> None:
     ``reporting/process/supabase_policy_script.sql``, then re-run the pipeline.
     """
     try:
+        from reporting.process.supabase_policy_script import (
+            check_policy_drift,
+            summarize_drift,
+        )
         from reporting.process.supabase_uploader import get_db_connection
-        from reporting.process.supabase_policy_script import check_policy_drift, summarize_drift
         connection = get_db_connection()
         if not connection:
             logger.error("❌ Policy-drift check: no DB connection — could not verify, treating as unverified")

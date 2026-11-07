@@ -1,9 +1,10 @@
+import argparse
 import logging
 import sys
-import argparse
-from pathlib import Path
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Optional
+
 from notion_client import Client
 from psycopg2.extensions import connection as PgConnection
 
@@ -12,7 +13,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.dates import parse_day
 from config.loader import load_full_config
 from config.logger_config import setup_logger
-from reporting.process.supabase_uploader import get_db_connection
+
 # init_notion_client / format_database_id / extract_property_value /
 # prepare_notion_update live in the shared _client module; re-exported here
 # so this module's own callers (and clone_to_other_platforms.py) keep working.
@@ -23,6 +24,7 @@ from reporting.notion._client import (
     load_notion_block,
     prepare_notion_update,
 )
+from reporting.process.supabase_uploader import get_db_connection
 
 # Set up logger. Module-scope default is a real (unconfigured) Logger — never
 # None — so `logger.xxx(...)` calls elsewhere in this module are plain Logger

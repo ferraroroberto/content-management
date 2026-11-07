@@ -39,13 +39,6 @@ from typing import Any, Callable, Optional
 from playwright.sync_api import TimeoutError as PWTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from reporting.notion.editorial import (  # noqa: E402
-    get_field,
-    get_property_type,
-    get_row_by_day,
-    init_notion_client,
-    set_field,
-)
 from planning._session_base import results_dir  # noqa: E402
 from planning._wip_rows import resolve_image_path  # noqa: E402
 from planning.substack.substack_session import (  # noqa: E402
@@ -55,6 +48,13 @@ from planning.substack.substack_session import (  # noqa: E402
     load_notion_token,
     load_substack_config,
     normalize_day,
+)
+from reporting.notion.editorial import (  # noqa: E402
+    get_field,
+    get_property_type,
+    get_row_by_day,
+    init_notion_client,
+    set_field,
 )
 
 logger = logging.getLogger("substack_post_note")

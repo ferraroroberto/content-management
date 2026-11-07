@@ -42,7 +42,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from rapidfuzz import fuzz, utils as rf_utils  # noqa: E402
+from rapidfuzz import fuzz  # noqa: E402
+from rapidfuzz import utils as rf_utils
 
 from config.console import force_utf8_stdio  # noqa: E402
 from config.loader import load_block, load_full_config  # noqa: E402

@@ -8,7 +8,16 @@ from pathlib import Path
 
 from demo_video import media
 from demo_video.checks import state_timeline
-from demo_video.storyboard import STATES_KEY, Demo, WindowStates, clip_files, load_marks, media_root, scene_frames, states_key
+from demo_video.storyboard import (
+    STATES_KEY,
+    Demo,
+    WindowStates,
+    clip_files,
+    load_marks,
+    media_root,
+    scene_frames,
+    states_key,
+)
 
 logger = logging.getLogger("demo_video.prep")
 

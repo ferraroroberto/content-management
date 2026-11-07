@@ -36,8 +36,8 @@ from typing import Optional
 
 from playwright.sync_api import Page
 
-from planning.instagram.instagram_labels import NEXT_MONTH_BTN_RE
 from planning.instagram.instagram_composer import fill_input
+from planning.instagram.instagram_labels import NEXT_MONTH_BTN_RE
 
 # Shares the "instagram_schedule" logger (rather than a module-local
 # "instagram_reels" one) so planning/videos/schedule_videos_posts.py's

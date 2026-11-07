@@ -8,7 +8,11 @@ from datetime import date
 from typing import Any, Callable, Dict, Iterator, List, Optional, TypeVar
 
 from notion_client import Client
-from notion_client.errors import APIResponseError, HTTPResponseError, RequestTimeoutError
+from notion_client.errors import (
+    APIResponseError,
+    HTTPResponseError,
+    RequestTimeoutError,
+)
 
 from newsletter.cache import CacheState, Connection, canonicalize_url
 

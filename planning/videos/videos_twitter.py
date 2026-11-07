@@ -16,10 +16,6 @@ from typing import Optional
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from planning._session_base import results_dir  # noqa: E402
-from planning.twitter.twitter_session import (  # noqa: E402
-    TwitterSession,
-    load_twitter_config,
-)
 from planning.twitter.schedule_twitter_posts import return_to_home  # noqa: E402
 from planning.twitter.twitter_composer import (  # noqa: E402
     cancel_composer,
@@ -34,6 +30,10 @@ from planning.twitter.twitter_composer import (  # noqa: E402
     wait_composer_clears,
 )
 from planning.twitter.twitter_labels import CANCEL_CLOSE_BTN_RES  # noqa: E402
+from planning.twitter.twitter_session import (  # noqa: E402
+    TwitterSession,
+    load_twitter_config,
+)
 from planning.videos.videos_session import (  # noqa: E402
     VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS,
     VideoRow,

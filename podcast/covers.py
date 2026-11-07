@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+
 from PIL import Image, ImageDraw, ImageFont
 
 from podcast.clips import load_clips

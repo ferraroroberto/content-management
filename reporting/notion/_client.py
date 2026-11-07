@@ -11,13 +11,13 @@ The logger is configured at import (mirroring ``supabase_uploader.py``) so
 regardless of which caller imports it.
 """
 
-from typing import Any, Optional
 import json
 import logging
 import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Optional
 
 from notion_client import Client
 

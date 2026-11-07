@@ -10,7 +10,6 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
-
 from urllib.parse import urlsplit
 
 from newsletter.topics import TOPICS

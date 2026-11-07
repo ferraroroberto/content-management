@@ -20,12 +20,18 @@ if str(REPO_ROOT) not in sys.path:
 
 # Console emojis crash on Windows' default cp1252; force UTF-8 stdio.
 from config.console import force_utf8_stdio  # noqa: E402
+
 force_utf8_stdio()
 
-from config.logger_config import setup_logger  # noqa: E402
 from config.loader import load_full_config as load_config  # noqa: E402
+from config.logger_config import setup_logger  # noqa: E402
 from newsletter import (  # noqa: E402
-    author_resolver, chrome_tabs, classifier, extractor, llm, notion_io,
+    author_resolver,
+    chrome_tabs,
+    classifier,
+    extractor,
+    llm,
+    notion_io,
     summarizer,
 )
 from newsletter.cache import CacheState  # noqa: E402

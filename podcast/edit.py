@@ -40,8 +40,16 @@ from podcast.episode import Episode, work_dir
 from podcast.media import extract_mix_wav, extract_wav, read_wav, write_wav
 from podcast.metrics import StageRecord
 from podcast.review import review_clip
-from podcast.transcribe import (BLEED_RATIO, FRAME_MS, find_loops, frame_rms, load_words, segment_words,
-                                whisper_segments, words_between)
+from podcast.transcribe import (
+    BLEED_RATIO,
+    FRAME_MS,
+    find_loops,
+    frame_rms,
+    load_words,
+    segment_words,
+    whisper_segments,
+    words_between,
+)
 
 logger = logging.getLogger("podcast.edit")
 

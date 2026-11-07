@@ -23,7 +23,14 @@ from typing import Any, Iterable, Optional
 import numpy as np
 
 from demo_video.media import Result
-from demo_video.storyboard import Cut, Demo, WindowStates, clip_files, load_marks, media_root
+from demo_video.storyboard import (
+    Cut,
+    Demo,
+    WindowStates,
+    clip_files,
+    load_marks,
+    media_root,
+)
 from podcast.media import ffmpeg_pipe, probe
 
 logger = logging.getLogger("demo_video.checks")
