@@ -518,6 +518,7 @@ def run(root: Path, *, init: bool, update: bool, allow_additions: bool) -> int:
     current = current_counts(tree.found)
 
     if init:
+        # runtime-write-exempt: the repo's own baseline file, named by the config, never a code folder
         baseline_path.write_text(render_baseline(current), encoding="utf-8", newline="\n")
         print(f"usage track ratchet: wrote {cfg.baseline} with {_total(current)} hit(s) in {len(current)} file(s)")
         return EXIT_PASS
@@ -528,6 +529,7 @@ def run(root: Path, *, init: bool, update: bool, allow_additions: bool) -> int:
         _report_added(added, tree.found, baseline)
         print("usage track ratchet: nothing written -- fix the code, or raise the baseline with --allow-additions")
         return EXIT_RISE
+    # runtime-write-exempt: the repo's own baseline file, named by the config, never a code folder
     baseline_path.write_text(render_baseline(current), encoding="utf-8", newline="\n")
     print(f"usage track ratchet: {cfg.baseline} now has {_total(current)} hit(s) in {len(current)} file(s) "
           f"({gone} dropped, {_total(added)} added)")
