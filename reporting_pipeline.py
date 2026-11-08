@@ -12,7 +12,6 @@ Initialization script to run the complete data processing pipeline:
 import argparse
 import json
 import logging
-import re
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -24,6 +23,7 @@ sys.path.append(str(Path(__file__).parent))
 from config.console import force_utf8_stdio  # noqa: E402
 
 force_utf8_stdio()
+from config.dates import parse_day  # noqa: E402
 from config.loader import load_full_config  # noqa: E402
 from config.logger_config import setup_logger  # noqa: E402
 from planning.substack.daily_pipeline import (
@@ -524,16 +524,10 @@ def _resolve_processing_date(reference_date) -> str:
     run for the wrong day would fetch, upload and write Notion rows for it.
     """
     if reference_date:
-        # strptime alone accepts "2026929" and "2026-9-29"; the digits must be zero-padded.
-        for pattern, date_format in ((r"\d{8}", "%Y%m%d"), (r"\d{4}-\d{2}-\d{2}", "%Y-%m-%d")):
-            if re.fullmatch(pattern, reference_date):
-                try:
-                    processing_date = datetime.strptime(reference_date, date_format).strftime("%Y-%m-%d")
-                    break
-                except ValueError:
-                    pass
-        else:
-            raise ValueError(f"Invalid date format: {reference_date} (expected YYYYMMDD or YYYY-MM-DD)")
+        try:
+            processing_date = parse_day(reference_date).isoformat()
+        except ValueError:
+            raise ValueError(f"Invalid date format: {reference_date} (expected YYYYMMDD or YYYY-MM-DD)") from None
         logger.info(f"📅 Using specified date: {processing_date}")
     else:
         processing_date = datetime.now().strftime("%Y-%m-%d")
