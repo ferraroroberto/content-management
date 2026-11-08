@@ -30,6 +30,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from check_ip import process  # noqa: E402 — pure helpers, no store access
+from common.runtime_files import ensure_folder  # noqa: E402
 from config.loader import load_full_config  # noqa: E402
 
 logger = logging.getLogger("check_ip.db")
@@ -467,8 +468,8 @@ def raw_sidecar(api_id: str) -> Path:
 def connect(path: Optional[Path] = None) -> sqlite3.Connection:
     """Open the store, creating the directory and schema on first use."""
     target = Path(path) if path else db_path()
-    target.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path argument, else db_path() under the check_ip store_folder (default results/check_ip)
-    conn = sqlite3.connect(target)  # runtime-write-exempt: path argument, else db_path() under the check_ip store_folder (default results/check_ip)
+    ensure_folder(target.parent)
+    conn = sqlite3.connect(target)  # runtime-write-exempt: the one connection helper; opens the path its caller passes (a test's temp database) else db_path()
     conn.row_factory = sqlite3.Row
     # WAL keeps the Streamlit tab readable while a run writes. The store is
     # repo-local by design — never put it on a synced folder, where the -wal

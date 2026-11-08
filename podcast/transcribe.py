@@ -26,11 +26,12 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-import requests
 
+from common.runtime_files import ensure_folder, write_text_at
 from podcast.episode import SPEAKERS, Episode, work_dir
 from podcast.media import extract_wav, read_wav, write_wav
 from podcast.metrics import StageRecord
+from src.pooled_http import pooled_request
 
 logger = logging.getLogger("podcast.transcribe")
 
@@ -97,8 +98,8 @@ def whisper_segments(url: str, wav: Path, rec: StageRecord, *, language: str = "
     """POST a WAV to the whisper server; return ``verbose_json`` segments."""
     t0 = time.perf_counter()
     with open(wav, "rb") as fh:
-        resp = requests.post(
-            url,
+        resp = pooled_request(
+            "POST", url,
             files={"file": (wav.name, fh, "audio/wav")},
             data={"response_format": "verbose_json", "timestamp_granularities[]": "word",
                   "language": language, "temperature": "0"},
@@ -275,7 +276,7 @@ def run(ep: Episode, cfg: dict, rec: StageRecord) -> Path:
     """Transcribe both tracks; write ``transcript/words.json`` + ``turns.json`` + raw md."""
     scratch = work_dir(cfg, ep)
     out_dir = ep.package / "transcript"
-    out_dir.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    ensure_folder(out_dir)
 
     audio: dict[str, tuple[np.ndarray, int]] = {}
     for spk in SPEAKERS:
@@ -297,10 +298,10 @@ def run(ep: Episode, cfg: dict, rec: StageRecord) -> Path:
 
     words.sort(key=lambda w: w["s"])
     turns = build_turns(words)
-    (out_dir / "words.json").write_text(json.dumps(words), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
-    (out_dir / "turns.json").write_text(json.dumps(turns, indent=1), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    write_text_at(out_dir / "words.json", json.dumps(words), encoding="utf-8")
+    write_text_at(out_dir / "turns.json", json.dumps(turns, indent=1), encoding="utf-8")
     lines = [f"[{fmt_ts(t['start'])}] {ep.label(t['speaker'])}: {t['text']}" for t in turns]
-    (out_dir / "raw transcript.md").write_text("\n\n".join(lines) + "\n", encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    write_text_at(out_dir / "raw transcript.md", "\n\n".join(lines) + "\n", encoding="utf-8")
     logger.info("✅ transcript: %d words, %d turns", len(words), len(turns))
     return out_dir
 

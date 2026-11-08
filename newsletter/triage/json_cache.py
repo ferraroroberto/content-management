@@ -13,6 +13,8 @@ import threading
 from pathlib import Path
 from typing import Any, Dict
 
+from common.runtime_files import ensure_folder, write_text_at
+
 logger = logging.getLogger("newsletter_triage.json_cache")
 
 
@@ -34,9 +36,9 @@ class JsonFileCache:
             self._flush_locked()
 
     def _flush_locked(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: cache path is the caller's argument, under results/newsletter/triage
+        ensure_folder(self.path.parent)
         tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self._data, ensure_ascii=False), encoding="utf-8")  # runtime-write-exempt: cache path is the caller's argument, under results/newsletter/triage
+        write_text_at(tmp, json.dumps(self._data, ensure_ascii=False), encoding="utf-8")
         tmp.replace(self.path)
 
     def __len__(self) -> int:

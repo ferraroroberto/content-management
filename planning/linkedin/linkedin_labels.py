@@ -150,9 +150,9 @@ CHOOSE_FILE_BTN_RE = re.compile(
 # 'Done' closes a sub-dialog (document title, etc.). ES variants vary across
 # LinkedIn builds — both 'Listo' and 'Hecho' have been observed.
 #
-# Matched by VISIBLE TEXT, not by accessible name. This used to be
-# ``DONE_BTN_RE`` + ``get_by_role("button", name=…)``, which stopped matching
-# in 2026-08 when LinkedIn re-rendered the control as a role-less ``<a>``
+# Matched by VISIBLE TEXT, not by accessible name: a ``DONE_BTN_RE`` +
+# ``get_by_role("button", name=…)`` lookup stopped matching in 2026-08 when
+# LinkedIn re-rendered the control as a role-less ``<a>``
 # whose label sits in nested ``<span>``s (the same pattern as the
 # feed share-box above). An ``<a>`` carrying neither ``href`` nor ``role``
 # has no implicit ARIA button role, so the role anchor could not match it at

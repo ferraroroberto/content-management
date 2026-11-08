@@ -36,6 +36,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from common.runtime_files import ensure_folder, write_text_at
 from config.console import force_utf8_stdio  # noqa: E402
 
 TRIAGE_RESULTS_DIR = REPO_ROOT / "results" / "newsletter" / "triage"
@@ -226,8 +227,8 @@ def main(argv=None) -> int:
     stats = json.loads(stats_path.read_text(encoding="utf-8"))
     crit = build_criteria(stats)
     out_path = Path(args.out)
-    out_path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: output path is the --out argument
-    out_path.write_text(json.dumps(crit, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")  # runtime-write-exempt: output path is the --out argument
+    ensure_folder(out_path.parent)
+    write_text_at(out_path, json.dumps(crit, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     print(f"✅ criteria.json written: {len(crit['sender_priors']['ranked'])} ranked senders, "
           f"{len(crit['sender_priors']['floor'])} floor senders, {len(crit['sender_overrides'])} overrides, "
           f"{len(crit['domain_priors'])} domains → {args.out}")

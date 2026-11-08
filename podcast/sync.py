@@ -45,6 +45,7 @@ from typing import Optional
 
 import numpy as np
 
+from common.runtime_files import ensure_folder, write_text_at
 from podcast.episode import SYNC_FILE, VIDEO_DIR, Episode, episode_path, work_dir
 from podcast.media import ffprobe_json, read_wav, run_ffmpeg
 from podcast.metrics import StageRecord
@@ -325,10 +326,10 @@ def run(ep: Episode, cfg: dict, rec: StageRecord) -> Optional[dict]:
     # Into this episode's own folder, never beside a source track it may only
     # read (a trial episode points at another folder's recording).
     dst = ep.folder / VIDEO_DIR / OUTPUT
-    dst.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    ensure_folder(dst.parent)
     retime(ep.tracks["guest"], dst, report["offset_s"], report["drift_ppm"] / 1e6, cfg.get("video_encoder", "libx264"))
     report["tracks"] = {"host": episode_path(ep.folder, ep.tracks["host"]), "guest": episode_path(ep.folder, dst)}
-    ep.package.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
-    (ep.package / SYNC_FILE).write_text(json.dumps(report, indent=1), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    ensure_folder(ep.package)
+    write_text_at(ep.package / SYNC_FILE, json.dumps(report, indent=1), encoding="utf-8")
     logger.info("✅ sync: %s written; the episode now reads %s", SYNC_FILE, OUTPUT)
     return report

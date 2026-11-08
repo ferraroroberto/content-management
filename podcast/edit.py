@@ -35,6 +35,7 @@ from typing import Optional
 
 import numpy as np
 
+from common.runtime_files import ensure_folder, write_text_at
 from podcast.clips import load_clips, save_clips
 from podcast.episode import Episode, work_dir
 from podcast.media import extract_mix_wav, extract_wav, read_wav, write_wav
@@ -414,8 +415,8 @@ def run(ep: Episode, cfg: dict, rec: StageRecord) -> list[dict]:
     for clip, (words, review) in zip(clips, reviews):
         clip_words[str(clip["number"])] = words
         clip["caption_review"] = review
-    (ep.package / CLIP_WORDS_FILE).parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
-    (ep.package / CLIP_WORDS_FILE).write_text(json.dumps(clip_words, ensure_ascii=False), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    ensure_folder((ep.package / CLIP_WORDS_FILE).parent)
+    write_text_at(ep.package / CLIP_WORDS_FILE, json.dumps(clip_words, ensure_ascii=False), encoding="utf-8")
     save_clips(ep, clips)
     logger.info("✅ edit decisions and caption review for %d clips", len(clips))
     return clips

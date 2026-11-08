@@ -39,6 +39,7 @@ from notion_client.errors import (
     RequestTimeoutError,
 )
 
+from common.runtime_files import write_text_at
 from config.loader import load_full_config
 from config.logger_config import configure_root_logging
 from config.no_window import NO_WINDOW
@@ -360,7 +361,7 @@ def _write_topics_sidecar(
         "headings": list(headings),
         "top_names": list(top_names) if top_names is not None else None,
     }
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")  # runtime-write-exempt: sidecar under RESULTS_DIR = REPO_ROOT/results/newsletter; REPO_ROOT is an import the check does not follow
+    write_text_at(path, json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
 
 

@@ -22,6 +22,7 @@ from typing import Any, Iterable, Optional
 
 import numpy as np
 
+from common.runtime_files import ensure_folder, write_text_at
 from demo_video.media import Result
 from demo_video.storyboard import (
     Cut,
@@ -253,6 +254,6 @@ def run_checks(demo: Demo, folder: Path, cuts: list[Cut]) -> list[Result]:
 
 def write_report(folder: Path, results: list[Result]) -> Path:
     path = folder / "out" / "prep" / "checks.json"
-    path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the demo folder the operator names, outside the repo tree
-    path.write_text(json.dumps([r.__dict__ for r in results], ensure_ascii=False, indent=1), encoding="utf-8")  # runtime-write-exempt: path sits under the demo folder the operator names, outside the repo tree
+    ensure_folder(path.parent)
+    write_text_at(path, json.dumps([r.__dict__ for r in results], ensure_ascii=False, indent=1), encoding="utf-8")
     return path

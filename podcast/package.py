@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional
 
+from common.runtime_files import ensure_folder, write_text_at
 from podcast.clips import clip_length, load_clips
 from podcast.episode import Episode, work_dir
 from podcast.hub import ask, ask_json
@@ -109,7 +110,7 @@ def _clean_chunk(cfg: dict, rec: StageRecord, chunk: list[str], labels: tuple[st
         cleaned = parse_clean(reply, labels)
         ok, why = _accept(raw, cleaned)
         if ok:
-            cached.write_text(json.dumps(cleaned, ensure_ascii=False), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+            write_text_at(cached, json.dumps(cleaned, ensure_ascii=False), encoding="utf-8")
             return cleaned
         logger.warning("⚠️ clean chunk rejected on attempt %d (%s); reply starts: %r",
                        attempt, why, reply[:300])
@@ -123,7 +124,7 @@ def run_clean(ep: Episode, cfg: dict, rec: StageRecord) -> Path:
     chunks = chunk_paragraphs(paragraphs)
     logger.info("ℹ️ cleaning %d paragraphs in %d chunks", len(paragraphs), len(chunks))
     cache_dir = work_dir(cfg, ep) / "clean_cache"
-    cache_dir.mkdir(exist_ok=True)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    ensure_folder(cache_dir, parents=False)
     with ThreadPoolExecutor(max_workers=3) as pool:
         results = list(pool.map(lambda c: _clean_chunk(cfg, rec, c, labels, cache_dir), chunks))
     unreached = sum(1 for part in results if part is None)
@@ -133,16 +134,16 @@ def run_clean(ep: Episode, cfg: dict, rec: StageRecord) -> Path:
         raise RuntimeError(f"{unreached} of {len(chunks)} transcript chunks could not be cleaned "
                            "(hub call failed); re-run to resume")
     cleaned = [p for part in results for p in part]
-    (ep.package / CLEAN_FILE).write_text(json.dumps(cleaned, indent=1, ensure_ascii=False), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    write_text_at(ep.package / CLEAN_FILE, json.dumps(cleaned, indent=1, ensure_ascii=False), encoding="utf-8")
     md = [f"# {ep.base_name} - transcript\n",
           "_Generated locally from the recording and lightly edited for readability._\n"]
     txt = []
     for p in cleaned:
         md.append(f"**{p['speaker']}:** {p['text']}\n" if p["speaker"] else f"{p['text']}\n")
         txt.append(f"{p['speaker']}: {p['text']}" if p["speaker"] else p["text"])
-    (ep.package / f"{ep.base_name} - transcript.txt").write_text("\n\n".join(txt) + "\n", encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    write_text_at(ep.package / f"{ep.base_name} - transcript.txt", "\n\n".join(txt) + "\n", encoding="utf-8")
     path = ep.package / f"{ep.base_name} - transcript.md"
-    path.write_text("\n".join(md), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    write_text_at(path, "\n".join(md), encoding="utf-8")
     logger.info("✅ cleaned transcript: %d paragraphs", len(cleaned))
     return path
 
@@ -182,7 +183,7 @@ def run_episode_copy(ep: Episode, cfg: dict, rec: StageRecord) -> dict:
     data = ask_json(cfg, rec, "episode_copy", EPISODE_PROMPT.format(
         guest=ep.guest_display, host=ep.host_name, guest_first=ep.guest_first,
         roles=roles, transcript=transcript), max_tokens=6000)
-    (ep.package / EPISODE_COPY_FILE).write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    write_text_at(ep.package / EPISODE_COPY_FILE, json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
     logger.info("✅ episode copy: %s", data.get("youtube_title"))
     return data
 
@@ -371,7 +372,7 @@ def run_package(ep: Episode, cfg: dict, rec: StageRecord) -> Path:
     copy = load_episode_copy(ep)
     clips = kept_clips(load_clips(ep), load_review(ep))
     html_path = ep.package / f"{ep.base_name} - website.html"
-    html_path.write_text(website_html(ep, copy, load_clean(ep)), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    write_text_at(html_path, website_html(ep, copy, load_clean(ep)), encoding="utf-8")
     path = build_docx(ep, copy, clips, ep.package / f"{ep.base_name}.docx")
     logger.info("✅ package: %s, %s", path.name, html_path.name)
     return path

@@ -55,7 +55,10 @@ and fails when a file's count rises above `.comment-ratchet-baseline.json`.
 The wrapper reports a file it could not scan as **NOT CONFIRMED**.
 
 After rewording a reference away, shrink the baseline in the same PR with
-`scripts/comment_ratchet.py --update-baseline`. `src/gmail_readonly/` and
+`scripts/comment_ratchet.py --update-baseline`. `history_phrases = true` also counts
+the curated history phrases (`used to be`, `formerly`, `had drifted`, ...) in comments
+and docstrings; `docstrings` stays off because about 200 `#NNN` references in docstrings
+are still to be reworded. `src/gmail_readonly/` and
 `src/google_oauth_common/` are excluded: they are vendored copies. See the
 scaffold's `docs/comment-ratchet.md` for the exit codes and keys.
 
@@ -79,7 +82,12 @@ Runs the weekly prompt audit's deterministic rules over the instruction files
 (`CLAUDE.md`, `AGENTS.md`, every `.claude/skills/*/SKILL.md` and the docs a
 skill links to) and fails when a file's count for a rule rises above
 `.instruction-ratchet-baseline.json`, or a file passes its size cap. The
-wrapper reports a file it could not measure as **NOT CONFIRMED**.
+wrapper reports a file it could not measure as **NOT CONFIRMED**. Three
+opt-in rules are on in `[instruction_ratchet]`: `ci_expectations` (a repo with
+workflow files needs a `CI expectations` section in `CLAUDE.md`), `agents_pointer`
+(`AGENTS.md` stays a short pointer naming `CLAUDE.md`) and `repeated_text_words = 12`
+(a run of 12 words `CLAUDE.md` shares with a `docs/` file is a hit: point to the doc).
+The 120-line `CLAUDE.md` cap is for app repos and is not set here.
 
 After rewording a hit away, shrink the baseline in the same PR with
 `scripts/instruction_ratchet.py --update-baseline`; only `--allow-additions`
@@ -132,7 +140,8 @@ stay off because the repo has no helper for either. The wrapper reports git
 or a Python file it could not read or parse as **NOT CONFIRMED**.
 
 The `must-use` entries in `.fleet.toml` name the one helper for a call, and
-a call outside it is a hit: `sqlite3.connect` outside `check_ip/db.py`,
+a call outside it is a hit: `requests.<verb>` outside `src/pooled_http.py`
+(the vendored pooled keep-alive session), `sqlite3.connect` outside `check_ip/db.py`,
 `os.replace` outside `common/atomic_write.py` (the atomic file writer), and
 Starlette's `StaticFiles` outside `src/static_versioning.py`, so the
 recorder's `/static` mount keeps going through `CachingStaticFiles`.
@@ -155,8 +164,11 @@ are excluded as vendored copies. A target the resolver cannot place is counted
 as `unresolved`, and a new one is **NOT CONFIRMED**. The script imports its
 vendored sibling, `scripts/runtime_write_resolve.py`.
 
-Move the write under `data/` or the runtime root, or mark a deliberate one
-`# runtime-write-exempt: <reason>`, then shrink the baseline in the same PR with
+Move the write under `data/` or the runtime root. A write into a folder the caller
+supplies (an operator-named episode or demo folder, an `--out` path) goes through
+`common/runtime_files.py`, which carries the one reasoned marker; mark any other
+deliberate write `# runtime-write-exempt: <reason>` with the outside contract that
+fixes its path, then shrink the baseline in the same PR with
 `scripts/runtime_write_ratchet.py --update-baseline`; only `--allow-additions`
 adds. See the scaffold's `docs/runtime-write-ratchet.md` for the exit codes and
 keys.

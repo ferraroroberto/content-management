@@ -11,6 +11,7 @@ The preset folders:
 - `config/` — `config.json`, `mapping.json`, logging, Chrome launch and shared helpers; `config/doc_capture/` is the control-panel screenshot engine.
 - `docs/` — durable topic reference; `docs/screenshots/` holds the capture manifest and generated per-tab images.
 - `common/` — code shared by two or more tools. `common/atomic_write.py` is the one atomic file writer (`atomic_write_text`, `atomic_write_bytes`): a unique temp file beside the target, swapped in with `os.replace`, removed on failure; a raw `os.replace` elsewhere is a conventions-ratchet hit.
+- `common/runtime_files.py` — writes at a path the caller supplies (`ensure_folder`, `write_text_at`, `open_for_write`, `copy_file_to`): the pipelines write into operator-named episode/demo folders and `--out` paths the runtime-write ratchet cannot resolve statically, so the reason for the exemption is stated once there instead of on every call site.
 - `src/` — the vendored Google client packages, byte-identical to their source repo and excluded from the ratchets: `src/gmail_readonly/` (read-only Gmail OAuth + search) and `src/google_oauth_common/` (the shared installed-app OAuth bootstrap). They import each other by bare name, so `newsletter/triage/gmail.py`, their one caller, puts `src/` on `sys.path`.
 
 Declared tool roots (`extra_roots`):

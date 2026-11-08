@@ -24,6 +24,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from common.runtime_files import ensure_folder, write_text_at
 from newsletter.triage import db  # noqa: E402
 from newsletter.triage import feedback as fb  # noqa: E402
 from newsletter.triage.criteria import OVERRIDES_PATH, load_overrides  # noqa: E402
@@ -202,5 +203,5 @@ def set_sender_tier(address: str, tier: str, *, name: str = "", reason: str = "m
     else:
         senders[address] = {"tier": tier, "reason": reason + (f" — {name}" if name else ""),
                             "since": datetime.now(timezone.utc).date().isoformat(), "source": "manual"}
-    overrides_path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: overrides_path is the caller's argument, default under results/newsletter/triage
-    overrides_path.write_text(json.dumps(ov, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")  # runtime-write-exempt: overrides_path is the caller's argument, default under results/newsletter/triage
+    ensure_folder(overrides_path.parent)
+    write_text_at(overrides_path, json.dumps(ov, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

@@ -32,6 +32,7 @@ from config.loader import load_full_config
 from config.logger_config import configure_root_logging
 from newsletter._normalizer_base import NotionArticleNormalizer, run_cli
 from newsletter.cache import host_matches
+from src.pooled_http import pooled_request
 
 
 class NotionURLNormalizer(NotionArticleNormalizer):
@@ -80,9 +81,9 @@ class NotionURLNormalizer(NotionArticleNormalizer):
                     "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
                 )
             }
-            r = requests.head(url, headers=headers, allow_redirects=True, timeout=10)
+            r = pooled_request("HEAD", url, headers=headers, allow_redirects=True, timeout=10)
             if r.status_code == 405:
-                r = requests.get(url, headers=headers, stream=True, timeout=10)
+                r = pooled_request("GET", url, headers=headers, stream=True, timeout=10)
             if 200 <= r.status_code < 400:
                 return True, f"OK ({r.status_code})"
             return False, f"Error: {r.status_code}"

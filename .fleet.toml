@@ -55,6 +55,7 @@ usage-log = { src = "app/webapp/static/_vendored/usage-log", sha = "4a06ca84fc9c
 usage_log = { src = "src/usage_log.py", sha = "4a06ca84fc9c5005d4be7fa505c9d0e7c0472dba", dest = "src/usage_log.py" }
 usage_log_starlette = { src = "src/usage_log_starlette.py", sha = "ea4e1e80f83c4f5a1a6b33e8a029e46ca63150c5", dest = "src/usage_log_starlette.py" }
 runtime_data = { src = "src/runtime_data.py", sha = "4a06ca84fc9c5005d4be7fa505c9d0e7c0472dba", dest = "src/runtime_data.py" }
+pooled_http = { src = "src/pooled_http.py", sha = "9d0fd2777fbae78aaffa7a0e53f62a201db5af79", dest = "src/pooled_http.py" }
 usage_track_ratchet = { src = "scripts/usage_track_ratchet.py", sha = "4a06ca84fc9c5005d4be7fa505c9d0e7c0472dba", dest = "scripts/usage_track_ratchet.py" }
 usage_track_scan = { src = "scripts/usage_track_scan.py", sha = "ea4e1e80f83c4f5a1a6b33e8a029e46ca63150c5", dest = "scripts/usage_track_scan.py" }
 instruction_frontmatter = { src = "scripts/instruction_frontmatter.py", sha = "e55de9619b9625c5499e1b9077350f9860e6037b", dest = "scripts/instruction_frontmatter.py" }
@@ -69,6 +70,7 @@ instruction_repeats = { src = "scripts/instruction_repeats.py", sha = "e55de9619
 enabled  = true
 baseline = ".comment-ratchet-baseline.json"
 exclude  = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
+history_phrases = true
 
 # Static-analysis ratchet (project-scaffolding docs/static-ratchet.md): fails the
 # pre-ship gate on a new duplicate block, unused import/variable or curated ruff bug
@@ -134,6 +136,9 @@ exclude  = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
 enabled    = true
 baseline   = ".instruction-ratchet-baseline.json"
 skill_dirs = [".claude/skills"]
+ci_expectations = true
+agents_pointer = true
+repeated_text_words = 12
 
 # Doc references ratchet (project-scaffolding docs/doc-refs-ratchet.md): fails the
 # pre-ship gate when README.md, CLAUDE.md or docs/**/*.md names a repo path, a
@@ -174,6 +179,13 @@ print_paths = ["app/", "check_ip/", "config/", "demo_video/", "engagement/", "ne
 call   = "sqlite3.connect"
 helper = ["check_ip/db.py"]
 why    = "check_ip/db.py is the one SQLite connection helper (WAL, schema)"
+
+# A bare requests.<verb> opens a fresh TCP connection per call; src/pooled_http.py shares a
+# keep-alive pool (one connection per host, not one ephemeral port per call).
+[[conventions_ratchet.must_use]]
+call   = ["requests.get", "requests.post", "requests.put", "requests.patch", "requests.delete", "requests.head", "requests.request"]
+helper = ["src/pooled_http.py"]
+why    = "outbound HTTP goes through src/pooled_http.py (one pooled keep-alive session)"
 
 # A raw replace skips the unique temp name and the cleanup on a failed write.
 [[conventions_ratchet.must_use]]

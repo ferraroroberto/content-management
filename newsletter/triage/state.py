@@ -12,6 +12,8 @@ import logging
 from pathlib import Path
 from typing import Any, Dict
 
+from common.runtime_files import ensure_folder, write_text_at
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRIAGE_DIR = REPO_ROOT / "results" / "newsletter" / "triage"
 STATE_PATH = TRIAGE_DIR / "state.json"
@@ -46,5 +48,5 @@ def save_state(state: Dict[str, Any], path: Path = STATE_PATH) -> None:
         logger.error("❌ refusing to overwrite unreadable triage state %s (%s) — fix or delete it first",
                      path, type(exc).__name__)
         raise StateUnreadableError(f"{path} exists but cannot be parsed ({type(exc).__name__})") from exc
-    path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path is the caller's argument, default STATE_PATH under results/newsletter/triage
-    path.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")  # runtime-write-exempt: path is the caller's argument, default STATE_PATH under results/newsletter/triage
+    ensure_folder(path.parent)
+    write_text_at(path, json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")

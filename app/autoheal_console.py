@@ -38,6 +38,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # import below raises ModuleNotFoundError and the wrapper dies before opening its log.
 # Mirrors app/app.py's own sys.path bootstrap.
 sys.path.insert(0, str(REPO_ROOT))
+from common.runtime_files import ensure_folder, open_for_write
 from config.no_window import NO_WINDOW  # noqa: E402
 
 DEFAULT_MODEL = "claude-opus-4-8"
@@ -128,7 +129,7 @@ def _emit(fh: Any, text: str) -> None:
 
 def run(skill_cmd: str, log_path: Path, model: str, claude_exe: str,
         remote_control: bool = True, remote_name: str = "autoheal") -> int:
-    log_path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: log_path is the caller's argument; process_runner passes a results/ path
+    ensure_folder(log_path.parent)
     argv = [
         claude_exe, "-p", skill_cmd,
         "--model", model,
@@ -143,7 +144,7 @@ def run(skill_cmd: str, log_path: Path, model: str, claude_exe: str,
         # driven remotely (e.g. answering the "not confident" escalation from the
         # phone instead of only via Telegram). Optional name makes it findable.
         argv += ["--remote-control", remote_name]
-    with log_path.open("wb") as fh:  # runtime-write-exempt: log_path is the caller's argument; process_runner passes a results/ path
+    with open_for_write(log_path, "wb") as fh:
         _emit(fh, f"$ {' '.join(argv)}")
         _emit(fh, f"# started {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         _emit(fh, "")

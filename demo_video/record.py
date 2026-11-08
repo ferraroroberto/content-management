@@ -34,6 +34,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Optional, Protocol
 
+from common.runtime_files import ensure_folder, write_text_at
 from demo_video.storyboard import STATES_KEY, Beat, Demo, Recording, Step, Take
 
 logger = logging.getLogger("demo_video.record")
@@ -188,7 +189,7 @@ def record_take(browser: Any, take: Take, runner: Runner, values: dict, rec: Rec
         videos = {role: p.video for role, p in pages.items()}
         for ctx in contexts.values():
             ctx.close()
-    out_dir.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the demo folder the operator names, outside the repo tree
+    ensure_folder(out_dir)
     for role, video in videos.items():
         if video is not None:
             video.save_as(out_dir / f"{role}.webm")
@@ -229,7 +230,7 @@ def run_recording(demo: Demo, folder: Path, lang: str) -> Path:
     old = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
     if STATES_KEY in old:
         logger.info("ℹ️ dropping measured states from the old marks — prep measures them again")
-    path.write_text(json.dumps(marks, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")  # runtime-write-exempt: path sits under the demo folder the operator names, outside the repo tree
+    write_text_at(path, json.dumps(marks, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     logger.info("✅ recorded %s: %s → %s", lang, ", ".join(sorted(marks)), out_dir)
     return path
 

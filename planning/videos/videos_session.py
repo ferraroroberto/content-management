@@ -40,6 +40,7 @@ from typing import Any, Callable, Optional
 from playwright.sync_api import TimeoutError as PWTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from common.runtime_files import ensure_folder
 from config.no_window import NO_WINDOW  # noqa: E402
 from planning._session_base import (  # noqa: E402
     LoginRequiredError,
@@ -413,7 +414,7 @@ def _run_ffmpeg_transcode(src: Path, dst: Path, tcfg: dict) -> bool:
     output is removed and False is returned so the caller falls back to the master.
     """
     target = tcfg["target_bitrate_mbps"]
-    dst.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: dst is the caller's transcode target under results/videos
+    ensure_folder(dst.parent)
     cmd = [
         "-i", str(src),
         "-map", "0:v:0", "-map", "0:a:0?",
