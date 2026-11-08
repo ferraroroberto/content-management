@@ -34,7 +34,7 @@ class ParseDayTests(unittest.TestCase):
         self.assertEqual(parse_day(" 2026-01-05 "), date(2026, 1, 5))
 
     def test_unparseable_values_raise_value_error(self) -> None:
-        for bad in ("", "tomorrow", "2026-13-01", "20261301", "2026-1-5x"):
+        for bad in ("", "tomorrow", "2026-13-01", "20261301", "2026-1-5x", "2026929", "2026-9-29", "29-09-2026"):
             with self.subTest(value=bad), self.assertRaises(ValueError):
                 parse_day(bad)
 
