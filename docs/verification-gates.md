@@ -166,7 +166,9 @@ vendored sibling, `scripts/runtime_write_resolve.py`.
 
 Move the write under `data/` or the runtime root. A write into a folder the caller
 supplies (an operator-named episode or demo folder, an `--out` path) goes through
-`common/runtime_files.py`, which carries the one reasoned marker; mark any other
+`common/runtime_files.py`, which carries the reasoned markers and raises `ValueError`
+before any write that resolves under a `code_folders` entry (its `CODE_FOLDERS` list
+is kept equal to the config by a test); mark any other
 deliberate write `# runtime-write-exempt: <reason>` with the outside contract that
 fixes its path, then shrink the baseline in the same PR with
 `scripts/runtime_write_ratchet.py --update-baseline`; only `--allow-additions`
