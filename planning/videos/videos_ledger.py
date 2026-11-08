@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import Optional
 
 from common.atomic_write import atomic_write_text
+from common.runtime_files import ensure_folder
 from planning._session_base import results_dir
 
 logger = logging.getLogger("videos_schedule")
@@ -137,7 +138,7 @@ class TagAlongLedger:
         sharing one temp name could interleave their writes and publish a
         corrupt file, which would defeat the point of staging it at all.
         """
-        self.path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: ledger path is the constructor argument, default under results/videos
+        ensure_folder(self.path.parent)
         atomic_write_text(self.path, json.dumps(data, indent=2, sort_keys=True))
 
 

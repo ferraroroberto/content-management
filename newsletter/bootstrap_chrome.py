@@ -49,6 +49,7 @@ from config.chrome_profile_lock import (  # noqa: E402
     pids_holding_profile,
 )
 from config.loader import load_block  # noqa: E402
+from src.pooled_http import pooled_request
 
 USER_DATA_DIR = Path(__file__).parent / "chrome_user_data"
 
@@ -70,7 +71,7 @@ def debug_port_up(timeout: float = 1.0, *, port: Optional[int] = None) -> bool:
     """True when Chrome's CDP endpoint answers on the configured debug port."""
     url = f"http://127.0.0.1:{port if port is not None else configured_debug_port()}/json/version"
     try:
-        return requests.get(url, timeout=timeout).status_code == 200
+        return pooled_request("GET", url, timeout=timeout).status_code == 200
     except requests.RequestException:
         return False
 

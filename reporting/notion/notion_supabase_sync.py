@@ -22,6 +22,7 @@ from reporting.notion._client import (
     slugify_identifier,
 )
 from reporting.process.supabase_uploader import get_db_connection, load_db_config
+from src.pooled_http import pooled_request
 
 # Set up logger - will use existing logger if available
 logger = logging.getLogger("notion_supabase_sync")
@@ -80,10 +81,10 @@ class NotionSupabaseSync:
         
         try:
             if method == "GET":
-                response = requests.get(url, headers=self.headers, timeout=NOTION_REQUEST_TIMEOUT)
+                response = pooled_request("GET", url, headers=self.headers, timeout=NOTION_REQUEST_TIMEOUT)
             elif method == "POST":
-                response = requests.post(
-                    url, headers=self.headers, json=data, timeout=NOTION_REQUEST_TIMEOUT
+                response = pooled_request(
+                    "POST", url, headers=self.headers, json=data, timeout=NOTION_REQUEST_TIMEOUT
                 )
             else:
                 raise ValueError(f"Unsupported method: {method}")

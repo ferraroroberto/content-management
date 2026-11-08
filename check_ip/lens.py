@@ -26,6 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from check_ip import db  # noqa: E402
+from src.pooled_http import pooled_request
 
 logger = logging.getLogger("check_ip.lens")
 
@@ -40,7 +41,7 @@ class LensClient:
     def validate(self) -> bool:
         """Confirm the key works before a run spends a thousand calls on it."""
         try:
-            response = requests.get(self.endpoint,
+            response = pooled_request("GET", self.endpoint,
                                     params={"engine": "google", "q": "test", "api_key": self.api_key},
                                     timeout=60)
         except requests.RequestException as err:
@@ -68,7 +69,7 @@ class LensClient:
             "no_cache": True,  # a cached hit would hide new reuse, which is the point
         }
         try:
-            response = requests.get(self.endpoint, params=params, timeout=180)
+            response = pooled_request("GET", self.endpoint, params=params, timeout=180)
         except requests.RequestException as err:
             logger.error("❌ %s search failed for %s: %s", search_type, local_image, err)
             return None

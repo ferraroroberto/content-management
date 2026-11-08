@@ -16,6 +16,7 @@ import requests
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from config.loader import load_full_config as load_config
 from config.logger_config import setup_logger
+from src.pooled_http import pooled_request
 
 # Set up logger. Module-scope default is a real (unconfigured) Logger — never
 # None — so `logger.xxx(...)` calls elsewhere in this module are plain Logger
@@ -190,7 +191,7 @@ def get_api_data(platform_key: str, config: Optional[dict[str, Any]], reference_
         try:
             logger.debug(f"📡 Making API request to {url} (attempt {attempt+1}/{retries})")
             logger.debug(f"🔑 Using query parameters: {querystring}")
-            response = requests.get(url, headers=headers, params=querystring, timeout=RAPIDAPI_TIMEOUT_S)
+            response = pooled_request("GET", url, headers=headers, params=querystring, timeout=RAPIDAPI_TIMEOUT_S)
             response.raise_for_status()  # Raise an exception for bad status codes
             data = response.json()
             logger.info(f"✅ Successfully retrieved {platform_key} data")

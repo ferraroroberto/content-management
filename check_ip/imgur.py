@@ -18,6 +18,8 @@ from typing import Optional
 
 import requests
 
+from src.pooled_http import pooled_request
+
 logger = logging.getLogger("check_ip.imgur")
 
 API_URL = "https://api.imgur.com/3/image"
@@ -36,7 +38,7 @@ class ImgurClient:
     def validate(self) -> bool:
         """Cheap credential check. Never fatal — the caller decides."""
         try:
-            response = requests.get("https://api.imgur.com/3/account/me",
+            response = pooled_request("GET", "https://api.imgur.com/3/account/me",
                                     headers=self.headers, timeout=30)
         except requests.RequestException as err:
             logger.warning("⚠️ could not reach Imgur to validate credentials: %s", err)
@@ -59,7 +61,7 @@ class ImgurClient:
         for attempt in range(1, retries + 1):
             try:
                 with open(image_path, "rb") as handle:
-                    response = requests.post(API_URL, headers=self.headers,
+                    response = pooled_request("POST", API_URL, headers=self.headers,
                                              files={"image": handle}, timeout=120)
             except requests.RequestException as err:
                 logger.warning("⚠️ network error uploading %s (attempt %s/%s): %s",

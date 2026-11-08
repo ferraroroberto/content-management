@@ -2,8 +2,8 @@
 
 Deliberately has no dependency on ``engagement.db.client`` or
 ``engagement.classify.rules`` — safe for both to import without a cycle.
-Single-source for the reply-picking logic that had drifted into two
-independent implementations: ``engagement/db/client.py``'s
+Single source for the reply-picking logic, so two independent
+implementations cannot diverge: ``engagement/db/client.py``'s
 ``_pick_thanks_reply`` existed only to dodge the very cycle this module
 avoids (``rules.py`` already imports from ``client.py``), so a
 ``phrases.json`` schema change could update one path and silently miss the

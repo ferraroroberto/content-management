@@ -38,6 +38,7 @@ from typing import Optional
 import streamlit as st
 
 from app.autoheal_console import DEFAULT_MODEL
+from common.runtime_files import ensure_folder
 from config.no_window import NO_WINDOW
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -166,7 +167,7 @@ def start_skill_console(name: str, skill_cmd: str, *, model: str = DEFAULT_MODEL
 
     ts = datetime.now().strftime("%Y-%m-%d-%H%M%S")
     log_path = REPO_ROOT / "results" / "planning" / f"autoheal-{ts}.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: log lives under results/planning; REPO_ROOT is an import the check does not follow
+    ensure_folder(log_path.parent)
     # Create the file now, before the tail thread starts. The wrapper opens it
     # with "wb" only after its own (new-console) Python startup, so if that child
     # dies early the file would never exist and the tail's open() would raise

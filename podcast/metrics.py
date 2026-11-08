@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator, Optional
 
+from common.runtime_files import ensure_folder, write_text_at
+
 METRICS_FILE = "metrics.json"
 
 
@@ -48,8 +50,8 @@ def stage_timer(package: Path, stage: str) -> Iterator[StageRecord]:
         "llm": rec.llm,
         "finished_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
-    package.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
-    (package / METRICS_FILE).write_text(json.dumps(data, indent=2), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    ensure_folder(package)
+    write_text_at(package / METRICS_FILE, json.dumps(data, indent=2), encoding="utf-8")
 
 
 def llm_cost_usd(call: dict, rates: dict) -> Optional[float]:

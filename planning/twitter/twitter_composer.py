@@ -69,8 +69,7 @@ def click_compose_area(page: Page) -> None:
     over the inline composer because the inline one can carry stale draft
     state between sessions.
 
-    Every candidate used to be probed with a bare ``count()``, which does not
-    wait — so a row that arrived while X was still showing its splash screen
+    Probing each candidate with a bare ``count()`` does not wait — so a row that arrived while X was still showing its splash screen
     found nothing mounted, exhausted all four probes in milliseconds and
     raised, while its siblings on the same warm page all succeeded (#235).
     ``click_until_effect`` re-resolves until the composer is genuinely on

@@ -19,6 +19,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+from common.runtime_files import ensure_folder
 from podcast.clips import load_clips
 from podcast.episode import Episode, work_dir
 from podcast.media import frame_at
@@ -190,7 +191,7 @@ def run(ep: Episode, cfg: dict, rec: StageRecord, *, force: bool = False) -> Non
         out = clip_outputs(ep, clip, "covers")[0]
         if out.exists() and not force:
             continue
-        out.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+        ensure_folder(out.parent)
         # Source-track frame (no burned captions), a moment the 1:1 clip actually shows.
         spk, at = cover_moment(clip)
         frame = frame_at(ep.tracks[spk], at, scratch / "cover_frame.png")

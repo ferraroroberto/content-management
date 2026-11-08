@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from common.runtime_files import ensure_folder
 from config.loader import load_block
 
 SPEAKERS = ("guest", "host")
@@ -133,7 +134,7 @@ def work_dir(cfg: dict, episode: Episode) -> Path:
     """Scratch dir for large intermediates (WAVs, frames) — kept off OneDrive."""
     root = Path(cfg["work_dir"]) if cfg.get("work_dir") else Path(tempfile.gettempdir()) / "cm-podcast"
     path = root / episode.folder.name.replace(" ", "_")
-    path.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: scratch dir from cfg work_dir, else the system temp dir
+    ensure_folder(path)
     return path
 
 

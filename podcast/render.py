@@ -14,9 +14,9 @@ Output is 24 fps (episodes mix 24 and 30 fps sources), H.264 yuv420p at
 from __future__ import annotations
 
 import logging
-import shutil
 from pathlib import Path
 
+from common.runtime_files import copy_file_to, ensure_folder, write_text_at
 from planning.videos.videos_session import windows_safe_filename
 from podcast.captions import LAYOUTS, Layout, build_ass
 from podcast.clips import load_clips, save_clips
@@ -108,7 +108,7 @@ def render_clip(ep: Episode, clip: dict, layout: Layout, words: list[dict], scra
     """Render one crop; ``words`` are the clip's caption words on its cut timeline."""
     ass_name = f"clip{clip['number']:02d}_{layout.name}.ass"
     duration = sum(b - a for a, b in clip.get("keep") or [[clip["start"], clip["end"]]])
-    (scratch / ass_name).write_text(build_ass(words, 0.0, duration, layout), encoding="utf-8")  # runtime-write-exempt: scratch dir the caller passes, outside the repo tree; fonts come from cfg
+    write_text_at(scratch / ass_name, build_ass(words, 0.0, duration, layout), encoding="utf-8")
     seek = ["-ss", f"{clip['start']:.3f}", "-t", f"{clip['end'] - clip['start']:.3f}"]
     run_ffmpeg([
         *seek, "-i", str(ep.tracks["guest"]), *seek, "-i", str(ep.tracks["host"]),
@@ -122,8 +122,8 @@ def render_clip(ep: Episode, clip: dict, layout: Layout, words: list[dict], scra
 def prepare_fonts(cfg: dict, scratch: Path) -> None:
     """Copy the caption font where the ASS subtitles filter looks for it (``fonts/`` in the scratch dir)."""
     fonts = scratch / "fonts"
-    fonts.mkdir(exist_ok=True)  # runtime-write-exempt: scratch dir the caller passes, outside the repo tree; fonts come from cfg
-    shutil.copy2(cfg["fonts"]["caption"], fonts / Path(cfg["fonts"]["caption"]).name)  # runtime-write-exempt: scratch dir the caller passes, outside the repo tree; fonts come from cfg
+    ensure_folder(fonts, parents=False)
+    copy_file_to(cfg["fonts"]["caption"], fonts / Path(cfg["fonts"]["caption"]).name)
 
 
 def run(ep: Episode, cfg: dict, rec: StageRecord, *, force: bool = False) -> list[dict]:
@@ -140,7 +140,7 @@ def run(ep: Episode, cfg: dict, rec: StageRecord, *, force: bool = False) -> lis
         if not words:
             logger.warning("⚠️ clip %d has no caption words: run the edit stage first", clip["number"])
         for (name, layout), out in zip(LAYOUTS.items(), clip_outputs(ep, clip, "videos")):
-            out.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: scratch dir the caller passes, outside the repo tree; fonts come from cfg
+            ensure_folder(out.parent)
             if force or not out.exists():
                 render_clip(ep, clip, layout, output_words(clip, words), scratch, out, encoder)
             clip.setdefault("videos", {})[name] = out.relative_to(ep.package).as_posix()

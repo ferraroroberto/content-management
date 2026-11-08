@@ -13,6 +13,7 @@ import json
 import logging
 from pathlib import Path
 
+from common.runtime_files import ensure_folder, write_text_at
 from podcast.episode import Episode, work_dir
 from podcast.hub import ask_json
 from podcast.metrics import StageRecord
@@ -89,7 +90,7 @@ def style_examples(cfg: dict, ep: Episode) -> dict:
     rows = query_rows_by_filter(notion, db_id, {"property": "clip", "title": {"is_not_empty": True}})
     picked = pick_style_examples(episodes, rows, n)
     examples = {"titles": picked["titles"], "linkedin": picked["linkedin"]}
-    cache.write_text(json.dumps(examples, indent=1, ensure_ascii=False), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    write_text_at(cache, json.dumps(examples, indent=1, ensure_ascii=False), encoding="utf-8")
     logger.info("ℹ️ style examples: %d titles, %d LinkedIn intros from the newest %d episode(s) (Notion, read-only)",
                 len(examples["titles"]), len(examples["linkedin"]), picked["episodes"])
     return examples
@@ -303,8 +304,8 @@ def load_clips(ep: Episode) -> list[dict]:
 
 
 def save_clips(ep: Episode, clips: list[dict]) -> None:
-    ep.package.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
-    (ep.package / CLIPS_FILE).write_text(json.dumps(clips, indent=1, ensure_ascii=False), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    ensure_folder(ep.package)
+    write_text_at(ep.package / CLIPS_FILE, json.dumps(clips, indent=1, ensure_ascii=False), encoding="utf-8")
 
 
 def clip_length(clip: dict) -> float:
@@ -325,5 +326,5 @@ def write_clips_md(ep: Episode, clips: list[dict]) -> Path:
             parts.append(f"**Score:** {json.dumps(c['score'])}\n")
         parts.append(f"<details><summary>clip text</summary>\n\n{c['text']}\n\n</details>\n")
     path = ep.package / "clips.md"
-    path.write_text("\n".join(parts), encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    write_text_at(path, "\n".join(parts), encoding="utf-8")
     return path

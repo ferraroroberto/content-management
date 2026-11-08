@@ -33,6 +33,7 @@ from playwright.sync_api import TimeoutError as PWTimeoutError
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(REPO_ROOT))
 
+from common.runtime_files import ensure_folder
 from config.console import force_utf8_stdio  # noqa: E402
 from config.logger_config import setup_logger  # noqa: E402
 from engagement.db.client import (  # noqa: E402
@@ -662,7 +663,7 @@ def _evaluate_scrape_health(total_posts: int, structural_errors: list[str]) -> s
 def _write_dry_run(posts: list[dict], all_comments: list[dict], all_commenters: dict[str, dict]) -> None:
     """Write what a live run would persist to a timestamped JSON file."""
     out_path = REPO_ROOT / "results" / "engagement" / f"dryrun-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
-    out_path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: dry-run dump under REPO_ROOT/results/engagement; REPO_ROOT is an import the check does not follow
+    ensure_folder(out_path.parent)
     out_path.write_text(
         json.dumps(
             {"posts": [p["post_url"] for p in posts], "comments": all_comments, "commenters": list(all_commenters.values())},

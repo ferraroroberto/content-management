@@ -61,10 +61,11 @@ def query_database(
     """Paginated, retried query returning every matching row.
 
     Single-source for the "query a Notion DB and page through every result"
-    loop that used to be hand-rolled with raw ``requests`` in
-    ``build_newsletter.NotionClient``, ``normalize_names.NotionNameNormalizer``
-    and ``normalize_url.NotionURLNormalizer`` — none of which retried on a
-    transient Notion error, unlike the archive path below.
+    loop, shared by ``build_newsletter.NotionClient``,
+    ``normalize_names.NotionNameNormalizer`` and
+    ``normalize_url.NotionURLNormalizer``; unlike a hand-rolled raw
+    ``requests`` loop it retries a transient Notion error, as the archive path
+    below does.
     """
     return list(iter_database(client, db_id, query_filter=query_filter, sorts=sorts))
 

@@ -18,6 +18,7 @@ from reporting.notion._client import (
     notion_rest_headers,
     slugify_identifier,
 )
+from src.pooled_http import pooled_request
 
 # Set up logger - will use existing logger if available
 logger = logging.getLogger("notion_database_list")
@@ -51,8 +52,8 @@ class NotionDatabaseLister:
             data["start_cursor"] = start_cursor
         
         try:
-            response = requests.post(
-                url, headers=self.headers, json=data, timeout=NOTION_REQUEST_TIMEOUT
+            response = pooled_request(
+                "POST", url, headers=self.headers, json=data, timeout=NOTION_REQUEST_TIMEOUT
             )
             response.raise_for_status()
             return response.json()

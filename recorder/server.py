@@ -51,6 +51,7 @@ from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Mount, Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
+from common.runtime_files import write_text_at
 from config.no_window import NO_WINDOW
 from recorder.store import RECORDING_ID, ChunkStore, MissingChunks
 from src.static_versioning import CachingStaticFiles, fleet_hash, stamp_assets
@@ -136,7 +137,7 @@ def ensure_links(folder: Path) -> dict[str, str]:
     for side in SIDES:
         if side not in links.values():
             links[secrets.token_urlsafe(18)] = side
-    path.write_text(json.dumps(data, indent=1), encoding="utf-8")  # runtime-write-exempt: folder is the recording folder the caller names
+    write_text_at(path, json.dumps(data, indent=1), encoding="utf-8")
     return dict(links)
 
 

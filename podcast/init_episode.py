@@ -41,6 +41,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from common.runtime_files import ensure_folder, write_text_at
 from podcast.episode import SPEAKERS, VIDEO_DIR, episode_path, load_podcast_config
 
 logger = logging.getLogger("podcast.init")
@@ -236,10 +237,10 @@ def trial_spec(trial: Path, source: Path) -> Optional[dict]:
 
 def write_episode(folder: Path, spec: dict, *, force: bool = False) -> Path:
     path = folder / "episode.json"
-    folder.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    ensure_folder(folder)
     if path.exists() and not force:
         raise FileExistsError(f"{path} already exists; pass --force to overwrite it")
-    path.write_text(json.dumps(spec, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")  # runtime-write-exempt: path sits under the episode folder the operator names, outside the repo tree
+    write_text_at(path, json.dumps(spec, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     return path
 
 

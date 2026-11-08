@@ -45,6 +45,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import requests
 
+from common.runtime_files import write_text_at
 from newsletter.topics import TOPICS
 from newsletter.triage.score import MetaScore, ShadowPass, load_lessons
 
@@ -288,7 +289,7 @@ def write_shadow(path: Path, rows: Sequence[Dict[str, Any]], *, window: Tuple[st
     data = {"window": list(window), "written_at": datetime.now(timezone.utc).isoformat(), "engine": engine,
             "evaluated": sum(1 for r in rows if r["status"] == "ok"), "rows": list(rows)}
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")  # runtime-write-exempt: path is the caller's argument, a results/newsletter/triage report
+    write_text_at(tmp, json.dumps(data, ensure_ascii=False), encoding="utf-8")
     tmp.replace(path)
 
 

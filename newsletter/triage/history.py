@@ -45,6 +45,7 @@ if str(REPO_ROOT) not in sys.path:
 from rapidfuzz import fuzz  # noqa: E402
 from rapidfuzz import utils as rf_utils
 
+from common.runtime_files import ensure_folder, open_for_write
 from config.console import force_utf8_stdio  # noqa: E402
 from config.loader import load_block, load_full_config  # noqa: E402
 from newsletter import notion_io  # noqa: E402
@@ -63,10 +64,10 @@ REDIRECT_CACHE = REPO_ROOT / "results" / "newsletter" / "triage" / "redirects.js
 
 
 def _write_jsonl(path: Path, rows: Iterable[Dict[str, Any]]) -> int:
-    path.parent.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: path is the caller's argument, under results/newsletter/triage/history
+    ensure_folder(path.parent)
     tmp = path.with_suffix(path.suffix + ".tmp")
     n = 0
-    with tmp.open("w", encoding="utf-8") as fp:  # runtime-write-exempt: path is the caller's argument, under results/newsletter/triage/history
+    with open_for_write(tmp, "w", encoding="utf-8") as fp:
         for row in rows:
             fp.write(json.dumps(row, ensure_ascii=False) + "\n")
             n += 1

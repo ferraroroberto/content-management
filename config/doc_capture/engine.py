@@ -27,6 +27,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from common.runtime_files import write_text_at
+from src.pooled_http import pooled_request
+
 logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -70,11 +73,7 @@ def load_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
 
 
 def save_manifest(manifest: dict[str, Any], path: Path = MANIFEST_PATH) -> None:
-    path.write_text(  # runtime-write-exempt: path is the caller's argument; defaults point at docs/screenshots and README.md
-        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
+    write_text_at(path, json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
 
 
 # ── idempotency ─────────────────────────────────────────────────────
@@ -148,7 +147,7 @@ def _preflight(base_url: str) -> None:
     import requests
 
     try:
-        requests.get(base_url, timeout=5)
+        pooled_request("GET", base_url, timeout=5)
     except requests.RequestException as exc:
         raise SystemExit(
             f"❌ control-panel app unreachable at {base_url} — start it first "
@@ -346,6 +345,6 @@ def regenerate_readme(
     if new == text:
         logger.info("✅ README unchanged")
         return False
-    readme_path.write_text(new, encoding="utf-8", newline="\n")  # runtime-write-exempt: path is the caller's argument; defaults point at docs/screenshots and README.md
+    write_text_at(readme_path, new, encoding="utf-8", newline="\n")
     logger.info("✅ README screenshots section regenerated")
     return True

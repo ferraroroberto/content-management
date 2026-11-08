@@ -66,6 +66,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from common.runtime_files import ensure_folder, write_text_at
 from config.console import force_utf8_stdio  # noqa: E402
 from config.loader import load_block  # noqa: E402
 from newsletter import llm  # noqa: E402
@@ -74,6 +75,7 @@ from newsletter.triage import jev as jx  # noqa: E402
 from newsletter.triage import score as sc  # noqa: E402
 from newsletter.triage.criteria import CRITERIA_PATH  # noqa: E402
 from newsletter.triage.score import MetaScore  # noqa: E402
+from src.pooled_http import pooled_request
 
 logger = logging.getLogger("newsletter_triage.jev_pilot")
 
@@ -210,7 +212,7 @@ class RingRecorder:
 
     def _poll(self) -> None:
         try:
-            recs = requests.get(self.url, timeout=5).json().get("requests", [])
+            recs = pooled_request("GET", self.url, timeout=5).json().get("requests", [])
         except (requests.RequestException, ValueError):
             self.polls_failed += 1
             return
@@ -239,7 +241,7 @@ class RingRecorder:
 
 def hub_counters(base_url: str) -> Dict[str, Dict[str, Any]]:
     try:
-        rows = requests.get(base_url.rstrip("/") + "/admin/api/hub/counters", timeout=5).json().get("counters", [])
+        rows = pooled_request("GET", base_url.rstrip("/") + "/admin/api/hub/counters", timeout=5).json().get("counters", [])
     except (requests.RequestException, ValueError):
         return {}
     return {r["key"]: r for r in rows}
@@ -428,7 +430,7 @@ def capture_requests(items: Sequence[Dict[str, Any]], criteria: Dict[str, Any], 
     body = {"model": jev_model, "state": jx.build_state(items[0]["input"]), "questions": jx.build_questions(criteria)}
     t0 = time.monotonic()
     try:
-        r = requests.post(base_url.rstrip("/") + jx.ROUTE, json=body, timeout=jx.DEFAULT_TIMEOUT_S)
+        r = pooled_request("POST", base_url.rstrip("/") + jx.ROUTE, json=body, timeout=jx.DEFAULT_TIMEOUT_S)
         jresp: Dict[str, Any] = {"status": r.status_code, "body": r.json()}
     except (requests.RequestException, ValueError) as exc:
         jresp = {"error": type(exc).__name__}
@@ -595,22 +597,20 @@ def render_md(result: Dict[str, Any]) -> str:
 
 def write_artefact(result: Dict[str, Any], out_root: Path = OUT_ROOT) -> Path:
     out = out_root / result["generated_at"].replace(":", "")
-    out.mkdir(parents=True, exist_ok=True)  # runtime-write-exempt: out_root is the caller's argument, default REPO_ROOT/tmp/jev_pilot
+    ensure_folder(out)
     for rid, r in result["runs"].items():
         items = r.pop("_items")
-        (out / f"items-run-{rid}.json").write_text(json.dumps(items, ensure_ascii=False, indent=1), encoding="utf-8")  # runtime-write-exempt: out_root is the caller's argument, default REPO_ROOT/tmp/jev_pilot
+        write_text_at(out / f"items-run-{rid}.json", json.dumps(items, ensure_ascii=False, indent=1), encoding="utf-8")
     for r in result["runs"].values():
         r["measures"].pop("_disagreements")
         (r.get("fresh_legacy_measures") or {}).pop("_disagreements", None)
     (result.get("pooled_fresh_legacy") or {}).pop("_disagreements", None)
     if "capture" in result:
-        (out / "capture.json").write_text(json.dumps(result.pop("capture"), ensure_ascii=False, indent=1),  # runtime-write-exempt: out_root is the caller's argument, default REPO_ROOT/tmp/jev_pilot
-                                          encoding="utf-8")
+        write_text_at(out / "capture.json", json.dumps(result.pop("capture"), ensure_ascii=False, indent=1), encoding="utf-8")
     pooled = result.get("pooled") or {}
-    (out / "disagreements.json").write_text(json.dumps(pooled.pop("_disagreements", []), ensure_ascii=False, indent=1),  # runtime-write-exempt: out_root is the caller's argument, default REPO_ROOT/tmp/jev_pilot
-                                            encoding="utf-8")
-    (out / "summary.json").write_text(json.dumps(result, ensure_ascii=False, indent=1, default=str), encoding="utf-8")  # runtime-write-exempt: out_root is the caller's argument, default REPO_ROOT/tmp/jev_pilot
-    (out / "summary.md").write_text(render_md(result), encoding="utf-8")  # runtime-write-exempt: out_root is the caller's argument, default REPO_ROOT/tmp/jev_pilot
+    write_text_at(out / "disagreements.json", json.dumps(pooled.pop("_disagreements", []), ensure_ascii=False, indent=1), encoding="utf-8")
+    write_text_at(out / "summary.json", json.dumps(result, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+    write_text_at(out / "summary.md", render_md(result), encoding="utf-8")
     return out
 
 
