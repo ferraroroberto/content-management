@@ -29,6 +29,7 @@ LANDING_URL = "https://mail.google.com/"
 
 
 def main() -> int:
+    # runtime-write-exempt: the newsletter Chrome login profile (gitignored); moving it logs the Gmail session out
     USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
     print(f"📁 Newsletter Chrome profile: {USER_DATA_DIR}")
     print("   (this profile is separate from your normal Chrome — same pattern as")

@@ -14,8 +14,10 @@ import requests
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from common.runtime_files import ensure_folder, open_for_write
 from config.loader import load_full_config as load_config
 from config.logger_config import setup_logger
+from reporting.results_paths import results_folder
 from src.pooled_http import pooled_request
 
 # Set up logger. Module-scope default is a real (unconfigured) Logger — never
@@ -50,9 +52,7 @@ def check_file_exists_for_date(platform_key: str, config: dict[str, Any], date_s
     # Get results directory from config or use default
     results_dir_relative = config.get("folder_results_raw", "results/raw")
     
-    # Create full path for results directory
-    project_root = os.path.dirname(os.path.dirname(__file__))
-    results_dir = os.path.join(project_root, *results_dir_relative.split('/'))
+    results_dir = str(results_folder(results_dir_relative))
     
     # Generate filename with provided date
     filename = f"{platform}_{data_type}_{date_str}.json"
@@ -228,12 +228,9 @@ def save_results(platform_key: str, data: Any, config: dict[str, Any], date_str:
     # Get results directory from config or use default
     results_dir_relative = config.get("folder_results_raw", "results/raw")
     
-    # Create full path for results directory
-    project_root = os.path.dirname(os.path.dirname(__file__))
-    results_dir = os.path.join(project_root, *results_dir_relative.split('/'))
+    results_dir = str(results_folder(results_dir_relative))
     
-    # Create results directory if it doesn't exist
-    os.makedirs(results_dir, exist_ok=True)
+    ensure_folder(results_dir)
     
     # Add metadata
     result_data = {
@@ -253,7 +250,7 @@ def save_results(platform_key: str, data: Any, config: dict[str, Any], date_str:
         logger.info(f"🗑️  Deleted existing file: {file_path}")
     
     # Save to file
-    with open(file_path, 'w', encoding='utf-8') as file:
+    with open_for_write(file_path, 'w', encoding='utf-8') as file:
         json.dump(result_data, file, indent=4, ensure_ascii=False)
     
     logger.info(f"✅ Results saved to {file_path}")

@@ -7,6 +7,7 @@ import sys
 import tempfile
 import tomllib
 import unittest
+import unittest.mock
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +18,7 @@ from common.runtime_files import (  # noqa: E402
     CODE_FOLDERS,
     copy_file_to,
     ensure_folder,
+    fold_legacy_folder,
     open_for_write,
     write_text_at,
 )
@@ -150,6 +152,69 @@ class CodeFolderGuardTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, target, ignore_errors=True)
         self.assertEqual(ensure_folder(target), target)
         self.assertTrue(target.is_dir())
+
+
+class FoldLegacyFolderTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.legacy = self.root / "legacy"
+        self.target = self.root / "target"
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_moves_missing_files_and_empties_the_legacy_side(self) -> None:
+        (self.legacy / "sub").mkdir(parents=True)
+        (self.legacy / "a.json").write_text("a", encoding="utf-8")
+        (self.legacy / "sub" / "b.json").write_text("b", encoding="utf-8")
+        self.assertEqual(fold_legacy_folder(self.legacy, self.target), 2)
+        self.assertEqual((self.target / "a.json").read_text(encoding="utf-8"), "a")
+        self.assertEqual((self.target / "sub" / "b.json").read_text(encoding="utf-8"), "b")
+        self.assertEqual([p for p in self.legacy.rglob("*") if p.is_file()], [])
+
+    def test_a_name_already_in_the_target_wins_and_the_legacy_copy_stays(self) -> None:
+        self.legacy.mkdir()
+        self.target.mkdir()
+        (self.legacy / "a.json").write_text("old", encoding="utf-8")
+        (self.target / "a.json").write_text("new", encoding="utf-8")
+        self.assertEqual(fold_legacy_folder(self.legacy, self.target), 0)
+        self.assertEqual((self.target / "a.json").read_text(encoding="utf-8"), "new")
+        self.assertTrue((self.legacy / "a.json").exists())
+
+    def test_a_second_fold_is_a_no_op_and_a_missing_legacy_folder_is_fine(self) -> None:
+        self.legacy.mkdir()
+        (self.legacy / "a.json").write_text("a", encoding="utf-8")
+        self.assertEqual(fold_legacy_folder(self.legacy, self.target), 1)
+        (self.target / "a.json").unlink()  # deleted on purpose later: must not come back
+        self.assertEqual(fold_legacy_folder(self.legacy, self.target), 0)
+        self.assertFalse((self.target / "a.json").exists())
+        self.assertEqual(fold_legacy_folder(self.root / "absent", self.target), 0)
+
+    def test_refuses_a_target_inside_a_code_folder(self) -> None:
+        self.legacy.mkdir()
+        (self.legacy / "a.json").write_text("a", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            fold_legacy_folder(self.legacy, REPO_ROOT / "src" / "_fold_probe")
+        self.assertTrue((self.legacy / "a.json").exists())
+
+
+class ReportingResultsFolderTests(unittest.TestCase):
+    def test_config_relative_value_lands_at_the_repo_level_not_under_reporting(self) -> None:
+        from reporting import results_paths
+
+        results_paths.results_folder.cache_clear()
+        self.addCleanup(results_paths.results_folder.cache_clear)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            legacy = root / "reporting" / "results" / "raw"
+            legacy.mkdir(parents=True)
+            (legacy / "x_posts_2026-01-01.json").write_text("{}", encoding="utf-8")
+            with unittest.mock.patch.object(results_paths, "REPO_ROOT", root):
+                folder = results_paths.results_folder("results/raw")
+            self.assertEqual(folder, root / "results" / "raw")
+            self.assertTrue((folder / "x_posts_2026-01-01.json").exists())
+            self.assertFalse((legacy / "x_posts_2026-01-01.json").exists())
 
 
 if __name__ == "__main__":

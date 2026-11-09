@@ -154,13 +154,16 @@ class Priors:
 # ---------------------------------------------------------------------------
 # prompts
 
-LESSONS_PATH = Path(__file__).with_name("lessons.json")
+LESSONS_PATH = REPO_ROOT / "results" / "newsletter" / "triage" / "lessons.json"
+# Where the export wrote before it moved out of the code folder; read until the next export replaces it.
+_LEGACY_LESSONS_PATH = Path(__file__).with_name("lessons.json")
 
 
 def load_lessons(path: Optional[Path] = None) -> List[str]:
     """Owner-accepted criteria notes distilled from reviews (local gitignored file, text-only; exported from the
     store by ``lessons.py`` — absent on a fresh clone until the first accept/save)."""
-    path = path or LESSONS_PATH
+    if path is None:
+        path = LESSONS_PATH if LESSONS_PATH.exists() else _LEGACY_LESSONS_PATH
     if not path.exists():
         return []
     try:

@@ -50,6 +50,7 @@ def run_bootstrap(
 
     cfg = load_config()
     user_data_dir = resolve_user_data_dir(cfg["user_data_dir"])
+    # runtime-write-exempt: the persistent Chrome login profile the platform's user_data_dir config names; moving it logs the session out
     user_data_dir.mkdir(parents=True, exist_ok=True)
 
     login_url = cfg.get("login_url", default_login_url)

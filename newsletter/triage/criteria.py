@@ -11,7 +11,7 @@ Two halves, merged:
 
 The merged output — like ``overrides.json`` — carries real sender addresses
 and hit-rate tables, so both live under the gitignored ``results/newsletter/
-triage/`` tree (same rationale as ``newsletter/triage/lessons.json``): only
+triage/`` tree (same rationale as ``results/newsletter/triage/lessons.json``): only
 the hand-written RULES half is versioned with the code, as Python source
 below.
 

@@ -38,11 +38,25 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
+from common.runtime_files import ensure_folder, open_for_write, write_text_at
+
 logger = logging.getLogger("engagement.classify.local_model")
 
-MODEL_DIR = Path(__file__).resolve().parent
+_LEGACY_MODEL_DIR = Path(__file__).resolve().parent
+MODEL_DIR = _LEGACY_MODEL_DIR.parents[1] / "results" / "engagement" / "classify"
 MODEL_PATH = MODEL_DIR / "local_model.joblib"
 META_PATH = MODEL_DIR / "local_model.json"
+
+
+def _on_disk(path: Path) -> Path:
+    """``path``, or the copy trained before the artefact moved out of the code folder when only that exists.
+
+    Only the default location falls back, so a caller that points MODEL_PATH elsewhere
+    sees exactly that file. The next ``train()`` writes the new location."""
+    legacy = _LEGACY_MODEL_DIR / path.name
+    if path.parent == MODEL_DIR and not path.exists() and legacy.exists():
+        return legacy
+    return path
 
 SCALAR_COLS = [
     "text_len",
@@ -83,10 +97,11 @@ def _recorded_sklearn_version() -> Optional[str]:
     """The scikit-learn version that pickled the artefact, from the sidecar.
     None for an artefact trained before the sidecar recorded it — those are
     caught by sklearn's own unpickle warning instead."""
-    if not META_PATH.exists():
+    meta_path = _on_disk(META_PATH)
+    if not meta_path.exists():
         return None
     try:
-        meta = json.loads(META_PATH.read_text(encoding="utf-8"))
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as err:
         logger.warning("⚠️ local_model metadata unreadable: %s", err)
         return None
@@ -216,8 +231,9 @@ def train(platform: str = "linkedin") -> dict:
 
     import joblib
     import sklearn
-    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(pipeline, MODEL_PATH)
+    ensure_folder(MODEL_PATH.parent)
+    with open_for_write(MODEL_PATH, "wb") as fh:
+        joblib.dump(pipeline, fh)
 
     meta = {
         "trained_at": datetime.now(timezone.utc).isoformat(),
@@ -234,7 +250,7 @@ def train(platform: str = "linkedin") -> dict:
         "min_per_class": min_per_class,
         "scalar_cols": SCALAR_COLS,
     }
-    META_PATH.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    write_text_at(META_PATH, json.dumps(meta, indent=2))
     _load_model_cached.cache_clear()
     logger.info(
         "✅ trained local model — n_ai=%d n_human=%d cv_auc=%.3f → %s",
@@ -298,7 +314,8 @@ def _load_model_cached():
     incompatible scikit-learn. "Not trained yet" stays a soft None (the rules
     pass is lossless without a model); a version-skewed artefact is not — it
     would classify everything as uncertain, so it fails loudly instead."""
-    if not MODEL_PATH.exists():
+    model_path = _on_disk(MODEL_PATH)
+    if not model_path.exists():
         return None
 
     import sklearn
@@ -316,7 +333,7 @@ def _load_model_cached():
         warnings.simplefilter("always", InconsistentVersionWarning)
         try:
             import joblib
-            model = joblib.load(MODEL_PATH)
+            model = joblib.load(model_path)
         except Exception as err:
             logger.warning("⚠️ local_model load failed: %s", err)
             return None

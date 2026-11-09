@@ -1,7 +1,7 @@
 """Distil a review into criteria notes — proposed by the hub LLM, accepted by the owner.
 
     python -m newsletter.triage.lessons --run 12                 # propose 1–3 notes for a stored, reviewed run
-    python -m newsletter.triage.lessons --accept 4,5             # accept proposals → newsletter/triage/lessons.json
+    python -m newsletter.triage.lessons --accept 4,5             # accept proposals → results/newsletter/triage/lessons.json
     python -m newsletter.triage.lessons --list                   # pending + accepted
 
 Input to the model: the current criteria brief, the owner's review comment ("why I chose these"),
@@ -27,6 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from common.runtime_files import ensure_folder, write_text_at  # noqa: E402
 from config.console import force_utf8_stdio  # noqa: E402
 from config.loader import load_block, load_full_config  # noqa: E402
 from newsletter import llm  # noqa: E402
@@ -133,7 +134,8 @@ def export(path: Optional[Path] = None) -> int:
                        "Appended to the scoring prompt brief. Edit by accepting/rejecting in the control panel.",
             "lessons": [{"text": r["text"], "window": f"{r.get('window_start')}→{r.get('window_end')}",
                          "accepted": (r.get("accepted_at") or "")[:10]} for r in rows]}
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    ensure_folder(path.parent)
+    write_text_at(path, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
     return len(rows)
 
 

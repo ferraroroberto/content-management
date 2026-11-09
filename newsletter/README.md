@@ -300,7 +300,7 @@ never inventing people.
 - `triage/gmail.py` — read-only Gmail label ingestion + link extraction / redirect decoding (adapter over the vendored `src/gmail_readonly/`).
 - `triage/history.py` — 54-week ground-truth dataset (Notion positives ⋈ Gmail offered links) + `stats.md`.
 - `results/newsletter/triage/criteria.json` — machine-readable selection criteria (twin of `docs/newsletter-triage-criteria.md`), rebuilt by `python -m newsletter.triage.criteria`. Gitignored — a build artifact merging the hand-written `RULES` in `triage/criteria.py` with data priors that carry real sender addresses.
-- `results/newsletter/triage/overrides.json` — owner-maintained sender decisions (tier `never|rarely|usually|always|review`, e.g. paywalled publications); applied before the data priors, updated by the feedback loop. Gitignored for the same reason as `triage/lessons.json` — regenerated/appended locally, carries real sender addresses.
+- `results/newsletter/triage/overrides.json` — owner-maintained sender decisions (tier `never|rarely|usually|always|review`, e.g. paywalled publications); applied before the data priors, updated by the feedback loop. Gitignored for the same reason as `results/newsletter/triage/lessons.json` — regenerated/appended locally, carries real sender addresses.
 
 ## Triage — Gmail history + criteria
 
@@ -421,7 +421,7 @@ Markdown reports and caches stay in gitignored `results/newsletter/triage/`.
 | `triage_emails`, `triage_candidates` | the run's inbox + every link with scores, verdict, stage-A/B JSON and the engine's suggestion (pick / runner, rank, ⭐, 🏆) |
 | `triage_decisions` | the owner's ticks, keyed by **window + canonical URL** — they survive a re-run and pre-fill the new table; single source for the sender-tier tally (`feedback.jsonl` retired); picks from earlier windows are a dedupe set for the next run (`already picked <window>`, before the archive step puts them in Notion) |
 | `triage_reviews` | the per-window review comment ("why these choices") |
-| `triage_lessons` | criteria notes proposed by the hub (`lessons_model`, `claude_sonnet`) from comment + disagreements; accepted ones are exported to the gitignored `newsletter/triage/lessons.json` (regenerated on every accept/save; the store is the source of truth) and appended to the scoring prompt brief |
+| `triage_lessons` | criteria notes proposed by the hub (`lessons_model`, `claude_sonnet`) from comment + disagreements; accepted ones are exported to the gitignored `results/newsletter/triage/lessons.json` (regenerated on every accept/save; the store is the source of truth) and appended to the scoring prompt brief |
 | `triage_editions`, `triage_picks` | the 54-week knowledge base from the history files (`python -m newsletter.triage.db import-history`) |
 
 Control panel → **🧭 triage**: pick a closed Saturday→Saturday week (or the

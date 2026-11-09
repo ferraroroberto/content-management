@@ -99,7 +99,7 @@ python -m reporting.social_client.social_api_client [options]
 
 ## Output
 
-Results are saved in the configured results directory (default: `reporting/results/raw/`) with the following naming convention:
+Results are saved in the configured results directory (default: `results/raw/`) with the following naming convention:
 
 ```
 {platform}_{data_type}_{YYYY-MM-DD}.json

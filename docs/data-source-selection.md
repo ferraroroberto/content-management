@@ -28,7 +28,7 @@ profile and taking whatever is topmost. Video Notes are covered too — the same
 branch, with Playwright as the one-key rollback.
 
 The downstream pipeline is source-agnostic — `data_processor` reads the
-JSON envelope from `reporting/results/raw/<platform>_<data_type>_<YYYY-MM-DD>.json`
+JSON envelope from `results/raw/<platform>_<data_type>_<YYYY-MM-DD>.json`
 and uses the matching `<key>` mapping in `config/mapping.json`, falling
 back to `<key>_playwright` automatically (via
 `get_alternative_mapping_keys`). So you can flip one platform at a time
@@ -70,7 +70,7 @@ Then run just that platform to validate:
     --platform linkedin_posts --no-skip --debug
 ```
 
-The new envelope lands in `reporting/results/raw/linkedin_*_<today>.json`.
+The new envelope lands in `results/raw/linkedin_*_<today>.json`.
 Re-run `reporting_pipeline.py` (or just `data_processor`) and confirm the
 Notion row matches what you expect.
 
@@ -78,7 +78,7 @@ Notion row matches what you expect.
 
 If a platform's Playwright scraper breaks the day before you need a clean
 report — flip its `"source"` back to `"rapidapi"` in `config/config.json`,
-delete the broken file from `reporting/results/raw/`, and re-run the
+delete the broken file from `results/raw/`, and re-run the
 pipeline. The RapidAPI configuration (api_url / api_key / api_host / etc.)
 is intentionally left untouched in the config — flipping the key is the
 only change. Keep the RapidAPI subscription active for at least one full

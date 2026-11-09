@@ -1,16 +1,4 @@
 {
   "version": 1,
-  "entries": [
-    {"key": "engagement/classify/llm_fallback.py", "counts": {"unresolved": 1}},
-    {"key": "engagement/classify/local_model.py", "counts": {"code-folder": 2}},
-    {"key": "newsletter/bootstrap_chrome.py", "counts": {"code-folder": 1}},
-    {"key": "newsletter/bootstrap_session.py", "counts": {"code-folder": 1}},
-    {"key": "newsletter/triage/lessons.py", "counts": {"unresolved": 1}},
-    {"key": "planning/_bootstrap.py", "counts": {"unresolved": 1}},
-    {"key": "planning/substack/extract_session.py", "counts": {"unresolved": 1}},
-    {"key": "reporting/notion/notion_database_list.py", "counts": {"unresolved": 1}},
-    {"key": "reporting/notion/notion_database_structure.py", "counts": {"unresolved": 2}},
-    {"key": "reporting/process/data_processor.py", "counts": {"code-folder": 1}},
-    {"key": "reporting/social_client/social_api_client.py", "counts": {"code-folder": 2}}
-  ]
+  "entries": []
 }

@@ -390,7 +390,7 @@ flowchart LR
     A1[RapidAPI<br/>x10 endpoints]:::rapidapi --> B
     A2[Playwright<br/>x10 endpoints]:::playwright --> B
     B[reporting.social_client<br/>dispatch on 'source']
-    B --> C[reporting/results/raw/<br/>JSON dump]
+    B --> C[results/raw/<br/>JSON dump]
     C --> D[reporting.process.data_processor]
     D --> E[(Supabase<br/>PostgreSQL)]
     E --> F[reporting.process<br/>profile_aggregator<br/>posts_consolidator]
