@@ -130,12 +130,15 @@ the same PR with `scripts/dead_code_ratchet.py --update-baseline`; only
 
 ## 8. Conventions ratchet (`scripts/conventions_ratchet_gate.py`)
 
-Holds three fleet conventions as `ast` rules and fails when a file's count
-of hits for one rises above `.conventions-ratchet-baseline.json`, which is
-empty today: `no-window` (a `subprocess` spawn without `creationflags=`),
+Holds fleet conventions as `ast` rules and fails when a file's count
+of hits for one rises above `.conventions-ratchet-baseline.json`. The
+baseline holds only `state-literal` hits today (implicit-state-machine
+suspects: a lifecycle string compared or stored as a state); every other
+rule is at zero: `no-window` (a `subprocess` spawn without `creationflags=`),
 `logging-not-print` (a `print` in a library package; command-line modules
-print by design and are skipped) and `no-drive-path` (a string literal that
-starts with a drive letter). The `secret-compare` and `git-wrapper` rules
+print by design and are skipped), `no-drive-path` (a string literal that
+starts with a drive letter), `subprocess-timeout`, `state-set-repeat` and
+`state-write`. The `secret-compare` and `git-wrapper` rules
 stay off because the repo has no helper for either. The wrapper reports git
 or a Python file it could not read or parse as **NOT CONFIRMED**.
 
