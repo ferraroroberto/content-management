@@ -89,6 +89,7 @@ def _load_cache() -> dict:
 
 def _save_cache(cache: dict) -> None:
     p = _cache_path()
+    # runtime-write-exempt: the gitignored LLM verdict cache at the engagement.llm_fallback.cache_path config key; the operator chooses the folder
     p.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(p, json.dumps(cache, ensure_ascii=False, indent=2))
 

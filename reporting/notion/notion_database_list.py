@@ -206,7 +206,7 @@ class NotionDatabaseLister:
         # Sort databases by name for easier reading
         sorted_databases = sorted(databases, key=lambda x: x["name"].lower())
         
-        # Save with pretty formatting
+        # runtime-write-exempt: rewrites the tracked notion_database_list.json registry that notion_supabase_sync reads (or the file --output names); curated config, not runtime output
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(sorted_databases, f, ensure_ascii=False, indent=4)
         

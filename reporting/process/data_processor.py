@@ -12,9 +12,11 @@ import pandas as pd
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from common.runtime_files import ensure_folder
 from config.loader import load_full_config as load_config
 from config.logger_config import setup_logger
 from reporting.process.supabase_uploader import upload_all_dataframes
+from reporting.results_paths import results_folder
 
 # Set up logger. Module-scope default is a real (unconfigured) Logger — never
 # None — so `logger.xxx(...)` calls elsewhere in this module are plain Logger
@@ -454,9 +456,7 @@ def process_all_files(mapping_config: dict[str, Any], main_config: Optional[dict
     # Get raw results directory from config or use default
     results_dir_relative = main_config.get("folder_results_raw", "results/raw") if main_config else "results/raw"
     
-    # Create full path for results directory
-    project_root = os.path.dirname(os.path.dirname(__file__))
-    results_dir = os.path.join(project_root, *results_dir_relative.split('/'))
+    results_dir = str(results_folder(results_dir_relative))
     
     if not os.path.exists(results_dir):
         logger.error(f"❌ Results directory not found: {results_dir}")
@@ -532,12 +532,8 @@ def save_dataframes(dataframes: dict[str, pd.DataFrame], main_config: Optional[d
     # Get processed results directory from config or use default
     output_dir_relative = main_config.get("folder_results_processed", "results/processed") if main_config else "results/processed"
     
-    # Create full path for output directory
-    project_root = os.path.dirname(os.path.dirname(__file__))
-    output_dir = os.path.join(project_root, *output_dir_relative.split('/'))
-    
-    # Create output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
+    output_dir = str(results_folder(output_dir_relative))
+    ensure_folder(output_dir)
     
     saved_files = []
     

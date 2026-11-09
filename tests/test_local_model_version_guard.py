@@ -100,6 +100,22 @@ class VersionGuardTests(unittest.TestCase):
         self.assertIsNone(local_model._load_model_cached())
         self.assertFalse(local_model.model_is_available())
 
+    # ---- the artefact moved out of the code folder: an old copy still loads ----
+
+    def test_default_location_falls_back_to_the_pre_move_copy(self) -> None:
+        legacy_dir = Path(self._tmp.name) / "legacy"
+        legacy_dir.mkdir()
+        new_dir = Path(self._tmp.name) / "new"
+        new_dir.mkdir()
+        joblib.dump(self.pipeline, legacy_dir / "local_model.joblib")
+        with patch.object(local_model, "_LEGACY_MODEL_DIR", legacy_dir), patch.object(local_model, "MODEL_DIR", new_dir):
+            default = new_dir / "local_model.joblib"
+            self.assertEqual(local_model._on_disk(default), legacy_dir / "local_model.joblib")
+            joblib.dump(self.pipeline, default)
+            self.assertEqual(local_model._on_disk(default), default)
+            # a caller-pointed path never falls back
+            self.assertEqual(local_model._on_disk(self.model_path), self.model_path)
+
     # ---- matching version loads and predicts ----
 
     def test_matching_version_loads(self) -> None:

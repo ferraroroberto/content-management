@@ -43,7 +43,7 @@ flowchart LR
 | `python -m engagement.linkedin.scrape_comments --days 5` | Scrape last 5 calendar days **including today** of LI comments → Supabase. Headful by default. `--days N` means N total days, so `--days 1` = today only. |
 | `python -m engagement.linkedin.scrape_comments --days 1 --limit 1 --dry-run` | Smoke test against 1 post (today only); writes `results/engagement/dryrun-*.json` instead of upserting. |
 | `python -m engagement.classify.rules` | Re-classify all `pending` `unknown` rows using current `phrases.json`. If a local model is on disk, it runs as a second pass on the rows the rules layer left as `unknown`. |
-| `python -m engagement.classify.local_model train` | Train the local sklearn classifier on accumulated whitelist/blacklist labels. Refuses to train below `rules.local_model_min_train_per_class` per class. Writes `engagement/classify/local_model.joblib` (gitignored) + a metadata sidecar recording the scikit-learn version that pickled it. |
+| `python -m engagement.classify.local_model train` | Train the local sklearn classifier on accumulated whitelist/blacklist labels. Refuses to train below `rules.local_model_min_train_per_class` per class. Writes `results/engagement/classify/local_model.joblib` (gitignored) + a metadata sidecar recording the scikit-learn version that pickled it. |
 | `python -m engagement.classify.local_model eval` | 5-fold stratified CV on the same labeled set; prints AUC + precision/recall/F1 at the configured threshold. |
 | `python -m engagement.reputation.update` | Recompute rolling per-commenter signals + counters + reputation_score from the `comments` table and upsert into `commenters`. Idempotent; preserves manual whitelist/blacklist. |
 | `& .\.venv\Scripts\python.exe -m streamlit run engagement\review_app.py` | Launch the review UI on `http://localhost:8501`. |
@@ -83,8 +83,7 @@ engagement/
 │   ├── local_model.py                # sklearn logreg, trained on accumulated wl/bl labels
 │   ├── llm_fallback.py               # Phase 3 — local-hub LLM, fires only inside the local-model uncertainty window
 │   ├── phrases.json                  # generic-praise list, weights, thresholds, reply templates
-│   ├── local_model.joblib            # (gitignored) trained pipeline — user-specific artifact
-│   ├── local_model.json              # (gitignored) training metadata sidecar, incl. the sklearn version that pickled the artifact
+│   │   (the trained model local_model.joblib + its .json sidecar live in the gitignored results/engagement/classify/)
 │   └── .llm_cache.json               # (gitignored) per-machine cache of LLM verdicts
 ├── reputation/
 │   └── update.py                     # rolling signals + reputation_score recomputer (Phase 3)

@@ -124,6 +124,7 @@ def ensure_chrome(*, timeout_s: int = 15) -> int:
     profile is still held by a non-debug Chrome after the full wait schedule
     (a likely-wedged holder, reported rather than force-killed).
     """
+    # runtime-write-exempt: the newsletter Chrome login profile (gitignored); moving it logs the Gmail session out
     USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
     port = configured_debug_port()
 

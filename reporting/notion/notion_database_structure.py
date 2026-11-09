@@ -11,6 +11,7 @@ from notion_client import Client
 
 # Add the parent directory to sys.path to allow importing from sibling packages
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from common.runtime_files import REPO_ROOT, ensure_folder, open_for_write
 from config.logger_config import setup_logger
 from reporting.notion._client import (
     extract_property_value,
@@ -160,11 +161,9 @@ def save_database_info(
 ) -> str:
     """Save database structure and content to files."""
     if output_dir is None:
-        # Create output directory
-        project_root = os.path.dirname(os.path.dirname(__file__))
-        output_dir = os.path.join(project_root, "notion", "database_sample")
-    
-    os.makedirs(output_dir, exist_ok=True)
+        output_dir = os.path.join(REPO_ROOT, "results", "notion", "database_sample")
+
+    ensure_folder(output_dir)
     
     db_id = database_structure.get('database_id', 'unknown')
     
@@ -174,7 +173,7 @@ def save_database_info(
     
     # Save structure as JSON (overwrite if exists)
     structure_file = os.path.join(output_dir, f"{sanitized_name}_{db_id}_structure.json")
-    with open(structure_file, 'w') as f:
+    with open_for_write(structure_file, 'w', encoding='utf-8') as f:
         json.dump(database_structure, f, indent=2)
     
     # Save content as CSV only (overwrite if exists)

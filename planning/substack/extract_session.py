@@ -78,6 +78,7 @@ def main() -> int:
         logger.error("❌ substack.sid not found — login may have expired. Re-run bootstrap_session.")
         return 1
 
+    # runtime-write-exempt: the gitignored Substack API session file that planning/substack/api_client.py reads from the same SESSION_FILE constant
     SESSION_FILE.write_text(
         json.dumps({"cookies": substack_cookies, "user_agent": user_agent}),
         encoding="utf-8",

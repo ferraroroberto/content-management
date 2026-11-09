@@ -85,4 +85,29 @@ def copy_file_to(src: PathLike, dst: PathLike) -> Path:
     return Path(shutil.copy2(src, target))
 
 
-__all__ = ["CODE_FOLDERS", "copy_file_to", "ensure_folder", "open_for_write", "write_text_at"]
+def fold_legacy_folder(legacy: PathLike, target: PathLike) -> int:
+    """Move every file under ``legacy`` that ``target`` lacks into ``target``; return how many moved.
+
+    For output that used to land in a code folder and now lands under ``results/``: the
+    old files stay readable without a manual step. A name already in ``target`` is left
+    alone, and a moved file is gone from ``legacy`` so a file deleted from ``target``
+    later does not come back.
+    """
+    source = Path(legacy)
+    if not source.is_dir():
+        return 0
+    moved = 0
+    for old in sorted(p for p in source.rglob("*") if p.is_file()):
+        new = Path(target) / old.relative_to(source)
+        if new.exists():
+            continue
+        ensure_folder(new.parent)
+        copy_file_to(old, new)
+        old.unlink()
+        moved += 1
+    if moved:
+        logger.info("✅ moved %d runtime file(s) from a code folder to %s", moved, Path(target).name)
+    return moved
+
+
+__all__ = ["CODE_FOLDERS", "copy_file_to", "ensure_folder", "fold_legacy_folder", "open_for_write", "write_text_at"]
