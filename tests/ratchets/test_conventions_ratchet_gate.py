@@ -61,7 +61,18 @@ class WiringTests(unittest.TestCase):
         fleet = tomllib.loads((REPO_ROOT / ".fleet.toml").read_text(encoding="utf-8"))
         table = fleet["conventions_ratchet"]
         self.assertIs(table["enabled"], True)
-        self.assertEqual(table["rules"], ["no-window", "logging-not-print", "no-drive-path", "subprocess-timeout"])
+        self.assertEqual(
+            table["rules"],
+            [
+                "no-window",
+                "logging-not-print",
+                "no-drive-path",
+                "subprocess-timeout",
+                "state-literal",
+                "state-set-repeat",
+                "state-write",
+            ],
+        )
         self.assertTrue((REPO_ROOT / table["baseline"]).is_file())
         entry = fleet["vendored"]["conventions_ratchet"]
         self.assertEqual(entry["dest"], "scripts/conventions_ratchet.py")
@@ -95,9 +106,10 @@ class SeededViolationTurnsTheGateRedTests(unittest.TestCase):
         self.repo = Path(tmp.name)
         (self.repo / "scripts").mkdir()
         (self.repo / "scripts" / "conventions_ratchet.py").write_bytes(gate.SCRIPT.read_bytes())
-        # the ratchet loads its sibling reader module from beside itself
-        readers = gate.SCRIPT.with_name("conventions_readers.py")
-        (self.repo / "scripts" / readers.name).write_bytes(readers.read_bytes())
+        # the ratchet loads its sibling modules from beside itself
+        for sibling_name in ("conventions_readers.py", "conventions_state.py"):
+            sibling = gate.SCRIPT.with_name(sibling_name)
+            (self.repo / "scripts" / sibling.name).write_bytes(sibling.read_bytes())
         (self.repo / "lib").mkdir()
         self.module = self.repo / "lib" / "tool.py"
         self.module.write_text(self.CLEAN, encoding="utf-8")
