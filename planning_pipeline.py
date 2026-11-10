@@ -28,8 +28,8 @@ CLI:
 from __future__ import annotations
 
 import argparse
-import json
 import logging
+import os
 import sys
 import time
 from dataclasses import dataclass, field
@@ -43,6 +43,7 @@ from config.console import force_utf8_stdio  # noqa: E402
 
 force_utf8_stdio()
 from config.logger_config import setup_logger  # noqa: E402
+from planning import run_state  # noqa: E402
 from planning._failure import classify as classify_failure  # noqa: E402
 from planning._failure import extract_screenshot
 from planning.instagram.clone_to_other_platforms import main as run_clone  # noqa: E402
@@ -297,14 +298,6 @@ def _build_summary_md(args: argparse.Namespace,
     return "\n".join(lines)
 
 
-def _write_summary(md: str, started_at: datetime) -> Path:
-    out_dir = Path(__file__).parent / "results" / "planning"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{started_at.strftime('%Y-%m-%d-%H%M%S')}-summary.md"
-    out_path.write_text(md, encoding="utf-8")
-    return out_path
-
-
 def _build_result_json(args: argparse.Namespace,
                        results: list[PlatformResult],
                        started_at: datetime,
@@ -316,13 +309,6 @@ def _build_result_json(args: argparse.Namespace,
     path (lifted out of the inline ``detail`` text) and a ``failure_kind`` from
     the shared classifier so the heal loop knows which failures are UI-drift
     (the only kind it may auto-fix)."""
-    if args.live:
-        mode_label = "LIVE"
-    elif args.dry_run:
-        mode_label = "DRY-RUN"
-    else:
-        mode_label = "config default"
-
     platforms: list[dict] = []
     for r in results:
         rows: list[dict] = []
@@ -349,7 +335,7 @@ def _build_result_json(args: argparse.Namespace,
     return {
         "started_at": started_at.isoformat(timespec="seconds"),
         "finished_at": finished_at.isoformat(timespec="seconds"),
-        "mode": mode_label,
+        "mode": _result_mode(args),
         "exit_code": exit_code,
         "verdict": "clean" if exit_code == 0 else "failures",
         "summary_path": str(summary_path),
@@ -357,16 +343,30 @@ def _build_result_json(args: argparse.Namespace,
     }
 
 
-def _write_result_json(result: dict, started_at: datetime) -> Path:
-    """Write the timestamped result record plus a stable ``latest-result.json``
-    pointer so the app can find the newest run deterministically."""
-    out_dir = Path(__file__).parent / "results" / "planning"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(result, indent=2, ensure_ascii=False)
-    out_path = out_dir / f"{started_at.strftime('%Y-%m-%d-%H%M%S')}-result.json"
-    out_path.write_text(payload, encoding="utf-8")
-    (out_dir / "latest-result.json").write_text(payload, encoding="utf-8")
-    return out_path
+def _result_mode(args: argparse.Namespace) -> str:
+    if args.live:
+        return "LIVE"
+    if args.dry_run:
+        return "DRY-RUN"
+    return "config default"
+
+
+def _record_progress(args: argparse.Namespace, started_at: datetime, stage: str,
+                     results: list[PlatformResult]) -> None:
+    """Publish the in-flight record before ``stage`` starts.
+
+    A failed write is logged and the run goes on: the record is a trace for the
+    case where the run dies, not something worth dying for.
+    """
+    assert logger is not None
+    record = run_state.running_record(
+        mode=_result_mode(args), started_at=started_at, stage=stage,
+        completed=[r.name for r in results],
+    )
+    try:
+        run_state.write_result(record, started_at)
+    except OSError as err:
+        logger.warning("⚠️ Could not write the in-flight result record: %s", err)
 
 
 def main() -> int:
@@ -381,9 +381,11 @@ def main() -> int:
         mode_label = "DRY-RUN"
     else:
         mode_label = "per-platform config default"
-    logger.info("🚀 Planning pipeline starting (%s)", mode_label)
+    logger.info("🚀 Planning pipeline starting (%s, pid %d, parent pid %d)",
+                mode_label, os.getpid(), os.getppid())
 
     results: list[PlatformResult] = []
+    _record_progress(args, started_at, "Clone", results)
     results.append(_run_clone(args))
 
     scheduler_args = _build_scheduler_args(args)
@@ -394,11 +396,12 @@ def main() -> int:
         ("Threads",   run_threads,   args.skip_threads),
         ("Videos",    run_videos,    args.skip_videos),
     ]:
+        _record_progress(args, started_at, name, results)
         results.append(_run_platform(name, fn, scheduler_args, skip))
 
     finished_at = datetime.now()
     md = _build_summary_md(args, results, started_at, finished_at)
-    out_path = _write_summary(md, started_at)
+    out_path = run_state.write_summary(md, started_at)
     logger.info("📝 Summary written to %s", out_path)
     print()
     print(md)
@@ -407,7 +410,7 @@ def main() -> int:
     exit_code = 0 if not any_fail else 11
 
     result = _build_result_json(args, results, started_at, finished_at, exit_code, out_path)
-    result_path = _write_result_json(result, started_at)
+    result_path = run_state.write_result(result, started_at)
     logger.info("🧾 Result JSON written to %s", result_path)
 
     return exit_code

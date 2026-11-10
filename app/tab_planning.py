@@ -23,11 +23,12 @@ from app.process_runner import (
     start_pipeline,
     start_skill_console,
 )
+from planning import run_state
 
 PIPELINE_NAME = "planning"
 AUTOHEAL_NAME = "planning-autoheal"
 _ACTIVE_KEY = "planning-active-runner"
-RESULT_PATH = Path(__file__).resolve().parent.parent / "results" / "planning" / "latest-result.json"
+RESULT_PATH = run_state.RESULTS_DIR / run_state.LATEST_NAME
 
 
 def _launch_plain(cmd: list[str]) -> None:
@@ -47,6 +48,22 @@ _KIND_BADGE = {
 }
 
 
+def _render_unfinished(result: dict, verdict: str) -> None:
+    """A run with no final record: still going, or killed before it could write one."""
+    started = f"{result.get('mode', '?')} run started {result.get('started_at', '?')}"
+    stage = result.get("stage") or "?"
+    if verdict == "running":
+        st.info(f"⏳ {started} — still running, now in the {stage} stage.")
+        return
+    done = ", ".join(result.get("completed_stages") or []) or "none"
+    st.error(
+        f"⛔ {started} was **interrupted** during the {stage} stage: the process is gone and "
+        f"it never wrote a summary. Stages finished: {done}. Rows it had not finished keep "
+        "their WIP tick, so check the platform's own scheduler for the stage it died in "
+        "before running again."
+    )
+
+
 def _render_last_outcome() -> None:
     """Show the last run's machine-readable result + per-platform failures."""
     if not RESULT_PATH.exists():
@@ -57,7 +74,10 @@ def _render_last_outcome() -> None:
         return
 
     st.divider()
-    verdict = result.get("verdict", "?")
+    verdict = run_state.effective_verdict(result)
+    if verdict in ("running", "interrupted"):
+        _render_unfinished(result, verdict)
+        return
     header = f"last run · {result.get('mode', '?')} · {result.get('finished_at', '')}"
     if verdict == "clean":
         st.success(f"✅ {header} — clean, nothing failed.")
