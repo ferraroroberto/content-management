@@ -72,6 +72,7 @@ from planning.instagram.instagram_session import (  # noqa: E402
     load_notion_token,
 )
 from planning.instagram.instagram_upload import upload_files  # noqa: E402
+from planning.row_outcome import RowStatus, derive_row_status, is_failure  # noqa: E402
 from reporting.notion.editorial import retrieve_page  # noqa: E402
 from reporting.notion.notion_update import format_database_id  # noqa: E402
 
@@ -535,7 +536,7 @@ def _resolve_plans(notion, cfg: dict, rows: list[IgRow]
             post = resolve_post_payload(notion, cfg, row)
         except (RuntimeError, FileNotFoundError) as err:
             logger.error("❌ %s payload resolution failed: %s", row.day_title, err)
-            results.append({"day": row.day_title, "status": "FAIL", "detail": f"payload resolution: {err}"})
+            results.append({"day": row.day_title, "status": RowStatus.FAIL, "detail": f"payload resolution: {err}"})
             continue
         logger.info(
             "🖼️ %s: story=1 image, post=%d image(s), caption=%d chars",
@@ -590,7 +591,7 @@ def main() -> tuple[int, list[dict]]:
         except LoginRequiredError as err:
             logger.error("❌ %s", err)
             for row, _, _ in plans:
-                results.append({"day": row.day_title, "status": "LOGIN-REQUIRED", "detail": str(err)})
+                results.append({"day": row.day_title, "status": RowStatus.LOGIN_REQUIRED, "detail": str(err)})
             return 4, results
         # Let the planner SPA fully mount.
         session.page.wait_for_timeout(4500)
@@ -600,49 +601,46 @@ def main() -> tuple[int, list[dict]]:
 
         for row, story, post in plans:
             day_statuses: list[str] = []
+            legs: list[RowStatus] = []
+            leg_ok = RowStatus.DRY if dry_run else RowStatus.LIVE
             return_to_planner(session.page, cfg["feed_url"])
             try:
                 day_statuses.append(schedule_story(session, cfg, row, story, dry_run=dry_run))
+                legs.append(leg_ok)
             except (RuntimeError, PWTimeoutError) as err:
                 shot = session.screenshot_failure(f"{row.day_title}-story-error")
                 logger.error("❌ %s story failed: %s (screenshot %s)", row.day_title, err, shot)
                 day_statuses.append(f"story:FAIL({err})")
+                legs.append(RowStatus.FAIL)
                 cancel_composer(session.page)
                 return_to_planner(session.page, cfg["feed_url"])
             return_to_planner(session.page, cfg["feed_url"])
             try:
                 day_statuses.append(schedule_post(session, cfg, row, post, dry_run=dry_run))
+                legs.append(leg_ok)
             except (RuntimeError, PWTimeoutError) as err:
                 shot = session.screenshot_failure(f"{row.day_title}-post-error")
                 logger.error("❌ %s post failed: %s (screenshot %s)", row.day_title, err, shot)
                 day_statuses.append(f"post:FAIL({err})")
+                legs.append(RowStatus.FAIL)
                 cancel_composer(session.page)
                 return_to_planner(session.page, cfg["feed_url"])
 
             line = f"{row.day_title}: " + ", ".join(day_statuses)
             statuses.append(line)
 
-            all_live = all("LIVE" in s for s in day_statuses)
-            any_fail = any("FAIL" in s for s in day_statuses)
-            if any_fail:
-                row_status = "FAIL"
-            elif dry_run:
-                row_status = "DRY"
-            elif all_live:
-                row_status = "LIVE"
-            else:
-                row_status = "PARTIAL"
+            row_status = derive_row_status(legs, dry_run)
             results.append({"day": row.day_title, "status": row_status, "detail": ", ".join(day_statuses)})
 
             # Untick WIP IG only on a fully-successful LIVE day (both story+post).
-            if not dry_run and all_live:
+            if row_status is RowStatus.LIVE:
                 untick_wip(notion, row.page_id, cfg["editorial_columns"],
                            day_title=row.day_title, wip_label="WIP-IG", log=logger)
 
     logger.info("══════════ Summary ══════════")
     for s in statuses:
         logger.info("   %s", s)
-    failed = [r for r in results if r["status"] in ("FAIL", "PARTIAL", "LOGIN-REQUIRED")]
+    failed = [r for r in results if is_failure(r["status"])]
     return (0 if not failed else 11), results
 
 

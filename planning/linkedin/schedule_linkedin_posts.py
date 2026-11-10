@@ -103,6 +103,7 @@ from planning.linkedin.linkedin_session import (  # noqa: E402
     load_linkedin_config,
     load_notion_token,
 )
+from planning.row_outcome import RowStatus, is_failure  # noqa: E402
 from reporting.notion.editorial import (  # noqa: E402
     get_field,
     retrieve_page,
@@ -920,10 +921,11 @@ def main() -> tuple[int, list[dict]]:
                 logger.info("🛤️ %s: route=%s", row.day_title, row.route)
                 status = schedule_one_row(session, cfg, row, notion, dry_run=dry_run)
                 statuses.append(status)
-                if dry_run:
-                    results.append({"day": row.day_title, "status": "DRY", "detail": status})
-                else:
-                    results.append({"day": row.day_title, "status": "LIVE", "detail": status})
+                results.append({
+                    "day": row.day_title,
+                    "status": RowStatus.DRY if dry_run else RowStatus.LIVE,
+                    "detail": status,
+                })
                 # On successful live schedule, untick "Work in Progress LI" on
                 # the editorial row so the next run doesn't re-schedule it.
                 if not dry_run and "LIVE scheduled" in status:
@@ -932,14 +934,14 @@ def main() -> tuple[int, list[dict]]:
             except LoginRequiredError as err:
                 logger.error("❌ %s", err)
                 statuses.append(f"{row.day_title}: LOGIN-REQUIRED")
-                results.append({"day": row.day_title, "status": "LOGIN-REQUIRED", "detail": str(err)})
+                results.append({"day": row.day_title, "status": RowStatus.LOGIN_REQUIRED, "detail": str(err)})
                 break
             except (FileNotFoundError, RuntimeError, PWTimeoutError,
                     HTTPResponseError) as err:
                 shot = session.screenshot_failure(f"{row.day_title}-error")
                 logger.error("❌ %s failed: %s (screenshot %s)", row.day_title, err, shot)
                 statuses.append(f"{row.day_title}: FAILED ({err})")
-                results.append({"day": row.day_title, "status": "FAIL", "detail": f"{err} (screenshot {shot})"})
+                results.append({"day": row.day_title, "status": RowStatus.FAIL, "detail": f"{err} (screenshot {shot})"})
                 # Try to recover the UI for the next row.
                 try:
                     close_dialogs(session.page)
@@ -949,7 +951,7 @@ def main() -> tuple[int, list[dict]]:
     logger.info("══════════ Summary ══════════")
     for s in statuses:
         logger.info("   %s", s)
-    failed = [r for r in results if r["status"] in ("FAIL", "LOGIN-REQUIRED")]
+    failed = [r for r in results if is_failure(r["status"])]
     return (0 if not failed else 11), results
 
 

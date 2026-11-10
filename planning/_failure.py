@@ -1,7 +1,7 @@
 """Shared failure classifier for the planning pipeline + the self-heal skill.
 
-A scheduler row records a coarse ``status`` (``LIVE`` / ``DRY`` / ``FAIL`` /
-``LOGIN-REQUIRED`` / ``OTHER``) plus a free-text ``detail``. That is enough for
+A scheduler row records a coarse ``status`` (a ``planning.row_outcome.RowStatus``)
+plus a free-text ``detail``. That is enough for
 a human reading the markdown summary, but the autonomous self-heal loop
 (``/schedule-autoheal``) needs to know *what kind* of failure a row is so it can
 decide whether it is safe to touch:
@@ -13,6 +13,9 @@ decide whether it is safe to touch:
   missing illustration, Notion lookup miss). A human decision, never auto-fixed.
 - **other** — anything unclassified; treated as human-only.
 - **none** — not a failure (``LIVE`` / ``DRY`` / ``SKIP``).
+
+A ``PARTIAL`` row or a status the module does not recognise is classified from
+its ``detail`` like a ``FAIL`` row: one leg broke and its error text says why.
 
 The classification lives here so the pipeline (which writes ``failure_kind`` into
 the machine-readable result JSON) and the skill (which reads it) can never drift
@@ -30,6 +33,8 @@ from __future__ import annotations
 import logging
 import re
 from typing import Callable, Literal, Optional, TypeVar
+
+from planning.row_outcome import RowStatus, parse
 
 logger = logging.getLogger("planning_failure")
 
@@ -62,10 +67,10 @@ def classify(status: str, detail: str) -> FailureKind:
     (the heal-eligible class), then data errors, else ``other``. Non-failure
     statuses short-circuit to ``none``.
     """
-    status_up = (status or "").upper()
-    if status_up in ("LIVE", "DRY", "SKIP"):
+    parsed = parse(status)
+    if parsed in (RowStatus.LIVE, RowStatus.DRY, RowStatus.SKIP):
         return "none"
-    if status_up == "LOGIN-REQUIRED":
+    if parsed is RowStatus.LOGIN_REQUIRED:
         return "login-required"
 
     text = detail or ""

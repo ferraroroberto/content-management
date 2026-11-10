@@ -114,8 +114,15 @@ class InstagramUntickTests(unittest.TestCase):
         self.set_field.assert_called_once()
         self.assertEqual(self.set_field.call_args.args[1:], ("p1", "wip_checkbox", False, ED_COLS, "checkbox"))
 
-    def test_a_failed_leg_keeps_wip_checked(self):
+    def test_a_failed_leg_with_a_live_leg_is_partial_and_keeps_wip_checked(self):
         self.story.side_effect = RuntimeError("story composer stuck")
+        code, results = ig.main()
+        self.assertEqual((code, results[0]["status"]), (11, "PARTIAL"))
+        self.set_field.assert_not_called()
+
+    def test_both_legs_failing_is_fail_and_keeps_wip_checked(self):
+        self.story.side_effect = RuntimeError("story composer stuck")
+        self.post.side_effect = RuntimeError("post composer stuck")
         code, results = ig.main()
         self.assertEqual((code, results[0]["status"]), (11, "FAIL"))
         self.set_field.assert_not_called()

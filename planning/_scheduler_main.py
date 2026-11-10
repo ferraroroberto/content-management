@@ -29,6 +29,7 @@ from config.dates import parse_day
 from planning._dates import parse_week_start
 from planning._failure import attempt_row
 from planning._session_base import LoginRequiredError
+from planning.row_outcome import RowStatus, is_failure
 from reporting.notion.editorial import init_notion_client, set_field
 from reporting.notion.notion_update import format_database_id
 
@@ -171,7 +172,7 @@ def _resolve_plans(rows: list, notion: Any, cfg: dict, resolve_payload: Callable
             payload = resolve_payload(notion, cfg, row)
         except (RuntimeError, FileNotFoundError) as err:
             log.error("❌ %s payload resolution failed: %s", row.day_title, err)
-            results.append({"day": row.day_title, "status": "FAIL", "detail": f"payload resolution: {err}"})
+            results.append({"day": row.day_title, "status": RowStatus.FAIL, "detail": f"payload resolution: {err}"})
             continue
         log.info(
             "🖼️ %s: image=%s, caption=%d chars",
@@ -216,14 +217,15 @@ def _schedule_row(
         cancel_composer(session.page)
         return_home(session.page, cfg["feed_url"])
         return (f"{row.day_title}: post:FAIL({err})",
-                {"day": row.day_title, "status": "FAIL", "detail": f"{err} (screenshot {shot})"})
+                {"day": row.day_title, "status": RowStatus.FAIL, "detail": f"{err} (screenshot {shot})"})
 
+    row_status = RowStatus.DRY if dry_run else RowStatus.LIVE
     # Untick the WIP checkbox only on a fully-successful LIVE day.
-    if not dry_run and "LIVE" in status:
+    if row_status is RowStatus.LIVE:
         untick_wip(notion, row.page_id, cfg["editorial_columns"],
                    day_title=row.day_title, wip_label=wip_label, log=log)
     return (f"{row.day_title}: {status}",
-            {"day": row.day_title, "status": "DRY" if dry_run else "LIVE", "detail": status})
+            {"day": row.day_title, "status": row_status, "detail": status})
 
 
 def run_single_post_scheduler(
@@ -290,7 +292,7 @@ def run_single_post_scheduler(
         except LoginRequiredError as err:
             log.error("❌ %s", err)
             for row, _ in plans:
-                results.append({"day": row.day_title, "status": "LOGIN-REQUIRED", "detail": str(err)})
+                results.append({"day": row.day_title, "status": RowStatus.LOGIN_REQUIRED, "detail": str(err)})
             return 4, results
         session.page.wait_for_timeout(login_settle_ms)
         if after_login is not None:
@@ -308,5 +310,5 @@ def run_single_post_scheduler(
     log.info("══════════ Summary ══════════")
     for s in statuses:
         log.info("   %s", s)
-    failed = [r for r in results if r["status"] in ("FAIL", "LOGIN-REQUIRED")]
+    failed = [r for r in results if is_failure(r["status"])]
     return (0 if not failed else 11), results

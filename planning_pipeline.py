@@ -46,6 +46,7 @@ from config.logger_config import setup_logger  # noqa: E402
 from planning import run_state  # noqa: E402
 from planning._failure import classify as classify_failure  # noqa: E402
 from planning._failure import extract_screenshot
+from planning.row_outcome import RowStatus, has_scheduled, is_failure, parse  # noqa: E402
 from planning.instagram.clone_to_other_platforms import main as run_clone  # noqa: E402
 from planning.instagram.schedule_instagram_posts import main as run_instagram  # noqa: E402
 from planning.linkedin.schedule_linkedin_posts import main as run_linkedin  # noqa: E402
@@ -67,10 +68,12 @@ class PlatformResult:
 
     @property
     def status_counts(self) -> dict[str, int]:
-        counts = {"LIVE": 0, "DRY": 0, "FAIL": 0, "LOGIN-REQUIRED": 0, "OTHER": 0}
+        """Rows per outcome; ``OTHER`` holds a status that names none of them."""
+        counts = {status.value: 0 for status in RowStatus}
+        counts["OTHER"] = 0
         for r in self.rows:
-            key = r["status"] if r["status"] in counts else "OTHER"
-            counts[key] += 1
+            parsed = parse(r["status"])
+            counts[parsed.value if parsed else "OTHER"] += 1
         return counts
 
 
@@ -197,16 +200,13 @@ def _fmt_duration(seconds: float) -> str:
     return f"{minutes}m{secs:02d}s" if minutes else f"{secs}s"
 
 
-_FAILED_ROW_STATUSES = ("FAIL", "LOGIN-REQUIRED", "PARTIAL")
-
-
 def _platform_failed(r: PlatformResult) -> bool:
     """Whether a single platform result counts as a failure.
 
     A skipped platform never fails. Otherwise a failure is a platform-level
     error, a non-zero exit code (each scheduler's own verdict, e.g. Videos'
-    ``PARTIAL`` row aggregation — issue #321), or any row landing in
-    ``_FAILED_ROW_STATUSES``. Computed once so the exit code, the JSON
+    ``PARTIAL`` row aggregation), or any row ``is_failure`` calls a failure.
+    Computed once so the exit code, the JSON
     verdict, and the markdown verdict never drift from each other.
     """
     if r.skipped:
@@ -214,7 +214,7 @@ def _platform_failed(r: PlatformResult) -> bool:
     return bool(
         r.error
         or r.exit_code != 0
-        or any(row["status"] in _FAILED_ROW_STATUSES for row in r.rows)
+        or any(is_failure(row["status"]) for row in r.rows)
     )
 
 
@@ -240,17 +240,18 @@ def _build_summary_md(args: argparse.Namespace,
         f"- Mode: **{mode_label}**",
         f"- Total duration: {_fmt_duration(total_duration)}",
         "",
-        "| Platform  | LIVE | DRY  | FAIL | LOGIN | OTHER | Duration |",
-        "|-----------|-----:|-----:|-----:|------:|------:|---------:|",
+        "| Platform  | LIVE | DRY  | SKIP | PART | FAIL | LOGIN | OTHER | Duration |",
+        "|-----------|-----:|-----:|-----:|-----:|-----:|------:|------:|---------:|",
     ]
     for r in results:
         if r.skipped:
-            lines.append(f"| {r.name:<9} |   -  |   -  |   -  |   -   |   -   | skipped  |")
+            lines.append(f"| {r.name:<9} |   -  |   -  |   -  |   -  |   -  |   -   |   -   | skipped  |")
             continue
         c = r.status_counts
         lines.append(
-            f"| {r.name:<9} | {c['LIVE']:>4} | {c['DRY']:>4} | {c['FAIL']:>4} | "
-            f"{c['LOGIN-REQUIRED']:>5} | {c['OTHER']:>5} | {_fmt_duration(r.duration_s):>8} |"
+            f"| {r.name:<9} | {c['LIVE']:>4} | {c['DRY']:>4} | {c['SKIP']:>4} | "
+            f"{c['PARTIAL']:>4} | {c['FAIL']:>4} | {c['LOGIN-REQUIRED']:>5} | "
+            f"{c['OTHER']:>5} | {_fmt_duration(r.duration_s):>8} |"
         )
     lines.append("")
 
@@ -278,11 +279,11 @@ def _build_summary_md(args: argparse.Namespace,
 
     any_fail = _any_platform_failed(results)
     any_scheduled = any(
-        not r.skipped and any(row["status"] == "LIVE" for row in r.rows)
+        not r.skipped and any(has_scheduled(row["status"]) for row in r.rows)
         for r in results
     )
     any_dry = any(
-        not r.skipped and any(row["status"] == "DRY" for row in r.rows)
+        not r.skipped and any(parse(row["status"]) is RowStatus.DRY for row in r.rows)
         for r in results
     )
     if not any_scheduled and not any_dry and not any_fail:

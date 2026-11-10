@@ -47,6 +47,7 @@ from planning._scheduler_main import (  # noqa: E402
     untick_wip,
 )
 from planning._wip_rows import iter_wip_pages  # noqa: E402
+from planning.row_outcome import RowStatus, derive_row_status, is_failure  # noqa: E402
 from planning.videos.videos_ledger import TagAlongLedger  # noqa: E402
 from planning.videos.videos_session import (  # noqa: E402
     ClipPayload,
@@ -93,7 +94,7 @@ class _RowState:
         # Per-platform in-scope flag (True = clip relation populated for that platform).
         self.in_scope: dict[str, bool] = in_scope
         # Filled by drivers post-run.
-        self.driver_status: dict[str, str] = {}  # platform -> "LIVE"|"DRY"|"FAIL"|"LOGIN-REQUIRED"|"SKIP"
+        self.driver_status: dict[str, str] = {}  # platform -> a RowStatus value
         self.driver_detail: dict[str, str] = {}
 
     @property
@@ -168,7 +169,7 @@ def fetch_wip_video_rows(notion, db_id: str, video_cols: dict,
                 in_scope=in_scope,
             )
             for p in PLATFORMS_SCHEDULED:
-                state.driver_status[p] = "FAIL"
+                state.driver_status[p] = RowStatus.FAIL
                 state.driver_detail[p] = f"payload resolution: {err}"
             rows.append(state)
             continue
@@ -193,20 +194,20 @@ def _rows_for_platform(rows: list[_RowState], platform: str, force: bool,
     """
     eligible = []
     for row in rows:
-        if row.driver_status.get(platform) == "FAIL":
+        if row.driver_status.get(platform) == RowStatus.FAIL:
             continue
         if not row.in_scope.get(platform):
-            row.driver_status[platform] = "SKIP"
+            row.driver_status[platform] = RowStatus.SKIP
             row.driver_detail[platform] = f"clip {platform.upper()}(v) not set"
             continue
         if row.link_status.get(platform) and not force:
-            row.driver_status[platform] = "SKIP"
+            row.driver_status[platform] = RowStatus.SKIP
             row.driver_detail[platform] = f"link {platform.upper()}(v) already populated"
             continue
         if (platform in PLATFORMS_TAG_ALONG and not force
                 and ledger.is_scheduled(platform, row.day_title)):
             at = ledger.recorded_at(platform, row.day_title) or "an earlier run"
-            row.driver_status[platform] = "SKIP"
+            row.driver_status[platform] = RowStatus.SKIP
             row.driver_detail[platform] = (
                 f"{platform.upper()} already scheduled in a prior run "
                 f"(tag-along ledger, {at})"
@@ -240,37 +241,11 @@ def _record_driver_results(rows: list[_RowState], platform: str, driver_results:
 def _aggregate_row_status(state: _RowState, dry_run: bool) -> tuple[str, str]:
     """Aggregate per-platform results into one row-level status + detail.
 
-    Returns (status, detail). Status ∈ LIVE / DRY / PARTIAL / FAIL / LOGIN-REQUIRED.
+    Returns (status, detail); the status comes from ``derive_row_status``.
     """
-    parts: list[str] = []
-    statuses: list[str] = []
-    for p in PLATFORMS_SCHEDULED:
-        s = state.driver_status.get(p, "SKIP")
-        parts.append(f"{p.upper()}:{s}")
-        statuses.append(s)
-
-    if any(s == "LOGIN-REQUIRED" for s in statuses):
-        return "LOGIN-REQUIRED", ", ".join(parts)
-    if all(s == "SKIP" for s in statuses):
-        return "SKIP", ", ".join(parts)
-    if all(s in ("SKIP", "FAIL") for s in statuses) and any(s == "FAIL" for s in statuses):
-        return "FAIL", ", ".join(parts)
-    if dry_run:
-        has_dry = any(s == "DRY" for s in statuses)
-        has_fail = any(s == "FAIL" for s in statuses)
-        if has_fail:
-            # A failed leg must never read as a clean DRY: report
-            # PARTIAL when another leg still ran dry-clean, FAIL when none did.
-            return ("PARTIAL" if has_dry else "FAIL"), ", ".join(parts)
-        return "DRY", ", ".join(parts)
-
-    has_live = any(s == "LIVE" for s in statuses)
-    has_fail = any(s == "FAIL" for s in statuses)
-    if has_live and not has_fail:
-        return "LIVE", ", ".join(parts)
-    if has_live and has_fail:
-        return "PARTIAL", ", ".join(parts)
-    return "FAIL", ", ".join(parts)
+    statuses = [state.driver_status.get(p, RowStatus.SKIP) for p in PLATFORMS_SCHEDULED]
+    parts = [f"{p.upper()}:{s}" for p, s in zip(PLATFORMS_SCHEDULED, statuses)]
+    return derive_row_status(statuses, dry_run).value, ", ".join(parts)
 
 
 def _maybe_untick_wip(notion, video_cols: dict, state: _RowState, dry_run: bool,
@@ -307,11 +282,11 @@ def _maybe_untick_wip(notion, video_cols: dict, state: _RowState, dry_run: bool,
 
     for p in PLATFORMS_SCHEDULED:
         s = state.driver_status.get(p, "")
-        if s == "LIVE":
+        if s == RowStatus.LIVE:
             continue
-        if s == "SKIP" and state.link_status.get(p):
+        if s == RowStatus.SKIP and state.link_status.get(p):
             continue  # idempotent skip
-        if (s == "SKIP" and p in PLATFORMS_TAG_ALONG
+        if (s == RowStatus.SKIP and p in PLATFORMS_TAG_ALONG
                 and ledger.is_scheduled(p, state.day_title)):
             logger.info(
                 "🧾 %s: %s has no link column but the tag-along ledger records it "
@@ -320,7 +295,7 @@ def _maybe_untick_wip(notion, video_cols: dict, state: _RowState, dry_run: bool,
                 ledger.recorded_at(p, state.day_title) or "an earlier run",
             )
             continue  # idempotent skip, ledger-backed
-        if s == "SKIP" and not state.in_scope.get(p):
+        if s == RowStatus.SKIP and not state.in_scope.get(p):
             continue  # out of scope, user opted out
         logger.info(
             "⏳ %s: keeping WIP-Vd checked — %s status is %r (not LIVE / idempotent-skip / out-of-scope).",
@@ -427,7 +402,7 @@ def _log_in_scope_rows(rows: list[_RowState]) -> None:
 def _mark_skipped(rows: list[_RowState], platform: str, ledger: TagAlongLedger) -> None:
     """Record SKIP for every row on a platform turned off by its --skip-* flag."""
     for state in rows:
-        state.driver_status[platform] = "SKIP"
+        state.driver_status[platform] = RowStatus.SKIP
         state.driver_detail[platform] = "platform skipped via --skip-* flag"
         if (platform in PLATFORMS_TAG_ALONG
                 and ledger.is_scheduled(platform, state.day_title)):
@@ -464,7 +439,7 @@ def _run_driver(platform: str, eligible: list[_RowState], cfg: dict, *, dry_run:
 def _mark_live_rows_scheduled(notion, cfg: dict, rows: list[_RowState], platform: str,
                               driver_results: list[dict], ledger: TagAlongLedger) -> None:
     for entry in driver_results:
-        if entry["status"] != "LIVE":
+        if entry["status"] != RowStatus.LIVE:
             continue
         # Find the matching state.
         state = next((s for s in rows if s.day_title == entry["day"]), None)
@@ -588,7 +563,7 @@ def main() -> tuple[int, list[dict]]:
     _log_summary(summary_rows)
 
     # SKIP-only is not a failure (e.g. --skip-* flags or all-already-scheduled).
-    failed = [r for r in summary_rows if r["status"] in ("FAIL", "PARTIAL", "LOGIN-REQUIRED")]
+    failed = [r for r in summary_rows if is_failure(r["status"])]
     return (0 if not failed else 11), summary_rows
 
 

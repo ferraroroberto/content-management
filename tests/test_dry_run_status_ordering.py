@@ -1,13 +1,12 @@
 """Regression tests for issue #321 findings 3 and 4: a failed platform leg
 must never read as a clean ``DRY``/pipeline-success status during a dry run.
 
-**Instagram** (``schedule_instagram_posts.py``): the row-status if/elif chain
-checked ``dry_run`` before ``any_fail``, so a dry run with a failed leg was
-tagged ``DRY`` and skipped the ``failed`` filter entirely — a real failure
-read as a clean run. Fixed by testing ``any_fail`` first. This module builds
-the status inline in a long scheduling loop (no standalone function to call),
-so the regression proof is structural: parse the AST and assert the ``if``
-chain's first test is ``any_fail``, not ``dry_run``.
+**Instagram** (``schedule_instagram_posts.py``): the row status used to be an
+inline if/elif chain that checked ``dry_run`` before ``any_fail``, so a dry run
+with a failed leg was tagged ``DRY``. It now comes from the same
+``derive_row_status`` as Videos, so the proof is behavioural: a dry run with a
+failed story or post leg must not read as ``DRY``, and the driver must hand its
+legs to the derive rather than test free-text leg strings.
 
 **Videos** (``schedule_videos_posts.py``): ``_aggregate_row_status`` is a
 standalone pure function, so it gets a direct behavioural test — a dry run
@@ -24,6 +23,7 @@ import unittest
 from datetime import date
 from pathlib import Path
 
+from planning.row_outcome import RowStatus, derive_row_status
 from planning.videos.schedule_videos_posts import _aggregate_row_status, _RowState
 
 INSTAGRAM_MODULE_PATH = (
@@ -32,40 +32,20 @@ INSTAGRAM_MODULE_PATH = (
 )
 
 
-def _find_row_status_if_chain(tree: ast.Module) -> ast.If:
-    """Find the ``if ...: row_status = ...`` chain (an ``If`` node whose body
-    assigns to a name ``row_status``, followed by ``elif`` branches)."""
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.If):
-            continue
-        for stmt in node.body:
-            if (
-                isinstance(stmt, ast.Assign)
-                and len(stmt.targets) == 1
-                and isinstance(stmt.targets[0], ast.Name)
-                and stmt.targets[0].id == "row_status"
-            ):
-                return node
-    raise AssertionError("no `if ...: row_status = ...` chain found")
+class InstagramRowStatusTests(unittest.TestCase):
+    def test_failed_leg_in_a_dry_run_is_not_a_clean_dry(self):
+        for legs in ([RowStatus.DRY, RowStatus.FAIL], [RowStatus.FAIL, RowStatus.DRY],
+                     [RowStatus.FAIL, RowStatus.FAIL]):
+            self.assertNotEqual(derive_row_status(legs, dry_run=True), RowStatus.DRY)
 
-
-def _test_name(test_expr: ast.expr) -> str:
-    """Best-effort name of a simple ``Name`` test expression (e.g. `any_fail`)."""
-    if isinstance(test_expr, ast.Name):
-        return test_expr.id
-    return ast.dump(test_expr)
-
-
-class InstagramRowStatusOrderingTests(unittest.TestCase):
-    def test_any_fail_is_checked_before_dry_run(self):
+    def test_driver_derives_the_row_status_from_its_legs(self):
         tree = ast.parse(INSTAGRAM_MODULE_PATH.read_text(encoding="utf-8"))
-        chain = _find_row_status_if_chain(tree)
-        first_test = _test_name(chain.test)
-        self.assertEqual(
-            first_test, "any_fail",
-            "row_status if-chain must test `any_fail` first, or a failed leg "
-            "in a dry run reads as a clean DRY row (issue #321)",
-        )
+        calls = [
+            n for n in ast.walk(tree)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+            and n.func.id == "derive_row_status"
+        ]
+        self.assertEqual(len(calls), 1)
 
 
 class VideosAggregateRowStatusDryRunTests(unittest.TestCase):
