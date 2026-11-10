@@ -25,6 +25,7 @@ from podcast.clips import clip_length, load_clips
 from podcast.episode import Episode, list_episodes, load_episode, load_podcast_config
 from podcast.metrics import load_metrics, summarize
 from podcast.report import SCORES_FILE
+from podcast.review_state import ClipStatus
 from podcast.revise import list_versions
 from podcast.transcribe import fmt_ts
 
@@ -119,10 +120,10 @@ def _send_feedback(ep: Episode, number: int) -> None:
 def _review_controls(ep: Episode, number: int, entry: dict) -> None:
     st.markdown(f"**{STATUS_ICON.get(entry['status'], entry['status'])}** · version {entry['version']}")
     cols = st.columns(2)
-    cols[0].button("✅ approve", key=f"podcast-approve-{number}", disabled=entry["status"] == "approved",
-                   on_click=review_state.set_status, args=(ep, number, "approved"), width="stretch")
-    cols[1].button("🗑️ drop", key=f"podcast-drop-{number}", disabled=entry["status"] == "dropped",
-                   on_click=review_state.set_status, args=(ep, number, "dropped"), width="stretch")
+    cols[0].button("✅ approve", key=f"podcast-approve-{number}", disabled=entry["status"] == ClipStatus.APPROVED,
+                   on_click=review_state.set_status, args=(ep, number, ClipStatus.APPROVED), width="stretch")
+    cols[1].button("🗑️ drop", key=f"podcast-drop-{number}", disabled=entry["status"] == ClipStatus.DROPPED,
+                   on_click=review_state.set_status, args=(ep, number, ClipStatus.DROPPED), width="stretch")
     st.text_area("feedback", key=f"podcast-feedback-{number}", height=110,
                  placeholder="e.g. at 0:12 'happy' should be 'crappy'; start at 'sleep'; no punch-ins; "
                              "title: why eight hours")
@@ -130,7 +131,7 @@ def _review_controls(ep: Episode, number: int, entry: dict) -> None:
               width="stretch", help="Saved now; '▶ apply feedback' re-renders the clip as a new version.")
     if entry["status"] in review_state.DECIDED:
         st.button("↩ back to pending", key=f"podcast-reopen-{number}", on_click=review_state.set_status,
-                  args=(ep, number, "pending"), width="stretch")
+                  args=(ep, number, ClipStatus.PENDING), width="stretch")
 
 
 def _rounds(entry: dict) -> None:

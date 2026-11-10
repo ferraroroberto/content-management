@@ -162,15 +162,15 @@ def status(ep: Episode) -> int:
     from podcast.sync import references  # noqa: PLC0415
     for name, (_, is_done) in STAGES.items():
         if is_done(ep):
-            state = "done"
+            label = "done"
         elif name == "sync" and not references(ep):
-            state = "not needed (no recorder references)"
+            label = "not needed (no recorder references)"
         elif name in REVIEW_GATED and not review_done(clips, review):
-            state = "waiting for review"
+            label = "waiting for review"
         else:
-            state = "to run"
+            label = "to run"
             pending.append(name)
-        logger.info("ℹ️ %s: %s", name, state)
+        logger.info("ℹ️ %s: %s", name, label)
     if clips:
         open_feedback = to_revise(clips, review)
         logger.info("ℹ️ review: %s%s", summary(clips, review),

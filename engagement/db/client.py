@@ -24,6 +24,7 @@ from config.supabase_client import build_supabase_client  # noqa: E402
 
 # Leaf module (no dependency on this module) — safe to import without a cycle.
 from engagement.classify.phrases_io import pick_thanks_reply  # noqa: E402
+from engagement.db.comment_status import CommentStatus, writable_status  # noqa: E402
 
 logger = logging.getLogger("engagement.db")
 
@@ -197,8 +198,8 @@ def fetch_commenter(platform: str, account_url: str) -> Optional[dict]:
 
 
 def update_comment_status(platform: str, comment_id: str, status: str, **extra: Any) -> None:
+    payload = {"status": writable_status(status).value, "decided_at": "now()", **extra}
     sb = supabase_client()
-    payload = {"status": status, "decided_at": "now()", **extra}
     sb.table("comments").update(payload).eq("platform", platform).eq("comment_id", comment_id).execute()
 
 
@@ -235,13 +236,13 @@ def cascade_blacklist_pending(platform: str, account_url: str) -> int:
                 "suggested_action": "like_and_thanks",
                 "suggested_reply": reply,
                 "confidence": 1.0,
-                "status": "approved",
+                "status": CommentStatus.APPROVED.value,
                 "decided_at": "now()",
             }
         )
         .eq("platform", platform)
         .eq("commenter_url", account_url)
-        .eq("status", "pending")
+        .eq("status", CommentStatus.PENDING.value)
         .execute()
     )
     return len(res.data or [])
@@ -302,9 +303,9 @@ def mark_replied_as_ignored(platform: str = "linkedin") -> int:
     sb = supabase_client()
     res = (
         sb.table("comments")
-        .update({"status": "ignored", "decided_at": "now()"})
+        .update({"status": CommentStatus.IGNORED.value, "decided_at": "now()"})
         .eq("platform", platform)
-        .eq("status", "pending")
+        .eq("status", CommentStatus.PENDING.value)
         .not_.is_("my_reply_text", "null")
         .execute()
     )
@@ -370,7 +371,7 @@ def cascade_whitelist_pending(platform: str, account_url: str) -> int:
         )
         .eq("platform", platform)
         .eq("commenter_url", account_url)
-        .eq("status", "pending")
+        .eq("status", CommentStatus.PENDING.value)
         .execute()
     )
     return len(res.data or [])

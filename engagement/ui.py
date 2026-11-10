@@ -26,6 +26,11 @@ from engagement.db.client import (  # noqa: E402
     supabase_client,
     update_comment_status,
 )
+from engagement.db.comment_status import (  # noqa: E402
+    STORED_STATUSES,
+    CommentStatus,
+    derive_comment_status,
+)
 
 CLASS_BADGE = {
     "whitelist": "🟢 whitelist",
@@ -89,7 +94,7 @@ def _load_comments(status_in: tuple[str, ...], platform: str | None) -> pd.DataF
 def _load_classification_counts() -> dict:
     sb = _client()
     out: dict = {}
-    for status in ("pending", "approved", "sent", "rejected", "ignored"):
+    for status in _ALL_STATUSES:
         res = sb.table("comments").select("comment_id", count="exact").eq("status", status).limit(1).execute()
         out[status] = res.count or 0
     return out
@@ -125,23 +130,23 @@ def invalidate_caches() -> None:
 # ---------- Action handlers ----------
 
 def _act_approve(platform: str, comment_id: str) -> None:
-    update_comment_status(platform, comment_id, "approved")
+    update_comment_status(platform, comment_id, CommentStatus.APPROVED)
     invalidate_caches()
 
 
 def _act_reject(platform: str, comment_id: str) -> None:
-    update_comment_status(platform, comment_id, "rejected")
+    update_comment_status(platform, comment_id, CommentStatus.REJECTED)
     invalidate_caches()
 
 
 def _act_ignore(platform: str, comment_id: str) -> None:
-    update_comment_status(platform, comment_id, "ignored")
+    update_comment_status(platform, comment_id, CommentStatus.IGNORED)
     invalidate_caches()
 
 
 def _act_surface(platform: str, comment_id: str) -> None:
     update_comment_status(
-        platform, comment_id, "pending",
+        platform, comment_id, CommentStatus.PENDING,
         classification="human", suggested_action="surface_to_me", suggested_reply=None,
     )
     invalidate_caches()
@@ -189,7 +194,7 @@ def _render_comment_card(row: dict, *, tab: str, commenter_cls: dict[str, str] |
             head.append(f"[profile ↗]({commenter_url})")
         if link:
             head.append(f"[{'comment ↗' if link != post_url else 'post ↗'}]({link})")
-        if status and status != "pending":
+        if status and derive_comment_status(status) is not CommentStatus.PENDING:
             head.append(f"`{status}`")
         st.markdown(" · ".join(head))
 
@@ -266,7 +271,7 @@ def render_sidebar_filters(*, key_suffix: str = "") -> tuple[str | None, str]:
     return platform, search
 
 
-_ALL_STATUSES = ("pending", "approved", "sent", "rejected", "ignored")
+_ALL_STATUSES = tuple(s.value for s in STORED_STATUSES)
 
 
 # Per-tab user-manual legends explaining what each action button does and the
@@ -345,7 +350,7 @@ def _view_filter(key: str) -> tuple[str, ...]:
         "show", ["pending", "all"], horizontal=True, key=key,
         help="'all' also shows comments you've already marked read / AI / approved.",
     )
-    return ("pending",) if view == "pending" else _ALL_STATUSES
+    return (CommentStatus.PENDING.value,) if view == "pending" else _ALL_STATUSES
 
 
 def _commenter_class_map(platform: str | None) -> dict[str, str]:

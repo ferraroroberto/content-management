@@ -33,6 +33,7 @@ sys.path.append(str(REPO_ROOT))
 from config.chrome_launch import doc_capture_context_kwargs, doc_capture_launch_kwargs  # noqa: E402
 from config.console import force_utf8_stdio  # noqa: E402
 from engagement.db.client import supabase_client  # noqa: E402
+from engagement.db.comment_status import CommentStatus  # noqa: E402
 
 APP_URL = "http://localhost:8501"
 
@@ -61,7 +62,7 @@ def _skip(label: str, detail: str = "") -> None:
 
 def _count_pending() -> int:
     sb = supabase_client()
-    res = sb.table("comments").select("comment_id", count="exact").eq("status", "pending").limit(1).execute()
+    res = sb.table("comments").select("comment_id", count="exact").eq("status", CommentStatus.PENDING.value).limit(1).execute()
     return res.count or 0
 
 
@@ -72,7 +73,7 @@ def _approved_keys() -> set[tuple[str, str]]:
     just the row(s) this click approved, instead of every approved row in the
     table (issue #246)."""
     sb = supabase_client()
-    rows = sb.table("comments").select("platform,comment_id").eq("status", "approved").execute().data or []
+    rows = sb.table("comments").select("platform,comment_id").eq("status", CommentStatus.APPROVED.value).execute().data or []
     return {(r["platform"], r["comment_id"]) for r in rows}
 
 
@@ -200,7 +201,7 @@ def _check_approve(page, out_dir: Path) -> int:
         sb = supabase_client()
         if newly_approved:
             for platform, comment_id in newly_approved:
-                sb.table("comments").update({"status": "pending", "decided_at": None}) \
+                sb.table("comments").update({"status": CommentStatus.PENDING.value, "decided_at": None}) \
                     .eq("platform", platform).eq("comment_id", comment_id).execute()
         else:
             print("     note: rollback skipped — could not identify which row(s) the click approved")
