@@ -249,8 +249,8 @@ def _build_summary_md(args: argparse.Namespace,
             continue
         c = r.status_counts
         lines.append(
-            f"| {r.name:<9} | {c['LIVE']:>4} | {c['DRY']:>4} | {c['SKIP']:>4} | "
-            f"{c['PARTIAL']:>4} | {c['FAIL']:>4} | {c['LOGIN-REQUIRED']:>5} | "
+            f"| {r.name:<9} | {c[RowStatus.LIVE]:>4} | {c[RowStatus.DRY]:>4} | {c[RowStatus.SKIP]:>4} | "
+            f"{c[RowStatus.PARTIAL]:>4} | {c[RowStatus.FAIL]:>4} | {c[RowStatus.LOGIN_REQUIRED]:>5} | "
             f"{c['OTHER']:>5} | {_fmt_duration(r.duration_s):>8} |"
         )
     lines.append("")
