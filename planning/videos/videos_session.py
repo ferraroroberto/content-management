@@ -48,6 +48,7 @@ from planning._session_base import (  # noqa: E402
     load_notion_token,
 )
 from planning._session_base import configure_logger as _configure_logger  # noqa: E402
+from planning.row_outcome import RowStatus  # noqa: E402
 from podcast.media import ffprobe_json, run_ffmpeg  # noqa: E402
 from reporting.notion._client import page_title  # noqa: E402
 from reporting.notion.editorial import (  # noqa: E402
@@ -647,7 +648,7 @@ def run_video_driver(
         except LoginRequiredError as err:
             log.error("❌ %s login required: %s", platform, err)
             for row in rows:
-                results.append({"day": row.day_title, "status": "LOGIN-REQUIRED", "detail": str(err)})
+                results.append({"day": row.day_title, "status": RowStatus.LOGIN_REQUIRED, "detail": str(err)})
             return results
         session.page.wait_for_timeout(login_settle_ms)
         if after_login is not None:
@@ -657,13 +658,13 @@ def run_video_driver(
             return_home(session.page, cfg["feed_url"])
             try:
                 status = schedule_one(session, cfg, video_cfg, row, dry_run=dry_run)
-                results.append({"day": row.day_title, "status": "DRY" if dry_run else "LIVE", "detail": status})
+                results.append({"day": row.day_title, "status": RowStatus.DRY if dry_run else RowStatus.LIVE, "detail": status})
             except (RuntimeError, PWTimeoutError) as err:
                 shot = session.screenshot_failure(f"{row.day_title}-{platform.lower()}-video-error")
                 log.error("❌ %s %s failed: %s (screenshot %s)", platform, row.day_title, err, shot)
                 cancel_composer(session.page)
                 return_home(session.page, cfg["feed_url"])
-                results.append({"day": row.day_title, "status": "FAIL", "detail": f"{err} (screenshot {shot})"})
+                results.append({"day": row.day_title, "status": RowStatus.FAIL, "detail": f"{err} (screenshot {shot})"})
     return results
 
 

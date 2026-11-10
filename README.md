@@ -383,6 +383,11 @@ machine-readable `results/planning/latest-result.json`, written as `running` at 
 [`docs/self-healing-scheduler.md`](docs/self-healing-scheduler.md) for the full
 loop, failure classification, and guardrails.
 
+Each scheduled row ends in one of six declared outcomes (`LIVE`, `DRY`, `SKIP`,
+`FAIL`, `PARTIAL`, `LOGIN-REQUIRED`) owned by `planning/row_outcome.py`; the
+summary table, the verdict and every exit code read it from there. See
+[`docs/planning-row-outcome.md`](docs/planning-row-outcome.md).
+
 ## Reporting pipeline — overview
 
 ```mermaid

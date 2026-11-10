@@ -40,6 +40,7 @@ from planning.linkedin.linkedin_session import (  # noqa: E402
     LoginRequiredError,
     load_linkedin_config,
 )
+from planning.row_outcome import RowStatus  # noqa: E402
 from planning.videos.videos_session import VideoRow  # noqa: E402
 
 logger = logging.getLogger("videos_linkedin")
@@ -235,17 +236,17 @@ def run(
                 status = schedule_one_video(session, li_cfg, video_cfg, row, dry_run=dry_run)
                 results.append({
                     "day": row.day_title,
-                    "status": "DRY" if dry_run else "LIVE",
+                    "status": RowStatus.DRY if dry_run else RowStatus.LIVE,
                     "detail": status,
                 })
             except LoginRequiredError as err:
                 logger.error("❌ LI login required: %s", err)
-                results.append({"day": row.day_title, "status": "LOGIN-REQUIRED", "detail": str(err)})
+                results.append({"day": row.day_title, "status": RowStatus.LOGIN_REQUIRED, "detail": str(err)})
                 # Login error is fatal for the whole platform — mark remaining rows.
                 for remaining in rows[rows.index(row) + 1:]:
                     results.append({
                         "day": remaining.day_title,
-                        "status": "LOGIN-REQUIRED",
+                        "status": RowStatus.LOGIN_REQUIRED,
                         "detail": "LI login required (set on a prior row).",
                     })
                 break
@@ -254,7 +255,7 @@ def run(
                 logger.error("❌ LI %s failed: %s (screenshot %s)", row.day_title, err, shot)
                 results.append({
                     "day": row.day_title,
-                    "status": "FAIL",
+                    "status": RowStatus.FAIL,
                     "detail": f"{err} (screenshot {shot})",
                 })
                 try:

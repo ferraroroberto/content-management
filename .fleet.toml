@@ -232,3 +232,12 @@ enabled  = true
 baseline = ".usage-track-ratchet-baseline.json"
 rules    = ["untracked-control", "untracked-sheet", "dynamic-id", "usage-log-wired"]
 paths    = ["recorder/static/**"]
+
+# Declared state machines (project-scaffolding docs/implicit-state-machines.md): the
+# conventions ratchet stops reporting the owner module and keeps reporting any other
+# module that re-derives the same states. docs/planning-row-outcome.md says who reads it.
+[[state_machines]]
+name   = "planning-row-outcome"
+module = "planning/row_outcome.py"
+type   = "RowStatus"
+derive = "derive_row_status"
