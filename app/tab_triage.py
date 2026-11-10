@@ -26,6 +26,7 @@ from app.process_runner import (
 )
 from newsletter.triage import db, lessons, review
 from newsletter.triage.rank import TOPICS
+from newsletter.triage.run_status import RunStatus, derive_run_status
 
 PIPELINE_NAME = "triage"
 _SHORT = {"leadership and management": "leadership", "personal development": "persdev", "innovation": "innovation"}
@@ -213,9 +214,10 @@ def _render_review(run: dict) -> None:
                 + (f" · re-scored from run {rescored_from}" if rescored_from else "")
                 + (f" · stats: {run['stats'].get('emails', '?')} emails · {run['stats'].get('links', '?')} links · "
                    f"{run['stats'].get('llm_calls', '?')} LLM calls" if run.get("stats") else ""))
-    if run.get("status") != "done":
+    state = derive_run_status(run.get("status"))
+    if state is not RunStatus.DONE:
         st.warning(f"run {run_id} is **{run.get('status')}** — " + (str((run.get("stats") or {}).get("error", ""))
-                                                                    if run.get("status") == "failed" else "wait for it to finish"))
+                                                                    if state is RunStatus.FAILED else "wait for it to finish"))
         return
     all_cands = st.toggle("show every scored candidate (promote from the long tail)", value=False,
                           key=f"triage-all-{run_id}")

@@ -75,6 +75,7 @@ from newsletter.triage import rank as rk  # noqa: E402
 from newsletter.triage import report as rp  # noqa: E402
 from newsletter.triage import score as sc  # noqa: E402
 from newsletter.triage.criteria import CRITERIA_PATH  # noqa: E402
+from newsletter.triage.run_status import RunStatus  # noqa: E402
 from newsletter.triage.state import STATE_PATH, TRIAGE_DIR, load_state, save_state  # noqa: E402,F401
 
 logger = logging.getLogger("newsletter_triage.run")
@@ -351,7 +352,7 @@ def run_window(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[st
             backtest=backtest, limit_links=limit_links, engine=engine, inputs=inputs, fresh=fresh)
     except Exception as err:
         if run_id is not None:
-            db.mark_run(run_id, status="failed", stats={"error": str(err)[:500]})
+            db.mark_run(run_id, status=RunStatus.FAILED, stats={"error": str(err)[:500]})
         raise
     if run_id is None:
         stats["store"] = "unavailable"
@@ -361,7 +362,7 @@ def run_window(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[st
         n_d = db.save_decisions(start, end, _truth_decisions(cands, sel, backtest))
         logger.info("🧪 stored %d truth decisions for the backtest window", n_d)
     stats["store"] = f"run {run_id}"
-    db.mark_run(run_id, status="done", stats=stats, report_path=str(path))
+    db.mark_run(run_id, status=RunStatus.DONE, stats=stats, report_path=str(path))
     logger.info("🗄️ stored run %s: %d emails, %d candidates", run_id, n_e, n_c)
     return path, sel, stats
 

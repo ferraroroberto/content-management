@@ -1,11 +1,8 @@
 {
   "version": 1,
   "entries": [
-    {"key": "app/tab_triage.py", "counts": {"state-literal": 2}},
     {"key": "engagement/check_review_app.py", "counts": {"state-literal": 1}},
     {"key": "engagement/ui.py", "counts": {"state-literal": 1}},
-    {"key": "newsletter/triage/db.py", "counts": {"state-literal": 1}},
-    {"key": "newsletter/triage/run.py", "counts": {"state-literal": 2}},
     {"key": "planning/substack/api_client.py", "counts": {"state-literal": 2}},
     {"key": "podcast/review_state.py", "counts": {"state-literal": 1}},
     {"key": "podcast/revise.py", "counts": {"state-literal": 1}},

@@ -30,6 +30,7 @@ if str(REPO_ROOT) not in sys.path:
 from config.console import force_utf8_stdio  # noqa: E402
 from config.loader import load_full_config  # noqa: E402
 from config.supabase_client import build_supabase_client  # noqa: E402
+from newsletter.triage.run_status import RunStatus, settled_status  # noqa: E402
 
 logger = logging.getLogger("newsletter_triage.db")
 
@@ -161,7 +162,8 @@ def register_run(start: Any, end: Any, *, kind: str = "live", edition: Optional[
     if prev:
         _t("triage_runs").delete().eq("id", prev["id"]).execute()
         logger.info("♻️ replaced stored run %s (%s → %s, %s)", prev["id"], _d(start), _d(end), kind)
-    row = {"window_start": _d(start), "window_end": _d(end), "kind": kind, "edition": edition, "status": "running",
+    row = {"window_start": _d(start), "window_end": _d(end), "kind": kind, "edition": edition,
+           "status": RunStatus.RUNNING.value,
            "started_at": _now(), "source": source, "model": model, "criteria_version": criteria_version}
     data = _t("triage_runs").insert(row).execute().data or []
     return int(data[0]["id"])
@@ -169,12 +171,15 @@ def register_run(start: Any, end: Any, *, kind: str = "live", edition: Optional[
 
 def mark_run(run_id: int, *, status: str, stats: Optional[Dict[str, Any]] = None,
              report_path: Optional[str] = None) -> None:
-    patch: Dict[str, Any] = {"status": status, "finished_at": _now()}
+    """Settle a ``running`` run as done or failed; a run already settled (or replaced) is left as it is."""
+    patch: Dict[str, Any] = {"status": settled_status(status).value, "finished_at": _now()}
     if stats is not None:
         patch["stats"] = json.loads(json.dumps(stats, default=str))
     if report_path:
         patch["report_path"] = report_path
-    _t("triage_runs").update(patch).eq("id", run_id).execute()
+    moved = _t("triage_runs").update(patch).eq("id", run_id).eq("status", RunStatus.RUNNING.value).execute().data
+    if not moved:
+        logger.warning("⚠️ run %s is not running any more — left as it is, not marked %s", run_id, status)
 
 
 def get_run(run_id: int) -> Optional[Dict[str, Any]]:
