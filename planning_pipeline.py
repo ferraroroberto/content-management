@@ -46,10 +46,10 @@ from config.logger_config import setup_logger  # noqa: E402
 from planning import run_state  # noqa: E402
 from planning._failure import classify as classify_failure  # noqa: E402
 from planning._failure import extract_screenshot
-from planning.row_outcome import RowStatus, has_scheduled, is_failure, parse  # noqa: E402
 from planning.instagram.clone_to_other_platforms import main as run_clone  # noqa: E402
 from planning.instagram.schedule_instagram_posts import main as run_instagram  # noqa: E402
 from planning.linkedin.schedule_linkedin_posts import main as run_linkedin  # noqa: E402
+from planning.row_outcome import RowStatus, has_scheduled, is_failure, parse  # noqa: E402
 from planning.threads.schedule_threads_posts import main as run_threads  # noqa: E402
 from planning.twitter.schedule_twitter_posts import main as run_twitter  # noqa: E402
 from planning.videos.schedule_videos_posts import main as run_videos  # noqa: E402
