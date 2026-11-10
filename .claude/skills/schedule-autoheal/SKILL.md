@@ -31,6 +31,7 @@ schema fields `status`, `detail`, `screenshot`, `failure_kind` live in `planning
 ## Step 2 — triage
 
 - `verdict == "clean"` → **report "✅ it worked", stop.** Do not edit anything.
+- `verdict == "running"` or `"interrupted"` once the run has ended → the run was killed mid-stage and never wrote a summary. Not heal-eligible: **escalate** (Step 5) with the record's `stage` and `completed_stages`.
 - Otherwise collect every row whose `failure_kind != "none"`.
   - `failure_kind == "ui-drift"` → **heal-eligible** (Step 3).
   - `login-required` / `data-error` / `other` → **not** heal-eligible → **escalate** (Step 5).

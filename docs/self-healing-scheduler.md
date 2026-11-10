@@ -37,6 +37,10 @@ structured `results/planning/<ts>-result.json` plus a stable
 | `screenshot`   | failure screenshot path, lifted out of `detail`                |
 | `failure_kind` | heal-eligibility class from `planning/_failure.py`             |
 
+## Run state — `planning/run_state.py`
+
+The pipeline writes the record at the start of the run and before each stage, with `verdict: "running"`, the `pid`, the `stage` under way and `completed_stages`; the final write replaces it with `clean` or `failures`. A killed process writes nothing, so a record still saying `running` whose pid is gone (or older than six hours, in case the OS reused the pid) reads as `interrupted`: `effective_verdict` makes that call for the planning tab, and the autoheal skill treats a `running` record after its own run as the same case. An interrupted run is never heal-eligible. The rows of the stage it died in keep their WIP tick, so the next run picks them up again; a post that stage had half scheduled on the platform is not undone.
+
 ## Failure classification — `planning/_failure.py`
 
 `classify(status, detail)` is a pure function imported by **both** the pipeline

@@ -379,7 +379,7 @@ planning tab (and `launch_autoheal.bat`) runs the `/schedule-autoheal` skill in 
 live DOM, applies a selector-only fix, re-validates with a dry-run, and — when
 confident — files an issue, opens a PR, and merges end-to-end. Login / data
 errors instead ping Telegram and stop for a human. The run also writes a
-machine-readable `results/planning/latest-result.json`. See
+machine-readable `results/planning/latest-result.json`, written as `running` at the start of the run and before each stage so a run that is killed mid-stage shows in the tab as interrupted instead of the previous clean run. See
 [`docs/self-healing-scheduler.md`](docs/self-healing-scheduler.md) for the full
 loop, failure classification, and guardrails.
 
