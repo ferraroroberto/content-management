@@ -26,6 +26,7 @@ from engagement.db.client import (
     load_engagement_config,
     supabase_client,
 )
+from engagement.db.comment_status import CommentStatus
 
 logger = logging.getLogger("engagement.classify")
 
@@ -186,7 +187,7 @@ def _fetch_pending(sb, platform: str) -> list[dict]:
         sb.table("comments")
         .select("*")
         .eq("platform", platform)
-        .eq("status", "pending")
+        .eq("status", CommentStatus.PENDING.value)
         .eq("classification", "unknown")
         .execute()
         .data
@@ -211,7 +212,7 @@ def _verdict_payload(c: dict, verdict: tuple) -> dict:
     # cascade_blacklist_pending so the manual-click and the rescan
     # paths give identical state. User trusts the blacklist.
     if src == "blacklist":
-        payload["status"] = "approved"
+        payload["status"] = CommentStatus.APPROVED.value
         payload["decided_at"] = "now()"
     return payload
 

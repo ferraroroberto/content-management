@@ -360,6 +360,7 @@ def _wait_for_video_transcode(
         state = data.get("state")
         if state == "transcoded":
             return
+        # state-literal-exempt: Mux's own transcode vocabulary read off its response, not a lifecycle this repo stores or derives
         if state in ("errored", "failed"):
             raise VideoTranscodeError(
                 f"Substack video transcode failed (state={state!r}) for media_upload_id={media_upload_id}."

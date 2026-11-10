@@ -235,9 +235,29 @@ paths    = ["recorder/static/**"]
 
 # Declared state machines (project-scaffolding docs/implicit-state-machines.md): the
 # conventions ratchet stops reporting the owner module and keeps reporting any other
-# module that re-derives the same states. docs/planning-row-outcome.md says who reads it.
+# module that re-derives the same states. Each machine's docs page says who reads it:
+# docs/planning-row-outcome.md, docs/triage-run-status.md, docs/podcast-clip-status.md,
+# docs/engagement-comment-status.md.
 [[state_machines]]
 name   = "planning-row-outcome"
 module = "planning/row_outcome.py"
 type   = "RowStatus"
 derive = "derive_row_status"
+
+[[state_machines]]
+name   = "triage-run-status"
+module = "newsletter/triage/run_status.py"
+type   = "RunStatus"
+derive = "derive_run_status"
+
+[[state_machines]]
+name   = "podcast-clip-status"
+module = "podcast/review_state.py"
+type   = "ClipStatus"
+derive = "derive_clip_status"
+
+[[state_machines]]
+name   = "engagement-comment-status"
+module = "engagement/db/comment_status.py"
+type   = "CommentStatus"
+derive = "derive_comment_status"

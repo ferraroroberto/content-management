@@ -57,6 +57,7 @@ from podcast.metrics import StageRecord
 from podcast.render import clip_filename, clip_outputs, prepare_fonts, render_clip
 from podcast.review import _same, apply_corrections, review_clip
 from podcast.review_state import (
+    ClipStatus,
     clip_state,
     load_review,
     now,
@@ -444,7 +445,7 @@ def _revise_one(ep: Episode, cfg: dict, rec: StageRecord, clips: list[dict], cli
 
     def close(c: dict) -> None:
         last = open_round(c)
-        c.update(status="pending", version=version + 1)
+        c.update(status=ClipStatus.PENDING.value, version=version + 1)
         if not last:
             return
         # Feedback the owner added while this ran was not mapped: it opens the next round.
@@ -452,7 +453,7 @@ def _revise_one(ep: Episode, cfg: dict, rec: StageRecord, clips: list[dict], cli
         last.update(feedback=feedback, applied_at=now(), produced_version=version + 1, **record)
         if extra:
             c["rounds"].append({"at": now(), "feedback": extra, "version": version + 1})
-            c["status"] = "changes"
+            c["status"] = ClipStatus.CHANGES.value
     update(ep, number, close)
     logger.info("✅ clip %d revised → v%d: %s%s", number, version + 1, "; ".join(record["applied"]) or "no edit",
                 f" · unhandled: {'; '.join(record['unhandled'])}" if record["unhandled"] else "")

@@ -22,10 +22,11 @@ from typing import Optional
 from podcast import review_state
 from podcast.clips import clip_length, load_clips
 from podcast.episode import load_episode, load_podcast_config
+from podcast.review_state import ClipStatus
 
 logger = logging.getLogger("podcast.review_cli")
 
-STATUS_OF = {"approve": "approved", "drop": "dropped", "pending": "pending"}
+STATUS_OF = {"approve": ClipStatus.APPROVED, "drop": ClipStatus.DROPPED, "pending": ClipStatus.PENDING}
 
 
 def show(ep, clips: list[dict]) -> None:
