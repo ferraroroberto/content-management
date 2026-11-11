@@ -8,10 +8,10 @@ holds (the page reconciles against that after a reconnect). Chunks are staged
 off OneDrive (``recorder.staging_dir``, default the system temp folder) and
 only the finished, remuxed file lands in ``<episode>/video editing/``.
 
-Neither container ``MediaRecorder`` writes carries a usable duration (#336), so
+Neither container ``MediaRecorder`` writes carries a usable duration, so
 the joined stream is remuxed with ``ffmpeg -c copy`` into an ``.mp4``, which
 rewrites the index without re-encoding. The page records WebM (H.264 + Opus)
-where it can, because Chrome's MP4 recorder crashes the tab at 4 GiB (#341);
+where it can, because Chrome's MP4 recorder crashes the tab at 4 GiB;
 MP4 holds H.264, VP9 and Opus alike, so the output is one format either way.
 """
 

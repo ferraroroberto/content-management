@@ -9,7 +9,7 @@ for the composer to close, and best-effort cancel it. Living here (instead of
 inside the scheduler module) means a rename or signature change to any of
 these is a visible public-API change instead of an invisible break of the
 video path, which used to import them as ``_private`` names straight out of
-``schedule_threads_posts`` (issue #324).
+``schedule_threads_posts``.
 
 All are pure Playwright drivers; nothing in here is route-specific (the photo
 vs. video difference is only which file gets uploaded and what happens after
@@ -51,7 +51,7 @@ def open_composer(page: Page) -> None:
     merely its ``[role="dialog"]`` shell. Those two mount separately, and
     treating the shell as "open" is what let ``type_caption`` run against a
     still-spinning modal and fail the first row of a batch while the six after
-    it succeeded (issue #235).
+    it succeeded.
     """
     click_until_effect(
         page,

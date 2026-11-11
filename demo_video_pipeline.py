@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Demo-video pipeline (issues #359, #360, #361).
+"""Demo-video pipeline.
 
     python demo_video_pipeline.py "<demo folder>" [--stages record,prep,check,render] [--cut <id>] [--preview] [--force]
     python demo_video_pipeline.py "<demo folder>" --status

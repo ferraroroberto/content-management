@@ -1,6 +1,6 @@
 """Capture engine + README generator for the control-panel screenshots.
 
-Design (issue #110):
+Design:
 
 * **Manifest is the contract** — ``docs/screenshots/manifest.json`` declares
   every capturable feature. The engine never invents targets.

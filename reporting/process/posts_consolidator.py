@@ -39,7 +39,7 @@ def main(args=None) -> bool:
 
     Returns ``True``/``False`` (rather than only raising) so
     ``reporting_pipeline.run_module`` can record a step failure even when this
-    degrades gracefully instead of raising (issue #246).
+    degrades gracefully instead of raising.
     """
     if args is None:
         # Use command-line arguments if available, otherwise parse them

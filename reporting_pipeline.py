@@ -80,7 +80,7 @@ def configure_logger(debug_mode=False):
 class PipelineFailures:
     """Accumulates hard failures during a run for one consolidated alert.
 
-    Three depths are tracked (issues #76, #84):
+    Three depths are tracked:
 
     * ``step_failures`` — a pipeline step raised (recorded by ``run_module``).
     * ``missing_endpoints`` — a configured endpoint produced no raw JSON file
@@ -96,7 +96,7 @@ class PipelineFailures:
     * ``policy_drift`` — a public table lost RLS / an ``anon_*_all`` policy, or
       a view lost ``security_invoker`` (recorded by ``check_policy_drift_coverage``);
       this catches Supabase security drift on the project's own clock instead of
-      waiting for the weekly security-advisor email (issue #50).
+      waiting for the weekly security-advisor email.
     * ``all_zero_platforms`` — every post a platform's raw scrape holds has 0 likes,
       0 comments and 0 reposts (recorded by ``check_all_zero_posts``); a scraper that
       can no longer read the counts looks exactly like this.
@@ -105,7 +105,7 @@ class PipelineFailures:
       (recorded by ``check_planning_run``).
     * ``unverified`` — a coverage/drift check could not run at all (no DB
       connection, or it raised) so its posture is genuinely unknown, not
-      "clean" (issue #246). Kept separate from the other lists so a full DB
+      "clean". Kept separate from the other lists so a full DB
       outage still trips ``any()`` and the alert/non-zero exit, instead of a
       check that silently couldn't run being folded into a green run.
     """
@@ -309,7 +309,7 @@ def check_posts_coverage(processing_date: str, failures: "PipelineFailures") -> 
 
     ``check_endpoint_coverage`` is presence-only — it cannot see this: a raw
     file can exist yet hold no post the consolidator can match (``posted_at =
-    date - 1 day``), leaving every ``*_<platform>_*`` column NULL (issue #84).
+    date - 1 day``), leaving every ``*_<platform>_*`` column NULL.
     Here we read the consolidated ``posts`` row that actually feeds Notion and
     flag any platform with neither a video nor a non-video ``post_id``. DB
     errors degrade gracefully (logged) — the run is never crashed by the check.
@@ -399,7 +399,7 @@ def check_policy_drift_coverage(failures: "PipelineFailures") -> None:
     Reuses ``supabase_policy_script.check_policy_drift`` (read-only) so a public
     table that lost RLS or an ``anon_*_all`` policy — or a view that lost
     ``security_invoker`` — is caught on the daily run instead of via the weekly
-    security-advisor email (issue #50). DB errors degrade gracefully (logged) —
+    security-advisor email. DB errors degrade gracefully (logged) —
     mirrors ``check_posts_coverage``; the run is never crashed by this posture
     check. Remediation stays a deliberate human action: re-run
     ``reporting/process/supabase_policy_script.sql``, then re-run the pipeline.
@@ -446,8 +446,7 @@ def _load_notify_send():
     The hooks directory goes on ``sys.path`` rather than the module being loaded
     by file spec, because ``notify_send`` imports its sibling ``_lib`` to resolve
     the destination chat by category. A spec-only load leaves ``_lib`` unfindable,
-    ``notify_send`` degrades to "no chat resolved", and the alert is dropped
-    (content-management#264).
+    ``notify_send`` degrades to "no chat resolved", and the alert is dropped.
     """
     hooks_dir = Path.home() / ".claude" / "hooks"
     helper = hooks_dir / "notify_send.py"
@@ -516,7 +515,7 @@ def send_failure_alert(failures: "PipelineFailures", processing_date: str, confi
     Routed by **intent category**, not by a chat id this repo owns: a pipeline
     failure is come-look, so it goes to ``attention`` and the fleet's
     ``hooks/projects.toml`` decides which chat that is. Nothing here needs
-    changing when the destination moves (content-management#264).
+    changing when the destination moves.
 
     ``config`` is unused now that the destination is not repo-owned. It stays in
     the signature because callers pass it positionally.
@@ -562,10 +561,10 @@ def run_module(module_func, module_name, debug_mode=False, extra_args=None, fail
         extra_args: List of additional arguments to pass
         failures: Optional PipelineFailures accumulator to record step
             exceptions, and step functions that return ``False`` instead of
-            raising (issue #246).
+            raising.
         exit_code_names: Optional ``{exit code: name}`` for an int-returning
             step; a named code is recorded with its name, so the alert says
-            what happened instead of only the number (issue #371).
+            what happened instead of only the number.
     """
     # Save original command line arguments
     original_argv = sys.argv.copy()

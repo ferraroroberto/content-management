@@ -58,7 +58,7 @@ def stealth_launch_kwargs(user_data_dir: str, *, headless: bool = False) -> dict
       every site renders in English. Without this, sites localize from the
       OS / account locale (Spanish on this machine), which breaks every
       English ``get_by_role`` and accessible-name selector in the planning
-      drivers (see issue #27). LinkedIn additionally honors a per-account
+      drivers. LinkedIn additionally honors a per-account
       UI language setting; if a profile was bootstrapped while logged in to
       a Spanish-language account, the account setting wins and must be
       flipped to English manually once (Settings → Account preferences →

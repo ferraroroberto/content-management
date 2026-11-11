@@ -1,5 +1,5 @@
 """The clip review from the command line — the same ``review.json`` the Podcast
-tab writes (issue #339), for a review walked through in a terminal (issue #350).
+tab writes, for a review walked through in a terminal.
 
     python -m podcast.review_cli "<episode folder>" show
     python -m podcast.review_cli "<episode folder>" approve 1 3 5

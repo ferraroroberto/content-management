@@ -81,7 +81,7 @@ def note_posted_date(iso_ts: Optional[str]) -> Optional[str]:
 
 
 def note_is_teaser(attachments: list[dict]) -> bool:
-    """True when a note embeds a newsletter post preview (issue #84's teaser).
+    """True when a note embeds a newsletter post preview (the teaser).
 
     The Playwright equivalent looked for an ``<a href*='/p/'>`` card inside the
     note container. Natively the same signal is an attachment: either a ``post``

@@ -1,6 +1,6 @@
 """Instagram (Meta planner) video composer driver for the weekly-video orchestrator.
 
-Schedules one clip through Meta's **Reels** composer (issue #118): planner →
+Schedules one clip through Meta's **Reels** composer: planner →
 hover day column → Schedule menu → "Create reel" → Add Video → caption →
 Next → Scheduling options → pick "Schedule" → fill date+time → Schedule.
 

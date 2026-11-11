@@ -10,7 +10,7 @@ prompts for the "must-read" topic and copies the composed line to the
 clipboard.
 
 Originally from ``E:\\automation\\automation\\notion\\build_newsletter.py``;
-migrated into the newsletter package as part of issue #18. Config now
+migrated into the newsletter package. Config now
 comes from ``config/config.json`` (Notion token, articles + newsletter DB
 ids); HTML output landed under ``results/newsletter/`` instead of next to
 the script.

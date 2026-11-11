@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Serve the podcast recorder for one episode (issue #341).
+"""Serve the podcast recorder for one episode.
 
     python recorder_server.py "<episode folder>" [--port 8470] [--host 127.0.0.1]
 

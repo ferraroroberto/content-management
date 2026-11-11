@@ -147,7 +147,7 @@ def results_frame(
     narrows to what matters.
 
     Retired rows never appear, whatever the status filter says — the point of
-    retiring them was to take them off this table (issue #292). A row the owner
+    retiring them was to take them off this table. A row the owner
     already annotated is never retired, so no past decision can disappear here.
     """
     where = ["r.found_link is not null", "r.retired = 0"]
@@ -272,11 +272,11 @@ def overview(conn: sqlite3.Connection) -> dict:
     ``not_fully_assessed`` is the honest half of ``screened``: rows a screening
     pass touched without looking at all three licence conditions. They are
     counted here rather than left to look compliant, which is what the
-    credit-only model did to them (issue #295).
+    credit-only model did to them.
 
     ``indeterminate`` is the other honest half, and the two do not overlap:
     every condition was answered and at least one answer was "could not be
-    established" (issue #305). Those rows are done with the queue and waiting
+    established". Those rows are done with the queue and waiting
     on the owner; keeping them in ``not_fully_assessed`` is what made the
     re-screen backlog unable to drain.
     """

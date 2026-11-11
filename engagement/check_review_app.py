@@ -71,7 +71,7 @@ def _approved_keys() -> set[tuple[str, str]]:
     — for every row currently ``status = 'approved'``. Used to diff before/after
     the approve click so the idempotency rollback below can scope itself to
     just the row(s) this click approved, instead of every approved row in the
-    table (issue #246)."""
+    table."""
     sb = supabase_client()
     rows = sb.table("comments").select("platform,comment_id").eq("status", CommentStatus.APPROVED.value).execute().data or []
     return {(r["platform"], r["comment_id"]) for r in rows}

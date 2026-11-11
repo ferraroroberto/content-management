@@ -17,12 +17,12 @@ It also owns the post-Schedule confirmation wait
 here rather than in either driver because both drivers ran a byte-identical
 copy of it and the copies have to agree: they encode when a row counts as
 scheduled, and a driver that disagreed would either drop a post or duplicate
-one (issue #178).
+one.
 
 For the same reason it owns the dialog locators and ``finalize_schedule`` —
 the Confirm → final Schedule → confirmed tail every route (photo, POST,
 carousel, video) ends on. The video driver used to import them as private
-names from the photo scheduler and keep its own copy of the tail (issue #371).
+names from the photo scheduler and keep its own copy of the tail.
 The Schedule dialog's date/time setters live beside it in
 ``linkedin_schedule_picker``.
 
@@ -95,7 +95,7 @@ def click_feed_entry(
     ``<a tabindex=0 onclick>`` whose label is a child ``<p>Photo</p>`` — there is
     no ``role="button"`` or aria-label once the feed hydrates, so the old
     ``get_by_role("button", name=...)`` anchor resolved nothing and the click
-    burned its whole 30 s timeout (issue #140; the pre-hydration placeholder
+    burned its whole 30 s timeout (the pre-hydration placeholder
     briefly *is* a ``<div role="button">``, which is why the failure read
     "element was detached from the DOM, retrying" — Playwright caught the
     placeholder, LinkedIn swapped it for the role-less ``<a>``, and the name
@@ -103,13 +103,13 @@ def click_feed_entry(
     placeholder and hydrated forms; clicking it bubbles up to the ``<a onclick>``.
 
     We re-resolve on each attempt with a short per-attempt timeout, so a
-    cold-start miss (the share box not mounted yet, issue #27) or a transient
+    cold-start miss (the share box not mounted yet) or a transient
     detachment fails fast and the next attempt clicks against the settled DOM.
     Attempts accumulate up to ``FEED_ENTRY_CLICK_TIMEOUT_MS``; a warm share box
     still returns on the first attempt in ~1 s.
 
     ``expect_selector``, when given, guards a THIRD failure mode Playwright's
-    own actionability checks can't see (issue #150): the target node can be
+    own actionability checks can't see: the target node can be
     attached, visible and stable — and receive the click — before LinkedIn's
     framework finishes hydrating that node's own click handler, so the click
     is delivered but silently swallowed. That reads as success to ``.click()``
@@ -122,7 +122,7 @@ def click_feed_entry(
     Before each re-click the effect is checked once more: a click whose effect
     merely landed *late* has already opened the editor, whose modal now covers
     the share box, so re-clicking would only be intercepted until the budget
-    ran out and fail a row that was in fact fine (issue #271; the 2026-08-28
+    ran out and fail a row that was in fact fine (the 2026-08-28
     Photo failure shows that interception).
     """
     deadline = time.monotonic() + FEED_ENTRY_CLICK_TIMEOUT_MS / 1000
@@ -633,7 +633,7 @@ def dialog_locator(page: Page):
 
     ``DIALOG_SEL`` matches both the legacy ``<div role="dialog">`` and the
     native ``<dialog open>`` LinkedIn's 2026 rebuild replaced it with — see
-    ``linkedin_labels.DIALOG_SEL`` for the full account (issue #178).
+    ``linkedin_labels.DIALOG_SEL`` for the full account.
 
     Always chain off this locator (``dialog_locator(page).locator("button…")``)
     rather than interpolating ``DIALOG_SEL`` into a bigger selector string:
@@ -798,7 +798,7 @@ def finalize_schedule(
     no media ("Something went wrong, please try reloading"). That wait runs
     after the post is confirmed scheduled, so an error inside it is logged and
     swallowed: raising would report a scheduled row as FAIL, leave it
-    Work-in-Progress and schedule it again on the next run (issue #178).
+    Work-in-Progress and schedule it again on the next run.
     """
     click_schedule_confirm(page)
     page.wait_for_timeout(1500)

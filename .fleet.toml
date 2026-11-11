@@ -72,6 +72,7 @@ enabled  = true
 baseline = ".comment-ratchet-baseline.json"
 exclude  = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
 history_phrases = true
+docstrings = true
 
 # Static-analysis ratchet (project-scaffolding docs/static-ratchet.md): fails the
 # pre-ship gate on a new duplicate block, unused import/variable or curated ruff bug

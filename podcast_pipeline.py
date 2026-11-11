@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Podcast episode pipeline (issue #333).
+"""Podcast episode pipeline.
 
     python podcast_pipeline.py "<episode folder>" [--stages transcribe,clean,...] [--force] [--unreviewed]
     python podcast_pipeline.py "<episode folder>" --status
@@ -9,12 +9,12 @@ Stages run in order and each one writes its output into
 exists is skipped unless ``--force`` is given, so a run resumes where the
 last one stopped. Nothing is published, posted or written to Notion.
 
-``covers`` and ``package`` wait for the owner's clip review (issue #339):
+``covers`` and ``package`` wait for the owner's clip review:
 they run once every clip is approved or dropped, or with ``--unreviewed``.
 
 ``--status`` runs nothing and writes nothing: it says where the episode stands
 (tracks found, each stage done / to run / waiting for review, the review
-summary, the next stage), and exits 2 when a track is missing (issue #350).
+summary, the next stage), and exits 2 when a track is missing.
 """
 
 from __future__ import annotations

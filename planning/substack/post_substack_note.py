@@ -21,9 +21,9 @@ Everything either side of publishing — the Notion read, the idempotence guard,
 the empty-body refusal, the image resolution and the ``post_url`` write-back —
 is shared, so the two backends differ only in how the Note reaches Substack.
 Video notes (see ``post_substack_video_note.py``) support the same
-``note_source`` flag (issue #189) and publish through the same
+``note_source`` flag and publish through the same
 ``publish_note_flow``: each publisher passes a ``NotePublish`` with its own
-fill step, Post-ready wait and link column (issue #371).
+fill step, Post-ready wait and link column.
 """
 
 from __future__ import annotations
@@ -352,8 +352,7 @@ def publish_note_flow(
 ) -> int:
     """Publish one Note through the configured backend; return an exit code.
 
-    The one publish sequence behind both the image Note and the video Note
-    (issue #371): backend check, native dry run / publish, or open composer →
+    The one publish sequence behind both the image Note and the video Note: backend check, native dry run / publish, or open composer →
     fill → dry-run screenshot → optional Post-ready wait → click Post →
     resolve the URL → write the link column.
 

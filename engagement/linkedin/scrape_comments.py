@@ -626,7 +626,7 @@ def _dedupe_comments_by_id(rows: list[dict]) -> list[dict]:
     inherits its parent comment's URN in `_extract_comment_id`, so two
     distinct comments can land in the same batch with the same id —
     Postgres then rejects the *entire* `ON CONFLICT` upsert rather than just
-    the colliding rows (issue #313). Keep whichever row carries a reply
+    the colliding rows. Keep whichever row carries a reply
     (more information survives), logging the collision so a genuine
     URN-extraction bug stays visible instead of silently dropping data.
     """
@@ -652,7 +652,7 @@ def _evaluate_scrape_health(total_posts: int, structural_errors: list[str]) -> s
     """Return `"broken"` when every attempted post's outcome was a structural
     extractor error (or an unhandled exception) rather than a legitimate empty
     result. This is the discriminator that separates a dead selector (18
-    consecutive `no_list_container` runs went unnoticed — issue #175) from an
+    consecutive `no_list_container` runs went unnoticed) from an
     ordinary quiet day where posts were visited and simply have no comments
     yet. Comment count alone is deliberately not part of the check — only the
     extractor's own `error` key is, since it is the one signal that tells

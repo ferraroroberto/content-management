@@ -1,6 +1,6 @@
 """Build the newsletter-triage history dataset and its statistics.
 
-Ground truth for the criteria (issue #210):
+Ground truth for the criteria:
 
 * **positives** — every Notion article with an edition (``news``) relation in
   the window: title, URL, topic, author, edition number/date, star, must-read;
@@ -120,7 +120,7 @@ def reextract_cached(cfg: Dict[str, Any]) -> List[gm.EmailRecord]:
     """Re-run link extraction from already-cached HTML only — no mailbox
     build, no Gmail search, no network I/O at all.
 
-    Split out of ``pull_emails`` (issue #246): that function always calls
+    Split out of ``pull_emails``: that function always calls
     ``gm.build_mailbox(cfg)`` + ``label_search`` + ``search_ids`` even when
     called with ``limit=0``, so the documented offline path
     (``--no-gmail --reextract --budget 0``, "no new network" per the README)

@@ -1,4 +1,4 @@
-"""Deterministic checks that stop a demo before it renders (issue #360).
+"""Deterministic checks that stop a demo before it renders.
 
 Each check returns ``Result``s whose state is ``pass``, ``fail`` or
 ``unknown``; anything but ``pass`` stops the run. They exist because each one

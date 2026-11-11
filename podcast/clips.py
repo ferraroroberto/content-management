@@ -2,7 +2,7 @@
 
 Selection shows the model the episode as numbered sentences and asks for
 sentence-id ranges, so every cut lands on a sentence boundary by
-construction. Copy follows the owner's house style (derived in the #333
+construction. Copy follows the owner's house style (derived in the initial
 spike): lowercase ≤5-word titles, a LinkedIn hook + short paragraphs + fixed
 footer, and the templated Instagram caption.
 """
@@ -37,8 +37,7 @@ INTRO_MARK = "A clip from my conversation"
 
 def pick_style_examples(episodes: list[dict], clip_rows: list[dict], n: int) -> dict:
     """Titles and LinkedIn intros of the clips of the newest ``n`` dated
-    episodes that have clips, newest episode first, then by clip number
-    (issue #354). The style improved over time, so older episodes are left out.
+    episodes that have clips, newest episode first, then by clip number. The style improved over time, so older episodes are left out.
     ``episodes`` / ``clip_rows`` are Notion rows of the Episodes / Clips tables."""
     from reporting.notion._client import extract_property_value  # noqa: PLC0415
 

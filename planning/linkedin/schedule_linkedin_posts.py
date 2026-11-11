@@ -296,7 +296,7 @@ def _dialog_done_control(page: Page):
 
     NOT ``get_by_role("button", …)``: LinkedIn re-rendered this
     control as a role-less ``<a>`` whose label sits in nested ``<span>``s
-    (issue #237, same pattern as the feed share-box in #140). An ``<a>`` with
+    (same pattern as the feed share-box). An ``<a>`` with
     neither ``href`` nor ``role`` has no implicit ARIA button role, so the
     role anchor matched nothing at all — for 177 consecutive polls, while the
     dialog sat plainly ready on screen and the wait reported the PDF as still
@@ -361,7 +361,7 @@ class AltTextCrashError(RuntimeError):
 
     Raised instead of letting the 'Next' click time out against the crash
     screen, so ``schedule_one_illustration_row`` can re-drive the row without
-    ALT text (issue #270). A ``RuntimeError`` so the per-row handler still
+    ALT text. A ``RuntimeError`` so the per-row handler still
     records a FAIL should it ever escape.
     """
 
@@ -379,7 +379,7 @@ def _alt_commit_crashed(page: Page, timeout_ms: int = ALT_COMMIT_SETTLE_MS) -> b
 
     Since 2026-09 the ALT panel's 'Add' throws ``x.create is not a function``
     inside LinkedIn's bundle and the whole app unmounts to a full-page
-    "Something went wrong / Try again" screen (issue #270). A LinkedIn bug, not
+    "Something went wrong / Try again" screen. A LinkedIn bug, not
     selector drift: the live probe hit it with ``fill()`` and real keystrokes,
     short and long text, a mouse click and focus+Enter, and via the composer's
     Edit path too.
@@ -534,7 +534,7 @@ def _wait_for_pdf_upload(page: Page, *, timeout_ms: int = 180000) -> None:
     the timeout. Called in the right order it is the single accurate signal
     that both the upload and the title are satisfied.
 
-    **Leaves breadcrumbs (issue #235).** This wait timed out once with the
+    **Leaves breadcrumbs.** This wait timed out once with the
     failure screenshot showing a dialog that looked entirely ready — preview
     rendered, title filled, Done in its enabled style — and because the loop
     logged nothing across its ~180 polls, the log could not settle whether
@@ -675,8 +675,7 @@ def schedule_one_illustration_row(
     the videos-package mention-aware typer (POST route caption may contain
     ``@FirstName Last`` references that must resolve through LI's typeahead).
 
-    ALT text is best-effort: when LinkedIn's editor crashes committing it
-    (issue #270), the row is re-driven once from a fresh feed without ALT text
+    ALT text is best-effort: when LinkedIn's editor crashes committing it, the row is re-driven once from a fresh feed without ALT text
     and the returned status says so. The crash happens before 'Next', so the
     first attempt cannot have scheduled anything.
     """

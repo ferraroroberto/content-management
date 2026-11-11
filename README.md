@@ -546,7 +546,7 @@ each stage checks, its baseline file, and how to shrink it after a fix:
 & .\.venv\Scripts\python.exe scripts/runtime_write_ratchet.py --probe $env:TEMP\rw-snapshot.json     # fails on a file the tests left there
 & .\.venv\Scripts\python.exe -m scripts.static_ratchet_gate         # unused code, duplication, ruff B/S
 & .\.venv\Scripts\python.exe -m scripts.docs_ratchet_gate           # README size cap, history markers
-& .\.venv\Scripts\python.exe -m scripts.comment_ratchet_gate        # #NNN issue refs in comments
+& .\.venv\Scripts\python.exe -m scripts.comment_ratchet_gate        # #NNN issue refs and history phrases in comments and docstrings
 & .\.venv\Scripts\python.exe -m scripts.structure_ratchet_gate      # file/function/directory size caps
 & .\.venv\Scripts\python.exe -m scripts.instruction_ratchet_gate    # prompt-audit rules on CLAUDE.md/SKILL.md
 & .\.venv\Scripts\python.exe -m scripts.doc_refs_ratchet_gate       # dangling repo paths/links in docs

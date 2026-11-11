@@ -1,5 +1,4 @@
-"""Stage: apply the owner's review feedback to the clips that asked for changes
-(issue #339), and re-render only those.
+"""Stage: apply the owner's review feedback to the clips that asked for changes, and re-render only those.
 
 Per clip with an open review round:
 

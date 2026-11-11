@@ -4,7 +4,7 @@
 as a readiness test ("is the composer there yet?") therefore only ever asks
 "was it there at this instant", and a driver built on it fails the moment the
 page is slower than whatever fixed ``page.wait_for_timeout(...)`` happened to
-precede the probe. Issue #235: an X row failed in ~10 s (its six siblings took
+precede the probe. For example, an X row failed in ~10 s (its six siblings took
 ~14 s) because the app shell had not hydrated, and a Threads row failed because
 the composer modal's shell had mounted while its ``contenteditable`` had not —
 two probes racing each other inside the same driver.

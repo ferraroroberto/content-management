@@ -237,7 +237,7 @@ def _set_schedule_time(page: Page, hour: int, minute: int) -> None:
     ends up rejecting even the exact string it displays by default — so we open
     the menu and click the slot, which is also locale-proof.
 
-    The slot is polled for rather than looked up once (issue #390): the menu
+    The slot is polled for rather than looked up once: the menu
     can open still holding the previous date's slot list. If it never shows
     up, the menu is closed (focusing the date field dismisses it; Escape would
     close the whole Schedule dialog) and reopened once. After the click the
@@ -286,7 +286,7 @@ def set_schedule_datetime(page: Page, target: date, hour: int, minute: int) -> N
 
     Date first: the time menu offers only future slots, so a stale date can
     hide the slot we want. The summary is checked for the time too: it
-    re-renders a beat after the picker takes the click (issue #390).
+    re-renders a beat after the picker takes the click.
     """
     _set_schedule_date(page, target)
     _set_schedule_time(page, hour, minute)

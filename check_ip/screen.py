@@ -12,13 +12,13 @@ refuses to write them at all; ``verdict`` touches only ``db.SCREEN_COLUMNS``.
 That separation is what makes the skill safe to run unattended: the
 worst it can do is propose something wrong, which the owner then overrules.
 
-**The re-screen backlog is a queue of its own** (issue #300). ``next --unassessed``
+**The re-screen backlog is a queue of its own**. ``next --unassessed``
 serves only rows that were screened while at least one licence condition went
 unestablished — the ones ``stats`` counts as ``not_fully_assessed``. They were
 judged under the old credit-only question, and left in the general queue they
 would sit behind thousands of never-screened rows forever.
 
-**A re-screen no longer destroys the answer it replaces** (issue #301). Before
+**A re-screen no longer destroys the answer it replaces**. Before
 overwriting the screening columns, ``record_verdict`` copies them into
 ``screen_history`` in the same transaction — so the observation behind a
 previous verdict stays retrievable, which matters because the screening
@@ -40,8 +40,7 @@ Usage::
         --reason "the post no longer exists"
     python -m check_ip.screen stats
 
-**An honest "could not tell" no longer re-queues a row forever** (issue #305;
-rationale: ``db.CONDITION_COLUMNS``, `check_ip/README.md`). ``--credit`` and
+**An honest "could not tell" no longer re-queues a row forever** (rationale: ``db.CONDITION_COLUMNS``, `check_ip/README.md`). ``--credit`` and
 friends take ``unknown`` for that third state; **omitting** the flag is the
 fourth, never assessed.
 
@@ -170,13 +169,13 @@ def next_batch(
     never screened twice under different images, and rows the owner already
     decided are skipped.
 
-    Two flags move the ``screened_at`` line, and they are not the same thing
-    (issue #300). ``include_screened`` merely *drops* the "never screened"
+    Two flags move the ``screened_at`` line, and they are not the same thing.
+    ``include_screened`` merely *drops* the "never screened"
     predicate, so a re-check competes with every unscreened row under the same
-    ranking — with 7k pending rows behind them, the backlog #295 created is
+    ranking — with 7k pending rows behind them, the credit-only backlog is
     never reached that way. ``unassessed`` serves that backlog and nothing
     else: screened, at least one licence condition still null (an ``unknown``
-    answer is a ``2`` and does not qualify — issue #305), and not permanently
+    answer is a ``2`` and does not qualify), and not permanently
     unassessable. It is the same set ``stats()`` counts as
     ``not_fully_assessed`` — deliberately rendered from the same
     ``db.assessed_sql`` / ``db.permanent_sql`` helpers so the number the tab
@@ -190,7 +189,7 @@ def next_batch(
     excluded posters, same retired/duplicate/``ok is null``/Exact Match
     predicates, same ranking. A re-screen batch is ordered like any other.
 
-    Two predicates keep ``Similar Match`` out (issue #292), and the redundancy
+    Two predicates keep ``Similar Match`` out, and the redundancy
     is deliberate: ``retired`` covers whatever else gets retired later, while
     the explicit ``match_type`` test holds on a store where the retirement
     migration has not run yet — a fresh clone against an old database must not
@@ -256,7 +255,7 @@ def record_verdict(
     ``2`` assessed but not establishable, ``None`` never assessed — and
     **nothing is cleared**. The old model blanked
     the aggravators on a non-infringement verdict, which is exactly how a
-    credited-but-commercial post ended up stored as compliant (issue #295).
+    credited-but-commercial post ended up stored as compliant.
 
     ``verdict`` is checked against ``db.verdict_for()`` rather than normalised:
     a worker that says ``acceptable`` while reporting a violated condition has
@@ -340,14 +339,14 @@ def stats(conn: sqlite3.Connection, *, source: Optional[str] = None) -> dict:
     what the queue and the tab will actually serve rather than counting 115k
     rows nothing will ever look at again.
 
-    ``not_fully_assessed`` is the number issue #295 exists for: rows that were
+    ``not_fully_assessed`` is the number that matters most here: rows that were
     screened but whose licence conditions were not all looked at. They are
     **not** compliant rows and are counted apart from ``proposed_acceptable``,
     which only holds rows where all three conditions were met. The permanently
     unassessable ones (``nothing_to_assess``) are counted on their own instead,
     since no re-screen will ever move them.
 
-    ``indeterminate`` is the number issue #305 exists for, and it is reported
+    ``indeterminate`` is the number that must not hide in the totals, and it is reported
     separately because it asks for something different: every condition was
     answered, and at least one answer was "could not be established". A
     ``not_fully_assessed`` row wants another screening pass; an
@@ -407,7 +406,7 @@ def build_parser(cfg: dict) -> argparse.ArgumentParser:
     Separate from ``main`` so the defaults can be asserted without opening the
     store — the condition defaults in particular, which carry meaning: one of
     them silently changing from "nobody looked" to "somebody looked" is what
-    issue #305 is about, and it is invisible in any test that calls
+    the bug this guards against, and it is invisible in any test that calls
     ``record_verdict`` directly.
     """
     parser = argparse.ArgumentParser(description="check_ip screening queue")

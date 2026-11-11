@@ -141,7 +141,7 @@ def work_dir(cfg: dict, episode: Episode) -> Path:
 def list_episodes(cfg: Optional[dict] = None) -> list[Path]:
     """Episode folders that carry an ``episode.json``: those under
     ``episodes_root``, then the trial episodes under the optional
-    ``trials_root`` (``podcast.init_episode --from``, issue #350)."""
+    ``trials_root`` (``podcast.init_episode --from``)."""
     cfg = cfg if cfg is not None else load_podcast_config()
     found: list[Path] = []
     for key in ("episodes_root", "trials_root"):

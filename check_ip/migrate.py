@@ -7,7 +7,7 @@ history holds them. What is left is the one lane that stays useful:
 
 Usage::
 
-    python -m check_ip.migrate --recompute-duplicates  # re-elect the canonical rows (#291)
+    python -m check_ip.migrate --recompute-duplicates  # re-elect the canonical rows
 
 It needs no workbooks, never deletes, and reports what it changed plus the
 annotation count either side of it.
@@ -56,7 +56,7 @@ def _duplicate_shape(conn: sqlite3.Connection) -> dict:
 
 
 def _recompute_duplicates(conn: sqlite3.Connection) -> int:
-    """Re-run the duplicate marking and prove it cost no decision (issue #291).
+    """Re-run the duplicate marking and prove it cost no decision.
 
     Nothing but the ``duplicate`` column is written — ``found_link`` stays the
     URL that was actually found and opened, and every verdict stays on the row

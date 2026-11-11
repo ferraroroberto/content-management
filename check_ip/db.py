@@ -1,4 +1,4 @@
-"""SQLite store for the illustration copyright check (issue #286).
+"""SQLite store for the illustration copyright check.
 
 One file — ``results/check_ip/check_ip.db`` by default — holding the images,
 every link a reverse-image search found, the owner's decisions on those links,
@@ -216,7 +216,7 @@ def condition_state(value: object) -> Optional[int]:
     NULL is the state this whole model exists to keep honest.
 
     ``"unknown"`` is the word a worker uses when it looked and could not tell,
-    so it maps to ``2`` — an answer — and **not** to ``None`` (issue #305).
+    so it maps to ``2`` — an answer — and **not** to ``None``.
     ``None`` is reachable only by passing ``None`` or by naming the absence of
     an answer outright (``"unassessed"``, ``""``), which is what a caller that
     simply omitted the condition does.
@@ -250,8 +250,7 @@ def severity(credit_ok: object = None, noncommercial_ok: object = None,
     anything — neither is evidence of a violation — but neither is a pass
     either, which is why a severity of 0 is never on its own a statement that
     a post is compliant. ``all_conditions_met()`` is the other half of that
-    sentence and the tab prints both. Severity is therefore untouched by issue
-    #305: no existing row's severity moves.
+    sentence and the tab prints both. Severity is therefore untouched: no existing row's severity moves.
 
     3 is no credit **and** commercial use **and** a modified image: the case
     the owner calls plain stealing.
@@ -285,11 +284,11 @@ def fully_assessed(credit_ok: object = None, noncommercial_ok: object = None,
 
     The question the old model could not ask. A row can be severity 0 and not
     assessed at all, and the difference between "checked, nothing wrong" and
-    "never checked" is the whole point of issue #295.
+    "never checked" is the whole point of this count.
 
     "Looked at" is the test, not "settled": an indeterminate ``2`` counts here,
     because a worker did open the post and answer. That is what lets the
-    re-screen queue drain (issue #305) — the queue asks *has anyone looked*,
+    re-screen queue drain — the queue asks *has anyone looked*,
     while ``all_conditions_met()`` below asks *did it pass*.
     """
     return all(condition_state(value) is not None
@@ -331,7 +330,7 @@ def indeterminate(credit_ok: object = None, noncommercial_ok: object = None,
                   unmodified_ok: object = None) -> bool:
     """Whether every condition was answered and at least one came back ``2``.
 
-    Its own counter (issue #305) because it wants a different action from a
+    Its own counter because it wants a different action from a
     NULL: NULL wants another screening pass, while this row's screening pass is
     done and what is left is the owner's own judgement, or nothing. Deliberately
     false while any condition is still NULL, so the two counters never
@@ -360,7 +359,7 @@ def verdict_for(credit_ok: object = None, noncommercial_ok: object = None,
     unclear rather than acceptable.
 
     A row whose conditions were all answered but where one came back
-    indeterminate stays ``unclear`` too (issue #305): nothing was found wrong,
+    indeterminate stays ``unclear`` too: nothing was found wrong,
     and nothing was established either, so it leaves the re-screen queue
     without ever claiming to be compliant.
     """
@@ -563,8 +562,7 @@ def mark_duplicates(conn: sqlite3.Connection) -> dict:
     0 = the page appears once · 2 = the primary row for a page seen several
     times · 1 = every other row for that page.
 
-    Rows group by ``canonical_link_for(found_link)``, not by the raw string
-    (issue #291): LinkedIn's locale hosts and X's ``?lang=`` are mirrors of one
+    Rows group by ``canonical_link_for(found_link)``, not by the raw string: LinkedIn's locale hosts and X's ``?lang=`` are mirrors of one
     post, and partitioning on the raw URL left every mirror ``duplicate = 0``,
     so the queue served the same post once per host.
 
@@ -629,7 +627,7 @@ def push_screen_history(conn: sqlite3.Connection, row_id: int) -> bool:
 
     **Deliberately does not commit.** The caller owns the transaction, because
     the whole point of this function is that the copy and the overwrite that
-    supersedes it land together or not at all (issue #301). Committing here
+    supersedes it land together or not at all. Committing here
     would create exactly the window it exists to close.
 
     ``insert or ignore`` resolves against ``unique (result_id, screened_at)``:

@@ -221,8 +221,7 @@ def upload_files(page: Page, paths: list[Path], *, is_video: bool = False) -> No
     1. **Direct file chooser** (story path, older post path): clicking it
        opens the OS file picker; ``page.expect_file_chooser`` intercepts
        the FileChooser event and we push files via ``set_files``.
-    2. **Intermediate dialog** (current post path on most accounts, issue
-       #28): clicking it opens a media dialog whose "Upload from computer"
+    2. **Intermediate dialog** (current post path on most accounts): clicking it opens a media dialog whose "Upload from computer"
        button is what actually triggers the file chooser.
 
     We try (1) first; if no FileChooser appears within 8 s, we look for the
@@ -231,12 +230,12 @@ def upload_files(page: Page, paths: list[Path], *, is_video: bool = False) -> No
     ``input[type=file]`` (8 s wait). Each leg logs which one ran, and on
     final failure we save a debug screenshot + dump the visible dialog
     buttons so the next regression triages from artefacts, not a live DOM
-    session (AC #5).
+    session.
 
     ``is_video=True`` narrows Leg 0's selector to
     ``input[type=file][accept*="video"]`` so we cannot accidentally bind
     files to an image input when Meta's post composer mounts both
-    (issue #37 — duplicated attach when the video input is filled AND the
+    (duplicated attach when the video input is filled AND the
     image affordance re-opens its own chooser).
     """
     file_paths = [str(p) for p in paths]

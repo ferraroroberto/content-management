@@ -98,7 +98,7 @@ def _get_handle_url() -> str:
 
 
 def _raise_if_logged_out(s: LinkedInSession) -> None:
-    """Report a late client-side login redirect as login-required (issue #310).
+    """Report a late client-side login redirect as login-required.
 
     ``/in/<handle>/`` pages bounce an expired session to ``/authwall`` after
     ``domcontentloaded``, past ``goto_with_login_check``'s own check — without

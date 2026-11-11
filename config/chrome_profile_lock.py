@@ -5,7 +5,7 @@ allows only **one live instance**. Several unattended jobs in this suite target 
 *same* profile — e.g. the engagement scrape and the reporting follower-scrape both
 drive ``planning/linkedin/chrome_user_data`` and both fire from the app-launcher
 around the same time. The second job to launch gets Playwright's "Opening in
-existing browser session" error and dies (see issue #54).
+existing browser session" error and dies.
 
 The holder is almost always a **legitimately-running sibling job**, not a stale
 zombie, so we must **not** kill it — that would corrupt the sibling's run. Instead

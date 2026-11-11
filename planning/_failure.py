@@ -21,7 +21,7 @@ The classification lives here so the pipeline (which writes ``failure_kind`` int
 the machine-readable result JSON) and the skill (which reads it) can never drift
 apart.
 
-This module also owns the **retry-safety contract** (issue #235):
+This module also owns the **retry-safety contract**:
 ``PostMayBeLiveError`` marks a failure that must never be retried, and
 ``attempt_row`` is the single enforcement of that rule. Both live here, next to
 each other and to the classifier, precisely because a driver that re-implemented
@@ -84,7 +84,7 @@ def classify(status: str, detail: str) -> FailureKind:
 class PostMayBeLiveError(RuntimeError):
     """A row failed at or after the point of no return — never retry it.
 
-    The per-row retry added in issue #235 exists to absorb races *before* a
+    The per-row retry exists to absorb races *before* a
     post is committed (composer not open yet, caption box not rendered). Once
     the driver has clicked the platform's final Schedule action, a failure no
     longer means "nothing happened": the post may well be scheduled and the
@@ -123,7 +123,7 @@ def attempt_row(
     * anything on the final attempt, which is simply re-raised.
 
     Everything else — a composer that never opened, a caption box that had not
-    rendered — is exactly the transient class issue #235 was filed for, and is
+    rendered — is exactly the transient class the retry targets, and is
     retried against a settled DOM.
     """
     if attempts < 1:

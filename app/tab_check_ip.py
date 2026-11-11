@@ -1,4 +1,4 @@
-"""Check-IP tab — triage where my illustrations are being reused (issue #286).
+"""Check-IP tab — triage where my illustrations are being reused.
 
 Reverse-image search results land in a SQLite store (``check_ip/``); this tab
 is where they get judged. Filter down to a slice, read what the screening skill

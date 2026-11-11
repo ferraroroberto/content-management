@@ -9,7 +9,7 @@ Schedule action, and wait for the composer to clear (or best-effort cancel
 it). Living here (instead of inside the scheduler module) means a rename or
 signature change to any of these is a visible public-API change instead of an
 invisible break of the video path, which used to import them as ``_private``
-names straight out of ``schedule_twitter_posts`` (issue #324).
+names straight out of ``schedule_twitter_posts``.
 
 All are pure Playwright drivers; nothing in here is route-specific (the photo
 vs. video difference is only which file gets uploaded and what happens after
@@ -71,7 +71,7 @@ def click_compose_area(page: Page) -> None:
 
     Probing each candidate with a bare ``count()`` does not wait — so a row that arrived while X was still showing its splash screen
     found nothing mounted, exhausted all four probes in milliseconds and
-    raised, while its siblings on the same warm page all succeeded (#235).
+    raised, while its siblings on the same warm page all succeeded.
     ``click_until_effect`` re-resolves until the composer is genuinely on
     screen, so a cold app shell costs a few extra seconds instead of the row.
     """
@@ -134,7 +134,7 @@ def _dismiss_mention_typeahead(page: Page) -> None:
     the caret sits right after the handle, so nothing dismisses it. It reopens
     whenever focus returns to the textarea (e.g. after the Schedule modal
     closes), and it overlays the composer's primary Schedule button, failing
-    ``click_final_schedule_action`` (issue #63 follow-on). Escape closes it
+    ``click_final_schedule_action``. Escape closes it
     without altering the caption (verified: "@handle" stays as literal text,
     which X still linkifies on publish).
 
@@ -168,7 +168,7 @@ def _click_through_cover(
     that stacking context. It is normally *behind* the buttons, but X's
     hit-testing intermittently routes the pointer to the cover and Playwright
     reports the subtree "intercepts pointer events" even though the button is
-    visible/enabled/stable (issue #63).
+    visible/enabled/stable.
 
     Scroll into view, try a normal click (which polls actionability — cheap on
     a warm composer), then fall back to a JS ``el.click()`` that bypasses
@@ -263,8 +263,7 @@ def click_schedule_toolbar(page: Page) -> None:
     """Open the Schedule modal via the composer's calendar-clock toolbar button.
 
     The button relocates low in the modal after image attach and is subject to
-    the intermittent cover-overlay interception handled by ``_click_through_cover``
-    (issue #63). Success is confirmed by the modal's 6 native selects mounting,
+    the intermittent cover-overlay interception handled by ``_click_through_cover``. Success is confirmed by the modal's 6 native selects mounting,
     so a slow open isn't mistaken for a failed click. The image is already
     fully attached by now (``upload_image`` waits for the preview), so the
     JS-click bypass is safe — not a blind early click.
@@ -366,7 +365,7 @@ def click_final_schedule_action(page: Page) -> None:
     mention typeahead when the caption ends in an ``@handle`` — that dropdown
     overlays this button, so dismiss it first. The button lives in the same
     relocated toolbar as the schedule icon, so it gets the same cover-overlay
-    JS-click fallback (issue #63).
+    JS-click fallback.
     """
     _dismiss_mention_typeahead(page)
     candidates = [
