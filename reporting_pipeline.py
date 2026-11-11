@@ -202,6 +202,40 @@ def check_all_zero_posts(config: dict, processing_date: str, failures: "Pipeline
 COVERAGE_PLATFORMS = ("linkedin", "instagram", "twitter", "threads", "substack")
 
 
+def _editorial_text_queued(
+    day_yyyymmdd: str, load_config, load_token, columns_key: str, text_role: str
+) -> Optional[bool]:
+    """Whether the editorial row of ``day_yyyymmdd`` holds text in the ``text_role`` column.
+
+    ``load_config`` / ``load_token`` are the platform's own loaders;
+    ``columns_key`` names the role→column map in its config block. A missing row
+    or an empty column is ``False`` (nothing queued). ``None`` means the lookup
+    could not establish the answer — Notion unreachable, config missing, or the
+    column absent from the row — and callers must not read it as "nothing queued".
+    """
+    try:
+        from reporting.notion.editorial import (
+            get_field,
+            get_row_by_day,
+            init_notion_client,
+        )
+        cfg = load_config()
+        notion = init_notion_client(load_token())
+        if notion is None:
+            return None
+        columns = cfg[columns_key]
+        row = get_row_by_day(notion, cfg["editorial_db_id"], day_yyyymmdd, columns)
+        if row is None:
+            return False
+        text = get_field(row, text_role, columns)
+        if text is None:
+            return None
+        return bool(str(text).strip())
+    except Exception as e:
+        logger.warning(f"⚠️ Could not verify editorial content for {day_yyyymmdd}: {e}")
+        return None
+
+
 def _substack_had_editorial_content(day_yyyymmdd: str) -> Optional[bool]:
     """Whether a Substack editorial row with body text existed for ``day_yyyymmdd``.
 
@@ -216,28 +250,49 @@ def _substack_had_editorial_content(day_yyyymmdd: str) -> Optional[bool]:
     treating the missing metrics as a real failure rather than silently
     downgrading it on an unverifiable guess.
     """
-    try:
-        from planning.substack.substack_session import (
-            load_notion_token,
-            load_substack_config,
-        )
-        from reporting.notion.editorial import (
-            get_field,
-            get_row_by_day,
-            init_notion_client,
-        )
-        cfg = load_substack_config()
-        notion = init_notion_client(load_notion_token())
-        if notion is None:
-            return None
-        row = get_row_by_day(notion, cfg["editorial_db_id"], day_yyyymmdd, cfg["notion_columns"])
-        if row is None:
-            return False
-        body_text = get_field(row, "text_body", cfg["notion_columns"]) or ""
-        return bool(str(body_text).strip())
-    except Exception as e:
-        logger.warning(f"⚠️ Could not verify Substack editorial content for {day_yyyymmdd}: {e}")
-        return None
+    from planning.substack.substack_session import load_notion_token, load_substack_config
+
+    return _editorial_text_queued(
+        day_yyyymmdd, load_substack_config, load_notion_token, "notion_columns", "text_body"
+    )
+
+
+def _threads_had_editorial_content(day_yyyymmdd: str) -> Optional[bool]:
+    """Whether a Threads caption (``text TH``) was queued for ``day_yyyymmdd``.
+
+    The weekly planning run schedules each queued caption into Threads' native
+    scheduler. A day with no caption has nothing to publish, so no post metrics
+    for it is expected; a day with a caption but no post means the schedule step
+    did not run or did not land, which is a failure. ``None`` means unverified.
+    """
+    from planning.threads.threads_session import load_notion_token, load_threads_config
+
+    return _editorial_text_queued(
+        day_yyyymmdd, load_threads_config, load_notion_token, "editorial_columns", "caption_text"
+    )
+
+
+def _gap_is_expected(platform: str, processing_date: str) -> bool:
+    """True when ``platform`` genuinely had nothing queued for the day these metrics cover.
+
+    Only Substack and Threads are judged this way; any other platform, and any
+    lookup that comes back unverified, leaves the gap a failure.
+    """
+    lookups = {
+        "substack": _substack_had_editorial_content,
+        "threads": _threads_had_editorial_content,
+    }
+    lookup = lookups.get(platform)
+    if lookup is None:
+        return False
+    covered_day = (datetime.strptime(processing_date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y%m%d")
+    if lookup(covered_day) is not False:
+        return False
+    logger.warning(
+        f"⚠️ Posts-coverage: {platform} had no editorial content queued for {covered_day} — "
+        f"no post metrics for {processing_date} is expected, not a failure"
+    )
+    return True
 
 
 def check_posts_coverage(processing_date: str, failures: "PipelineFailures") -> None:
@@ -250,9 +305,11 @@ def check_posts_coverage(processing_date: str, failures: "PipelineFailures") -> 
     flag any platform with neither a video nor a non-video ``post_id``. DB
     errors degrade gracefully (logged) — the run is never crashed by the check.
 
-    Substack is special-cased: if the editorial calendar genuinely had nothing
-    queued for the day these metrics would cover (``processing_date - 1``),
-    the gap is logged as an alert, not recorded as a failure (issue #182).
+    Substack and Threads are judged against the editorial calendar: if it
+    genuinely had nothing queued for the day these metrics would cover
+    (``processing_date - 1``), the gap is logged as an alert, not recorded as a
+    failure. Content queued but no post, or a calendar that could not be read,
+    stays a failure.
     """
     try:
         from reporting.process.supabase_uploader import get_db_connection
@@ -285,12 +342,8 @@ def check_posts_coverage(processing_date: str, failures: "PipelineFailures") -> 
             has_metrics = data.get(f"post_id_{platform}_no_video") or data.get(f"post_id_{platform}_video")
             if has_metrics:
                 continue
-            if platform == "substack":
-                covered_day = (datetime.strptime(processing_date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y%m%d")
-                had_content = _substack_had_editorial_content(covered_day)
-                if had_content is False:
-                    logger.warning(f"⚠️ Posts-coverage: substack had no editorial content queued for {covered_day} — no post metrics for {processing_date} is expected, not a failure")
-                    continue
+            if _gap_is_expected(platform, processing_date):
+                continue
             failures.missing_post_metrics.append(platform)
             logger.error(f"❌ Posts-coverage: no post metrics for {platform} on {processing_date}")
         if not failures.missing_post_metrics:
