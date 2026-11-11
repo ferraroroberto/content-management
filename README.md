@@ -379,7 +379,7 @@ planning tab (and `launch_autoheal.bat`) runs the `/schedule-autoheal` skill in 
 live DOM, applies a selector-only fix, re-validates with a dry-run, and — when
 confident — files an issue, opens a PR, and merges end-to-end. Login / data
 errors instead ping Telegram and stop for a human. The run also writes a
-machine-readable `results/planning/latest-result.json`, written as `running` at the start of the run and before each stage so a run that is killed mid-stage shows in the tab as interrupted instead of the previous clean run. See
+machine-readable `results/planning/latest-result.json`, written as `running` at the start of the run and before each stage so a run that is killed mid-stage shows in the tab as interrupted instead of the previous clean run, with the stages it never started and the command that redoes them. The daily reporting run also alerts on it. See
 [`docs/self-healing-scheduler.md`](docs/self-healing-scheduler.md) for the full
 loop, failure classification, and guardrails.
 
@@ -419,7 +419,9 @@ flowchart LR
   for how to flip per platform and roll back.
 - **Fails loudly when it drops data.** The run sends **one** Telegram alert and
   exits non-zero if any of these hold: a step raised; a configured endpoint
-  produced no raw file for the date; or — after consolidation — a platform has
+  produced no raw file for the date; the last weekly planning run was killed
+  before it finished (the alert names the stages it never ran and the command that
+  redoes them); or — after consolidation — a platform has
   **no post metrics** in the consolidated `posts` row for the day (a
   content-level check, since a raw file can exist yet contain no post the
   consolidator can match). The alert lists the date + failing steps + missing

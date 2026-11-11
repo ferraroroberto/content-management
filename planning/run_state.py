@@ -27,6 +27,11 @@ LATEST_NAME = "latest-result.json"
 # whose pid the OS has since handed to an unrelated process.
 MAX_RUN_AGE_S = 6 * 3600
 
+# Run order of the orchestrator's stages; ``planning_pipeline.main`` runs them in this order.
+STAGES = ("Clone", "LinkedIn", "Instagram", "Twitter", "Threads", "Videos")
+
+_MODE_FLAGS = {"LIVE": "--live", "DRY-RUN": "--dry-run"}
+
 _WIN_STILL_ACTIVE = 259
 _WIN_QUERY_LIMITED_INFORMATION = 0x1000
 _WIN_ACCESS_DENIED = 5
@@ -58,8 +63,8 @@ def pid_alive(pid: int) -> bool:
 
 
 def running_record(*, mode: str, started_at: datetime, stage: Optional[str],
-                   completed: list[str]) -> dict:
-    """The in-flight record: the stage under way and the stages already finished."""
+                   completed: list[str], skipped: Optional[list[str]] = None) -> dict:
+    """The in-flight record: the stage under way, the stages finished and the ones opted out of."""
     return {
         "started_at": started_at.isoformat(timespec="seconds"),
         "finished_at": None,
@@ -69,6 +74,7 @@ def running_record(*, mode: str, started_at: datetime, stage: Optional[str],
         "pid": os.getpid(),
         "stage": stage,
         "completed_stages": completed,
+        "skipped_stages": skipped or [],
         "summary_path": None,
         "platforms": [],
     }
@@ -103,6 +109,34 @@ def effective_verdict(result: dict, *, now: Optional[datetime] = None) -> str:
     if age_s > MAX_RUN_AGE_S:
         return "interrupted"
     return "running" if pid_alive(pid) else "interrupted"
+
+
+def not_run_stages(result: dict) -> list[str]:
+    """The stages a killed run never started, in run order.
+
+    The stage under way when it died is not in this list: it started and may have
+    half-finished. A stage the operator opted out of with ``--skip-*`` was never
+    meant to run, so it is not "not run" either.
+    """
+    settled = {*(result.get("completed_stages") or []), *(result.get("skipped_stages") or [])}
+    settled.add(result.get("stage"))
+    return [name for name in STAGES if name not in settled]
+
+
+def resume_command(result: dict) -> str:
+    """The pipeline command that redoes an interrupted run's remainder.
+
+    It skips every stage that finished or was opted out of and re-runs the stage
+    that died plus the ones after it; the schedulers skip rows whose link is
+    already populated, so the re-run is idempotent for rows that landed.
+    """
+    done = {*(result.get("completed_stages") or []), *(result.get("skipped_stages") or [])}
+    parts = ["python planning_pipeline.py"]
+    flag = _MODE_FLAGS.get(str(result.get("mode")))
+    if flag:
+        parts.append(flag)
+    parts.extend(f"--skip-{name.lower()}" for name in STAGES if name in done)
+    return " ".join(parts)
 
 
 def write_summary(markdown: str, started_at: datetime, results_dir: Optional[Path] = None) -> Path:
