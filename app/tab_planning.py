@@ -56,12 +56,14 @@ def _render_unfinished(result: dict, verdict: str) -> None:
         st.info(f"⏳ {started} — still running, now in the {stage} stage.")
         return
     done = ", ".join(result.get("completed_stages") or []) or "none"
+    not_run = ", ".join(run_state.not_run_stages(result)) or "none"
     st.error(
         f"⛔ {started} was **interrupted** during the {stage} stage: the process is gone and "
-        f"it never wrote a summary. Stages finished: {done}. Rows it had not finished keep "
-        "their WIP tick, so check the platform's own scheduler for the stage it died in "
-        "before running again."
+        f"it never wrote a summary. Stages finished: {done}. Never started: {not_run}. Rows it "
+        "had not finished keep their WIP tick, so check the platform's own scheduler for the "
+        "stage it died in before running again."
     )
+    st.code(run_state.resume_command(result), language="text")
 
 
 def _render_last_outcome() -> None:

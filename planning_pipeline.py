@@ -352,6 +352,11 @@ def _result_mode(args: argparse.Namespace) -> str:
     return "config default"
 
 
+def _skipped_stages(args: argparse.Namespace) -> list[str]:
+    """The stages the operator opted out of, so a killed run's record can tell them from stages it never reached."""
+    return [name for name in run_state.STAGES if getattr(args, f"skip_{name.lower()}")]
+
+
 def _record_progress(args: argparse.Namespace, started_at: datetime, stage: str,
                      results: list[PlatformResult]) -> None:
     """Publish the in-flight record before ``stage`` starts.
@@ -362,7 +367,7 @@ def _record_progress(args: argparse.Namespace, started_at: datetime, stage: str,
     assert logger is not None
     record = run_state.running_record(
         mode=_result_mode(args), started_at=started_at, stage=stage,
-        completed=[r.name for r in results],
+        completed=[r.name for r in results], skipped=_skipped_stages(args),
     )
     try:
         run_state.write_result(record, started_at)

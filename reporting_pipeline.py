@@ -26,6 +26,7 @@ force_utf8_stdio()
 from config.dates import parse_day  # noqa: E402
 from config.loader import load_full_config  # noqa: E402
 from config.logger_config import setup_logger  # noqa: E402
+from planning import run_state
 from planning.substack.daily_pipeline import (
     EXIT_CODE_NAMES as SUBSTACK_EXIT_CODE_NAMES,
 )
@@ -99,6 +100,9 @@ class PipelineFailures:
     * ``all_zero_platforms`` — every post a platform's raw scrape holds has 0 likes,
       0 comments and 0 reposts (recorded by ``check_all_zero_posts``); a scraper that
       can no longer read the counts looks exactly like this.
+    * ``interrupted_planning`` — the last weekly planning run was killed before it
+      finished, so the stages after the one it died in never scheduled their posts
+      (recorded by ``check_planning_run``).
     * ``unverified`` — a coverage/drift check could not run at all (no DB
       connection, or it raised) so its posture is genuinely unknown, not
       "clean" (issue #246). Kept separate from the other lists so a full DB
@@ -114,11 +118,13 @@ class PipelineFailures:
         self.policy_drift: list[str] = []
         self.unverified: list[str] = []
         self.all_zero_platforms: list[str] = []
+        self.interrupted_planning: list[str] = []
 
     def any(self) -> bool:
         return bool(self.step_failures or self.missing_endpoints or self.skipped_platforms
                     or self.missing_post_metrics or self.policy_drift
-                    or self.unverified or self.all_zero_platforms)
+                    or self.unverified or self.all_zero_platforms
+                    or self.interrupted_planning)
 
 
 def _load_config() -> dict | None:
@@ -356,6 +362,37 @@ def check_posts_coverage(processing_date: str, failures: "PipelineFailures") -> 
         failures.unverified.append(f"posts_coverage: check raised — {e}")
 
 
+def check_planning_run(failures: "PipelineFailures") -> None:
+    """Record a weekly planning run that was killed before it finished.
+
+    A killed process cannot alert on its own death, and the platforms after the
+    stage it died in stay unscheduled until the next weekly run. The daily run is
+    the next thing that looks, so it reads the planning result record and raises
+    the alert. No record yet is a repo that has never planned; a record that
+    cannot be read is unverified, never a pass. The alert repeats daily until the
+    remainder is re-run or the next weekly run replaces the record.
+    """
+    try:
+        path = run_state.RESULTS_DIR / run_state.LATEST_NAME
+        if not path.exists():
+            return
+        result = json.loads(path.read_text(encoding="utf-8"))
+        if run_state.effective_verdict(result) != "interrupted":
+            return
+        stage = result.get("stage") or "unknown stage"
+        not_run = ", ".join(run_state.not_run_stages(result)) or "none"
+        failures.interrupted_planning.append(
+            f"started {result.get('started_at', '?')}, died in {stage}\n"
+            f"  Not run: {not_run}\n"
+            f"  Check {stage} in the platform's own scheduler first, then re-run the rest: "
+            f"{run_state.resume_command(result)}"
+        )
+        logger.error(f"❌ Planning run interrupted in {stage}; not run: {not_run}")
+    except (OSError, ValueError) as e:
+        logger.error(f"❌ Planning-run check failed: {e}")
+        failures.unverified.append(f"planning_run: check raised — {e}")
+
+
 def check_policy_drift_coverage(failures: "PipelineFailures") -> None:
     """Record any Supabase RLS / policy / view-security drift for the run.
 
@@ -459,6 +496,11 @@ def _build_alert_message(failures: "PipelineFailures", processing_date: str) -> 
         lines.append("")
         lines.append("RLS/policy drift:")
         for entry in failures.policy_drift:
+            lines.append(f"• {entry}")
+    if failures.interrupted_planning:
+        lines.append("")
+        lines.append("Planning run interrupted:")
+        for entry in failures.interrupted_planning:
             lines.append(f"• {entry}")
     if failures.unverified:
         lines.append("")
@@ -590,6 +632,20 @@ def _resolve_processing_date(reference_date) -> str:
         logger.info(f"📅 No date specified. Using current date: {processing_date}")
     return processing_date
 
+def _run_posture_checks(failures: "PipelineFailures") -> None:
+    """Run the checks that are independent of the day's data, so none has a ``--skip-*`` flag.
+
+    A planning run killed mid-stage leaves later platforms unscheduled, and only
+    the daily run is placed to notice. Supabase RLS / policy / view-security drift
+    is checked every run so it surfaces on the project's own clock, not via the
+    weekly advisor email.
+    """
+    logger.info("🗓️ Checking the last planning run")
+    check_planning_run(failures)
+    logger.info("🔒 Step 7: Checking Supabase RLS / policy drift")
+    check_policy_drift_coverage(failures)
+
+
 def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
                 skip_aggregation=False, skip_consolidation=False, skip_notion=False,
                 skip_substack=False, reference_date=None, auto_confirm=False):
@@ -676,11 +732,7 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
     else:
         logger.info("⏭️ Skipping Substack Daily Pipeline step")
 
-    # Posture check: Supabase RLS / policy / view-security drift.
-    # Read-only and independent of the daily data; runs every pipeline so drift
-    # surfaces on the project's own clock, not via the weekly advisor email.
-    logger.info("🔒 Step 7: Checking Supabase RLS / policy drift")
-    check_policy_drift_coverage(failures)
+    _run_posture_checks(failures)
 
     # Notify only on failure: one consolidated alert + a non-zero exit signal.
     if failures.any():
