@@ -13,8 +13,9 @@ from __future__ import annotations
 import unittest
 from unittest.mock import MagicMock, patch
 
-import reporting_pipeline as rp
 from test_posts_coverage_substack_gap import _FakeConnection, _row_missing_only
+
+import reporting_pipeline as rp
 
 THREADS_COLUMNS = {"title_day": "day", "caption_text": "text TH"}
 THREADS_CONFIG = {"editorial_db_id": "db", "editorial_columns": THREADS_COLUMNS}

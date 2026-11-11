@@ -250,7 +250,10 @@ def _substack_had_editorial_content(day_yyyymmdd: str) -> Optional[bool]:
     treating the missing metrics as a real failure rather than silently
     downgrading it on an unverifiable guess.
     """
-    from planning.substack.substack_session import load_notion_token, load_substack_config
+    from planning.substack.substack_session import (
+        load_notion_token,
+        load_substack_config,
+    )
 
     return _editorial_text_queued(
         day_yyyymmdd, load_substack_config, load_notion_token, "notion_columns", "text_body"
