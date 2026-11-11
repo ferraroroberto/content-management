@@ -1,4 +1,4 @@
-"""The record stage: drive an app through scripted beats and film it (issue #361).
+"""The record stage: drive an app through scripted beats and film it.
 
 The harness knows nothing about any app. A **driver** — a throwaway Python
 file in the demo folder, written per demo from

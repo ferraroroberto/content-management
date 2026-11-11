@@ -172,7 +172,7 @@ def get_supabase_data(
 
     Raises on a connection/query failure instead of swallowing it — ``(None,
     None)`` already means "queries ran, no row for this date", a distinct,
-    successful outcome from "the read itself failed" (issue #445). Callers
+    successful outcome from "the read itself failed". Callers
     that want a graceful pipeline-step failure catch around this call.
     """
     # Convert date format
@@ -528,7 +528,7 @@ def main() -> bool:
     a step failure on any of the early bail-outs below (missing token, failed
     client init, no editorial row, no Supabase connection) or a failed page
     update — all of which previously returned silently on a green "completed
-    successfully" log line one level up (issue #246).
+    successfully" log line one level up.
     """
     # Parse command-line arguments
     args = parse_arguments()

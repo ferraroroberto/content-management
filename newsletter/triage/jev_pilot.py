@@ -1,8 +1,8 @@
-"""Jev pilot (#285) — replay stored, reviewed runs through TypeSafe Jev and measure it against the owner.
+"""Jev pilot — replay stored, reviewed runs through TypeSafe Jev and measure it against the owner.
 
     python -m newsletter.triage.jev_pilot --run 17 [--run 16 …] [--repeat]   # replay through the hub
     python -m newsletter.triage.jev_pilot --shadow [--run 17 …]              # stored `both` runs, no Jev calls
-    python -m newsletter.triage.jev_pilot --run 17 --legacy [--capture] [--allow-unreviewed]   # both engines (#392)
+    python -m newsletter.triage.jev_pilot --run 17 --legacy [--capture] [--allow-unreviewed]   # both engines
 
 Read-only on the store: it reads ``triage_runs`` / ``triage_emails`` / ``triage_candidates`` /
 ``triage_decisions`` and never writes, never touches Notion, and is not wired into ``run.py``.
@@ -17,7 +17,7 @@ small advantage for Jev on exactly the links that matter most; noted in the summ
 
 ``--shadow`` reads the shadow file next to each run's stored report, so weekly runs are compared with
 the same measures in either direction: ``<report>.jev-shadow.json`` for a ``both`` run (legacy decided)
-and ``<report>.legacy-shadow.json`` for a ``jev+legacy`` run (Jev decided, #394). Each run reports
+and ``<report>.legacy-shadow.json`` for a ``jev+legacy`` run (Jev decided). Each run reports
 ``decided_by``; on a Jev-decided run the stored answers are Jev's and legacy's come from the shadow file.
 
 Measures (per run and pooled):
@@ -33,7 +33,7 @@ Measures (per run and pooled):
   polled during the replay) and its per-model counters (``--legacy`` adds client timers, below);
 * consistency (``--repeat``) — the same run scored twice, share of topic / fit-band answers that change.
 
-``--legacy`` (#392) re-scores the same items with legacy Stage A too — fresh, the LLM cache bypassed,
+``--legacy`` re-scores the same items with legacy Stage A too — fresh, the LLM cache bypassed,
 same model and workers as ``run.py`` — interleaved with Jev (the first engine alternates per run). It
 adds, per engine: calls, wall clock, ms per link, the concurrency actually reached (most calls open at
 once) and tokens, all from client timers and each response's ``usage`` so both engines are measured the
@@ -110,7 +110,7 @@ def decided_by(run: Dict[str, Any]) -> str:
 
 def _shadow_doc(run: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """The run's shadow file — the engine that did *not* decide: Jev's for a legacy-decided run (``both``),
-    legacy's for a Jev-decided one (``jev+legacy``, #394)."""
+    legacy's for a Jev-decided one (``jev+legacy``)."""
     if not run.get("report_path"):
         return None
     report = Path(run["report_path"])
@@ -126,7 +126,7 @@ def _stored_jev(meta: Dict[str, Any]) -> Dict[str, Any]:
 def stage_a_items(run_id: int, *, require_review: bool = True) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     """A stored run → (run row, Stage A items with legacy answer + owner decision).
 
-    Direction-aware (#394): on a legacy-decided run ``legacy`` is the stored answer; on a Jev-decided run it
+    Direction-aware: on a legacy-decided run ``legacy`` is the stored answer; on a Jev-decided run it
     comes from the legacy shadow file (``not evaluated`` without one) and the stored answer is ``jev_stored``.
     The run row gains ``decided_by`` and ``shadow`` (the shadow file, or None).
     ``require_review=False`` admits a run with no applied review: every owner measure is then empty.
@@ -448,7 +448,7 @@ def replay(run_ids: Sequence[int], *, base_url: str, model: str, workers: int, r
            ) -> Dict[str, Any]:
     """Jev over each stored run. ``legacy`` (``{"model", "workers", "top_k"}``) also re-scores the same items
     with legacy Stage A — fresh, LLM cache bypassed — the two engines interleaved (the first engine alternates
-    per run, so both see the same box load), each with client timing and the responses' token usage (#392).
+    per run, so both see the same box load), each with client timing and the responses' token usage.
     ``legacy["top_k"]`` sets the Stage B depth the way ``run.py`` does: ``max(top_k, links // 12)``."""
     per_run: Dict[str, Any] = {}
     pooled: List[Dict[str, Any]] = []
@@ -517,7 +517,7 @@ def replay(run_ids: Sequence[int], *, base_url: str, model: str, workers: int, r
 
 def shadow(run_ids: Sequence[int]) -> Dict[str, Any]:
     """Stored runs with a shadow pass, either direction: ``both`` (legacy decided, Jev in ``.jev-shadow.json``)
-    and ``jev+legacy`` (Jev decided, legacy in ``.legacy-shadow.json``, #394). No model calls."""
+    and ``jev+legacy`` (Jev decided, legacy in ``.legacy-shadow.json``). No model calls."""
     if not run_ids:
         run_ids = [r["id"] for r in db.list_runs(60) if r.get("reviewed")
                    and ((r.get("stats") or {}).get("jev_shadow") or (r.get("stats") or {}).get("legacy_shadow"))]

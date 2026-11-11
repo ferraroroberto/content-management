@@ -1,4 +1,4 @@
-r"""Manual CLI — react to / remove a reaction from a Substack Note (P2, issue #186).
+r"""Manual CLI — react to / remove a reaction from a Substack Note (P2).
 
 Uses the native HTTP API (cookie auth). NOT part of the daily cron — this repo
 has no existing "like" workflow to slot into, so this is a small standalone

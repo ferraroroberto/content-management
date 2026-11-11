@@ -1,4 +1,4 @@
-"""Demo video tab — the runbook and the deterministic stages (issue #362).
+"""Demo video tab — the runbook and the deterministic stages.
 
 The interactive part of a demo — the message brief, the storyboard, the
 recording and the review loop — is the ``/demo-video`` skill in Claude Code;

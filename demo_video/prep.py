@@ -1,4 +1,4 @@
-"""The prep stage: transcode recordings, measure state timelines, read the music, contact sheets (issue #360)."""
+"""The prep stage: transcode recordings, measure state timelines, read the music, contact sheets."""
 
 from __future__ import annotations
 

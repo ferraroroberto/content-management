@@ -1,4 +1,4 @@
-"""Instagram Reels composer driver (issue #118).
+"""Instagram Reels composer driver.
 
 Meta's day-column ``Schedule ▾`` menu offers a dedicated **Create reel**
 composer for video, entirely separate from the feed-post composer driven by
@@ -16,7 +16,7 @@ hours/minutes/meridiem inputs, set the same way the feed composer's
 ``_set_all_visible_date_time`` does) → footer "Schedule". Selectors verified
 live, 2026-06.
 
-Split out of ``schedule_instagram_posts.py`` (issue #198): the Reels wizard
+Split out of ``schedule_instagram_posts.py``: the Reels wizard
 is a self-contained flow with its own dozen-function lifecycle that shares
 nothing with the feed-post/story driver beyond the page session and a couple
 of low-level helpers (``fill_input``, the module logger) reused from there.
@@ -275,7 +275,7 @@ def wait_reel_composer_closes(page: Page, *, timeout_ms: int = 30000) -> bool:
     Two outcomes count as success, either of which ends the wait:
     (1) the URL leaves /reels_composer/ (Meta navigates back to the planner), or
     (2) the in-place "Reel scheduled" confirmation dialog appears over the
-        composer while the URL stays on /latest/reels_composer/ (issue #125).
+        composer while the URL stays on /latest/reels_composer/.
         A URL-only check times out here and falsely reports failure even though
         the reel IS scheduled; the caller dismisses the dialog via "Done".
     """

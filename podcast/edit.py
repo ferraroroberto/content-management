@@ -1,5 +1,5 @@
 """Stage: per-clip edit decisions — the caption words, their LLM review, the
-jump-cut list and the 1:1 camera plan (issue #335).
+jump-cut list and the 1:1 camera plan.
 
 * **Caption words** come from a whisper pass over the clip's own mixed audio
   (both tracks): where both people talk at once the per-track pass can lose a

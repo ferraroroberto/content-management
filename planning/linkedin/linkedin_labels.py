@@ -1,7 +1,7 @@
 """Locale-aware label registry for the LinkedIn Playwright drivers.
 
 LinkedIn honors a per-account UI language setting that the browser locale flag
-cannot override (see issue #27). When the connected LinkedIn account renders in
+cannot override. When the connected LinkedIn account renders in
 Spanish, every accessible-name regex written in English silently misses, and
 the photo / video / carousel / schedule flows all fall over.
 

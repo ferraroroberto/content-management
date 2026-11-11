@@ -1,13 +1,13 @@
 """Newsletter triage tab — run the engine for a closed Saturday→Saturday week, review the 8+8+8
 suggestions in an editable table, Apply (decisions → sender tiers → watermark), distil lessons.
 
-UI only: every read/write goes through ``newsletter.triage.review`` / ``.db`` / ``.lessons``
-(issue #217). The engine runs as a subprocess in the shared ``"triage"`` process slot so the
+UI only: every read/write goes through ``newsletter.triage.review`` / ``.db`` / ``.lessons``.
+The engine runs as a subprocess in the shared ``"triage"`` process slot so the
 status badge / live log panel / sidebar work exactly like the other pipelines.
 
 Nothing is written before the owner clicks **Apply review**; a stored week is never re-run
 silently — the replace toggle must be on (the engine itself refuses without ``--force``). A stored
-week can be re-scored from its stored links with the chosen Stage A engine (``--rescore``, #395).
+week can be re-scored from its stored links with the chosen Stage A engine (``--rescore``).
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""Write a new episode's ``episode.json`` from the tracks in its folder (issue #349).
+"""Write a new episode's ``episode.json`` from the tracks in its folder.
 
     python -m podcast.init_episode "<episode folder>" [--guest "Full Name"] [--adjective brilliant]
         [--link "LinkedIn=https://..."] [--host-track <file>] [--guest-track <file>] [--force]
@@ -19,7 +19,7 @@ the guest's name), ``host_is_interviewee: false``. What only the owner knows
 comes from flags or is left as a ``TODO`` placeholder, listed at the end.
 An existing ``episode.json`` is never overwritten without ``--force``.
 
-**A trial run** (``--from "<source episode folder>"``, issue #350): the folder
+**A trial run** (``--from "<source episode folder>"``): the folder
 given first becomes a separate trial episode that reads the source's tracks by
 absolute path, so every output (package, review, synced track, scratch) lands
 in the trial folder and an existing package beside the source is never

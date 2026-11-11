@@ -12,7 +12,7 @@ input (``fill_input``) and navigate back to the planner between days
 of inside the scheduler module) means a rename or signature change to any of
 these is a visible public-API change instead of an invisible break of the
 video path, which used to import them as ``_private`` names straight out of
-``schedule_instagram_posts`` (issue #324).
+``schedule_instagram_posts``.
 
 ``open_day_schedule_menu`` pulls in ``navigate_to_week`` and the menu-click
 retry helper as a unit — they have no callers outside this cluster, and

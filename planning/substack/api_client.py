@@ -292,9 +292,9 @@ def _upload_video(session: requests.Session, video_path: Path, duration_seconds:
     """Upload a video through Substack's chunked multipart pipeline and kick off
     the Mux transcode. Returns the ``media_upload_id``.
 
-    Mirrors what the real composer does (issue #189), captured by driving it
+    Mirrors what the real composer does, captured by driving it
     with a network listener attached (the write routes are lazily-imported
-    webpack chunks, invisible to a bundle grep — same lesson as #185):
+    webpack chunks, invisible to a bundle grep):
 
     1. ``POST /video/upload?filetype=&fileSize=&fileName=`` — no body; the
        response hands back a ready-to-use ``media_upload_id`` plus one
@@ -408,7 +408,7 @@ def publish_note(
     3. ``POST /comment/feed`` — ``bodyJson`` + ``attachmentIds``.
 
     With a video, the attachment step is a chunked multipart upload + Mux
-    transcode instead (issue #189) — see :func:`_upload_video`. Pass exactly
+    transcode instead — see :func:`_upload_video`. Pass exactly
     one of ``image_path``/``video_path``; ``video_path`` requires
     ``video_duration_seconds`` (the transcode call needs it up front, before
     Mux has produced anything to derive it from — get it via

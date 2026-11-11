@@ -42,7 +42,7 @@ ENGINE_LABELS = {"jev+legacy": "Jev + Claude Haiku shadow", "jev": "Jev", "legac
 
 
 def engine_label(stats: Optional[Dict[str, Any]]) -> str:
-    """Which Stage A engine scored a stored run, from its ``stats``. ``legacy`` records no engine (the pre-#285
+    """Which Stage A engine scored a stored run, from its ``stats``. ``legacy`` records no engine (the original
     stats shape), so it is read off ``stage_a_scored``; no Stage A at all → ``rule-only``; no stats → ``""``."""
     stats = stats or {}
     engine = stats.get("stage_a_engine")

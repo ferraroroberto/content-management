@@ -9,6 +9,5 @@ Run via the CLI::
 
     & .\\.venv\\Scripts\\python.exe -m config.doc_capture all
 
-See ``config/doc_capture/engine.py`` for the mechanics and issue #110 for the
-design decisions.
+See ``config/doc_capture/engine.py`` for the mechanics and design decisions.
 """

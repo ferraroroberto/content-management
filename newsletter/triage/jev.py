@@ -1,4 +1,4 @@
-"""Stage A through TypeSafe Jev — a typed decision model, reached only via the hub (#285).
+"""Stage A through TypeSafe Jev — a typed decision model, reached only via the hub.
 
 Jev does not generate text: one request carries a ``state`` plus typed questions
 (Choice / Score / Noul) and comes back with an answer, per-option probabilities
@@ -209,7 +209,7 @@ def score_metadata_jev(items: Sequence[Dict[str, str]], criteria: Dict[str, Any]
 
     ``stop`` ends the pass early: items not yet started stay ``not evaluated``.
     ``results`` lets a caller read finished items while the pass is still running.
-    ``calls`` receives one record per hub call, shaped like ``score.score_metadata``'s (#392).
+    ``calls`` receives one record per hub call, shaped like ``score.score_metadata``'s.
     """
     questions = build_questions(criteria)
     out = results if results is not None else [JevMetaScore(error=NOT_EVALUATED) for _ in items]
@@ -279,7 +279,7 @@ def shadow_path(report: Path) -> Path:
 
 
 def legacy_shadow_path(report: Path) -> Path:
-    """``jev+legacy`` (#394): ``triage-<start>_<end>.md`` → ``triage-<start>_<end>.legacy-shadow.json``."""
+    """``jev+legacy``: ``triage-<start>_<end>.md`` → ``triage-<start>_<end>.legacy-shadow.json``."""
     return report.with_suffix(".legacy-shadow.json")
 
 

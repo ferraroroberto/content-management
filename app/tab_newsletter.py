@@ -2,16 +2,16 @@
 plus the optional Substack draft step.
 
 Each step is an independent, non-interactive subcommand of
-``newsletter_pipeline.py`` (issue #59). All buttons share the single
+``newsletter_pipeline.py``. All buttons share the single
 ``"newsletter"`` process slot, so the status badge / log panel / sidebar
 status work unchanged. The must-read picker reads the topics sidecar that
 ``build`` writes, so it never blocks on stdin.
 
-⑤ Substack draft (issue #184) is deliberately outside the ▶ combo — it writes
+⑤ Substack draft is deliberately outside the ▶ combo — it writes
 to an external platform, so it stays an explicit, separately-clicked action. It
 creates a **private** draft and never publishes.
 
-⓪ Schedule editions (issue #230) sits before ① because ② Archive can only file
+⓪ Schedule editions sits before ① because ② Archive can only file
 an article against a *future* newsletter row: with the buffer drained it aborts
 outright. The block reads the buffer state for its caption through a cached
 helper so a Streamlit rerun doesn't hit the Notion API on every keystroke.

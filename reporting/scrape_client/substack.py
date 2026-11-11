@@ -13,7 +13,7 @@ Note workflow the scrape (pipeline step 1) runs *before* the day's Note is
 published (step 6), so at scrape time the top entry is *yesterday's* real daily
 Note — exactly the row the posts consolidator needs (it matches
 ``posted_at = date - 1 day``). Dropping it left every ``*_substack_no_video``
-column NULL → blank Notion fields (issue #84).
+column NULL → blank Notion fields.
 
 A genuine newsletter-announcement / restack note embeds a ``/p/`` newsletter
 post as a preview card (an ``<a href*='/p/'>`` inside the note container);
@@ -149,7 +149,7 @@ def _scrape_note_permalink(page, handle: str, code: str) -> Optional[dict]:
     grabbed whichever note happened to render first (constant across
     permalinks → identical, wrong counts for every note), and the old
     ``<time datetime>`` element is gone entirely (→ ``posted_at`` was always
-    ``None``, which dropped every record downstream — issue #77).
+    ``None``, which dropped every record downstream).
 
     We pin the subject note via its own timestamp anchor
     (``<a title="May 30, 2026, 6:03 AM" href="…/note/<code>">``), walk up to

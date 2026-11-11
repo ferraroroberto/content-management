@@ -62,12 +62,11 @@ def _click_video_button(page: Page) -> None:
 
     Mirrors ``_click_add_photo`` from the photo flow but targets the
     ``Video`` affordance — a ``<p>Video</p>`` label inside the redesigned,
-    role-less ``<a>`` share-box wrapper, matched by visible text (issue #140;
-    matching by accessible name caught a feed "Play video" button instead).
+    role-less ``<a>`` share-box wrapper, matched by visible text (matching by accessible name caught a feed "Play video" button instead).
 
     ``click_feed_entry`` re-resolves on each attempt, so it absorbs both the
     cold-start race on the first feed action of a freshly-navigated session
-    (issue #27) and the share-box rehydration swap; a warm affordance still
+    and the share-box rehydration swap; a warm affordance still
     returns on the first attempt in ~1 s.
 
     Also mirrors ``_click_add_photo``'s ``expect_file_chooser`` guard: this
@@ -79,11 +78,11 @@ def _click_video_button(page: Page) -> None:
     here is non-fatal — it just means this click didn't trigger a native
     chooser this time.
 
-    ``expect_selector`` is the #150 inert-click guard the Photo click already
+    ``expect_selector`` is the inert-click guard the Photo click already
     had. Since 2026-09 the Video click mounts its file input straight away,
     like Photo, so the input's arrival is the proof the editor opened. Without
     the guard a swallowed click "succeeded" and ``_upload_video`` then waited
-    45 s for an input that was never coming (issue #271).
+    45 s for an input that was never coming.
     """
     try:
         with page.expect_file_chooser(timeout=FEED_ENTRY_CLICK_TIMEOUT_MS + FEED_ENTRY_EFFECT_TIMEOUT_MS):
@@ -100,7 +99,7 @@ def _upload_video(page: Page, video_path: Path) -> None:
     button opened an Editor dialog showing "Select files to begin" with an
     "Upload from computer" button, and the file chooser only opened when that
     button was clicked. Since 2026-09 it mounts ``input[accept="video/*"]``
-    straight away, like Photo (issue #271). The strategy below covers both:
+    straight away, like Photo. The strategy below covers both:
       1. Fast path: if any ``input[type=file]`` is already attached in the
          DOM, just push the file at it (catches future LinkedIn rebuilds).
       2. Otherwise: click the dialog's "Upload from computer" button and

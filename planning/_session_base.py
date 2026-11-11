@@ -252,7 +252,7 @@ class PlatformSession:
 
         ``goto_with_login_check`` calls this right after ``domcontentloaded``,
         but some login redirects are client-side and land later (LinkedIn's
-        ``/authwall``, issue #310) — callers re-check on their failure paths so
+        ``/authwall``) — callers re-check on their failure paths so
         an expired session is reported as one, not as a parse error.
         """
         current = (self.page.url or "").lower()

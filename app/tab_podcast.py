@@ -1,8 +1,8 @@
-"""Podcast tab — run the episode pipeline, review its clips and outputs (issue #333).
+"""Podcast tab — run the episode pipeline, review its clips and outputs.
 
 Everything shown is read from the episode's local ``podcast package`` folder;
 nothing here posts, schedules or writes to Notion. The owner's per-clip review
-(approve / drop / request changes, issue #339) is written to the episode's
+(approve / drop / request changes) is written to the episode's
 ``review.json``; the ``revise`` stage applies the feedback.
 """
 

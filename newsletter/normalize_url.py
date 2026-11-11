@@ -9,7 +9,7 @@ Optionally also pings each cleaned URL (HEAD then GET fallback) to confirm
 the page still resolves.
 
 Originally from ``E:\\automation\\automation\\notion\\normalize_url.py``;
-migrated into the newsletter package as part of issue #18. Config now comes
+migrated into the newsletter package. Config now comes
 from ``config/config.json`` (Notion token, articles DB id, and
 ``newsletter_archive.url_preserve_domains``).
 

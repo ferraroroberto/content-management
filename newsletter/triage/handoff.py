@@ -1,4 +1,4 @@
-"""Hand-off after a review — the two writes the triage never does on its own (issue #212).
+"""Hand-off after a review — the two writes the triage never does on its own.
 
     python -m newsletter.triage.handoff --run 6 --open              # ticked URLs → tabs in the :9222 Chrome
     python -m newsletter.triage.handoff --run 6 --mark-reviewed     # "until … > included" comment on the Notion task page

@@ -1,4 +1,4 @@
-"""Top up the buffer of future newsletter editions in Notion (issue #230).
+"""Top up the buffer of future newsletter editions in Notion.
 
 ``newsletter/pipeline.py``'s archive step targets the first *future* edition
 row that still has room for the article's topic (``notion_io.pick_newsletter``,

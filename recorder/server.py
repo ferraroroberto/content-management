@@ -18,13 +18,13 @@ Routes (``{token}`` is a link token, ``{rid}`` a recording id the page makes):
   ``<episode>/video editing/``, reply with the file name and duration
 * ``GET  /api/{token}/ice`` — the STUN/TURN servers for the call
 * ``WS   /ws/{token}`` — signalling: the page's offers, answers and ICE
-  candidates are relayed to the other side (#342)
+  candidates are relayed to the other side
 * ``POST /api/usage/events``, ``GET /api/usage/summary`` and ``/time`` — the usage
   log, matched before the token routes (``src/usage_log_starlette.py``)
 
 ``kind`` is ``main`` (this side's camera and mic) or ``ref`` (the other side's
 voice as received over the call, low quality: the reference the sync stage
-aligns the two full-quality tracks against, #343).
+aligns the two full-quality tracks against).
 
 The call is peer to peer: the server only relays signalling. One socket per
 side; a side that reconnects replaces its stale socket. Each page load names

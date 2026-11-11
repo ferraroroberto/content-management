@@ -17,7 +17,7 @@ short caption that feeds IG/TW/TH).
 
 * ``"playwright"`` (default) — drives the real-Chrome Note composer.
 * ``"native"`` — chunked multipart upload to Substack's HTTP API + Mux
-  transcode, no browser at request time (issue #189). The video's duration
+  transcode, no browser at request time. The video's duration
   is probed via ffprobe (``planning.videos.videos_session.probe_duration_seconds``)
   before the upload, since the transcode call needs it up front.
 
@@ -179,7 +179,7 @@ def _wait_for_post_enabled(page) -> None:
 
     The Post button stays ``disabled`` until the clip finishes uploading
     server-side; for a large video that runs well past the click's own retry
-    window, so wait for it to enable before clicking (issue #106).
+    window, so wait for it to enable before clicking.
     """
     page.wait_for_function(
         """() => {

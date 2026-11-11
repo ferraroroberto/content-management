@@ -18,16 +18,16 @@ stage-A metadata scoring (batched LLM) → fetch + stage-B content scoring for
 the top-K → vetoes (never-tier, paywalled, promo) → caps → shortlist →
 ``results/newsletter/triage/triage-<start>_<end>.md``.
 
-Stage A engine (``newsletter_triage.stage_a_engine`` / ``--stage-a-engine``, #285):
+Stage A engine (``newsletter_triage.stage_a_engine`` / ``--stage-a-engine``):
 ``legacy`` (default) scores with the hub model alias; ``jev`` scores with TypeSafe
 Jev through the hub's ``/v1/systemone``; ``both`` lets legacy decide every verdict
 while Jev scores the same links in the background (bounded by ``jev_budget_s``) and
 its answers are written beside the report as ``<report>.jev-shadow.json``.
-``jev+legacy`` (#394, the recommended setting) is the mirror: Jev decides every verdict
+``jev+legacy`` (the recommended setting) is the mirror: Jev decides every verdict
 while legacy scores the same links in the background through stage B (bounded by
 ``legacy_budget_s``), its answers written as ``<report>.legacy-shadow.json``.
 
-Re-score (``--rescore RUN_ID``, #395): replace a stored live run's scoring without
+Re-score (``--rescore RUN_ID``): replace a stored live run's scoring without
 touching Gmail — Stage A inputs are rebuilt from the run's stored emails + candidates
 (anchor = the stored display title, as ``jev_pilot`` replays them), sender/domain
 priors are re-read, and the run is replaced like ``--force``. The owner's decisions,
@@ -35,7 +35,7 @@ review and lessons are keyed by window, so they survive. The inputs are snapshot
 ``results/newsletter/triage/inputs/`` first, so a re-score that fails after replacing
 the run can be retried from the snapshot.
 
-LLM cache (#398): answers are keyed by the model version the hub serves for the alias
+LLM cache: answers are keyed by the model version the hub serves for the alias
 (``claude_haiku`` → ``claude-haiku-5-5``), so a repointed alias never replays the old
 model's answers; ``--fresh`` (with ``--rescore``) bypasses the cache entirely, both stages,
 and still stores the new answers.
@@ -215,7 +215,7 @@ def build_candidates(records: Sequence[gm.EmailRecord], priors: sc.Priors, notio
                      notion_titles: Dict[str, str],
                      picked_before: Optional[Dict[str, str]] = None) -> Tuple[List[rk.Candidate], Dict[str, List[rk.Candidate]]]:
     """``picked_before`` = ``db.picked_before(start)``: articles ticked in an earlier window are duplicates even
-    before the archive step puts them in Notion (#228 — HBR re-links the same piece from a later digest)."""
+    before the archive step puts them in Notion (HBR re-links the same piece from a later digest)."""
     picked_before = picked_before or {}
     cands: List[rk.Candidate] = []
     by_email: Dict[str, List[rk.Candidate]] = defaultdict(list)
@@ -330,7 +330,7 @@ def run_window(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[st
     """One window → report + stored run. Refuses to replace a stored (window, kind) unless ``force``
     (:class:`RunExists`). Store failures after registration mark the run ``failed`` and re-raise.
     ``inputs`` (:func:`stored_inputs`) replaces the e-mail read — the re-score path. ``fresh`` makes the
-    LLM cache answer nothing, so both stages call the model (#398)."""
+    LLM cache answer nothing, so both stages call the model."""
     kind = "backtest" if backtest is not None else "live"
     run_id: Optional[int] = None
     if store_ok():
@@ -772,7 +772,7 @@ def rescore(run_id: int, *, cfg: Dict[str, Any], criteria: Dict[str, Any], use_l
             limit_links: Optional[int] = None, fresh: bool = False) -> Tuple[Path, rk.Selection, Dict[str, Any]]:
     """Replace a stored live run's scoring from its stored inputs — no Gmail. Decisions, review and lessons
     are keyed by window and survive; the run gets a new id (``stats.rescored_from`` = the old one).
-    ``fresh`` bypasses the LLM cache (#398)."""
+    ``fresh`` bypasses the LLM cache."""
     run = db.get_run(run_id) if store_ok() else None
     if not run:
         raise NoStoredInputs(f"run {run_id} not found in the triage store")

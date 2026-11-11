@@ -264,14 +264,13 @@ def _maybe_untick_wip(notion, video_cols: dict, state: _RowState, dry_run: bool,
     re-run later. FAIL / LOGIN-REQUIRED also block the untick.
 
     Tag-along platforms (no ``post_url_<P>`` column on the editorial DB —
-    currently TH) carry their idempotency marker off-column in the ledger
-    (issue #239). The ledger is consulted rather than the SKIP *reason*, so a
+    currently TH) carry their idempotency marker off-column in the ledger. The ledger is consulted rather than the SKIP *reason*, so a
     recovery run passing ``--skip-th`` to avoid re-posting still unticks when
     a prior run genuinely scheduled TH — and still keeps WIP-Vd checked when
     it did not.
 
     Returns ``(action, reason)`` so the end-of-run summary can name the
-    WIP-Vd outcome per row (issue #37 AC). Actions:
+    WIP-Vd outcome per row. Actions:
       * "unticked"      — checkbox cleared in Notion this run
       * "kept-checked"  — gate blocked the untick (reason names the gate)
       * "untick-failed" — gate passed but Notion write raised

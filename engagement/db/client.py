@@ -84,7 +84,7 @@ class SchemaDriftError(RuntimeError):
 
     Raised by :func:`verify_schema` *before* any expensive work, so a database
     that is behind ``schema.sql`` costs a second and a clear message rather
-    than a full scrape that dies on its final upsert (issue #262).
+    than a full scrape that dies on its final upsert.
     """
 
 

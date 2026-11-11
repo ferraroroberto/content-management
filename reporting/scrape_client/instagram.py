@@ -239,7 +239,7 @@ def _scrape_permalink(page, permalink: str, *, timeout_ms: int = 8000) -> tuple[
     retries the permalink once if the date still doesn't show up in time —
     tiles are visited newest-first, so the *first* permalink (the one the
     posts-coverage check depends on) is the coldest navigation in the loop
-    and the most likely to lose that race (#260). Every ``posted_at is
+    and the most likely to lose that race. Every ``posted_at is
     None`` outcome is logged at WARNING with the permalink and the reason —
     a failed read must never be indistinguishable from a genuinely dateless
     post.

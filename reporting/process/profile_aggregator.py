@@ -89,7 +89,7 @@ def main(args=None) -> bool:
     """Main function for running the profile aggregator.
 
     Returns ``True``/``False`` so ``reporting_pipeline.run_module`` can record
-    a step failure on a logged-but-not-raised failure (issue #246).
+    a step failure on a logged-but-not-raised failure.
     """
     if args is None:
         # Use command-line arguments if available, otherwise parse them

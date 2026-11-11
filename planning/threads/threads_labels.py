@@ -9,7 +9,7 @@ are centralized here as compiled regexes rather than scattered inline through
 ``schedule_threads_posts``.
 
 This mirrors ``planning/linkedin/linkedin_labels.py``: the self-healing
-scheduler (issue #64) can scan and patch one small module instead of hunting an
+scheduler can scan and patch one small module instead of hunting an
 accessible-name string buried in scheduling logic. When Threads ships a new
 label variant, add it to the alternation here — do NOT re-inline a
 ``re.compile`` at the call site.

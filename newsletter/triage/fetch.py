@@ -100,7 +100,7 @@ _YT_ID_PATH = re.compile(r"^/(?:shorts|embed|live|v)/([A-Za-z0-9_-]{6,})")
 def youtube_watch_url(url: str) -> Optional[str]:
     """Canonical ``https://www.youtube.com/watch?v=<id>`` for any video link (``watch/?v=``, ``youtu.be/<id>``,
     ``/shorts/<id>``, ``/embed/<id>``, ``/live/<id>``); None when there is no video id (playlists, channels).
-    The oembed endpoint answers 404 for the ``youtube.com/watch/?v=`` form some newsletters emit (#224)."""
+    The oembed endpoint answers 404 for the ``youtube.com/watch/?v=`` form some newsletters emit."""
     parts = urlsplit(url or "")
     host = parts.netloc.lower()
     host = host[4:] if host.startswith("www.") else host

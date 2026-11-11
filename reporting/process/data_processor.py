@@ -573,7 +573,7 @@ def main(args: Optional[argparse.Namespace] = None) -> bool:
     a step failure when this degrades gracefully instead of raising — a
     missing mapping config, no data to process, or a failed Supabase upload
     all previously returned silently on a green "completed successfully" log
-    line one level up (issue #246).
+    line one level up.
     """
     if args is None:
         # Use command-line arguments if available, otherwise parse them

@@ -3,7 +3,7 @@
 Ensures a Chrome bound to ``newsletter/chrome_user_data`` is listening on the
 CDP debug port :9222 — **without ever touching the everyday browser**. This
 replaces the old ``bootstrap_chrome.bat`` that did ``taskkill /IM chrome.exe``
-(kill *every* Chrome). Supersedes the stop-gap from issue #57; see issue #59.
+(kill *every* Chrome).
 
 Behaviour (idempotent):
 

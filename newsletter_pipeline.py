@@ -1,4 +1,4 @@
-"""Newsletter pipeline orchestrator (issues #18, #59).
+"""Newsletter pipeline orchestrator.
 
 The weekly newsletter workflow, split into independent, non-interactive steps
 so each can run on its own and stream cleanly to the Streamlit app. The same

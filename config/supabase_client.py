@@ -3,7 +3,7 @@
 The triage store (``newsletter.triage.db``) and the engagement pipeline
 (``engagement.db.client``) each hand-rolled this loop and had already diverged:
 one treated "table missing" as a working key and never warned on the anon
-fallback, the other fell through on any error and did warn (issue #51). Both now
+fallback, the other fell through on any error and did warn. Both now
 call :func:`build_supabase_client`, so the priority order, the probe and the
 anon-fallback warning live in exactly one place.
 """
@@ -32,7 +32,7 @@ def build_supabase_client(
     ``probe_table``. A probe that raises moves on to the next key, unless
     ``key_ok_despite_error(err)`` is true — the triage store uses that to accept
     a key that answers "table not found" (the schema is simply not applied yet).
-    Falling back to ``anon_key`` logs a warning (issue #51). Raises
+    Falling back to ``anon_key`` logs a warning. Raises
     ``RuntimeError`` when ``supabase.url`` is missing or no key works.
     """
     from supabase import (

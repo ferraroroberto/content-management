@@ -82,7 +82,7 @@ class ClipPayload:
     already terminated with a slash) and ``filePC`` (bare filename without
     extension): video = ``<clipPC><filePC>.mp4``. When ``filePC`` carries
     characters Windows can't store, the Windows-safe form of the name is
-    used instead (issue #317).
+    used instead.
 
     ``caption_short`` is the clip page's ``Text`` property — used by IG,
     TW, TH, and SB.
@@ -255,7 +255,7 @@ def ensure_local_file(path: Path, *, timeout_s: float = 600.0, poll_s: float = 1
     the platform read bytes that aren't on disk yet: the on-demand recall can
     stall past the uploader's timeout, or fail outright when OneDrive is paused
     / offline, so the post gets scheduled with no real media even though the run
-    reports success (issue #104).
+    reports success.
 
     This triggers OneDrive's download, then polls the placeholder attributes
     until they clear. Raises ``RuntimeError`` if the file is still a placeholder
@@ -371,7 +371,7 @@ def _probe_video(path: Path) -> Optional[dict]:
 def probe_duration_seconds(path: Path) -> float:
     """Return a clip's duration in seconds via ffprobe.
 
-    Needed by the native Substack video-Note path (issue #189): the
+    Needed by the native Substack video-Note path: the
     ``/video/upload/{id}/transcode`` call requires the source duration
     up front, before Mux has transcoded anything to derive it from.
     """
@@ -442,7 +442,7 @@ def ensure_platform_safe_clip(video_path: Path, tcfg: Optional[dict] = None) -> 
     """Return a platform-safe derivative of ``video_path``, or the master unchanged.
 
     Transcode triggers on a size/bitrate threshold or a non-audio/video stream
-    (issue #107 — X rejects heavy/subtitled clips). The derivative is cached in
+    (X rejects heavy/subtitled clips). The derivative is cached in
     the system temp dir keyed by source mtime+size and reused across re-runs.
     Degrades to the master (logged) when transcode is disabled, ffmpeg/ffprobe
     are unavailable, the clip is already safe, or ffmpeg fails — never raises,
@@ -526,8 +526,7 @@ def load_clip_payload(notion, editorial_row: dict, video_cols: dict, clip_cols: 
     Raises ``RuntimeError`` if no clip relation is set, if the resolved
     clip page is missing ``clipPC`` / ``filePC``, if the assembled .mp4
     file does not exist on disk, or if it is an online-only OneDrive
-    placeholder that cannot be hydrated within the budget (issue #104 —
-    every platform driver consumes this one ``video_path``, so hydration
+    placeholder that cannot be hydrated within the budget (every platform driver consumes this one ``video_path``, so hydration
     happens here). The LI long caption (page body) is read here; the
     orchestrator will fail the LI status if it's empty (strict per user
     spec — no fallback to the short ``Text`` caption).

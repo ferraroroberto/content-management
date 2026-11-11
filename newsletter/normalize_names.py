@@ -11,7 +11,7 @@ each title into sentence case while preserving:
 - spaCy-detected PERSON entities (optional, on by default)
 
 Originally from ``E:\\automation\\automation\\notion\\normalize_names.py``;
-migrated into the newsletter package as part of issue #18. Config now comes
+migrated into the newsletter package. Config now comes
 from this project's ``config/config.json`` (Notion token + articles DB id)
 plus a sidecar ``normalize_names_words.json`` for the proper-name whitelist
 and word lists.

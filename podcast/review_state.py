@@ -1,4 +1,4 @@
-"""The owner's per-clip review (issue #339): approved, dropped, or changes
+"""The owner's per-clip review: approved, dropped, or changes
 requested with free-text feedback, one round per request.
 
 Kept in ``<episode folder>/review.json`` beside ``episode.json``, so it

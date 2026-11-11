@@ -1,6 +1,6 @@
-"""Stage: align the two recorder tracks before anything reads them (issue #343).
+"""Stage: align the two recorder tracks before anything reads them.
 
-Each side of a recorder session (#341, #342) records on its own computer and
+Each side of a recorder session records on its own computer and
 its own clock, so the two full-quality tracks start at different moments and
 drift apart by the clocks' difference. The pipeline assumes they are aligned
 (``transcribe``, ``edit`` and ``render`` cut both at the same episode times),

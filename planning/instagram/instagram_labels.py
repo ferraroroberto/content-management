@@ -5,12 +5,12 @@ The Meta Business planner mixes a few stable structural hooks (data-surface,
 must match by name: the "Get Meta Verified" upsell dismissals, the week/month
 calendar chevrons, the "Set date and time" toggle, the discard prompt, and the
 "Add photo/video" → "Upload from computer" media path (which Meta ships in both
-English and Spanish, see issues #28 / #60). Those labels are exactly what shifts
+English and Spanish). Those labels are exactly what shifts
 when Meta relabels a control or flips an account's locale, so they are
 centralized here rather than scattered inline through ``schedule_instagram_posts``.
 
 This mirrors ``planning/linkedin/linkedin_labels.py``: the self-healing
-scheduler (issue #64) can scan and patch one small module instead of hunting an
+scheduler can scan and patch one small module instead of hunting an
 accessible-name string buried in scheduling logic. When Meta ships a new label
 or locale variant, extend the alternation here — do NOT re-inline a
 ``re.compile`` or ``:has-text`` selector at the call site.

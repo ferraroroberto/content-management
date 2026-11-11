@@ -56,8 +56,7 @@ def _primary_button_enabled(page) -> Optional[bool]:
     inline composer (``tweetButtonInline``, outside any dialog) is always present
     and permanently disabled because it's empty. An unscoped ``.last`` selector
     picks *that* button and so never sees the real, enabled Schedule button —
-    the actual root cause of the "X never schedules the video" hang (issue #107,
-    correcting #106). Confirmed live: the in-dialog ``tweetButton`` enables ~8 s
+    the actual root cause of the "X never schedules the video" hang. Confirmed live: the in-dialog ``tweetButton`` enables ~8 s
     after the upload's STATUS=succeeded while the inline one stays disabled.
     """
     loc = page.locator(
@@ -82,7 +81,7 @@ def _video_upload_in_progress(page) -> bool:
     clip is still uploading/processing, not an empty composer. (We deliberately
     do NOT key off ``[role="progressbar"]`` — the composer's video *player* mounts
     its own scrubber/volume progressbars once the preview renders, so that signal
-    is a false positive that never clears; confirmed live in issue #107.)
+    is a false positive that never clears; confirmed live.)
     """
     return _primary_button_enabled(page) is False
 
@@ -93,8 +92,7 @@ def _wait_for_video_upload_ready(page, timeout_ms: int) -> None:
     ``upload_image`` only waits for the preview thumbnail to render — X keeps
     uploading the full clip in the background. Opening the schedule modal and
     confirming *during* that window stalls finalization: the final Schedule
-    button then never enables, even for a small, platform-safe clip (issue #107,
-    on top of #106). So we wait for the upload to settle here, before touching
+    button then never enables, even for a small, platform-safe clip. So we wait for the upload to settle here, before touching
     the schedule flow — mirroring LinkedIn's ``_wait_for_video_ready`` and the
     IG upload settle. Raises ``RuntimeError`` if it never settles.
     """
@@ -138,8 +136,7 @@ def _wait_tweet_button_enabled(page, timeout_ms: int) -> None:
     has already settled (see ``_wait_for_video_upload_ready``), so this normally
     returns immediately. ``click_final_schedule_action`` uses a JS-click
     fallback that *bypasses* the disabled state, so clicking while still disabled
-    is a silent no-op — the schedule never submits and the composer never clears
-    (issue #106). Raises ``RuntimeError`` if it never enables.
+    is a silent no-op — the schedule never submits and the composer never clears. Raises ``RuntimeError`` if it never enables.
     """
     deadline = page.evaluate("() => Date.now()") + timeout_ms
     last = None

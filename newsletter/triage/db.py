@@ -257,7 +257,7 @@ def load_decisions(start: Any, end: Any) -> List[Dict[str, Any]]:
 
 def picked_before(start: Any) -> Dict[str, str]:
     """``{canonical: "window_start → window_end"}`` of every article the owner picked in a window that closed
-    on or before ``start`` — the cross-window dedupe set (#228). Overlapping windows (backtests) and the
+    on or before ``start`` — the cross-window dedupe set. Overlapping windows (backtests) and the
     run's own window are excluded by construction (``window_end <= start``)."""
     rows = _fetch_all("triage_decisions", "canonical,window_start,window_end", filters={"pick": True},
                       lte=("window_end", _d(start)), order=("window_end", False))
@@ -350,7 +350,7 @@ def lessons(*, accepted: Optional[bool] = None, start: Any = None, end: Any = No
 
 
 def update_lesson(lesson_id: int, *, text: Optional[str] = None, accepted: Optional[bool] = None) -> None:
-    """Edit one lesson in place — the owner's wording and/or the accept flag (#231). ``accepted_at`` is set
+    """Edit one lesson in place — the owner's wording and/or the accept flag. ``accepted_at`` is set
     when the flag turns on and cleared when it turns off; unchanged when only the text changes."""
     patch: Dict[str, Any] = {}
     if text is not None:

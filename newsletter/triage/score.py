@@ -44,7 +44,7 @@ class LLMCache(JsonFileCache):
     """JSON cache for both stages, keyed by a hash of (model, prompt inputs).
 
     Makes re-runs and backtest iterations free for unchanged items. The model in the key is the *served*
-    version once ``use_version`` has recorded it (#398): an alias like ``claude_haiku`` is repointed by the hub
+    version once ``use_version`` has recorded it: an alias like ``claude_haiku`` is repointed by the hub
     when a newer model ships, and answers from the old one must not be replayed for the new. ``fresh`` makes
     every ``get`` a miss (a re-score that must call the model) while ``put`` still stores the new answers.
     """
@@ -273,9 +273,9 @@ def score_metadata(items: Sequence[Dict[str, str]], criteria: Dict[str, Any], *,
     CLI start for the Claude aliases) dominates, not generation. Cached items
     are not re-sent. ``calls``, when given, receives one record per hub call
     (links, monotonic start/end, ok, the response's token usage) for the
-    engine comparison in ``jev_pilot --legacy`` (#392). ``stop`` ends the pass early (batches not yet
+    engine comparison in ``jev_pilot --legacy``. ``stop`` ends the pass early (batches not yet
     started stay unscored) and ``results`` lets a caller read finished items while it runs — the
-    ``jev+legacy`` shadow (#394), like ``jev.score_metadata_jev``.
+    ``jev+legacy`` shadow, like ``jev.score_metadata_jev``.
     """
     brief = _criteria_brief(criteria)
     out: List[MetaScore] = results if results is not None else [MetaScore() for _ in items]
@@ -381,7 +381,7 @@ class ShadowPass:
 
 
 class LegacyShadow(ShadowPass):
-    """``jev+legacy`` mode (#394): legacy scores the same Stage A items in the background while Jev decides."""
+    """``jev+legacy`` mode: legacy scores the same Stage A items in the background while Jev decides."""
 
     def __init__(self, items: Sequence[Dict[str, str]], criteria: Dict[str, Any], *, base_url: str, model: str,
                  workers: int = 4, cache: Optional["LLMCache"] = None,

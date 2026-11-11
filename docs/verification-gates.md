@@ -57,8 +57,8 @@ The wrapper reports a file it could not scan as **NOT CONFIRMED**.
 After rewording a reference away, shrink the baseline in the same PR with
 `scripts/comment_ratchet.py --update-baseline`. `history_phrases = true` also counts
 the curated history phrases (`used to be`, `formerly`, `had drifted`, ...) in comments
-and docstrings; `docstrings` stays off because about 200 `#NNN` references in docstrings
-are still to be reworded. `src/gmail_readonly/` and
+and docstrings; `docstrings = true` also counts `#NNN` references inside module, class and
+function docstrings (baseline keys end `::docstring`). `src/gmail_readonly/` and
 `src/google_oauth_common/` are excluded: they are vendored copies. See the
 scaffold's `docs/comment-ratchet.md` for the exit codes and keys.
 

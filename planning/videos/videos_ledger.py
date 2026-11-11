@@ -1,10 +1,10 @@
-"""Off-column idempotency marker for tag-along video platforms (issue #239).
+"""Off-column idempotency marker for tag-along video platforms.
 
 Every platform in ``PLATFORMS_SCHEDULED`` except Threads gets its idempotency
 for free: the orchestrator writes a sentinel into ``link <P>(v)`` after a LIVE
 run, and ``_rows_for_platform`` skips any platform whose link is populated.
 Threads is a *tag-along* — it deliberately has no ``clip TH(v)`` and no
-``link TH(v)`` column on the editorial DB (issue #29) — so there is nowhere to
+``link TH(v)`` column on the editorial DB — so there is nowhere to
 write that sentinel and TH re-runs on every invocation.
 
 That costs nothing on a clean run: all four platforms succeed, WIP-Vd is
