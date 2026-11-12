@@ -45,7 +45,17 @@ from planning._scheduler_main import (  # noqa: E402
     resolve_scope,
     untick_wip,
 )
-from planning._session_base import results_dir  # noqa: E402
+from planning._session_base import (
+    CLICK_SETTLE_MS,
+    COMPOSER_SETTLE_MS,
+    DIALOG_MOUNT_MS,
+    FILL_COMMIT_MS,
+    MENU_ITEM_MS,
+    PLANNER_MOUNT_MS,
+    POLL_FAST_MS,
+    SHEET_OPEN_MS,
+    results_dir,
+)  # noqa: E402
 from planning._wip_rows import (  # noqa: E402
     IgRow,
     fetch_wip_ig_rows,
@@ -195,22 +205,22 @@ def _ensure_set_date_toggle_on(page: Page) -> None:
     # Try clicking the checkbox directly (Meta wires the change handler on it).
     try:
         cb.click(force=True, timeout=4000)
-        page.wait_for_timeout(800)
+        page.wait_for_timeout(DIALOG_MOUNT_MS)
         if (cb.input_value(timeout=1000) or "").lower() == "true":
-            page.wait_for_timeout(800)
+            page.wait_for_timeout(DIALOG_MOUNT_MS)
             return
     except Exception:
         pass
     # Fallback: click the visible label text.
     try:
         page.get_by_text(SET_DATE_TIME_TEXT_RE).first.click(timeout=4000)
-        page.wait_for_timeout(1200)
+        page.wait_for_timeout(SHEET_OPEN_MS)
     except Exception:
         pass
     # Final scroll so the (now-mounted) date/time row is in viewport.
     try:
         page.get_by_text(SCHEDULE_TEXT_RE).last.scroll_into_view_if_needed(timeout=2000)
-        page.wait_for_timeout(400)
+        page.wait_for_timeout(FILL_COMMIT_MS)
     except Exception:
         pass
 
@@ -270,7 +280,7 @@ def _wait_composer_closes(page: Page, planner_url: str, *, timeout_ms: int = 250
         url = (page.url or "").lower()
         if "/composer" not in url and "/composer/?" not in url:
             return True
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(CLICK_SETTLE_MS)
     return False
 
 
@@ -297,7 +307,7 @@ def _dismiss_initial_schedule_submodal(page: Page) -> None:
         if title_loc.count():
             appeared = True
             break
-        page.wait_for_timeout(200)
+        page.wait_for_timeout(POLL_FAST_MS)
 
     if not appeared:
         logger.debug("No initial schedule sub-modal appeared — proceeding.")
@@ -340,14 +350,14 @@ def _dismiss_initial_schedule_submodal(page: Page) -> None:
             page.keyboard.press("Escape")
         except Exception:
             pass
-    page.wait_for_timeout(700)
+    page.wait_for_timeout(MENU_ITEM_MS)
 
     # Confirm the sub-modal really went away.
     for _ in range(15):
         if title_loc.count() == 0:
             logger.debug("✅ Schedule sub-modal dismissed.")
             return
-        page.wait_for_timeout(200)
+        page.wait_for_timeout(POLL_FAST_MS)
     logger.warning("⚠️ Schedule sub-modal still present after dismissal attempt.")
 
 
@@ -371,7 +381,7 @@ def _set_all_visible_date_time(
     """
     try:
         page.get_by_text(SCHEDULE_TEXT_RE).last.scroll_into_view_if_needed(timeout=2000)
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(CLICK_SETTLE_MS)
     except Exception:
         pass
 
@@ -383,7 +393,7 @@ def _set_all_visible_date_time(
         try:
             fill_input(page, date_inputs.nth(i), date_str)
             page.keyboard.press("Tab")  # confirm value
-            page.wait_for_timeout(200)
+            page.wait_for_timeout(POLL_FAST_MS)
         except Exception as err:
             logger.warning("⚠️ Could not set date input #%d: %s", i, err)
 
@@ -400,7 +410,7 @@ def _set_all_visible_date_time(
             fill_input(page, minutes.nth(i), f"{minute:02d}")
             fill_input(page, meridiems.nth(i), mer)
             page.keyboard.press("Tab")
-            page.wait_for_timeout(200)
+            page.wait_for_timeout(POLL_FAST_MS)
         except Exception as err:
             logger.warning("⚠️ Could not set time triplet #%d: %s", i, err)
 
@@ -460,7 +470,7 @@ def schedule_story(
         shot = out_dir / f"{label}-story-FAIL.png"
         page.screenshot(path=str(shot), full_page=False)
         raise RuntimeError(f"Story composer did not close — see {shot}")
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(COMPOSER_SETTLE_MS)
     logger.info("✅ LIVE %s story scheduled", label)
     return "story:LIVE"
 
@@ -507,7 +517,7 @@ def schedule_post(
         shot = out_dir / f"{label}-post-FAIL.png"
         page.screenshot(path=str(shot), full_page=False)
         raise RuntimeError(f"Post composer did not close — see {shot}")
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(COMPOSER_SETTLE_MS)
     logger.info("✅ LIVE %s post scheduled (%d image(s))", label, len(post.image_paths))
     return "post:LIVE"
 
@@ -594,10 +604,10 @@ def main() -> tuple[int, list[dict]]:
                 results.append({"day": row.day_title, "status": RowStatus.LOGIN_REQUIRED, "detail": str(err)})
             return 4, results
         # Let the planner SPA fully mount.
-        session.page.wait_for_timeout(4500)
+        session.page.wait_for_timeout(PLANNER_MOUNT_MS)
         # Dismiss any first-load upsell modal (e.g. 'Get Meta Verified').
         dismiss_meta_verified_modal(session.page)
-        session.page.wait_for_timeout(500)
+        session.page.wait_for_timeout(CLICK_SETTLE_MS)
 
         for row, story, post in plans:
             day_statuses: list[str] = []

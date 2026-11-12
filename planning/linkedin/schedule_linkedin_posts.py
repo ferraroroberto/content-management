@@ -59,7 +59,18 @@ from planning._scheduler_main import (  # noqa: E402
     resolve_scope,
     untick_wip,
 )
-from planning._session_base import results_dir  # noqa: E402
+from planning._session_base import (
+    CLICK_SETTLE_MS,
+    COMPOSER_SETTLE_MS,
+    DIALOG_MOUNT_MS,
+    FILL_COMMIT_MS,
+    PANEL_LOAD_MS,
+    PHOTO_EDITOR_MS,
+    POLL_MS,
+    SHEET_OPEN_MS,
+    STEP_SETTLE_MS,
+    results_dir,
+)  # noqa: E402
 from planning._wip_rows import iter_wip_pages, resolve_image_path  # noqa: E402
 from planning.linkedin.linkedin_carousel_pdf import (  # noqa: E402
     CarouselDoc,
@@ -399,7 +410,7 @@ def _alt_commit_crashed(page: Page, timeout_ms: int = ALT_COMMIT_SETTLE_MS) -> b
             return True
         if page.evaluate("() => Date.now()") >= deadline:
             return False
-        page.wait_for_timeout(250)
+        page.wait_for_timeout(POLL_MS)
 
 
 def _set_alt_text(page: Page, alt_text: str) -> None:
@@ -507,7 +518,7 @@ def _share_document_choose_file(page: Page, pdf_path: Path) -> None:
          via ``expect_file_chooser``.
     """
     # Wait briefly for the Share-a-document dialog to mount.
-    page.wait_for_timeout(800)
+    page.wait_for_timeout(DIALOG_MOUNT_MS)
 
     inp = page.locator('input[type="file"]')
     try:
@@ -574,7 +585,7 @@ def _wait_for_pdf_upload(page: Page, *, timeout_ms: int = 180000) -> None:
         # whole wait afterwards, far too little to drown the log.
         if polls == 1 or polls % 15 == 0:
             logger.info("⏳ Waiting on PDF processing (poll %d): %s", polls, observed)
-        page.wait_for_timeout(1000)
+        page.wait_for_timeout(STEP_SETTLE_MS)
     raise RuntimeError(
         f"PDF processing did not finish within the timeout window "
         f"({timeout_ms}ms, {polls} polls; last observed Done button: {observed})."
@@ -621,7 +632,7 @@ def _fill_document_title(page: Page, doc_title: str) -> None:
             except Exception as err:
                 last_err = err
                 continue
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(CLICK_SETTLE_MS)
     raise RuntimeError(f"Could not locate the Document title input (last error: {last_err})")
 
 
@@ -714,21 +725,21 @@ def _drive_photo_row(
     # picker (the <input type="file"> appears in the DOM) — one click, no
     # need for a separate 'Start a post' step.
     _click_add_photo(page)
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(COMPOSER_SETTLE_MS)
     _upload_photo(page, image_path)
     # The photo editor takes a moment to open after upload completes.
-    page.wait_for_timeout(4000)
+    page.wait_for_timeout(PHOTO_EDITOR_MS)
     _set_alt_text(page, illust.alt_text)
-    page.wait_for_timeout(1000)
+    page.wait_for_timeout(STEP_SETTLE_MS)
     _click_next_after_photo_editor(page)
-    page.wait_for_timeout(2500)
+    page.wait_for_timeout(PANEL_LOAD_MS)
     if use_mention_resolution:
         fill_caption_with_mentions(page, illust.caption_text)
     else:
         _fill_caption(page, illust.caption_text)
-    page.wait_for_timeout(800)
+    page.wait_for_timeout(DIALOG_MOUNT_MS)
     open_schedule_dialog(page)
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(COMPOSER_SETTLE_MS)
     hour, minute = _resolve_schedule_time(cfg, row.day)
     set_schedule_datetime(page, row.day, hour, minute)
 
@@ -765,27 +776,27 @@ def schedule_one_carousel_row(
     session.goto_with_login_check(cfg["feed_url"])
 
     _click_start_a_post(page)
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(COMPOSER_SETTLE_MS)
     _click_more(page)
-    page.wait_for_timeout(800)
+    page.wait_for_timeout(DIALOG_MOUNT_MS)
     _click_add_a_document(page)
-    page.wait_for_timeout(1200)
+    page.wait_for_timeout(SHEET_OPEN_MS)
     _share_document_choose_file(page, doc.pdf_path)
     # Title first: 'Done' gates on the title as well as on PDF processing, so
     # waiting for it before typing one would deadlock (see _wait_for_pdf_upload).
     _fill_document_title(page, doc.doc_title)
-    page.wait_for_timeout(400)
+    page.wait_for_timeout(FILL_COMMIT_MS)
     _wait_for_pdf_upload(page)
     _click_document_done(page)
-    page.wait_for_timeout(2500)
+    page.wait_for_timeout(PANEL_LOAD_MS)
 
     if not caption:
         raise RuntimeError("Carousel caption is empty — refusing to schedule.")
     fill_caption_with_mentions(page, caption)
-    page.wait_for_timeout(800)
+    page.wait_for_timeout(DIALOG_MOUNT_MS)
 
     open_schedule_dialog(page)
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(COMPOSER_SETTLE_MS)
     hour, minute = _resolve_schedule_time(cfg, row.day)
     set_schedule_datetime(page, row.day, hour, minute)
 

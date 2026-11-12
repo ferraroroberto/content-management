@@ -41,6 +41,17 @@ from typing import Optional
 
 from playwright.sync_api import Page
 
+from planning._session_base import (
+    CLICK_SETTLE_MS,
+    COMPOSER_SETTLE_MS,
+    FIELD_FOCUS_MS,
+    FILL_COMMIT_MS,
+    POLL_FAST_MS,
+    POLL_MS,
+    UPLOAD_DONE_MS,
+    UPLOAD_POLL_MS,
+    UPLOAD_SAFETY_BUFFER_MS,
+)
 from planning.linkedin.linkedin_labels import (
     CONFIRM_BTN_RE,
     DIALOG_SEL,
@@ -161,7 +172,7 @@ def click_feed_entry(
         if time.monotonic() >= deadline:
             break
         # Brief settle before re-resolving against the churning feed.
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(CLICK_SETTLE_MS)
     raise RuntimeError(
         f"Could not click '{label}' on the LinkedIn feed after {attempts} "
         f"attempt(s): {last_err}"
@@ -270,7 +281,7 @@ def _click_mention_suggestion(page: Page, name: str, *, timeout_ms: int = 6000) 
                     continue
             except Exception:
                 continue
-        page.wait_for_timeout(200)
+        page.wait_for_timeout(POLL_FAST_MS)
     return False
 
 
@@ -314,9 +325,9 @@ def fill_caption_with_mentions(page: Page, caption: str) -> None:
             page.keyboard.type(caption[pos:m.start()], delay=4)
         mention_count += 1
         page.keyboard.type("@", delay=20)
-        page.wait_for_timeout(250)
+        page.wait_for_timeout(POLL_MS)
         page.keyboard.type(name, delay=80)
-        page.wait_for_timeout(400)
+        page.wait_for_timeout(FILL_COMMIT_MS)
         clicked = _click_mention_suggestion(page, name)
         if clicked:
             resolved_count += 1
@@ -331,7 +342,7 @@ def fill_caption_with_mentions(page: Page, caption: str) -> None:
             # inject one space when it's whitespace (replace the eaten
             # one) or alphanumeric (defensive — source missed a space).
             # Newlines, punctuation, EOF: leave alone.
-            page.wait_for_timeout(150)
+            page.wait_for_timeout(FIELD_FOCUS_MS)
             next_char = caption[name_end:name_end+1]
             if next_char in (" ", "\t"):
                 page.keyboard.type(" ", delay=40)
@@ -411,12 +422,12 @@ def wait_for_upload_complete(page: Page, *, timeout_ms: int = 420000) -> bool:
     ``timeout_ms`` is the hard cap on the in-progress polling loop
     (default 7 minutes) — long enough for a 30-50 MB clip on a slow uplink.
     """
-    page.wait_for_timeout(2000)
+    page.wait_for_timeout(UPLOAD_POLL_MS)
 
     try:
         if page.get_by_text(_UPLOAD_COMPLETE_TEXT_RE).count() > 0:
             logger.info("✅ LI upload-complete signal already visible — proceeding.")
-            page.wait_for_timeout(2000)
+            page.wait_for_timeout(UPLOAD_POLL_MS)
             return True
     except Exception:
         pass
@@ -424,14 +435,14 @@ def wait_for_upload_complete(page: Page, *, timeout_ms: int = 420000) -> bool:
     saw_in_progress = _upload_in_progress_visible(page)
     if not saw_in_progress:
         for _ in range(8):  # ~4s
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(CLICK_SETTLE_MS)
             if _upload_in_progress_visible(page):
                 saw_in_progress = True
                 break
             try:
                 if page.get_by_text(_UPLOAD_COMPLETE_TEXT_RE).count() > 0:
                     logger.info("✅ LI upload-complete signal appeared during settle.")
-                    page.wait_for_timeout(2000)
+                    page.wait_for_timeout(UPLOAD_POLL_MS)
                     return True
             except Exception:
                 pass
@@ -441,7 +452,7 @@ def wait_for_upload_complete(page: Page, *, timeout_ms: int = 420000) -> bool:
             "ℹ️ No LI upload-in-progress indicator detected; holding the browser "
             "open for 60s as a safety buffer so a slow background upload can finish."
         )
-        page.wait_for_timeout(60000)
+        page.wait_for_timeout(UPLOAD_SAFETY_BUFFER_MS)
         return True
 
     logger.info(
@@ -454,20 +465,20 @@ def wait_for_upload_complete(page: Page, *, timeout_ms: int = 420000) -> bool:
         try:
             if page.get_by_text(_UPLOAD_COMPLETE_TEXT_RE).count() > 0:
                 logger.info("✅ LI upload-complete text detected.")
-                page.wait_for_timeout(3000)
+                page.wait_for_timeout(UPLOAD_DONE_MS)
                 return True
         except Exception:
             pass
         if not _upload_in_progress_visible(page):
             logger.info("✅ LI upload-in-progress indicator gone; upload likely complete.")
-            page.wait_for_timeout(3000)
+            page.wait_for_timeout(UPLOAD_DONE_MS)
             return True
         now = page.evaluate("() => Date.now()")
         if now - last_log > 15000:
             logger.info("⏳ ...still uploading (%ds elapsed).",
                         (now - (deadline - timeout_ms)) // 1000)
             last_log = now
-        page.wait_for_timeout(2000)
+        page.wait_for_timeout(UPLOAD_POLL_MS)
 
     logger.warning(
         "⚠️ LI upload-complete signal not received within %ds. "
@@ -758,7 +769,7 @@ def close_dialogs(page: Page) -> None:
     """
     try:
         page.keyboard.press("Escape")
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(CLICK_SETTLE_MS)
     except Exception:
         return
     # A discard-confirmation dialog may appear; accept it.
@@ -766,7 +777,7 @@ def close_dialogs(page: Page) -> None:
         discard = dialog_button(page, DISCARD_BTN_RE)
         if discard.count() > 0:
             discard.first.click(timeout=2000)
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(CLICK_SETTLE_MS)
     except Exception:
         pass
     # Repeat in case a second dialog remains.
@@ -801,7 +812,7 @@ def finalize_schedule(
     Work-in-Progress and schedule it again on the next run.
     """
     click_schedule_confirm(page)
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(COMPOSER_SETTLE_MS)
 
     pre_shot = out_dir / f"{shot_stem}-pre.png"
     try:
@@ -824,7 +835,7 @@ def finalize_schedule(
         raise RuntimeError(f"{err} See {shot}")
     logger.info("🔔 %s: schedule confirmed via %s", log_label, signal)
 
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(COMPOSER_SETTLE_MS)
     if wait_for_upload:
         try:
             wait_for_upload_complete(page)

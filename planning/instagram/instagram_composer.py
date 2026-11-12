@@ -31,6 +31,16 @@ from typing import Optional
 
 from playwright.sync_api import Page
 
+from planning._session_base import (
+    CLICK_SETTLE_MS,
+    DIALOG_MOUNT_MS,
+    FIELD_FOCUS_MS,
+    FILL_COMMIT_MS,
+    MENU_OPEN_MS,
+    PANEL_LOAD_MS,
+    POLL_FAST_MS,
+    STEP_SETTLE_MS,
+)
 from planning.instagram.instagram_labels import (
     CLOSE_BTN_RE,
     DISCARD_LEAVE_BTN_RE,
@@ -52,7 +62,7 @@ def dismiss_meta_verified_modal(page: Page) -> bool:
         not_now = page.get_by_role("button", name=NOT_NOW_BTN_RE)
         if not_now.count():
             not_now.first.click(timeout=4000)
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(CLICK_SETTLE_MS)
             logger.info("ℹ️ Dismissed 'Get Meta Verified' upsell modal.")
             return True
     except Exception:
@@ -64,7 +74,7 @@ def dismiss_meta_verified_modal(page: Page) -> bool:
         )
         if close.count():
             close.first.click(timeout=2000)
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(CLICK_SETTLE_MS)
             logger.info("ℹ️ Closed blocking dialog via Close button.")
             return True
     except Exception:
@@ -133,7 +143,7 @@ def navigate_to_week(page: Page, target: date, *, max_clicks: int = 10) -> None:
         try:
             if next_btn.count():
                 next_btn.first.click(timeout=4000)
-                page.wait_for_timeout(800)
+                page.wait_for_timeout(DIALOG_MOUNT_MS)
             else:
                 break
         except Exception:
@@ -147,7 +157,7 @@ def navigate_to_week(page: Page, target: date, *, max_clicks: int = 10) -> None:
         try:
             if prev_btn.count():
                 prev_btn.first.click(timeout=4000)
-                page.wait_for_timeout(800)
+                page.wait_for_timeout(DIALOG_MOUNT_MS)
             else:
                 break
         except Exception:
@@ -185,7 +195,7 @@ def _click_schedule_menu_item(page: Page, schedule_btn, action: str) -> None:
         # that actually pops it (Playwright .click() leaves it closed).
         try:
             schedule_btn.evaluate("el => el.click()")
-            page.wait_for_timeout(600)
+            page.wait_for_timeout(MENU_OPEN_MS)
         except Exception as err:
             last_err = err
         try:
@@ -243,7 +253,7 @@ def open_day_schedule_menu(page: Page, d: date, action: str) -> None:
     # required for every other day).
     try:
         el.hover(timeout=8000)
-        page.wait_for_timeout(400)
+        page.wait_for_timeout(FILL_COMMIT_MS)
     except Exception as err:
         raise RuntimeError(f"Could not hover day column {label}: {err}")
 
@@ -277,7 +287,7 @@ def open_day_schedule_menu(page: Page, d: date, action: str) -> None:
     # not pop it) and click the requested item ("Schedule post" / "Schedule
     # story"). All of that, with retries, lives in the helper.
     _click_schedule_menu_item(page, schedule_btn, action)
-    page.wait_for_timeout(1000)
+    page.wait_for_timeout(STEP_SETTLE_MS)
 
 
 def fill_post_text(page: Page, caption: str) -> None:
@@ -295,7 +305,7 @@ def fill_post_text(page: Page, caption: str) -> None:
         try:
             el = ta_candidates.nth(i)
             el.click(timeout=4000)
-            page.wait_for_timeout(200)
+            page.wait_for_timeout(POLL_FAST_MS)
             try:
                 el.fill(caption)
                 logger.debug("📝 Caption filled via .fill() (element #%d)", i)
@@ -316,7 +326,7 @@ def cancel_composer(page: Page) -> None:
             btn = page.get_by_role("button", name=re.compile(rf"^{re.escape(name)}$", re.I))
             if btn.count():
                 btn.first.click(timeout=2000)
-                page.wait_for_timeout(500)
+                page.wait_for_timeout(CLICK_SETTLE_MS)
                 break
         except Exception:
             pass
@@ -325,7 +335,7 @@ def cancel_composer(page: Page) -> None:
         discard = page.get_by_role("button", name=DISCARD_LEAVE_BTN_RE)
         if discard.count():
             discard.first.click(timeout=2000)
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(CLICK_SETTLE_MS)
     except Exception:
         pass
 
@@ -344,9 +354,9 @@ def return_to_planner(page: Page, planner_url: str) -> None:
     try:
         if "/composer" in (page.url or "").lower() or "/content_calendar" not in (page.url or "").lower():
             page.goto(planner_url, wait_until="domcontentloaded", timeout=30000)
-            page.wait_for_timeout(2500)
+            page.wait_for_timeout(PANEL_LOAD_MS)
             dismiss_meta_verified_modal(page)
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(CLICK_SETTLE_MS)
     except Exception as err:
         # The schedulers' "instagram_schedule" logger, not this module's: the
         # drivers only configure that one, so a warning here would
@@ -357,10 +367,10 @@ def return_to_planner(page: Page, planner_url: str) -> None:
 def fill_input(page: Page, locator, value: str) -> None:
     """Click, clear, and type into a Meta composer text input."""
     locator.click(timeout=4000)
-    page.wait_for_timeout(150)
+    page.wait_for_timeout(FIELD_FOCUS_MS)
     # Meta inputs honor select-all + type; .fill() sometimes leaves the old
     # value (Meta's React onChange handler is picky).
     page.keyboard.press("Control+A")
     page.keyboard.press("Delete")
     page.keyboard.type(value, delay=8)
-    page.wait_for_timeout(150)
+    page.wait_for_timeout(FIELD_FOCUS_MS)

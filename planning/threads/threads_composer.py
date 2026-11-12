@@ -24,6 +24,16 @@ from pathlib import Path
 
 from playwright.sync_api import Page
 
+from planning._session_base import (
+    DIALOG_MOUNT_MS,
+    FIELD_FOCUS_MS,
+    FILL_COMMIT_MS,
+    FINAL_CLICK_MS,
+    MENU_ITEM_MS,
+    MENU_OPEN_MS,
+    POLL_MS,
+    POPUP_DISMISS_MS,
+)
 from planning._waits import CLICK_TIMEOUT_MS, click_until_effect, wait_for_first_ready
 from planning.threads.threads_labels import (
     ATTACH_MEDIA_BTN_RE,
@@ -99,9 +109,9 @@ def type_caption(page: Page, caption: str) -> None:
         label="Threads caption textbox",
     )
     ta.click(timeout=CLICK_TIMEOUT_MS)
-    page.wait_for_timeout(150)
+    page.wait_for_timeout(FIELD_FOCUS_MS)
     page.keyboard.type(caption, delay=4)
-    page.wait_for_timeout(400)
+    page.wait_for_timeout(FILL_COMMIT_MS)
     logger.debug("📝 Caption typed (%d chars).", len(caption))
 
 
@@ -118,7 +128,7 @@ def upload_image(page: Page, path: Path) -> None:
         inp = dialog.locator('input[type="file"]').first
         if inp.count():
             inp.set_input_files(str(path))
-            page.wait_for_timeout(800)
+            page.wait_for_timeout(DIALOG_MOUNT_MS)
             logger.debug("📤 Uploaded %s via existing input[type=file].", path.name)
         else:
             raise RuntimeError("no input")
@@ -157,8 +167,8 @@ def upload_image(page: Page, path: Path) -> None:
             > 0
         ):
             break
-        page.wait_for_timeout(250)
-    page.wait_for_timeout(700)
+        page.wait_for_timeout(POLL_MS)
+    page.wait_for_timeout(MENU_ITEM_MS)
 
 
 _FIND_HEADER_3DOTS_JS = r"""
@@ -200,13 +210,13 @@ def open_three_dots_menu(page: Page) -> None:
         raise RuntimeError(f"3-dots JS picker failed: {err}")
     if not clicked:
         raise RuntimeError("No icon-only buttons in the dialog header to click.")
-    page.wait_for_timeout(600)
+    page.wait_for_timeout(MENU_OPEN_MS)
     # Confirm a Schedule menuitem appeared.
     for _ in range(20):
         if page.get_by_text(SCHEDULE_TEXT_RE).count():
             logger.debug("⋯ Opened more-options menu.")
             return
-        page.wait_for_timeout(150)
+        page.wait_for_timeout(FIELD_FOCUS_MS)
     raise RuntimeError("Clicked the 3-dots, but the Schedule menuitem never appeared.")
 
 
@@ -221,7 +231,7 @@ def click_schedule_menuitem(page: Page) -> None:
             loc = find().first
             if loc.count():
                 loc.click(timeout=5000)
-                page.wait_for_timeout(800)
+                page.wait_for_timeout(DIALOG_MOUNT_MS)
                 logger.debug("📅 Clicked Schedule… menuitem.")
                 return
         except Exception:
@@ -248,7 +258,7 @@ def navigate_calendar_month(page: Page, target: date) -> None:
             try:
                 if nb.count():
                     nb.click(timeout=2500)
-                    page.wait_for_timeout(250)
+                    page.wait_for_timeout(POLL_MS)
                     clicked = True
                     break
             except Exception:
@@ -352,7 +362,7 @@ def click_calendar_day(page: Page, target: date) -> None:
         raise RuntimeError(f"Calendar day JS picker failed: {err}")
     if not res or not res.get("ok"):
         raise RuntimeError(f"Could not click calendar day {day_text}: {res}")
-    page.wait_for_timeout(300)
+    page.wait_for_timeout(POPUP_DISMISS_MS)
     logger.debug("📅 Clicked day %s in calendar.", day_text)
 
 
@@ -371,7 +381,7 @@ def set_calendar_time(page: Page, hour: int, minute: int) -> None:
             page.keyboard.press("Control+A")
             page.keyboard.press("Delete")
             page.keyboard.type(value, delay=20)
-            page.wait_for_timeout(150)
+            page.wait_for_timeout(FIELD_FOCUS_MS)
             try:
                 got = inp.input_value(timeout=1000) or ""
             except Exception:
@@ -381,7 +391,7 @@ def set_calendar_time(page: Page, hour: int, minute: int) -> None:
             raise RuntimeError(f"Could not set time {label}={value}: {err}")
     # Blur so the value commits before Done is clicked.
     page.keyboard.press("Tab")
-    page.wait_for_timeout(250)
+    page.wait_for_timeout(POLL_MS)
 
 
 def click_calendar_done(page: Page) -> None:
@@ -395,7 +405,7 @@ def click_calendar_done(page: Page) -> None:
             loc = find()
             if loc.count():
                 loc.click(timeout=4000)
-                page.wait_for_timeout(700)
+                page.wait_for_timeout(MENU_ITEM_MS)
                 logger.debug("✅ Calendar 'Done' clicked.")
                 return
         except Exception:
@@ -416,7 +426,7 @@ def click_final_schedule_action(page: Page) -> None:
             loc = find()
             if loc.count():
                 loc.click(timeout=6000)
-                page.wait_for_timeout(900)
+                page.wait_for_timeout(FINAL_CLICK_MS)
                 logger.debug("🚀 Final Schedule action clicked.")
                 return
         except Exception:
@@ -437,7 +447,7 @@ def wait_composer_closes(page: Page, timeout_ms: int = 20000) -> bool:
                 return True
         except Exception:
             pass
-        page.wait_for_timeout(400)
+        page.wait_for_timeout(FILL_COMMIT_MS)
     return False
 
 
@@ -448,7 +458,7 @@ def cancel_composer(page: Page) -> None:
             btn = page.get_by_role("button", name=name_re)
             if btn.count():
                 btn.first.click(timeout=2000)
-                page.wait_for_timeout(400)
+                page.wait_for_timeout(FILL_COMMIT_MS)
                 # The discard-confirmation pops up after Cancel.
                 continue
         except Exception:
