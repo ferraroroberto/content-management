@@ -25,6 +25,16 @@ from pathlib import Path
 from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PWTimeoutError
 
+from planning._session_base import (
+    CLICK_SETTLE_MS,
+    DIALOG_MOUNT_MS,
+    FIELD_FOCUS_MS,
+    FILL_COMMIT_MS,
+    MENU_ITEM_MS,
+    POLL_FAST_MS,
+    POLL_MS,
+    POPUP_DISMISS_MS,
+)
 from planning._waits import CLICK_TIMEOUT_MS, click_until_effect, wait_for_first_ready
 from planning.twitter.twitter_labels import (
     CONFIRM_BTN_RE,
@@ -51,7 +61,7 @@ def dismiss_blocking_modals(page: Page) -> bool:
             btn = dialog.first.get_by_role("button", name=name_re)
             if btn.count():
                 btn.first.click(timeout=2500)
-                page.wait_for_timeout(400)
+                page.wait_for_timeout(FILL_COMMIT_MS)
                 dismissed = True
                 logger.info("ℹ️ Dismissed dialog via %r button.", name_re.pattern)
                 break
@@ -117,12 +127,12 @@ def type_caption(page: Page, caption: str) -> None:
     ta = page.locator('[data-testid="tweetTextarea_0"]').first
     try:
         ta.click(timeout=4000)
-        page.wait_for_timeout(150)
+        page.wait_for_timeout(FIELD_FOCUS_MS)
     except Exception:
         pass
     # Lexical ignores .fill(); type via keyboard so onChange fires.
     page.keyboard.type(caption, delay=4)
-    page.wait_for_timeout(400)
+    page.wait_for_timeout(FILL_COMMIT_MS)
     _dismiss_mention_typeahead(page)
     logger.debug("📝 Caption typed (%d chars).", len(caption))
 
@@ -146,7 +156,7 @@ def _dismiss_mention_typeahead(page: Page) -> None:
     try:
         if page.locator('[role="listbox"][id^="typeaheadDropdown"]').count() > 0:
             page.keyboard.press("Escape")
-            page.wait_for_timeout(300)
+            page.wait_for_timeout(POPUP_DISMISS_MS)
             logger.debug("⌨️ Dismissed mention typeahead.")
     except Exception:
         pass
@@ -178,7 +188,7 @@ def _click_through_cover(
     """
     try:
         loc.scroll_into_view_if_needed(timeout=2000)
-        page.wait_for_timeout(200)
+        page.wait_for_timeout(POLL_FAST_MS)
     except Exception:
         pass
     try:
@@ -238,8 +248,8 @@ def upload_image(page: Page, path: Path) -> None:
             > 0
         ):
             break
-        page.wait_for_timeout(250)
-    page.wait_for_timeout(800)
+        page.wait_for_timeout(POLL_MS)
+    page.wait_for_timeout(DIALOG_MOUNT_MS)
 
 
 def _schedule_modal_open(page: Page, timeout_ms: int = 2500) -> bool:
@@ -255,7 +265,7 @@ def _schedule_modal_open(page: Page, timeout_ms: int = 2500) -> bool:
                 return True
         except Exception:
             pass
-        page.wait_for_timeout(150)
+        page.wait_for_timeout(FIELD_FOCUS_MS)
     return False
 
 
@@ -349,7 +359,7 @@ def click_confirm_in_modal(page: Page) -> None:
             loc = find().first
             if loc.count():
                 loc.click(timeout=5000)
-                page.wait_for_timeout(700)
+                page.wait_for_timeout(MENU_ITEM_MS)
                 logger.debug("✅ Schedule modal: Confirm clicked.")
                 return
         except Exception:
@@ -381,7 +391,7 @@ def click_final_schedule_action(page: Page) -> None:
         if not loc.count():
             continue
         if _click_through_cover(page, loc, label="Final Schedule"):
-            page.wait_for_timeout(700)
+            page.wait_for_timeout(MENU_ITEM_MS)
             logger.debug("🚀 Final Schedule action clicked.")
             return
     raise RuntimeError("Could not click the final Schedule action button.")
@@ -410,7 +420,7 @@ def wait_composer_clears(page: Page, timeout_ms: int = 20000) -> bool:
                     return True
         except Exception:
             pass
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(CLICK_SETTLE_MS)
     return False
 
 
@@ -421,7 +431,7 @@ def cancel_composer(page: Page) -> None:
         close = page.locator('[data-testid="app-bar-close"], button[aria-label="Close" i]')
         if close.count():
             close.first.click(timeout=2000)
-            page.wait_for_timeout(400)
+            page.wait_for_timeout(FILL_COMMIT_MS)
     except Exception:
         pass
     # If a "Save changes?" / "Discard?" dialog appears, pick Discard.
@@ -430,7 +440,7 @@ def cancel_composer(page: Page) -> None:
             btn = page.get_by_role("button", name=name_re)
             if btn.count():
                 btn.first.click(timeout=2000)
-                page.wait_for_timeout(400)
+                page.wait_for_timeout(FILL_COMMIT_MS)
         except Exception:
             pass
 

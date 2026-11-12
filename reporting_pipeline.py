@@ -13,6 +13,7 @@ import argparse
 import json
 import logging
 import sys
+from dataclasses import dataclass, field, fields
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -77,10 +78,19 @@ def configure_logger(debug_mode=False):
     logger = setup_logger("init", file_logging=False, level=log_level)
     return logger
 
+def _kind(heading: str) -> list:
+    """A failure-kind list; ``heading`` is the section title its entries get in the alert."""
+    return field(default_factory=list, metadata={"heading": heading})
+
+
+@dataclass
 class PipelineFailures:
     """Accumulates hard failures during a run for one consolidated alert.
 
-    Three depths are tracked:
+    Each field is one failure kind. Its ``heading`` metadata is the alert section
+    title and field order is the section order, so ``any()`` and
+    ``_build_alert_message`` follow the declarations and a new kind needs only a
+    new field here.
 
     * ``step_failures`` — a pipeline step raised (recorded by ``run_module``).
     * ``missing_endpoints`` — a configured endpoint produced no raw JSON file
@@ -93,13 +103,13 @@ class PipelineFailures:
       absent for the date (recorded by ``check_posts_coverage``); this catches
       the case where the raw file exists but holds no post the consolidator can
       match (e.g. the day's note was dropped before it reached the DB).
+    * ``all_zero_platforms`` — every post a platform's raw scrape holds has 0 likes,
+      0 comments and 0 reposts (recorded by ``check_all_zero_posts``); a scraper that
+      can no longer read the counts looks exactly like this.
     * ``policy_drift`` — a public table lost RLS / an ``anon_*_all`` policy, or
       a view lost ``security_invoker`` (recorded by ``check_policy_drift_coverage``);
       this catches Supabase security drift on the project's own clock instead of
       waiting for the weekly security-advisor email.
-    * ``all_zero_platforms`` — every post a platform's raw scrape holds has 0 likes,
-      0 comments and 0 reposts (recorded by ``check_all_zero_posts``); a scraper that
-      can no longer read the counts looks exactly like this.
     * ``interrupted_planning`` — the last weekly planning run was killed before it
       finished, so the stages after the one it died in never scheduled their posts
       (recorded by ``check_planning_run``).
@@ -110,21 +120,17 @@ class PipelineFailures:
       check that silently couldn't run being folded into a green run.
     """
 
-    def __init__(self) -> None:
-        self.step_failures: list[tuple[str, str]] = []
-        self.missing_endpoints: list[str] = []
-        self.skipped_platforms: list[str] = []
-        self.missing_post_metrics: list[str] = []
-        self.policy_drift: list[str] = []
-        self.unverified: list[str] = []
-        self.all_zero_platforms: list[str] = []
-        self.interrupted_planning: list[str] = []
+    step_failures: list[tuple[str, str]] = _kind("Failed steps:")
+    missing_endpoints: list[str] = _kind("Missing endpoints:")
+    skipped_platforms: list[str] = _kind("Skipped platforms (upstream unavailable):")
+    missing_post_metrics: list[str] = _kind("No post metrics (platform):")
+    all_zero_platforms: list[str] = _kind("All posts at 0 likes, 0 comments and 0 reposts (platform):")
+    policy_drift: list[str] = _kind("RLS/policy drift:")
+    interrupted_planning: list[str] = _kind("Planning run interrupted:")
+    unverified: list[str] = _kind("Unverified (check could not run):")
 
     def any(self) -> bool:
-        return bool(self.step_failures or self.missing_endpoints or self.skipped_platforms
-                    or self.missing_post_metrics or self.policy_drift
-                    or self.unverified or self.all_zero_platforms
-                    or self.interrupted_planning)
+        return any(getattr(self, f.name) for f in fields(self))
 
 
 def _load_config() -> dict | None:
@@ -466,46 +472,13 @@ def _load_notify_send():
 def _build_alert_message(failures: "PipelineFailures", processing_date: str) -> str:
     """Deterministic, mobile-skimmable alert body: date, steps, endpoints, drift."""
     lines = [f"🚨 Reporting pipeline finished with failures — {processing_date}"]
-    if failures.step_failures:
-        lines.append("")
-        lines.append("Failed steps:")
-        for name, error in failures.step_failures:
-            lines.append(f"• {name}: {error}")
-    if failures.missing_endpoints:
-        lines.append("")
-        lines.append("Missing endpoints:")
-        for endpoint in failures.missing_endpoints:
-            lines.append(f"• {endpoint}")
-    if failures.skipped_platforms:
-        lines.append("")
-        lines.append("Skipped platforms (upstream unavailable):")
-        for platform in failures.skipped_platforms:
-            lines.append(f"• {platform}")
-    if failures.missing_post_metrics:
-        lines.append("")
-        lines.append("No post metrics (platform):")
-        for platform in failures.missing_post_metrics:
-            lines.append(f"• {platform}")
-    if failures.all_zero_platforms:
-        lines.append("")
-        lines.append("All posts at 0 likes, 0 comments and 0 reposts (platform):")
-        for platform in failures.all_zero_platforms:
-            lines.append(f"• {platform}")
-    if failures.policy_drift:
-        lines.append("")
-        lines.append("RLS/policy drift:")
-        for entry in failures.policy_drift:
-            lines.append(f"• {entry}")
-    if failures.interrupted_planning:
-        lines.append("")
-        lines.append("Planning run interrupted:")
-        for entry in failures.interrupted_planning:
-            lines.append(f"• {entry}")
-    if failures.unverified:
-        lines.append("")
-        lines.append("Unverified (check could not run):")
-        for entry in failures.unverified:
-            lines.append(f"• {entry}")
+    for kind in fields(failures):
+        entries = getattr(failures, kind.name)
+        if not entries:
+            continue
+        lines.extend(["", kind.metadata["heading"]])
+        # step_failures holds (name, error) pairs; every other kind holds plain strings.
+        lines.extend(f"• {entry if isinstance(entry, str) else ': '.join(entry)}" for entry in entries)
     return "\n".join(lines)
 
 

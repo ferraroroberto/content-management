@@ -226,18 +226,11 @@ def _build_summary_md(args: argparse.Namespace,
                       results: list[PlatformResult],
                       started_at: datetime,
                       finished_at: datetime) -> str:
-    if args.live:
-        mode_label = "LIVE"
-    elif args.dry_run:
-        mode_label = "DRY-RUN"
-    else:
-        mode_label = "config default (per-platform)"
-
     total_duration = (finished_at - started_at).total_seconds()
     lines: list[str] = [
         f"# Planning summary — {started_at.strftime('%Y-%m-%d %H:%M:%S')}",
         "",
-        f"- Mode: **{mode_label}**",
+        f"- Mode: **{_result_mode(args)}**",
         f"- Total duration: {_fmt_duration(total_duration)}",
         "",
         "| Platform  | LIVE | DRY  | SKIP | PART | FAIL | LOGIN | OTHER | Duration |",
@@ -345,6 +338,7 @@ def _build_result_json(args: argparse.Namespace,
 
 
 def _result_mode(args: argparse.Namespace) -> str:
+    """The run mode as the summary, the log and the result record all name it."""
     if args.live:
         return "LIVE"
     if args.dry_run:
@@ -381,29 +375,24 @@ def main() -> int:
     assert logger is not None
     started_at = datetime.now()
 
-    if args.live:
-        mode_label = "LIVE"
-    elif args.dry_run:
-        mode_label = "DRY-RUN"
-    else:
-        mode_label = "per-platform config default"
     logger.info("🚀 Planning pipeline starting (%s, pid %d, parent pid %d)",
-                mode_label, os.getpid(), os.getppid())
+                _result_mode(args), os.getpid(), os.getppid())
 
     results: list[PlatformResult] = []
-    _record_progress(args, started_at, "Clone", results)
-    results.append(_run_clone(args))
-
     scheduler_args = _build_scheduler_args(args)
-    for name, fn, skip in [
-        ("LinkedIn",  run_linkedin,  args.skip_linkedin),
-        ("Instagram", run_instagram, args.skip_instagram),
-        ("Twitter",   run_twitter,   args.skip_twitter),
-        ("Threads",   run_threads,   args.skip_threads),
-        ("Videos",    run_videos,    args.skip_videos),
-    ]:
+    # Looked up here, not at import, so a test can swap one scheduler out.
+    schedulers = {
+        "LinkedIn": run_linkedin, "Instagram": run_instagram, "Twitter": run_twitter,
+        "Threads": run_threads, "Videos": run_videos,
+    }
+    # Run order comes from run_state.STAGES, the list the killed-run resume command is built from.
+    for name in run_state.STAGES:
         _record_progress(args, started_at, name, results)
-        results.append(_run_platform(name, fn, scheduler_args, skip))
+        if name == "Clone":
+            results.append(_run_clone(args))
+        else:
+            skip = getattr(args, f"skip_{name.lower()}")
+            results.append(_run_platform(name, schedulers[name], scheduler_args, skip))
 
     finished_at = datetime.now()
     md = _build_summary_md(args, results, started_at, finished_at)

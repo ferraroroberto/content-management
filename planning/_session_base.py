@@ -61,6 +61,29 @@ class LoginRequiredError(RuntimeError):
 #: Navigation attempts per ``goto_with_login_check`` call (one retry after a timeout).
 NAVIGATION_ATTEMPTS = 2
 
+# Fixed pacing the planning drivers insert between UI steps, in ms. Each tier
+# names the kind of UI change it waits out; when a platform's UI drifts, retune
+# the tier whose reason matches instead of adding a bare literal at the call.
+FIELD_FOCUS_MS = 150  # a click into, or a keystroke in, a text field registering before the next input
+POLL_FAST_MS = 200  # re-check gap for something that flips within a frame or two (a field committing on Tab, a sub-modal closing)
+POLL_MS = 250  # re-check gap for a composer element that mounts after a click
+POPUP_DISMISS_MS = 300  # a dropdown or typeahead closing after Escape, or a picker day cell click registering
+FILL_COMMIT_MS = 400  # filled or typed text committing into the editor state before the next control
+CLICK_SETTLE_MS = 500  # the standard settle after a click that swaps panel content, and the gap in longer re-check loops
+MENU_OPEN_MS = 600  # a menu popping open after its trigger is clicked
+MENU_ITEM_MS = 700  # a menu item or confirm click landing and the panel behind it updating
+DIALOG_MOUNT_MS = 800  # a dialog or the next wizard step mounting after a click
+FINAL_CLICK_MS = 900  # the final Schedule click being accepted before the dialog is read back
+STEP_SETTLE_MS = 1000  # one wizard step advancing before the next control is looked up
+SHEET_OPEN_MS = 1200  # a heavier sheet (document picker, date/time row) opening
+COMPOSER_SETTLE_MS = 1500  # the composer re-laying out after an upload, an opener click or a schedule step
+UPLOAD_POLL_MS = 2000  # gap between upload-progress checks
+PANEL_LOAD_MS = 2500  # a page or heavy panel finishing a swap or load (after navigation, an editor's Next/Done)
+UPLOAD_DONE_MS = 3000  # the pause after an upload reports complete, before the next control
+PHOTO_EDITOR_MS = 4000  # the photo editor opening after an upload finishes
+PLANNER_MOUNT_MS = 4500  # the planner SPA fully mounting on first load
+UPLOAD_SAFETY_BUFFER_MS = 60000  # how long a clip upload is left open when no progress signal ever appears
+
 
 class NavigationTimeoutError(RuntimeError, PWTimeoutError):
     """Raised when a page load times out on every attempt.
