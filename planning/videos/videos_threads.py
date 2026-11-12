@@ -22,6 +22,7 @@ from planning.threads.threads_composer import (  # noqa: E402
     click_calendar_done,
     click_final_schedule_action,
     click_schedule_menuitem,
+    discard_composer,
     navigate_calendar_month,
     open_composer,
     open_three_dots_menu,
@@ -30,7 +31,6 @@ from planning.threads.threads_composer import (  # noqa: E402
     upload_image,
     wait_composer_closes,
 )
-from planning.threads.threads_labels import DISCARD_BTN_RE  # noqa: E402
 from planning.threads.threads_session import (  # noqa: E402
     ThreadsSession,
     load_threads_config,
@@ -75,16 +75,7 @@ def schedule_one_video(
         shot = out_dir / f"{label}-th-dryrun.png"
         page.screenshot(path=str(shot), full_page=False)
         logger.info("✅ DRY-RUN %s TH: calendar populated, screenshot → %s", label, shot)
-        cancel_composer(page)
-        for _ in range(3):
-            try:
-                btn = page.get_by_role("button", name=DISCARD_BTN_RE)
-                if btn.count():
-                    btn.first.click(timeout=2000)
-                    page.wait_for_timeout(400)
-                    break
-            except Exception:
-                pass
+        discard_composer(page)
         return "TH:DRY"
 
     click_calendar_done(page)
