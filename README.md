@@ -167,6 +167,7 @@ content-management/                   # repo root
 │   └── videos/                       # weekly cross-platform video orchestrator
 ├── reporting/                        # daily numbers — APIs → Supabase → Notion
 │   ├── social_client/                # RapidAPI fetchers
+│   ├── scrape_client/                # HTTP/Playwright scrapers
 │   ├── process/                      # transform, upload to Supabase, aggregate
 │   └── notion/                       # editorial helpers + Notion sync
 ├── newsletter/                       # weekly newsletter pipeline (archive + normalize + build)
@@ -186,9 +187,17 @@ content-management/                   # repo root
 ├── app/                              # Streamlit control panel (tabs: reporting/editorial/planning/newsletter/triage/engagement/check-IP/podcast/demo-video)
 ├── config/                           # config.json, mapping.json, logger_config, chrome_launch, console
 │   └── doc_capture/                  # deterministic control-panel screenshot engine (README tour)
-├── src/                              # vendored Google client packages
+├── common/                           # code shared by two or more tools
+│   ├── atomic_write.py               # the one atomic file writer
+│   └── runtime_files.py              # writes at a caller-supplied path (episode/demo folders, --out)
+├── src/                              # vendored modules plus one repo-owned helper
 │   ├── gmail_readonly/               # portable, read-only Gmail OAuth + search component
-│   └── google_oauth_common/          # shared installed-app OAuth bootstrap for the portable Google packages
+│   ├── google_oauth_common/          # shared installed-app OAuth bootstrap for the portable Google packages
+│   ├── usage_log.py                  # vendored fleet usage log (+ usage_log_starlette.py, its Starlette mount)
+│   ├── runtime_data.py               # vendored runtime-data root resolver
+│   ├── pooled_http.py                # vendored keep-alive HTTP pool
+│   └── static_versioning.py          # repo-owned: cache-busted static serving for the recorder
+├── scripts/                          # vendored ratchets (*_ratchet.py) and their gate wrappers (*_ratchet_gate.py)
 ├── results/                          # outputs — planning summaries + raw API JSON
 ├── logs/                             # per-module .log files
 ├── docs/                             # durable topic reference docs (tracked)
