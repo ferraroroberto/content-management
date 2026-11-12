@@ -45,13 +45,13 @@ from planning.twitter.twitter_composer import (  # noqa: E402
     click_confirm_in_modal,
     click_final_schedule_action,
     click_schedule_toolbar,
+    close_schedule_modal,
     dismiss_blocking_modals,
     set_schedule_modal,
     type_caption,
     upload_image,
     wait_composer_clears,
 )
-from planning.twitter.twitter_labels import CANCEL_CLOSE_BTN_RES  # noqa: E402
 from planning.twitter.twitter_session import (  # noqa: E402
     TwitterSession,
     configure_logger,
@@ -136,17 +136,7 @@ def schedule_post(
             "✅ DRY-RUN %s: composer + schedule modal ready, screenshot → %s",
             label, shot,
         )
-        # Cancel the schedule modal AND the composer to leave clean state.
-        for name_re in CANCEL_CLOSE_BTN_RES:
-            try:
-                btn = page.get_by_role("button", name=name_re)
-                if btn.count():
-                    btn.first.click(timeout=2000)
-                    page.wait_for_timeout(400)
-                    break
-            except Exception:
-                pass
-        cancel_composer(page)
+        close_schedule_modal(page)
         return "post:DRY-OK"
 
     click_confirm_in_modal(page)

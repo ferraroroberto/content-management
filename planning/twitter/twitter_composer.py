@@ -37,6 +37,7 @@ from planning._session_base import (
 )
 from planning._waits import CLICK_TIMEOUT_MS, click_until_effect, wait_for_first_ready
 from planning.twitter.twitter_labels import (
+    CANCEL_CLOSE_BTN_RES,
     CONFIRM_BTN_RE,
     DISCARD_BTN_RES,
     DISMISS_DIALOG_BTN_RES,
@@ -445,6 +446,20 @@ def cancel_composer(page: Page) -> None:
             pass
 
 
+def close_schedule_modal(page: Page) -> None:
+    """Dry-run teardown: close the Schedule modal, then the composer."""
+    for name_re in CANCEL_CLOSE_BTN_RES:
+        try:
+            btn = page.get_by_role("button", name=name_re)
+            if btn.count():
+                btn.first.click(timeout=2000)
+                page.wait_for_timeout(FILL_COMMIT_MS)
+                break
+        except Exception:
+            pass
+    cancel_composer(page)
+
+
 __all__ = [
     "dismiss_blocking_modals",
     "click_compose_area",
@@ -456,4 +471,5 @@ __all__ = [
     "click_final_schedule_action",
     "wait_composer_clears",
     "cancel_composer",
+    "close_schedule_modal",
 ]

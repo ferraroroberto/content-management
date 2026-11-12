@@ -39,6 +39,7 @@ from planning.threads.threads_labels import (
     ATTACH_MEDIA_BTN_RE,
     CANCEL_DISCARD_BTN_RES,
     COMPOSE_ENTRY_BTN_RE,
+    DISCARD_BTN_RE,
     DONE_BTN_RE,
     FINAL_SCHEDULE_BTN_RE,
     NEXT_MONTH_BTN_RE,
@@ -465,6 +466,20 @@ def cancel_composer(page: Page) -> None:
             pass
 
 
+def discard_composer(page: Page) -> None:
+    """Dry-run teardown: Cancel the composer, then confirm the Discard prompt."""
+    cancel_composer(page)
+    for _ in range(3):
+        try:
+            btn = page.get_by_role("button", name=DISCARD_BTN_RE)
+            if btn.count():
+                btn.first.click(timeout=2000)
+                page.wait_for_timeout(FILL_COMMIT_MS)
+                break
+        except Exception:
+            pass
+
+
 __all__ = [
     "open_composer",
     "type_caption",
@@ -478,4 +493,5 @@ __all__ = [
     "click_final_schedule_action",
     "wait_composer_closes",
     "cancel_composer",
+    "discard_composer",
 ]
