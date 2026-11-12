@@ -114,13 +114,20 @@ _FIND_COLUMN_JS = r"""
 """
 
 
+# A normal load mounts the grid in ~4s; slow Meta loads have taken longer than
+# the fixed mount sleeps, so poll up to 30s before declaring the planner broken.
+_GRID_MOUNT_POLL_MS = 500
+_GRID_MOUNT_POLLS = 60
+
+
 def navigate_to_week(page: Page, target: date, *, max_clicks: int = 10) -> None:
     """Advance the week view forward (or back) until the target day's column
     is visible. The planner's chevron buttons are labelled 'Next week' /
     'Previous week' aria-wise; the visible label is just the chevron glyph.
 
-    Strategy: try clicking 'Next week' until the target's column appears,
-    then 'Previous week' if we overshot.
+    Strategy: wait for the week grid to mount, then try clicking 'Next week'
+    until the target's column appears, then 'Previous week' if we overshot.
+    Raises ``RuntimeError`` when the grid never mounts.
     """
     label = day_cell_label(target)
 
@@ -130,13 +137,25 @@ def navigate_to_week(page: Page, target: date, *, max_clicks: int = 10) -> None:
         except Exception:
             return False
 
-    if col_present():
-        return
-
     # Meta uses chevron-glyph text "Left" / "Right" as the button label
     # (probed via DOM); aria-label is empty.
     next_btn = page.get_by_role("button", name=NEXT_WEEK_BTN_RE)
     prev_btn = page.get_by_role("button", name=PREV_WEEK_BTN_RE)
+
+    # The planner shell paints before its week grid, which can spin for
+    # seconds; searching in that gap finds neither column nor week buttons.
+    for _ in range(_GRID_MOUNT_POLLS):
+        if col_present():
+            return
+        if next_btn.count() or prev_btn.count():
+            break
+        page.wait_for_timeout(_GRID_MOUNT_POLL_MS)
+    else:
+        raise RuntimeError(
+            f"Planner week grid did not mount within "
+            f"{_GRID_MOUNT_POLLS * _GRID_MOUNT_POLL_MS // 1000}s "
+            f"(looking for {label})."
+        )
 
     # Try forward first.
     for _ in range(max_clicks):
