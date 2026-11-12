@@ -25,7 +25,7 @@ from config.console import force_utf8_stdio  # noqa: E402
 
 force_utf8_stdio()
 from config.dates import parse_day  # noqa: E402
-from config.loader import load_full_config  # noqa: E402
+from config.loader import load_block, load_full_config  # noqa: E402
 from config.logger_config import setup_logger  # noqa: E402
 from planning import run_state
 from planning.substack.daily_pipeline import (
@@ -78,9 +78,12 @@ def configure_logger(debug_mode=False):
     logger = setup_logger("init", file_logging=False, level=log_level)
     return logger
 
-def _kind(heading: str) -> list:
-    """A failure-kind list; ``heading`` is the section title its entries get in the alert."""
-    return field(default_factory=list, metadata={"heading": heading})
+def _kind(heading: str, *, failure: bool = True) -> list:
+    """A failure-kind list; ``heading`` is the section title its entries get in the alert.
+
+    ``failure=False`` makes a note: it appears in the alert but does not trip ``any()``.
+    """
+    return field(default_factory=list, metadata={"heading": heading, "failure": failure})
 
 
 @dataclass
@@ -103,6 +106,10 @@ class PipelineFailures:
       absent for the date (recorded by ``check_posts_coverage``); this catches
       the case where the raw file exists but holds no post the consolidator can
       match (e.g. the day's note was dropped before it reached the DB).
+    * ``nothing_planned`` — a platform has no post metrics for the day because none
+      was planned for it (recorded by ``check_posts_coverage``). A note, not a
+      failure: it raises an alert so an unscheduled week is visible at once, but
+      the run stays green.
     * ``all_zero_platforms`` — every post a platform's raw scrape holds has 0 likes,
       0 comments and 0 reposts (recorded by ``check_all_zero_posts``); a scraper that
       can no longer read the counts looks exactly like this.
@@ -123,14 +130,15 @@ class PipelineFailures:
     step_failures: list[tuple[str, str]] = _kind("Failed steps:")
     missing_endpoints: list[str] = _kind("Missing endpoints:")
     skipped_platforms: list[str] = _kind("Skipped platforms (upstream unavailable):")
-    missing_post_metrics: list[str] = _kind("No post metrics (platform):")
+    missing_post_metrics: list[str] = _kind("Planned but no post metrics (platform):")
+    nothing_planned: list[str] = _kind("Nothing planned (not a failure, schedule the week):", failure=False)
     all_zero_platforms: list[str] = _kind("All posts at 0 likes, 0 comments and 0 reposts (platform):")
     policy_drift: list[str] = _kind("RLS/policy drift:")
     interrupted_planning: list[str] = _kind("Planning run interrupted:")
     unverified: list[str] = _kind("Unverified (check could not run):")
 
     def any(self) -> bool:
-        return any(getattr(self, f.name) for f in fields(self))
+        return any(getattr(self, f.name) for f in fields(self) if f.metadata["failure"])
 
 
 def _load_config() -> dict | None:
@@ -214,25 +222,36 @@ def check_all_zero_posts(config: dict, processing_date: str, failures: "Pipeline
 COVERAGE_PLATFORMS = ("linkedin", "instagram", "twitter", "threads", "substack")
 
 
-def _editorial_text_queued(
-    day_yyyymmdd: str, load_config, load_token, columns_key: str, text_role: str
-) -> Optional[bool]:
-    """Whether the editorial row of ``day_yyyymmdd`` holds text in the ``text_role`` column.
+# Where each platform's planned post text lives: (config block, its role→column map
+# key, the role holding the text). A day whose editorial row has text there is a day
+# the weekly planning run was meant to schedule a post for.
+PLANNED_TEXT_SOURCES = {
+    "linkedin": ("linkedin", "editorial_columns", "caption_text"),
+    "instagram": ("instagram", "editorial_columns", "caption_text"),
+    "twitter": ("twitter", "editorial_columns", "caption_text"),
+    "threads": ("threads", "editorial_columns", "caption_text"),
+    "substack": ("substack", "notion_columns", "text_body"),
+}
 
-    ``load_config`` / ``load_token`` are the platform's own loaders;
-    ``columns_key`` names the role→column map in its config block. A missing row
-    or an empty column is ``False`` (nothing queued). ``None`` means the lookup
-    could not establish the answer — Notion unreachable, config missing, or the
-    column absent from the row — and callers must not read it as "nothing queued".
+
+def _planned_post(platform: str, day_yyyymmdd: str) -> Optional[bool]:
+    """Whether the editorial row of ``day_yyyymmdd`` holds planned post text for ``platform``.
+
+    A missing row or an empty column is ``False`` (nothing planned). ``None``
+    means the lookup could not establish the answer — Notion unreachable, config
+    missing, or the column absent from the row — and callers must not read it as
+    "nothing planned".
     """
+    block, columns_key, text_role = PLANNED_TEXT_SOURCES[platform]
     try:
         from reporting.notion.editorial import (
             get_field,
             get_row_by_day,
             init_notion_client,
         )
-        cfg = load_config()
-        notion = init_notion_client(load_token())
+        cfg = load_block(block)
+        token = load_full_config().get("notion", {}).get("api_token")
+        notion = init_notion_client(token) if token else None
         if notion is None:
             return None
         columns = cfg[columns_key]
@@ -244,70 +263,39 @@ def _editorial_text_queued(
             return None
         return bool(str(text).strip())
     except Exception as e:
-        logger.warning(f"⚠️ Could not verify editorial content for {day_yyyymmdd}: {e}")
+        logger.warning(f"⚠️ Could not verify the planned {platform} post for {day_yyyymmdd}: {e}")
         return None
 
 
-def _substack_had_editorial_content(day_yyyymmdd: str) -> Optional[bool]:
-    """Whether a Substack editorial row with body text existed for ``day_yyyymmdd``.
+def _judge_missing_metrics(platform: str, processing_date: str, failures: "PipelineFailures") -> None:
+    """File a platform's missing post metrics under the kind its planning state names.
 
-    Unlike the other platforms, Substack Notes aren't scheduled automation —
-    ``post_substack_note.py`` publishes only when the day's editorial row exists
-    with non-empty body text, and treats a missing row as a normal no-op (rc=4),
-    not a failure. So a day with no editorial row genuinely has nothing to post,
-    and the resulting gap in ``posts`` is expected, not a coverage bug.
-
-    Returns ``True``/``False``, or ``None`` if the check itself couldn't run
-    (Notion unreachable, config missing) — callers should then fall back to
-    treating the missing metrics as a real failure rather than silently
-    downgrading it on an unverifiable guess.
+    The metrics cover ``processing_date - 1``. Planned for that day is a failure
+    (the schedule step did not run or did not land), not planned is a note, and a
+    planning state that cannot be read is unverified, never a pass.
     """
-    from planning.substack.substack_session import (
-        load_notion_token,
-        load_substack_config,
-    )
-
-    return _editorial_text_queued(
-        day_yyyymmdd, load_substack_config, load_notion_token, "notion_columns", "text_body"
-    )
-
-
-def _threads_had_editorial_content(day_yyyymmdd: str) -> Optional[bool]:
-    """Whether a Threads caption (``text TH``) was queued for ``day_yyyymmdd``.
-
-    The weekly planning run schedules each queued caption into Threads' native
-    scheduler. A day with no caption has nothing to publish, so no post metrics
-    for it is expected; a day with a caption but no post means the schedule step
-    did not run or did not land, which is a failure. ``None`` means unverified.
-    """
-    from planning.threads.threads_session import load_notion_token, load_threads_config
-
-    return _editorial_text_queued(
-        day_yyyymmdd, load_threads_config, load_notion_token, "editorial_columns", "caption_text"
-    )
-
-
-def _gap_is_expected(platform: str, processing_date: str) -> bool:
-    """True when ``platform`` genuinely had nothing queued for the day these metrics cover.
-
-    Only Substack and Threads are judged this way; any other platform, and any
-    lookup that comes back unverified, leaves the gap a failure.
-    """
-    lookups = {
-        "substack": _substack_had_editorial_content,
-        "threads": _threads_had_editorial_content,
-    }
-    lookup = lookups.get(platform)
-    if lookup is None:
-        return False
     covered_day = (datetime.strptime(processing_date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y%m%d")
-    if lookup(covered_day) is not False:
-        return False
-    logger.warning(
-        f"⚠️ Posts-coverage: {platform} had no editorial content queued for {covered_day} — "
-        f"no post metrics for {processing_date} is expected, not a failure"
-    )
-    return True
+    planned = _planned_post(platform, covered_day)
+    if planned is False:
+        failures.nothing_planned.append(f"{platform} (nothing planned for {covered_day})")
+        logger.warning(
+            f"⚠️ Posts-coverage: {platform} had nothing planned for {covered_day} — "
+            f"no post metrics for {processing_date} is expected, not a failure"
+        )
+    elif planned:
+        failures.missing_post_metrics.append(f"{platform} (planned for {covered_day})")
+        logger.error(
+            f"❌ Posts-coverage: {platform} had a post planned for {covered_day} "
+            f"but no post metrics on {processing_date}"
+        )
+    else:
+        failures.unverified.append(
+            f"posts_coverage: {platform} planning for {covered_day} not confirmed, no post metrics"
+        )
+        logger.error(
+            f"❌ Posts-coverage: no post metrics for {platform} on {processing_date} "
+            f"and its planned post for {covered_day} could not be confirmed"
+        )
 
 
 def check_posts_coverage(processing_date: str, failures: "PipelineFailures") -> None:
@@ -320,11 +308,8 @@ def check_posts_coverage(processing_date: str, failures: "PipelineFailures") -> 
     flag any platform with neither a video nor a non-video ``post_id``. DB
     errors degrade gracefully (logged) — the run is never crashed by the check.
 
-    Substack and Threads are judged against the editorial calendar: if it
-    genuinely had nothing queued for the day these metrics would cover
-    (``processing_date - 1``), the gap is logged as an alert, not recorded as a
-    failure. Content queued but no post, or a calendar that could not be read,
-    stays a failure.
+    Every flagged platform is judged by the same rule, ``_judge_missing_metrics``,
+    against the editorial calendar.
     """
     try:
         from reporting.process.supabase_uploader import get_db_connection
@@ -348,20 +333,17 @@ def check_posts_coverage(processing_date: str, failures: "PipelineFailures") -> 
 
         data = dict(zip(columns, row))
         for platform in COVERAGE_PLATFORMS:
-            if platform == "threads" and failures.skipped_platforms:
+            if any(entry.startswith(platform) for entry in failures.skipped_platforms):
                 logger.warning(
-                    "⚠️ Posts-coverage: Threads metrics skipped for %s because its source endpoints were unavailable",
+                    "⚠️ Posts-coverage: %s metrics skipped for %s because its source endpoints were unavailable",
+                    platform,
                     processing_date,
                 )
                 continue
-            has_metrics = data.get(f"post_id_{platform}_no_video") or data.get(f"post_id_{platform}_video")
-            if has_metrics:
+            if data.get(f"post_id_{platform}_no_video") or data.get(f"post_id_{platform}_video"):
                 continue
-            if _gap_is_expected(platform, processing_date):
-                continue
-            failures.missing_post_metrics.append(platform)
-            logger.error(f"❌ Posts-coverage: no post metrics for {platform} on {processing_date}")
-        if not failures.missing_post_metrics:
+            _judge_missing_metrics(platform, processing_date, failures)
+        if not (failures.missing_post_metrics or failures.nothing_planned):
             logger.info(f"✅ Posts-coverage: all {len(COVERAGE_PLATFORMS)} platforms have post metrics for {processing_date}")
     except Exception as e:
         logger.error(f"❌ Posts-coverage check failed: {e}")
@@ -470,8 +452,12 @@ def _load_notify_send():
 
 
 def _build_alert_message(failures: "PipelineFailures", processing_date: str) -> str:
-    """Deterministic, mobile-skimmable alert body: date, steps, endpoints, drift."""
-    lines = [f"🚨 Reporting pipeline finished with failures — {processing_date}"]
+    """Deterministic, mobile-skimmable alert body: date, steps, endpoints, drift, notes."""
+    lines = [
+        f"🚨 Reporting pipeline finished with failures — {processing_date}"
+        if failures.any()
+        else f"🔔 Reporting pipeline finished — notes for {processing_date}"
+    ]
     for kind in fields(failures):
         entries = getattr(failures, kind.name)
         if not entries:
@@ -494,7 +480,7 @@ def send_failure_alert(failures: "PipelineFailures", processing_date: str) -> No
     ``main()`` is the independent second signal regardless.
     """
     message = _build_alert_message(failures, processing_date)
-    logger.error("🚨 Pipeline finished with failures:\n%s", message)
+    (logger.error if failures.any() else logger.warning)("🚨 Pipeline finished with an alert:\n%s", message)
 
     notify_send = _load_notify_send()
     if notify_send is None:
@@ -615,6 +601,20 @@ def _run_posture_checks(failures: "PipelineFailures") -> None:
     check_policy_drift_coverage(failures)
 
 
+def _report_outcome(failures: "PipelineFailures", processing_date: str) -> None:
+    """Send the run's one consolidated alert: for a failure, and for a note alone.
+
+    A note (a day with nothing planned) alerts while the run stays green; a clean
+    run sends nothing.
+    """
+    if failures.any() or failures.nothing_planned:
+        send_failure_alert(failures, processing_date)
+    if failures.any():
+        logger.error("❌ Complete data processing pipeline finished WITH FAILURES")
+    else:
+        logger.info("🎉 Complete data processing pipeline finished")
+
+
 def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
                 skip_aggregation=False, skip_consolidation=False, skip_notion=False,
                 skip_substack=False, reference_date=None, auto_confirm=False):
@@ -703,13 +703,7 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
 
     _run_posture_checks(failures)
 
-    # Notify only on failure: one consolidated alert + a non-zero exit signal.
-    if failures.any():
-        send_failure_alert(failures, processing_date)
-        logger.error("❌ Complete data processing pipeline finished WITH FAILURES")
-    else:
-        logger.info("🎉 Complete data processing pipeline finished")
-
+    _report_outcome(failures, processing_date)
     return failures
 
 def main():
