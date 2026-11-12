@@ -12,6 +12,8 @@ Run: & .\\.venv\\Scripts\\python.exe -m unittest discover tests -v
 from __future__ import annotations
 
 import ast
+import contextlib
+import io
 import unittest
 from dataclasses import fields
 from pathlib import Path
@@ -98,6 +100,20 @@ class StageOrderTests(unittest.TestCase):
         ):
             self.assertEqual(0, planning_pipeline.main())
         self.assertEqual(list(run_state.STAGES), ran)
+
+    def test_help_names_every_stage_and_no_platform_count(self) -> None:
+        out = io.StringIO()
+        with (
+            mock.patch("sys.argv", ["planning_pipeline.py", "--help"]),
+            contextlib.redirect_stdout(out),
+            self.assertRaises(SystemExit),
+        ):
+            planning_pipeline.parse_args()
+        text = " ".join(out.getvalue().split())
+        for name in run_state.STAGES:
+            with self.subTest(stage=name):
+                self.assertIn(name, text)
+        self.assertNotIn("four platforms", text)
 
 
 if __name__ == "__main__":

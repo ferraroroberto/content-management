@@ -151,7 +151,7 @@ class ReportingAlertTests(unittest.TestCase):
         notify = MagicMock()
         notify.main.return_value = 0
         with mock.patch.object(rp, "_load_notify_send", return_value=notify):
-            rp.send_failure_alert(failures, "2026-11-10", None)
+            rp.send_failure_alert(failures, "2026-11-10")
 
         args = notify.main.call_args.args[0]
         self.assertEqual(args[:2], ["--category", "attention"])
