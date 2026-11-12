@@ -82,9 +82,11 @@ def dismiss_meta_verified_modal(page: Page) -> bool:
     return False
 
 
-# JS probe that locates a day-column ancestor by walking up from the day
-# header's leaf text node until it finds a descendant with a "Schedule…"
-# label — the day columns carry no stable id/testid of their own.
+# JS probe that answers "is this day's week on screen with its grid mounted":
+# from the day header's leaf text node it walks up to the first ancestor that
+# also holds a "Schedule…" control. That ancestor is the whole planner, not the
+# day's column, so it serves only as a presence check — the column's own
+# button is resolved geometrically by ``_DAY_SCHEDULE_BUTTON_JS``.
 _FIND_COLUMN_JS = r"""
 (label) => {
     const all = document.querySelectorAll('*');
@@ -112,6 +114,50 @@ _FIND_COLUMN_JS = r"""
     return null;
 }
 """
+
+
+# The header row and the column bodies are separate subtrees with no shared
+# column node, so a day's Schedule ▾ split-button is tied to its day by x
+# position: its horizontal centre lies inside that day's header cell. Returns
+# the header cell box (``mode === 'header'``) or the bottom-most visible
+# Schedule ▾ button in that column (``mode === 'button'``), else null.
+_DAY_SCHEDULE_BUTTON_JS = r"""
+([label, mode]) => {
+    let leaf = null;
+    for (const el of document.querySelectorAll('*')) {
+        if (el.children.length === 0 && (el.textContent || '').trim() === label) {
+            leaf = el;
+            break;
+        }
+    }
+    if (!leaf) return null;
+    // Widen from the text node to the header cell: the cell is the widest
+    // ancestor still narrower than the 250px a single day column never reaches.
+    let cell = leaf.getBoundingClientRect();
+    for (let node = leaf.parentElement, i = 0; node && i < 8; node = node.parentElement, i++) {
+        const r = node.getBoundingClientRect();
+        if (r.width >= 250) break;
+        if (r.width >= cell.width) cell = r;
+    }
+    if (mode === 'header') {
+        return {x: cell.x, y: cell.y, width: cell.width, height: cell.height};
+    }
+    let best = null, bestY = -Infinity;
+    for (const b of document.querySelectorAll('[aria-haspopup="menu"]')) {
+        if (!/^schedule\b/i.test((b.innerText || '').trim())) continue;
+        const r = b.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) continue;
+        const cx = r.x + r.width / 2;
+        if (cx < cell.x || cx > cell.x + cell.width) continue;
+        if (r.y > bestY) { best = b; bestY = r.y; }
+    }
+    return best;
+}
+"""
+
+# Where to rest the pointer to reveal a column's hover-only Schedule ▾ button:
+# this far below the day header, which is inside the column body.
+_COLUMN_HOVER_OFFSET_PX = 120
 
 
 # A normal load mounts the grid in ~4s; slow Meta loads have taken longer than
@@ -240,17 +286,16 @@ def _click_schedule_menu_item(page: Page, schedule_btn, action: str) -> None:
 
 
 def open_day_schedule_menu(page: Page, d: date, action: str) -> None:
-    """Hover the day's calendar column to reveal the bottom-right Schedule ▾
+    """Hover the day's calendar column to reveal its bottom Schedule ▾
     button, then click the requested menu item.
 
     ``action`` ∈ {"Schedule post", "Schedule story"}.
 
-    The menu only appears on hover (image 06/10 in the design notes), except
-    for today's column where it's already visible. We find the column by
-    locating the day-header text node ("Mon 18") and walking up the DOM until
-    we hit an ancestor that contains a Schedule button — that ancestor IS the
-    column. The hover + click then happen via the bounding-box of that
-    ancestor's Schedule button.
+    Every non-today column shows its Schedule ▾ only while hovered, so the
+    pointer rests inside the column body below the day header ("Sat 14"),
+    then the button is the visible one aligned with that header (see
+    ``_DAY_SCHEDULE_BUTTON_JS``). Today's column also carries a mid-column
+    slot button; the bottom-most match is taken in every column.
     """
     label = day_cell_label(d)
     logger.debug("🖱  resolving column for day cell %s", label)
@@ -261,46 +306,25 @@ def open_day_schedule_menu(page: Page, d: date, action: str) -> None:
     # Make sure the target day's week is on-screen.
     navigate_to_week(page, d)
 
-    col_handle = page.evaluate_handle(_FIND_COLUMN_JS, label)
-    if col_handle is None:
-        raise RuntimeError(f"Could not locate planner column for {label}.")
-    el = col_handle.as_element()
-    if el is None:
+    header = page.evaluate(_DAY_SCHEDULE_BUTTON_JS, [label, "header"])
+    if not header:
         raise RuntimeError(f"Day {label} not present in current week — wrong view?")
 
-    # Hover the column to reveal the Schedule button (no-op for today's cell,
-    # required for every other day).
     try:
-        el.hover(timeout=8000)
+        page.mouse.move(
+            header["x"] + header["width"] / 2,
+            header["y"] + header["height"] + _COLUMN_HOVER_OFFSET_PX,
+        )
         page.wait_for_timeout(FILL_COMMIT_MS)
     except Exception as err:
         raise RuntimeError(f"Could not hover day column {label}: {err}")
 
-    # Find the Schedule button inside this column. There are usually 1 or 2
-    # buttons whose visible text starts with "Schedule" — pick the LAST one
-    # (the menu button anchors the bottom of the column). ElementHandle uses
-    # query_selector_all rather than Locator.
-    candidates = el.query_selector_all(
-        'div[role="button"], button, [aria-haspopup="menu"]'
-    )
-    schedule_btn = None
-    for c in candidates:
-        try:
-            txt = (c.inner_text() or "").strip()
-        except Exception:
-            txt = ""
-        if re.match(r"^schedule\b", txt, re.I) or txt.lower() == "schedule":
-            schedule_btn = c
-    if schedule_btn is None:
-        # Some columns render the menu as a separate chevron with no text.
-        for c in candidates:
-            try:
-                if c.get_attribute("aria-haspopup"):
-                    schedule_btn = c
-            except Exception:
-                pass
+    schedule_btn = page.evaluate_handle(
+        _DAY_SCHEDULE_BUTTON_JS, [label, "button"]
+    ).as_element()
     if schedule_btn is None:
         raise RuntimeError(f"Could not find Schedule button inside {label} column.")
+    logger.info("🖱  %s: opening its own column's Schedule ▾ menu", label)
 
     # Open the Schedule ▾ menu (JS-native click — Playwright's mouse click does
     # not pop it) and click the requested item ("Schedule post" / "Schedule
