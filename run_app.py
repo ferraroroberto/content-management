@@ -44,3 +44,5 @@ sys.argv = ["streamlit", "run", "app/app.py", "--browser.gatherUsageStats=false"
 from streamlit.web import cli as stcli  # noqa: E402
 
 stcli.main(standalone_mode=False)
+
+# Automated fix for issue #583: planning/instagram: Saturday column's schedule menu never becomes visible
