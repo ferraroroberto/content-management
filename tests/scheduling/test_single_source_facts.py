@@ -67,7 +67,7 @@ class PipelineFailureKindTests(unittest.TestCase):
                 self.assertFalse(failures.any())
                 entry = ("step", "boom") if kind.name == "step_failures" else "entry"
                 getattr(failures, kind.name).append(entry)
-                self.assertTrue(failures.any())
+                self.assertEqual(failures.any(), kind.metadata["failure"])
                 message = rp._build_alert_message(failures, "2026-11-10")
                 self.assertIn(heading, message)
                 self.assertIn("• step: boom" if kind.name == "step_failures" else "• entry", message)

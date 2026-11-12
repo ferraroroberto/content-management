@@ -422,9 +422,13 @@ flowchart LR
   produced no raw file for the date; the last weekly planning run was killed
   before it finished (the alert names the stages it never ran and the command that
   redoes them); or — after consolidation — a platform has
-  **no post metrics** in the consolidated `posts` row for the day (a
-  content-level check, since a raw file can exist yet contain no post the
-  consolidator can match). The alert lists the date + failing steps + missing
+  **no post metrics** in the consolidated `posts` row for the day *and a post was
+  planned for it* (a content-level check, since a raw file can exist yet contain
+  no post the consolidator can match). One rule judges all five platforms against
+  the editorial calendar: planned but missing is a failure naming the platform and
+  day, nothing planned is a separate "Nothing planned" note (an alert, exit `0`, so
+  an unscheduled week is visible at once), and a calendar that cannot be read is
+  reported as unverified. The alert lists the date + failing steps + missing
   endpoints + platforms with no post metrics. A clean run sends nothing and
   exits `0`. The alert is routed by intent — `--category attention`, resolved to a
   chat by the fleet's `hooks/projects.toml`, so no chat id lives in this repo —
