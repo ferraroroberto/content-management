@@ -482,16 +482,13 @@ def _build_alert_message(failures: "PipelineFailures", processing_date: str) -> 
     return "\n".join(lines)
 
 
-def send_failure_alert(failures: "PipelineFailures", processing_date: str, config: dict | None) -> None:
+def send_failure_alert(failures: "PipelineFailures", processing_date: str) -> None:
     """Send exactly one consolidated Telegram alert for a failed run.
 
     Routed by **intent category**, not by a chat id this repo owns: a pipeline
     failure is come-look, so it goes to ``attention`` and the fleet's
     ``hooks/projects.toml`` decides which chat that is. Nothing here needs
     changing when the destination moves.
-
-    ``config`` is unused now that the destination is not repo-owned. It stays in
-    the signature because callers pass it positionally.
 
     A missing token or chat degrades gracefully (logged); the non-zero exit in
     ``main()`` is the independent second signal regardless.
@@ -708,7 +705,7 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
 
     # Notify only on failure: one consolidated alert + a non-zero exit signal.
     if failures.any():
-        send_failure_alert(failures, processing_date, config)
+        send_failure_alert(failures, processing_date)
         logger.error("❌ Complete data processing pipeline finished WITH FAILURES")
     else:
         logger.info("🎉 Complete data processing pipeline finished")

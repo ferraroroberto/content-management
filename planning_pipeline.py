@@ -86,13 +86,13 @@ def configure_logger(debug: bool) -> logging.Logger:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Planning pipeline: schedule every WIP row across LI → IG → TW → TH."
+        description=f"Planning pipeline: schedule every WIP row across {' → '.join(run_state.STAGES)}."
     )
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true",
                      help="Walk each platform's flow up to the final Schedule action; do NOT submit.")
     mode.add_argument("--live", action="store_true",
-                     help="Actually schedule posts on all four platforms.")
+                     help="Actually schedule posts on every platform stage.")
     p.add_argument("--debug", action="store_true",
                   help="Enable debug logging (passes through to each scheduler).")
     p.add_argument("--force", action="store_true",
