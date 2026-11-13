@@ -39,7 +39,7 @@ def pick_style_examples(episodes: list[dict], clip_rows: list[dict], n: int) -> 
     """Titles and LinkedIn intros of the clips of the newest ``n`` dated
     episodes that have clips, newest episode first, then by clip number. The style improved over time, so older episodes are left out.
     ``episodes`` / ``clip_rows`` are Notion rows of the Episodes / Clips tables."""
-    from reporting.notion._client import extract_property_value  # noqa: PLC0415
+    from tools.reporting.notion._client import extract_property_value  # noqa: PLC0415
 
     def prop(row: dict, name: str):
         props = row.get("properties", {})
@@ -81,8 +81,8 @@ def style_examples(cfg: dict, ep: Episode) -> dict:
         logger.warning("⚠️ podcast.notion.clips_db_id / episodes_db_id not set — selecting without style examples")
         return examples
     from config.loader import load_full_config  # noqa: PLC0415
-    from reporting.notion._client import init_notion_client  # noqa: PLC0415
-    from reporting.notion.editorial import query_rows_by_filter  # noqa: PLC0415
+    from tools.reporting.notion._client import init_notion_client  # noqa: PLC0415
+    from tools.reporting.notion.editorial import query_rows_by_filter  # noqa: PLC0415
 
     notion = init_notion_client(load_full_config()["notion"]["api_token"])
     episodes = query_rows_by_filter(notion, episodes_db_id, {"property": "Date", "date": {"is_not_empty": True}})

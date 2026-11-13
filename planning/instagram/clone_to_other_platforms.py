@@ -68,8 +68,8 @@ from planning.instagram.instagram_session import (  # noqa: E402
     load_instagram_config,
     load_notion_token,
 )
-from reporting.notion.editorial import retrieve_page  # noqa: E402
-from reporting.notion.notion_update import (  # noqa: E402
+from tools.reporting.notion.editorial import retrieve_page  # noqa: E402
+from tools.reporting.notion.notion_update import (  # noqa: E402
     format_database_id,
     prepare_notion_update,
 )

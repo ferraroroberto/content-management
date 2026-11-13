@@ -20,7 +20,7 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from reporting.notion import notion_update as nu
+from tools.reporting.notion import notion_update as nu
 
 POSTS_FIELDS = ["Impressions", "Likes", "Skipped"]
 FOLLOWER_FIELDS = ["Followers"]

@@ -1,8 +1,8 @@
 # Playwright social-media scraping — durable reference
 
-This is the reference doc for the `reporting/scrape_client/` package — the
+This is the reference doc for the `tools/reporting/scrape_client/` package — the
 Playwright-based alternative to the paid RapidAPI fetcher
-(`reporting/social_client/social_api_client.py`). It captures the
+(`tools/reporting/social_client/social_api_client.py`). It captures the
 per-platform DOM tricks that took the longest to find so a future reader
 (or LLM) re-fixing a broken scraper has somewhere to start.
 
@@ -94,7 +94,7 @@ When iterating on a new scraper, the fastest loop is:
 1. Edit the scraper.
 2. Delete the old JSON: `Remove-Item reporting\results\raw\<key>_<date>.json`.
 3. Re-run that one endpoint:
-   `python -m reporting.social_client.social_api_client --no-skip --platform <key> --debug`
+   `python -m tools.reporting.social_client.social_api_client --no-skip --platform <key> --debug`
 4. Inspect the saved JSON and compare to a known-good baseline (the
    RapidAPI shape mapping for the same date is fine for a diff).
 5. When a selector misses, the scraper saves a screenshot to
@@ -102,7 +102,7 @@ When iterating on a new scraper, the fastest loop is:
    the failure is usually obvious (wrong page state, login expired,
    layout A/B test).
 
-For full-pipeline validation, run `python -m reporting.process.data_processor`
+For full-pipeline validation, run `python -m tools.reporting.process.data_processor`
 standalone — it processes every JSON file in `results/raw/`, falls back
 to `_playwright` mappings as needed, and emits per-DataFrame counts so
 you can spot any endpoint that produced zero records.

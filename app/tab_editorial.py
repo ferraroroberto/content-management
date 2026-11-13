@@ -2,7 +2,7 @@
 
 Runs ``reporting.notion.add_editorial_dates``, which creates any missing
 editorial rows for the current + next calendar month (idempotent). One run
-button + the shared streamed-log panel, same as the reporting/planning tabs.
+button + the shared streamed-log panel, same as the tools/reporting/planning tabs.
 No date selector — the default current+next-month range is what runs.
 """
 
@@ -30,7 +30,7 @@ def run() -> None:
 
     debug = st.toggle("debug", value=False, key="editorial-debug")
 
-    cmd = [str(VENV_PY), "-m", "reporting.notion.add_editorial_dates"]
+    cmd = [str(VENV_PY), "-m", "tools.reporting.notion.add_editorial_dates"]
     if debug:
         cmd.append("--debug")
 

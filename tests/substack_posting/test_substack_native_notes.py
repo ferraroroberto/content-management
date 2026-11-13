@@ -1,6 +1,6 @@
 """Native note-engagement records must match the Playwright scraper's shape (issue #185).
 
-``reporting/scrape_client/substack_native.py`` reads note engagement over the
+``tools/reporting/scrape_client/substack_native.py`` reads note engagement over the
 private HTTP API instead of screen-scraping the rendered feed. It is selected by
 a ``source`` flag and writes into the same Postgres/Notion columns as the
 Playwright path, so a field that silently changes meaning corrupts history
@@ -26,7 +26,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
-from reporting.scrape_client.substack_native import (
+from tools.reporting.scrape_client.substack_native import (
     note_is_teaser,
     note_posted_date,
     note_record,

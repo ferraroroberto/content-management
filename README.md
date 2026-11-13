@@ -2,7 +2,7 @@
 
 Six surfaces, one repo:
 
-- **Reporting** (`reporting/`, `reporting_pipeline.py`) — pulls daily
+- **Reporting** (`tools/reporting/`, `reporting_pipeline.py`) — pulls daily
   metrics from social media APIs, processes through Supabase, syncs to
   Notion, and runs the daily Substack Note.
 - **Planning** (`planning/`, `planning_pipeline.py`) — schedules next
@@ -165,12 +165,12 @@ content-management/                   # repo root
 │   ├── substack/                     # Substack Note publisher + followers scraper
 │   │                                 # (with a video-day branch for the weekly clip)
 │   └── videos/                       # weekly cross-platform video orchestrator
-├── reporting/                        # daily numbers — APIs → Supabase → Notion
-│   ├── social_client/                # RapidAPI fetchers
-│   ├── scrape_client/                # HTTP/Playwright scrapers
-│   ├── process/                      # transform, upload to Supabase, aggregate
-│   └── notion/                       # editorial helpers + Notion sync
 ├── tools/                            # one package per tool (see docs/layout.md)
+│   ├── reporting/                        # daily numbers — APIs → Supabase → Notion
+│   │   ├── social_client/                # RapidAPI fetchers
+│   │   ├── scrape_client/                # HTTP/Playwright scrapers
+│   │   ├── process/                      # transform, upload to Supabase, aggregate
+│   │   └── notion/                       # editorial helpers + Notion sync
 │   ├── newsletter/                       # weekly newsletter pipeline (archive + normalize + build)
 │   │                                     # archive=chrome tabs → notion; normalize_names + normalize_url
 │   │                                     # rewrite titles + clean URLs; build_newsletter renders HTML
@@ -185,7 +185,7 @@ content-management/                   # repo root
 │   ├── podcast/                          # episode package: transcript → clips (1:1 + 9:16) → copy, covers, docx, website HTML
 │   ├── recorder/                         # self-hosted two-side recorder: page + chunk upload into the episode folder
 │   └── check_ip/                     # illustration copyright check (Google Lens → SQLite → triage tab)
-├── app/                              # Streamlit control panel (tabs: reporting/editorial/planning/newsletter/triage/engagement/check-IP/podcast/demo-video)
+├── app/                              # Streamlit control panel (tabs: tools/reporting/editorial/planning/newsletter/triage/engagement/check-IP/podcast/demo-video)
 ├── config/                           # config.json, mapping.json, logger_config, chrome_launch, console
 │   └── doc_capture/                  # deterministic control-panel screenshot engine (README tour)
 ├── common/                           # code shared by two or more tools
@@ -231,9 +231,9 @@ gotchas, files.
   [`planning/substack/README.md`](planning/substack/README.md) ·
   [`planning/videos/README.md`](planning/videos/README.md)
 - **Reporting** —
-  [`reporting/social_client/README.md`](reporting/social_client/README.md) ·
-  [`reporting/process/README.md`](reporting/process/README.md) ·
-  [`reporting/notion/README.md`](reporting/notion/README.md)
+  [`tools/reporting/social_client/README.md`](tools/reporting/social_client/README.md) ·
+  [`tools/reporting/process/README.md`](tools/reporting/process/README.md) ·
+  [`tools/reporting/notion/README.md`](tools/reporting/notion/README.md)
 - **Newsletter** —
   [`tools/newsletter/README.md`](tools/newsletter/README.md)
 - **Engagement** —
@@ -514,13 +514,13 @@ orientation map stays short. See that file for column-level detail.
 
 ```powershell
 # Test database connection (also verifies RLS/policy posture)
-& .\.venv\Scripts\python.exe -m reporting.process.supabase_policy_script --check
+& .\.venv\Scripts\python.exe -m tools.reporting.process.supabase_policy_script --check
 
 # Analyze Notion database structure
-& .\.venv\Scripts\python.exe -m reporting.notion.notion_database_structure --debug
+& .\.venv\Scripts\python.exe -m tools.reporting.notion.notion_database_structure --debug
 
 # Process single platform
-& .\.venv\Scripts\python.exe -m reporting.social_client.social_api_client --platform linkedin_profile --debug
+& .\.venv\Scripts\python.exe -m tools.reporting.social_client.social_api_client --platform linkedin_profile --debug
 
 # Smoke-test one planning scheduler (dry-run, no posts written)
 & .\.venv\Scripts\python.exe -m planning.twitter.schedule_twitter_posts --all-wip --dry-run --debug

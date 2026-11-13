@@ -49,13 +49,13 @@ from planning._session_base import (  # noqa: E402
 )
 from planning._session_base import configure_logger as _configure_logger  # noqa: E402
 from planning.row_outcome import RowStatus  # noqa: E402
-from reporting.notion._client import page_title  # noqa: E402
-from reporting.notion.editorial import (  # noqa: E402
+from tools.podcast.media import ffprobe_json, run_ffmpeg  # noqa: E402
+from tools.reporting.notion._client import page_title  # noqa: E402
+from tools.reporting.notion.editorial import (  # noqa: E402
     get_field,
     get_page_body_text,
     retrieve_page,
 )
-from tools.podcast.media import ffprobe_json, run_ffmpeg  # noqa: E402
 
 logger = logging.getLogger("videos_session")
 
@@ -591,7 +591,7 @@ def load_clip_payload(notion, editorial_row: dict, video_cols: dict, clip_cols: 
         caption_long = body_text
         if body_text and caption_li_col:
             try:
-                from reporting.notion.editorial import set_field as _set
+                from tools.reporting.notion.editorial import set_field as _set
                 _set(notion, rel_id, "caption_li", body_text, clip_cols, "rich_text")
                 logger.info(
                     "🔁 Cached LinkedIn long caption (%d chars) into clip property %r.",

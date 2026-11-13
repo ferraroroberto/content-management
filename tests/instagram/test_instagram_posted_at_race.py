@@ -3,7 +3,7 @@ r"""Regression tests for issue #260: the Instagram scraper's newest post lost
 immediately after a fixed 1 s sleep instead of waiting for the element, and
 swallowed the failure in a bare ``except Exception: pass``.
 
-``reporting/scrape_client/instagram.py`` now exposes the permalink read as a
+``tools/reporting/scrape_client/instagram.py`` now exposes the permalink read as a
 pure ``_read_permalink_posted_at(page, timeout_ms)`` that waits explicitly for
 the element and reports *why* it failed, plus ``_scrape_permalink`` which
 retries the permalink once and logs a WARNING whenever ``posted_at`` still
@@ -23,7 +23,7 @@ import unittest
 from unittest import mock
 from unittest.mock import MagicMock
 
-from reporting.scrape_client import instagram as ig
+from tools.reporting.scrape_client import instagram as ig
 
 DATETIME_ATTR = "2026-08-30T12:00:00.000Z"
 

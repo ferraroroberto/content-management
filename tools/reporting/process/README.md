@@ -1,0 +1,361 @@
+# Process Module
+
+The Process module handles data processing, transformation, and database operations for social media analytics data. It takes raw JSON data from various social media platforms, processes it according to mapping configurations, and uploads it to a Supabase PostgreSQL database.
+
+## 🚀 Overview
+
+This module contains several components:
+
+1. **Data Processor** - Transforms raw JSON data into structured DataFrames
+2. **Supabase Uploader** - Handles database connections and data uploads
+3. **Profile Aggregator** - Consolidates profile data from multiple platforms
+4. **Posts Consolidator** - Merges posts data across platforms
+5. **Supabase Policy Script** - Applies RLS policies to all database tables
+
+Notion relation/junction-table creation now lives entirely in the SQL
+auto-detector system (`tools/reporting/notion/setup_notion_relations_system.{py,sql,md}`).
+The Python relations creator and the ad hoc DB test scripts that used to live
+in this module are removed as stale/broken.
+
+## 📊 Components
+
+### 📊 data_processor.py
+
+The main data processing engine that:
+- Reads raw JSON files from the `results/raw` directory
+- Applies field mappings from `config/mapping.json`
+- Transforms nested JSON structures into flat DataFrames
+- Handles different data types (posts, profiles, etc.)
+- Exports processed data as CSV or Excel files
+- Optionally uploads data to Supabase
+
+**Key Features:**
+- Automatic type conversion (dates, booleans, integers)
+- Nested field extraction using dot notation
+- Array data processing for posts
+- Missing field validation
+- Debug mode for detailed logging
+
+### 📤 supabase_uploader.py
+
+Database interface module that:
+- Manages PostgreSQL connections (local/cloud environments)
+- Creates tables automatically based on DataFrame structure
+- Handles upsert operations with primary key conflict resolution
+- Supports batch uploads for large datasets
+- Provides connection pooling and error handling
+
+**Key Features:**
+- Environment-based configuration (local/cloud)
+- Automatic table creation with appropriate data types
+- Primary key determination based on data type
+- Batch processing to avoid memory issues
+- Transaction management
+
+### 🔄 profile_aggregator.py
+
+Consolidates follower counts from all platforms into a single `profile` table:
+- Reads from individual platform profile tables
+- Creates a unified view with all follower counts
+- Maintains historical data by date
+- Uses SQL for efficient aggregation
+
+### 📝 posts_consolidator.py
+
+Merges posts data from all platforms:
+- Separates video and non-video content
+- Creates a wide-format table with all platform data
+- Links posts to their URLs
+- Filters for posts from the previous day
+
+### 🔒 supabase_policy_script.py
+
+Applies Row Level Security (RLS) policies to all existing tables in Supabase:
+- Scans all tables in the public schema
+- Enables RLS on tables that don't have it
+- Creates essential policies for anonymous access (SELECT, INSERT, UPDATE, DELETE)
+- Handles existing policies gracefully to avoid conflicts
+- Provides comprehensive reporting on policy application status
+
+**Key Features:**
+- Automatic detection of existing policies and RLS status
+- Smart policy application (only creates what's missing)
+- Force mode to drop and recreate all policies
+- Dry-run mode to preview changes without execution
+- Comprehensive logging with emoji indicators
+- Environment-based configuration management
+- Error handling and recovery for individual table failures
+
+**Command Line Options:**
+- `--environment`: Choose between local/cloud database (default: cloud)
+- `--dry-run`: Preview what would be done without executing
+- `--check`: Detect RLS / policy / view-security drift and exit non-zero on any drift (read-only, no changes)
+- `--force`: Drop existing policies before creating new ones
+- `--debug`: Enable detailed debug logging
+
+**Drift detection (`--check`):**
+
+`--check` is a read-only gate that asserts the current security posture instead
+of changing it. For every public table it verifies RLS is enabled **and** all
+four `anon_*_all` policies exist; for every public view it verifies
+`security_invoker = on`. It exits `0` when everything conforms and non-zero,
+with an emoji-prefixed per-object summary of what drifted, when anything is
+missing. This catches a newly-created table or view that slipped through
+without RLS on the project's own clock, rather than waiting for the weekly
+Supabase security-advisor email.
+
+The daily reporting pipeline (`reporting_pipeline.py`, Step 7) runs this same
+check on every run: drift is folded into the pipeline's consolidated failure
+alert and makes the pipeline exit non-zero, so a red daily run is the signal.
+
+**Remediation runbook** — when `--check` (or the pipeline's Step 7) reports
+drift:
+
+1. Re-apply the policies by running `tools/reporting/process/supabase_policy_script.sql`
+   in Supabase → SQL Editor, or run `python supabase_policy_script.py` (without
+   `--check`) to enable RLS + create the missing policies and set
+   `security_invoker = on` on views.
+2. Re-run `python supabase_policy_script.py --check` and confirm it exits `0`.
+
+Remediation stays a deliberate human action — the check only reports; it never
+auto-remediates, so an unintended schema change can't be silently papered over.
+
+## ⚙️ Setup
+
+### 📋 Prerequisites
+
+- Python 3.x
+- PostgreSQL database (local or Supabase cloud)
+- Required Python packages:
+  ```bash
+  ./.venv/Scripts/python.exe -m pip install pandas psycopg2-binary python-dotenv argparse
+  ```
+
+### 🔧 Environment Configuration
+
+1. Copy `.env_example` to `.env`:
+   ```bash
+   cp .env_example .env
+   ```
+
+2. Update `.env` with your database credentials:
+   ```env
+   # For local development
+   db_user_local=postgres
+   db_password_local=your_password
+   db_host_local=127.0.0.1
+   db_port_local=5432
+   db_name_local=postgres
+
+   # For cloud deployment
+   db_user_cloud=your_cloud_user
+   db_password_cloud=your_cloud_password
+   db_host_cloud=your_host.supabase.com
+   db_port_cloud=5432
+   db_name_cloud=postgres
+   ```
+
+### 📁 Configuration Files
+
+The process module relies on configuration files in the `../config` directory:
+
+1. **config.json** - Main configuration with API settings and folder paths
+2. **mapping.json** - Field mapping rules for data transformation
+
+## 🚀 Usage
+
+### 📊 Basic Data Processing
+
+Process all JSON files and create DataFrames:
+
+```bash
+./.venv/Scripts/python.exe -m tools.reporting.process.data_processor
+```
+
+### 🔒 Applying RLS Policies
+
+Apply Row Level Security policies to all existing tables:
+
+```bash
+# Preview what would be done without executing
+./.venv/Scripts/python.exe supabase_policy_script.py --dry-run
+
+# Detect drift only (read-only; exits non-zero if any table/view drifted)
+./.venv/Scripts/python.exe supabase_policy_script.py --check
+
+# Apply policies to all tables (skips tables that already have policies)
+./.venv/Scripts/python.exe supabase_policy_script.py
+
+# Force apply policies (drops existing policies first)
+./.venv/Scripts/python.exe supabase_policy_script.py --force
+
+# Use local environment
+./.venv/Scripts/python.exe supabase_policy_script.py --environment local
+
+# Enable debug logging
+./.venv/Scripts/python.exe supabase_policy_script.py --debug
+```
+
+### 📝 Command Line Options
+
+#### data_processor.py
+
+```bash
+# Enable debug mode
+./.venv/Scripts/python.exe -m tools.reporting.process.data_processor --debug
+
+# Skip upload to database
+./.venv/Scripts/python.exe -m tools.reporting.process.data_processor --upload n
+
+# Export as Excel instead of CSV
+./.venv/Scripts/python.exe -m tools.reporting.process.data_processor --format excel
+
+# All options combined
+./.venv/Scripts/python.exe -m tools.reporting.process.data_processor --debug --upload n --format excel
+```
+
+#### supabase_uploader.py
+
+```bash
+# Test with a CSV file (cloud environment)
+./.venv/Scripts/python.exe -m tools.reporting.process.supabase_uploader --csv path/to/file.csv
+
+# Use local database
+./.venv/Scripts/python.exe -m tools.reporting.process.supabase_uploader --environment local --csv path/to/file.csv
+```
+
+#### profile_aggregator.py
+
+```bash
+# Run profile aggregation
+./.venv/Scripts/python.exe -m tools.reporting.process.profile_aggregator
+
+# Debug mode
+./.venv/Scripts/python.exe -m tools.reporting.process.profile_aggregator --debug
+```
+
+#### posts_consolidator.py
+
+```bash
+# Run posts consolidation
+./.venv/Scripts/python.exe -m tools.reporting.process.posts_consolidator
+
+# Debug mode
+./.venv/Scripts/python.exe -m tools.reporting.process.posts_consolidator --debug
+```
+
+## 📊 Data Flow
+
+1. **Input**: Raw JSON files in `results/raw/` directory
+   - Format: `{platform}_{datatype}_{YYYY-MM-DD}.json`
+
+2. **Processing**: 
+   - Field extraction based on mapping rules
+   - Type conversion and validation
+   - DataFrame creation
+
+3. **Output**:
+   - CSV/Excel files in `results/processed/`
+   - Database tables in Supabase
+
+## 🗄️ Database Schema
+
+### 🔑 Primary Keys by Data Type
+
+- **Posts**: `date`, `platform`, `data_type`, `post_id`
+- **Profile**: `date`, `platform`, `data_type`
+- **Comments**: `comment_id`
+- **Insights/Metrics**: `post_id`, `date`
+
+### 🔗 Aggregated Tables
+
+- **profile**: Consolidated follower counts across all platforms
+- **posts**: Unified posts data with video/non-video separation
+
+## ❌ Error Handling
+
+The module includes comprehensive error handling:
+
+- Missing configuration files
+- Invalid JSON data
+- Database connection failures
+- Missing required fields
+- Type conversion errors
+- Network timeouts
+
+All errors are logged with descriptive messages and emoji indicators.
+
+## 📝 Logging
+
+Uses custom logger with:
+- Console output with emoji indicators
+- Debug/Info level switching
+- File logging (optional)
+- Progress tracking for batch operations
+
+### 📊 Log Indicators:
+- 🚀 Starting/Processing
+- ✅ Success
+- ❌ Error
+- ⚠️ Warning
+- 📂 File operations
+- 📤 Upload operations
+- 🔄 Aggregation operations
+- 📊 Progress updates
+- 🐞 Debug mode
+- 🗑️ Cleanup operations
+
+## 🔧 Development
+
+### ➕ Adding New Platforms
+
+1. Update `mapping.json` with field mappings
+2. Ensure raw data follows standard format
+3. Run data processor to test transformation
+4. Verify database table creation
+
+### 🚀 Extending Functionality
+
+The module is designed to be extensible:
+- Add new data types in `get_primary_keys()`
+- Create custom field transformations in mapping
+- Add new aggregation SQL files
+- Implement additional consolidators
+
+## 🐛 Troubleshooting
+
+### ❗ Common Issues
+
+1. **Connection Failed**
+   - Check `.env` file exists and has correct credentials
+   - Verify database is accessible
+   - Check network/firewall settings
+
+2. **Missing Fields**
+   - Review mapping.json for correct paths
+   - Check if API response structure changed
+   - Enable debug mode for detailed logs
+
+3. **Type Conversion Errors**
+   - Verify data types in mapping configuration
+   - Check for null/missing values
+   - Review date format handling
+
+4. **Policy Application Issues**
+   - Ensure database user has sufficient privileges
+   - Check for existing policy conflicts
+   - Use dry-run mode to preview changes
+   - Review table permissions and ownership
+
+### 🔍 Debug Mode
+
+Enable debug mode for detailed logging:
+```bash
+./.venv/Scripts/python.exe -m tools.reporting.process.data_processor --debug
+```
+
+This provides:
+- Step-by-step execution logs
+- Raw data samples
+- SQL queries being executed
+- Detailed error messages

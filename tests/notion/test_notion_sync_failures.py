@@ -14,7 +14,7 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from reporting.notion import notion_supabase_sync as nss
+from tools.reporting.notion import notion_supabase_sync as nss
 
 DATABASE = {"id": "db1", "name": "Posts", "supabase_table": "posts"}
 PAGE = {"id": "p1"}

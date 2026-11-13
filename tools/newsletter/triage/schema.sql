@@ -145,7 +145,7 @@ create index if not exists triage_picks_edition_idx on triage_picks (edition);
 
 -- ---------------------------------------------------------------------------
 -- RLS + anon_* policies — one block per table, identical to what
--- reporting/process/supabase_policy_script.py::apply_table_policies emits. Idempotent
+-- tools/reporting/process/supabase_policy_script.py::apply_table_policies emits. Idempotent
 -- (drop policy if exists before create). ADD A BLOCK HERE FOR EVERY NEW triage_* TABLE —
 -- otherwise the daily drift check (step 7 of the reporting pipeline) fails until someone
 -- runs `python -m reporting.process.supabase_policy_script` by hand.

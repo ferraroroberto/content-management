@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
-from reporting.process import supabase_uploader as su
+from tools.reporting.process import supabase_uploader as su
 
 
 class PrimaryKeyTests(unittest.TestCase):

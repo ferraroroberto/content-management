@@ -2,7 +2,7 @@
 
 Queries the Notion "books" database for the book linked to a given newsletter
 page via its "\U0001F4F0 newsletter" relation, reusing the ``notion_client``
-helpers already shared across ``reporting/notion/`` rather than standing up a
+helpers already shared across ``tools/reporting/notion/`` rather than standing up a
 third Notion client (``build_newsletter.NotionClient`` and
 ``tools/newsletter/notion_io.py`` are the other two, each scoped to their own DBs).
 """
@@ -13,11 +13,11 @@ import logging
 from typing import Optional, TypedDict
 
 from config.loader import load_full_config
-from reporting.notion._client import extract_property_value, init_notion_client
-from reporting.notion.editorial import query_rows_by_filter
+from tools.reporting.notion._client import extract_property_value, init_notion_client
+from tools.reporting.notion.editorial import query_rows_by_filter
 
 # Column names as they exist in the live "books" Notion DB (see
-# reporting/notion/database_sample/books_fb47feb4fc974def8385e6a865aa68ba_structure.json).
+# tools/reporting/notion/database_sample/books_fb47feb4fc974def8385e6a865aa68ba_structure.json).
 _TITLE_TO_COPY_PROP = "title to copy"
 _AUTHOR_TO_COPY_PROP = "author to copy"
 _URL_PROP = "url"

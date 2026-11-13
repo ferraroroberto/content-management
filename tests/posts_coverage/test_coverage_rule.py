@@ -68,14 +68,14 @@ class _CoverageCase(unittest.TestCase):
         """Run the coverage check with ``platform`` missing and the editorial row as given."""
         patches = [
             patch(
-                "reporting.process.supabase_uploader.get_db_connection",
+                "tools.reporting.process.supabase_uploader.get_db_connection",
                 return_value=_FakeConnection(*row_missing_only(platform)),
             ),
             patch.object(rp, "load_block", return_value=BLOCK),
             patch.object(rp, "load_full_config", return_value={"notion": {"api_token": "token"}}),
-            patch("reporting.notion.editorial.init_notion_client", return_value=client),
-            patch("reporting.notion.editorial.get_row_by_day", side_effect=read_error, return_value=row),
-            patch("reporting.notion.editorial.get_field", return_value=text),
+            patch("tools.reporting.notion.editorial.init_notion_client", return_value=client),
+            patch("tools.reporting.notion.editorial.get_row_by_day", side_effect=read_error, return_value=row),
+            patch("tools.reporting.notion.editorial.get_field", return_value=text),
         ]
         for p in patches:
             p.start()
@@ -138,7 +138,7 @@ class EveryPlatformSameRuleTests(_CoverageCase):
             failures = rp.PipelineFailures()
             failures.skipped_platforms.append("threads (profile + posts; upstream unavailable)")
             with patch(
-                "reporting.process.supabase_uploader.get_db_connection",
+                "tools.reporting.process.supabase_uploader.get_db_connection",
                 return_value=_FakeConnection(*row_missing_only("threads")),
             ):
                 rp.logger = MagicMock()

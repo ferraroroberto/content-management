@@ -2,7 +2,7 @@
 
 Each `<platform>_<data_type>` block in `config/config.json` carries a
 `"source"` key. The dispatcher in
-`reporting/social_client/social_api_client.py::get_api_data` reads it and
+`tools/reporting/social_client/social_api_client.py::get_api_data` reads it and
 either makes the HTTP call (`"rapidapi"`), delegates to the matching
 `reporting.scrape_client.<platform>.fetch_<data_type>` (`"playwright"`), or
 delegates to `reporting.scrape_client.<platform>_native.fetch_<data_type>`
@@ -41,7 +41,7 @@ with no other change.
 | **Cost** | Monthly subscription per provider | Free — drives the existing logged-in Chrome profile |
 | **Speed** | ~2s per endpoint | ~5–30s per endpoint (browser launch + scroll + read; one open per endpoint) |
 | **Session** | API key in config | Persistent profile at `planning/<platform>/chrome_user_data/`; re-login via `python -m planning.<p>.bootstrap_session` if Chrome forgets the session |
-| **Breakage mode** | Provider may rate-limit, change pricing, deprecate endpoints | Selectors break when the platform's DOM changes — patch the per-platform module under `reporting/scrape_client/` |
+| **Breakage mode** | Provider may rate-limit, change pricing, deprecate endpoints | Selectors break when the platform's DOM changes — patch the per-platform module under `tools/reporting/scrape_client/` |
 | **Site coverage** | 1:1 with provider's API | Whatever's visible in the logged-in browser; see [`playwright-social-scraping.md`](playwright-social-scraping.md) for per-platform quirks |
 
 ## Flipping a platform
@@ -64,9 +64,9 @@ platform (the `_profile` and `_posts` block):
 Then run just that platform to validate:
 
 ```powershell
-& .\.venv\Scripts\python.exe -m reporting.social_client.social_api_client `
+& .\.venv\Scripts\python.exe -m tools.reporting.social_client.social_api_client `
     --platform linkedin_profile --no-skip --debug
-& .\.venv\Scripts\python.exe -m reporting.social_client.social_api_client `
+& .\.venv\Scripts\python.exe -m tools.reporting.social_client.social_api_client `
     --platform linkedin_posts --no-skip --debug
 ```
 

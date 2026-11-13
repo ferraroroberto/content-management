@@ -2,7 +2,7 @@
 
 Browser-driven automation for publishing a Substack **Note** (image or video)
 from the day's row in the Notion editorial database. (The follower count used
-to be scraped from here too; it now comes from `reporting/scrape_client` — see
+to be scraped from here too; it now comes from `tools/reporting/scrape_client` — see
 the module layout below.)
 
 Note publishing uses Playwright to drive **real Chrome** (`channel="chrome"`)
@@ -68,7 +68,7 @@ re-run `extract_session`.
 Set `substack_profile.source` to `"native"` in `config.json` (leave the other
 keys — the endpoint loop still needs `api_url` present). The reporting pipeline
 then routes the follower count through
-`reporting/scrape_client/substack_native.py::fetch_profile`, which returns the
+`tools/reporting/scrape_client/substack_native.py::fetch_profile`, which returns the
 same `{"num_followers": N}` envelope as the Playwright scraper. Flip back to
 `"playwright"` to use the browser scrape.
 
@@ -138,7 +138,7 @@ substack/
 ```
 
 Editorial rows are read through the shared helper
-`reporting/notion/editorial.py` (`get_row_by_day` / `get_field` / `set_field`,
+`tools/reporting/notion/editorial.py` (`get_row_by_day` / `get_field` / `set_field`,
 resolved against the `notion_columns` role map below) — this package has no
 Notion module of its own. The native-API modules are listed in the section
 above.
@@ -171,7 +171,7 @@ above.
 | `user_data_dir` | Dedicated Chrome profile directory (gitignored; defaults to `substack/chrome_user_data`). Must NOT point at your real Chrome profile — the session refuses to start if it does. |
 | `illustrations_folder` | Absolute folder containing the daily image. Joined with `image_filename`. |
 | `editorial_db_id` | Notion editorial database id. |
-| `notion_columns` | Role-to-column map. Roles: `title_day`, `text_body`, `image_filename`, `post_url`. The `follow SB` follower column is **not** in this map — it is populated by the reporting pipeline (`reporting/scrape_client/substack.py::fetch_profile` → `data_processor` → `notion_update`, mapped from `profile.num_followers_substack`) like every other platform's follower count. |
+| `notion_columns` | Role-to-column map. Roles: `title_day`, `text_body`, `image_filename`, `post_url`. The `follow SB` follower column is **not** in this map — it is populated by the reporting pipeline (`tools/reporting/scrape_client/substack.py::fetch_profile` → `data_processor` → `notion_update`, mapped from `profile.num_followers_substack`) like every other platform's follower count. |
 | `note_source` | Optional, `"playwright"` (default) or `"native"`. Which backend publishes the daily Note — the Chrome composer, or the HTTP API with the harvested cookie. Video notes support the same flag. |
 | `headless` | Optional bool (default `false`). |
 | `dry_run_default` | Optional bool (default `false`). When `true`, step 1 always runs as a dry-run unless `--force` is passed. |
@@ -192,8 +192,8 @@ first filename is used.
 
 ### Follower scrape (now in the reporting pipeline)
 The Substack follower count is no longer scraped from here. See
-`reporting/scrape_client/substack.py::fetch_profile`, dispatched by
-`reporting/social_client/social_api_client.py` when the
+`tools/reporting/scrape_client/substack.py::fetch_profile`, dispatched by
+`tools/reporting/social_client/social_api_client.py` when the
 `substack_profile` block in `config.json` carries `"source": "playwright"`.
 The value flows through `data_processor` → `profile_aggregator` →
 `notion_update` like every other platform's follower count.

@@ -47,8 +47,8 @@ from typing import Optional
 from notion_client.errors import HTTPResponseError, RequestTimeoutError
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from reporting.notion._client import page_title  # noqa: E402
-from reporting.notion.editorial import (  # noqa: E402
+from tools.reporting.notion._client import page_title  # noqa: E402
+from tools.reporting.notion.editorial import (  # noqa: E402
     retrieve_page,
 )
 

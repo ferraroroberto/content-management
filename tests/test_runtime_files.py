@@ -201,7 +201,7 @@ class FoldLegacyFolderTests(unittest.TestCase):
 
 class ReportingResultsFolderTests(unittest.TestCase):
     def test_config_relative_value_lands_at_the_repo_level_not_under_reporting(self) -> None:
-        from reporting import results_paths
+        from tools.reporting import results_paths
 
         results_paths.results_folder.cache_clear()
         self.addCleanup(results_paths.results_folder.cache_clear)

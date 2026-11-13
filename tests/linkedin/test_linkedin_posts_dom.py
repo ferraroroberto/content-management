@@ -21,8 +21,8 @@ import unittest
 from unittest import mock
 
 from planning.linkedin.linkedin_session import LinkedInSession
-from reporting.scrape_client import linkedin as li
-from reporting.scrape_client.base import ScrapeError
+from tools.reporting.scrape_client import linkedin as li
+from tools.reporting.scrape_client.base import ScrapeError
 
 HANDLE_URL = "https://www.linkedin.com/in/someone"
 ID_VIDEO = "7500000000000000001"

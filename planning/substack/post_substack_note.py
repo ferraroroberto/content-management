@@ -49,7 +49,7 @@ from planning.substack.substack_session import (  # noqa: E402
     load_substack_config,
     normalize_day,
 )
-from reporting.notion.editorial import (  # noqa: E402
+from tools.reporting.notion.editorial import (  # noqa: E402
     get_field,
     get_property_type,
     get_row_by_day,

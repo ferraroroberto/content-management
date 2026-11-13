@@ -20,7 +20,7 @@ logs/
 config.json
 .env
 **/.env
-reporting/process/.env
+tools/reporting/process/.env
 
 # Per-platform dedicated Chrome user-data directories (cookies, profile) — never commit.
 # These are SEPARATE profiles created by each platform's bootstrap script; they have
@@ -34,10 +34,10 @@ planning/threads/chrome_user_data/
 planning/instagram/chrome_user_data/
 tools/newsletter/chrome_user_data/
 
-# Ignore contents of any results directory (root and reporting/ package)
+# Ignore contents of any results directory (root and tools/reporting/ package)
 results/*
 !results/README.md
-reporting/results/*
+tools/reporting/results/*
 
 # Ignore Python cache files
 __pycache__/
@@ -46,7 +46,7 @@ __pycache__/
 tools/demo_video/remotion/node_modules/
 
 # Ignore Notion sample DB
-/reporting/notion/database_sample
+/tools/reporting/notion/database_sample
 
 # supabase cli state
 supabase/.temp/cli-latest
