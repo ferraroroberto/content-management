@@ -5,7 +5,7 @@ Centralises:
 - building the supabase-py client from config.supabase
 - upsert / select / update helpers for the `commenters` and `comments` tables
 
-Everything else in `engagement/` imports from here so the secrets path lives
+Everything else in `tools/engagement/` imports from here so the secrets path lives
 in exactly one place.
 """
 
@@ -18,13 +18,13 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 # Add the repo root to sys.path to allow importing the shared config loader.
-sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
+sys.path.append(str(Path(__file__).resolve().parents[3]))
 from config.loader import load_full_config as load_config  # noqa: E402
 from config.supabase_client import build_supabase_client  # noqa: E402
 
 # Leaf module (no dependency on this module) — safe to import without a cycle.
-from engagement.classify.phrases_io import pick_thanks_reply  # noqa: E402
-from engagement.db.comment_status import CommentStatus, writable_status  # noqa: E402
+from tools.engagement.classify.phrases_io import pick_thanks_reply  # noqa: E402
+from tools.engagement.db.comment_status import CommentStatus, writable_status  # noqa: E402
 
 logger = logging.getLogger("engagement.db")
 
@@ -56,7 +56,7 @@ def supabase_client():
 # ---------- Schema preflight ----------
 
 # Every column the engagement pipeline reads or writes. Kept in sync with
-# ``engagement/db/schema.sql`` by ``tests/test_engagement_schema_preflight.py``,
+# ``tools/engagement/db/schema.sql`` by ``tests/test_engagement_schema_preflight.py``,
 # which parses that file and fails if the two drift apart.
 REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
     "commenters": (
@@ -74,8 +74,8 @@ REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
 }
 
 SCHEMA_REMEDIATION = (
-    "apply engagement/db/schema.sql via the Supabase dashboard SQL editor "
-    "(engagement/README.md, setup step 2) — it is idempotent"
+    "apply tools/engagement/db/schema.sql via the Supabase dashboard SQL editor "
+    "(tools/engagement/README.md, setup step 2) — it is idempotent"
 )
 
 
@@ -149,7 +149,7 @@ def verify_schema() -> str:
             f"{table} is missing {', '.join(cols)}" for table, cols in sorted(drift.items())
         )
         raise SchemaDriftError(
-            f"live database is behind engagement/db/schema.sql — {detail}. "
+            f"live database is behind tools/engagement/db/schema.sql — {detail}. "
             f"Fix: {SCHEMA_REMEDIATION}."
         )
 

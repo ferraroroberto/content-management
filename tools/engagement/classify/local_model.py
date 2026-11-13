@@ -43,7 +43,7 @@ from common.runtime_files import ensure_folder, open_for_write, write_text_at
 logger = logging.getLogger("engagement.classify.local_model")
 
 _LEGACY_MODEL_DIR = Path(__file__).resolve().parent
-MODEL_DIR = _LEGACY_MODEL_DIR.parents[1] / "results" / "engagement" / "classify"
+MODEL_DIR = _LEGACY_MODEL_DIR.parents[2] / "results" / "engagement" / "classify"
 MODEL_PATH = MODEL_DIR / "local_model.joblib"
 META_PATH = MODEL_DIR / "local_model.json"
 
@@ -117,7 +117,7 @@ def _version_mismatch_error(trained: str, runtime: str) -> ModelVersionMismatch:
         f"environment runs scikit-learn {runtime}. A pickled sklearn pipeline is "
         f"not portable across minor versions — loading it would degrade every "
         f"prediction without erroring. Retrain with "
-        f"`python -m engagement.classify.local_model train`, or install "
+        f"`python -m tools.engagement.classify.local_model train`, or install "
         f"scikit-learn=={trained}."
     )
     logger.error("❌ %s", message)
@@ -129,7 +129,7 @@ def _version_mismatch_error(trained: str, runtime: str) -> ModelVersionMismatch:
 def featurize_one(comment: dict, duplicate_texts: set, phrases: dict) -> dict:
     """Build one feature row. Uses the rules.py helpers so training and
     inference use byte-identical derived signals."""
-    from engagement.classify.rules import (
+    from tools.engagement.classify.rules import (
         _generic_praise_hits,
         _has_personal_token,
         _is_emoji_only,
@@ -179,8 +179,8 @@ def _prepare_dataset(platform: str):
     import numpy as np
     import pandas as pd
 
-    from engagement.classify.rules import _build_duplicate_set, load_phrases
-    from engagement.db.client import fetch_labeled_training_set
+    from tools.engagement.classify.rules import _build_duplicate_set, load_phrases
+    from tools.engagement.db.client import fetch_labeled_training_set
 
     phrases = load_phrases()
     rows = fetch_labeled_training_set(platform)
@@ -358,7 +358,7 @@ def predict_one(comment: dict, duplicate_texts: set, phrases: Optional[dict] = N
     if model is None:
         return None
     if phrases is None:
-        from engagement.classify.rules import load_phrases
+        from tools.engagement.classify.rules import load_phrases
         phrases = load_phrases()
     try:
         import pandas as pd

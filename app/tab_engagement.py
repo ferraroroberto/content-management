@@ -11,7 +11,7 @@ from app.process_runner import (
     render_combined_status_badge,
     start_pipeline,
 )
-from engagement.ui import (
+from tools.engagement.ui import (
     invalidate_caches,
     render_ai_tab,
     render_commenters_tab,
@@ -57,7 +57,7 @@ Sort is switched to **Most recent** before extraction so we don't miss comments 
 
 Layered classifier — earlier layers are cheaper and more auditable; later layers handle the ambiguous middle.
 
-**Layer 1 — rules** (Phase 1, shipped). Pure-Python pipeline driven by `engagement/classify/phrases.json`. Per comment, a score is summed from:
+**Layer 1 — rules** (Phase 1, shipped). Pure-Python pipeline driven by `tools/engagement/classify/phrases.json`. Per comment, a score is summed from:
 
 - generic-praise phrase hits (configurable list of ~45 substrings: "great post", "thanks for sharing", "💯", …)
 - short comment (≤60 chars)
@@ -77,7 +77,7 @@ Score ≥ `ai_classification_threshold` (default 0.50) → **AI**. Below → **u
 - The pickle is bound to the scikit-learn that wrote it (pinned to one minor line in `requirements.txt`). If you upgrade sklearn, the loader refuses the stale artifact and names both versions — retrain rather than classifying from a degraded model.
 - The featurizer (`local_model.featurize_one`) re-imports the per-comment helpers from `rules.py`, so train-time and inference-time signals **can't drift**. Tune a rule → retrain the model.
 
-**Layer 3 — LLM fallback** (Phase 3, shipped — opt-in via `engagement.llm_fallback.enabled` in `config.json`). Structured-output call routed through the local LLM hub (`http://127.0.0.1:8000`, version-free alias `claude_haiku`) for the genuine ambiguous middle. Fires only on rows where the local model's `P(AI)` sits inside the uncertainty window `[llm_fallback_local_uncertainty_low, local_model_ai_threshold)` (defaults 0.30 / 0.70). Verdicts are cached on disk (`engagement/classify/.llm_cache.json`, gitignored) keyed by `sha256(commenter_url|text)`; the database is the truth-of-record.
+**Layer 3 — LLM fallback** (Phase 3, shipped — opt-in via `engagement.llm_fallback.enabled` in `config.json`). Structured-output call routed through the local LLM hub (`http://127.0.0.1:8000`, version-free alias `claude_haiku`) for the genuine ambiguous middle. Fires only on rows where the local model's `P(AI)` sits inside the uncertainty window `[llm_fallback_local_uncertainty_low, local_model_ai_threshold)` (defaults 0.30 / 0.70). Verdicts are cached on disk (`tools/engagement/classify/.llm_cache.json`, gitignored) keyed by `sha256(commenter_url|text)`; the database is the truth-of-record.
 
 **Verdict written back** to the `comments` row: `classification` (human/ai/unknown), `confidence` (0-1), `verdict_source` (`rules` / `local` / `llm` / `whitelist` / `blacklist` / `whitelist_cascade` / `blacklist_cascade`), `verdict_reasons` (jsonb: which rule + weight + probability fired), `suggested_action` (`surface_to_me` / `like_and_thanks` / `ignore`), `suggested_reply` (the canned thanks template for AI rows).
 
@@ -121,13 +121,13 @@ def _render_run_subtab() -> None:
         dry_run = st.toggle("dry-run", value=False, key="engagement-dry-run",
                             help="Write JSON dump under results/engagement/, skip Supabase upsert.")
 
-    scrape_cmd = [str(VENV_PY), "-m", "engagement.linkedin.scrape_comments", "--days", str(int(days))]
+    scrape_cmd = [str(VENV_PY), "-m", "tools.engagement.linkedin.scrape_comments", "--days", str(int(days))]
     if headless:
         scrape_cmd.append("--headless")
     if dry_run:
         scrape_cmd.append("--dry-run")
 
-    classify_cmd = [str(VENV_PY), "-m", "engagement.classify.rules"]
+    classify_cmd = [str(VENV_PY), "-m", "tools.engagement.classify.rules"]
 
     # Horizontal container lays the three buttons inline at content width with
     # a small CSS gap (≈1rem, roughly half a button's height). Wider relative

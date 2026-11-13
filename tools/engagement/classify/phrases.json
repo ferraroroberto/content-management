@@ -1,5 +1,5 @@
 {
-    "_doc": "Tunable rule inputs for engagement/classify/rules.py. Edit freely; no code change needed.",
+    "_doc": "Tunable rule inputs for tools/engagement/classify/rules.py. Edit freely; no code change needed.",
     "generic_praise_substrings": [
         "great post",
         "great insights",

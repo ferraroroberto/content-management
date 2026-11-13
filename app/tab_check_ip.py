@@ -168,7 +168,7 @@ def _render_run_controls() -> None:
             force = st.toggle("ignore re-search windows", value=False, key="check-ip-force",
                               help="Search every image even if it was searched recently.")
 
-        cmd = [str(VENV_PY), "-m", "check_ip.run"]
+        cmd = [str(VENV_PY), "-m", "tools.check_ip.run"]
         if not live:
             cmd.append("--dry-run")
         if limit:

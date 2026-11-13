@@ -5,9 +5,9 @@ from __future__ import annotations
 import copy
 import unittest
 
-from engagement.classify import local_model
-from engagement.classify.rules import _score_comment, load_phrases
-from engagement.reputation.update import _aggregate
+from tools.engagement.classify import local_model
+from tools.engagement.classify.rules import _score_comment, load_phrases
+from tools.engagement.reputation.update import _aggregate
 
 POST_AT = "2026-10-07T08:00:00Z"
 COMMENT = {"text": "x", "post_posted_at": POST_AT, "posted_at": "2026-10-07T08:03:00Z"}  # 180 s later

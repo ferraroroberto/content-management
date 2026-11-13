@@ -1,6 +1,6 @@
 # Engagement comment status
 
-Each row of the `comments` table has one review status. `engagement/db/comment_status.py` is the only module that names the states and maps a stored string to one, and `update_comment_status` writes only through it.
+Each row of the `comments` table has one review status. `tools/engagement/db/comment_status.py` is the only module that names the states and maps a stored string to one, and `update_comment_status` writes only through it.
 
 ## Why it is declared
 
@@ -29,12 +29,12 @@ The string values are the ones `schema.sql` documents for the column, so they ne
 
 | Reader | Where | Calls |
 |---|---|---|
-| Review writes (approve, reject, ignore, surface) | `engagement/ui.py` | `update_comment_status` with `CommentStatus` |
-| Status counts and the pending/all view | `engagement/ui.py` | `STORED_STATUSES`, `CommentStatus` |
-| Row badge | `_render_comment_card` in `engagement/ui.py` | `derive_comment_status` |
-| Cascades and ignore-replied | `engagement/db/client.py` | `CommentStatus` |
-| Pending fetch and blacklist auto-approve | `engagement/classify/rules.py` | `CommentStatus` |
-| Live-app check | `engagement/check_review_app.py` | `CommentStatus` |
+| Review writes (approve, reject, ignore, surface) | `tools/engagement/ui.py` | `update_comment_status` with `CommentStatus` |
+| Status counts and the pending/all view | `tools/engagement/ui.py` | `STORED_STATUSES`, `CommentStatus` |
+| Row badge | `_render_comment_card` in `tools/engagement/ui.py` | `derive_comment_status` |
+| Cascades and ignore-replied | `tools/engagement/db/client.py` | `CommentStatus` |
+| Pending fetch and blacklist auto-approve | `tools/engagement/classify/rules.py` | `CommentStatus` |
+| Live-app check | `tools/engagement/check_review_app.py` | `CommentStatus` |
 
 A new reader calls the module. It does not spell a status string.
 

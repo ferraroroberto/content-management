@@ -28,27 +28,25 @@ from common.atomic_write import atomic_write_text
 
 logger = logging.getLogger("engagement.classify.llm_fallback")
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-
-
+REPO_ROOT = Path(__file__).resolve().parents[3]
 # ---------- Config ----------
 
 def is_enabled(cfg: Optional[dict] = None) -> bool:
     """True if engagement.llm_fallback.enabled is set in config."""
     if cfg is None:
-        from engagement.db.client import load_engagement_config
+        from tools.engagement.db.client import load_engagement_config
         cfg = load_engagement_config()
     return bool((cfg.get("llm_fallback") or {}).get("enabled"))
 
 
 def _fallback_cfg() -> dict:
-    from engagement.db.client import load_engagement_config
+    from tools.engagement.db.client import load_engagement_config
     block = (load_engagement_config().get("llm_fallback") or {})
     return {
         "enabled": bool(block.get("enabled", False)),
         "base_url": block.get("base_url", "http://127.0.0.1:8000"),
         "model": block.get("model", "claude_haiku"),
-        "cache_path": block.get("cache_path", "engagement/classify/.llm_cache.json"),
+        "cache_path": block.get("cache_path", "tools/engagement/classify/.llm_cache.json"),
         "timeout_seconds": int(block.get("timeout_seconds", 20)),
     }
 

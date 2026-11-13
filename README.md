@@ -49,14 +49,14 @@ Six surfaces, one repo:
   caps), stores the run in Supabase and proposes an 8+8+8 shortlist that
   the owner reviews in the control panel's 🧭 triage tab — decisions feed
   sender tiers and owner-accepted criteria notes back into the engine.
-- **Engagement** (`engagement/`) — defends comment threads against
+- **Engagement** (`tools/engagement/`) — defends comment threads against
   AI-generated noise using a layered classifier (rules → local sklearn
   model → LLM fallback via the local hub). Scrapes LinkedIn comments
   from recent posts in the Notion editorial DB, classifies them, and
   surfaces a real-comments inbox and an AI-triage queue in a Streamlit
-  review app (`engagement/review_app.py`). Approved replies are staged
+  review app (`tools/engagement/review_app.py`). Approved replies are staged
   for manual copy-paste — never auto-sent. See
-  [`engagement/README.md`](engagement/README.md) for the full design.
+  [`tools/engagement/README.md`](tools/engagement/README.md) for the full design.
 - **Check IP** (`tools/check_ip/`) — finds where my published illustrations are
   being reused. Each illustration is reverse-image-searched through Google
   Lens (SerpAPI) and every **exact** match lands in a local SQLite store —
@@ -175,12 +175,12 @@ content-management/                   # repo root
 │                                     # rewrite titles + clean URLs; build_newsletter renders HTML
 │                                     # substack_draft pushes the same lists to a private Substack draft
 │   └── triage/                       # Gmail inbox → edition shortlist (criteria, engine, Supabase store, review, lessons)
-├── engagement/                       # anti-AI comment triage (rules → sklearn → LLM fallback)
-│   ├── linkedin/                     # LinkedIn comment scraper
-│   ├── classify/                     # layered classifier + phrase config
-│   ├── reputation/                   # per-commenter reputation feedback loop
-│   └── db/                           # Supabase schema (commenters + comments tables)
 ├── tools/                            # one package per tool (see docs/layout.md)
+│   ├── engagement/                       # anti-AI comment triage (rules → sklearn → LLM fallback)
+│   │   ├── linkedin/                     # LinkedIn comment scraper
+│   │   ├── classify/                     # layered classifier + phrase config
+│   │   ├── reputation/                   # per-commenter reputation feedback loop
+│   │   └── db/                           # Supabase schema (commenters + comments tables)
 │   ├── podcast/                          # episode package: transcript → clips (1:1 + 9:16) → copy, covers, docx, website HTML
 │   ├── recorder/                         # self-hosted two-side recorder: page + chunk upload into the episode folder
 │   └── check_ip/                     # illustration copyright check (Google Lens → SQLite → triage tab)
@@ -237,7 +237,7 @@ gotchas, files.
 - **Newsletter** —
   [`newsletter/README.md`](newsletter/README.md)
 - **Engagement** —
-  [`engagement/README.md`](engagement/README.md)
+  [`tools/engagement/README.md`](tools/engagement/README.md)
 - **Check IP** —
   [`tools/check_ip/README.md`](tools/check_ip/README.md)
 - **Podcast** —

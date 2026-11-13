@@ -16,10 +16,10 @@ from pathlib import Path
 
 import streamlit as st
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(REPO_ROOT))
 
-from engagement.ui import (  # noqa: E402
+from tools.engagement.ui import (  # noqa: E402
     render_ai_tab,
     render_commenters_tab,
     render_real_tab,

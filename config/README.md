@@ -83,7 +83,7 @@ cfg = load_full_config()        # full config.json, cached for the process
 notion = load_block("notion")   # one top-level block, raises if missing
 ```
 
-Both raise on a missing or corrupt `config.json` (config is mandatory — a clear exception beats a silent skip), matching the contracts already used by `reporting/scrape_client/base.py` and `planning/_session_base.py`. This replaced seven hand-copied `load_config()` variants scattered across `reporting/`, `engagement/`, and `newsletter/`.
+Both raise on a missing or corrupt `config.json` (config is mandatory — a clear exception beats a silent skip), matching the contracts already used by `reporting/scrape_client/base.py` and `planning/_session_base.py`. This replaced seven hand-copied `load_config()` variants scattered across `reporting/`, `tools/engagement/`, and `newsletter/`.
 
 ### 7. `chrome_launch.py`
 Shared real-Chrome launch options for every Playwright-driven platform (LinkedIn, Instagram, Twitter, Threads, Substack). Builds the kwargs that make an automated Chrome session indistinguishable from a human-driven one — real Chrome (not bundled Chromium) via `channel="chrome"`, no "Chrome is being controlled by automated test software" infobar, no detectable `navigator.webdriver`, a pinned 1280×900 viewport, and a forced `en-US` locale so English selectors don't break on a localized OS/account.
@@ -113,7 +113,7 @@ context = launch_persistent_context_with_lock_wait(
 **"Single source of truth: every session module imports `launch_persistent_context_with_lock_wait` from here — never re-inline a launch-with-retry in a new module."**
 
 ### 9. `supabase_client.py`
-Single-source supabase-py client builder with the `service_role_key` → `key` → `anon_key` fallback. `build_supabase_client(cfg, probe_table=..., probe_column=...)` probes each key with a one-row select and returns the first that works; falling back to `anon_key` logs a warning. Used by `engagement/db/client.py` and `newsletter/triage/db.py` — an optional `key_ok_despite_error` predicate lets the triage store treat "table not found" as a working key. Never re-inline the key loop in a new package.
+Single-source supabase-py client builder with the `service_role_key` → `key` → `anon_key` fallback. `build_supabase_client(cfg, probe_table=..., probe_column=...)` probes each key with a one-row select and returns the first that works; falling back to `anon_key` logs a warning. Used by `tools/engagement/db/client.py` and `newsletter/triage/db.py` — an optional `key_ok_despite_error` predicate lets the triage store treat "table not found" as a working key. Never re-inline the key loop in a new package.
 
 ## Usage
 

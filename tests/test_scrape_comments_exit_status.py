@@ -21,8 +21,8 @@ import unittest
 from typing import Optional
 from unittest import mock
 
-import engagement.linkedin.scrape_comments as scrape_comments
-from engagement.linkedin.scrape_comments import _evaluate_scrape_health
+import tools.engagement.linkedin.scrape_comments as scrape_comments
+from tools.engagement.linkedin.scrape_comments import _evaluate_scrape_health
 
 
 class ScrapeHealthTests(unittest.TestCase):

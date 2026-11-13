@@ -63,11 +63,11 @@ supabase/.branches/_current_branch
 /tmp
 
 # Local sklearn classifier artifact (user-specific, trained from accumulated labels).
-engagement/classify/local_model.joblib
-engagement/classify/local_model.json
+tools/engagement/classify/local_model.joblib
+tools/engagement/classify/local_model.json
 
 # LLM fallback verdict cache (per-machine performance cache; truth lives in Supabase).
-engagement/classify/.llm_cache.json
+tools/engagement/classify/.llm_cache.json
 # Launcher scratch (ephemeral images/logs written by the tray launcher)
 .launcher-tmp/
 

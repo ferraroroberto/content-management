@@ -476,7 +476,7 @@
             "enabled": true,
             "base_url": "http://127.0.0.1:8000",
             "model": "claude_haiku",
-            "cache_path": "engagement/classify/.llm_cache.json",
+            "cache_path": "tools/engagement/classify/.llm_cache.json",
             "timeout_seconds": 20
         }
     },

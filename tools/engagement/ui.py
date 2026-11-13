@@ -1,6 +1,6 @@
 """Reusable Streamlit render functions for the engagement review UI.
 
-Imported by both the standalone `engagement/review_app.py` entrypoint AND the
+Imported by both the standalone `tools/engagement/review_app.py` entrypoint AND the
 control-panel's `app/tab_engagement.py` — so a UX change here lands in both
 places. No top-level rendering and no `st.set_page_config()` (the caller owns
 those).
@@ -16,17 +16,17 @@ from urllib.parse import quote
 import pandas as pd
 import streamlit as st
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(REPO_ROOT))
 
-from engagement.db.client import (  # noqa: E402
+from tools.engagement.db.client import (  # noqa: E402
     cascade_blacklist_pending,
     cascade_whitelist_pending,
     set_commenter_classification,
     supabase_client,
     update_comment_status,
 )
-from engagement.db.comment_status import (  # noqa: E402
+from tools.engagement.db.comment_status import (  # noqa: E402
     STORED_STATUSES,
     CommentStatus,
     derive_comment_status,
