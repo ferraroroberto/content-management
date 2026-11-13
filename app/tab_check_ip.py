@@ -1,10 +1,10 @@
 """Check-IP tab — triage where my illustrations are being reused.
 
-Reverse-image search results land in a SQLite store (``check_ip/``); this tab
+Reverse-image search results land in a SQLite store (``tools/check_ip/``); this tab
 is where they get judged. Filter down to a slice, read what the screening skill
 proposed, set the verdict and the follow-up trail, click Apply.
 
-UI only: every read and write goes through ``check_ip.review`` / ``.screen``.
+UI only: every read and write goes through ``tools.check_ip.review`` / ``.screen``.
 Nothing is saved until Apply — the data editor's edits sit in session state
 until then, the same contract as the triage tab.
 
@@ -28,7 +28,7 @@ from app.process_runner import (
     render_status_badge,
     start_pipeline,
 )
-from check_ip import db, review, screen
+from tools.check_ip import db, review, screen
 
 PIPELINE_NAME = "check-ip"
 
@@ -356,7 +356,7 @@ it"; `1` means "reviewed, acceptable". The `contact` / `outreach` / `report` /
 
 ### Where the rows come from
 
-`check_ip.run` uploads each illustration to Imgur once, runs a Google Lens search
+`tools.check_ip.run` uploads each illustration to Imgur once, runs a Google Lens search
 against that URL, and records every match. Images already showing up a lot on
 LinkedIn get re-searched every few days; the rest every six months. The run costs
 one SerpAPI call per image, which is why the live run above is behind a toggle.
@@ -420,7 +420,7 @@ def run() -> None:
     if not review.store_exists():
         st.warning(
             "No store yet. The first search run creates it:\n\n"
-            "```\n& .\\.venv\\Scripts\\python.exe -m check_ip.run --dry-run\n```"
+            "```\n& .\\.venv\\Scripts\\python.exe -m tools.check_ip.run --dry-run\n```"
         )
         return
 

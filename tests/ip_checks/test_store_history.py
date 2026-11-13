@@ -13,8 +13,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from check_ip import db, screen  # noqa: E402
 from tests.ip_checks._store_fixtures import StoreTestCase, _seed  # noqa: E402
+from tools.check_ip import db, screen  # noqa: E402
 
 
 class HistoryTests(StoreTestCase):

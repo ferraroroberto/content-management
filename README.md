@@ -57,7 +57,7 @@ Six surfaces, one repo:
   review app (`engagement/review_app.py`). Approved replies are staged
   for manual copy-paste — never auto-sent. See
   [`engagement/README.md`](engagement/README.md) for the full design.
-- **Check IP** (`check_ip/`) — finds where my published illustrations are
+- **Check IP** (`tools/check_ip/`) — finds where my published illustrations are
   being reused. Each illustration is reverse-image-searched through Google
   Lens (SerpAPI) and every **exact** match lands in a local SQLite store —
   Lens's "similar" matches are another artist working in the same idiom, not
@@ -76,7 +76,7 @@ Six surfaces, one repo:
   time — there is one browser and one LinkedIn account, and parallel
   browsing risks it. The skill **only proposes**: it never contacts anyone,
   never files a report, and cannot write the verdict. See
-  [`check_ip/README.md`](check_ip/README.md).
+  [`tools/check_ip/README.md`](tools/check_ip/README.md).
 
 - **Podcast** (`podcast/`, `podcast_pipeline.py`) — turns a raw two-track
   interview recording into the episode package, locally: a cleaned
@@ -180,7 +180,8 @@ content-management/                   # repo root
 │   ├── classify/                     # layered classifier + phrase config
 │   ├── reputation/                   # per-commenter reputation feedback loop
 │   └── db/                           # Supabase schema (commenters + comments tables)
-├── check_ip/                         # illustration copyright check (Google Lens → SQLite → triage tab)
+├── tools/                            # one package per tool (see docs/layout.md)
+│   └── check_ip/                     # illustration copyright check (Google Lens → SQLite → triage tab)
 ├── podcast/                          # episode package: transcript → clips (1:1 + 9:16) → copy, covers, docx, website HTML
 ├── demo_video/                       # demo videos: demo.json storyboard → Remotion template (remotion/) → MP4 per cut
 ├── recorder/                         # self-hosted two-side recorder: page + chunk upload into the episode folder
@@ -238,7 +239,7 @@ gotchas, files.
 - **Engagement** —
   [`engagement/README.md`](engagement/README.md)
 - **Check IP** —
-  [`check_ip/README.md`](check_ip/README.md)
+  [`tools/check_ip/README.md`](tools/check_ip/README.md)
 - **Podcast** —
   [`docs/podcast-runbook.md`](docs/podcast-runbook.md) ·
   [`podcast/README.md`](podcast/README.md) ·

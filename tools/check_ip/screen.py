@@ -27,18 +27,18 @@ either.
 
 Usage::
 
-    python -m check_ip.screen next --limit 20
-    python -m check_ip.screen next --limit 20 --image "bicycle backwards - micromanagement.png"
-    python -m check_ip.screen next --limit 20 --unassessed   # the re-screen backlog
-    python -m check_ip.screen verdict --id 12345 --verdict infringement \\
+    python -m tools.check_ip.screen next --limit 20
+    python -m tools.check_ip.screen next --limit 20 --image "bicycle backwards - micromanagement.png"
+    python -m tools.check_ip.screen next --limit 20 --unassessed   # the re-screen backlog
+    python -m tools.check_ip.screen verdict --id 12345 --verdict infringement \\
         --credit violated --noncommercial met --unmodified met \\
         --reason "no mention of the owner anywhere in the post" --poster-url https://…
-    python -m check_ip.screen verdict --id 12345 --verdict infringement \\
+    python -m tools.check_ip.screen verdict --id 12345 --verdict infringement \\
         --credit met --noncommercial violated --unmodified met \\
         --reason "credited in the caption, but the post sells the poster's course"
-    python -m check_ip.screen verdict --id 12345 --verdict unclear --outcome nothing_to_assess \\
+    python -m tools.check_ip.screen verdict --id 12345 --verdict unclear --outcome nothing_to_assess \\
         --reason "the post no longer exists"
-    python -m check_ip.screen stats
+    python -m tools.check_ip.screen stats
 
 **An honest "could not tell" no longer re-queues a row forever** (rationale: ``db.CONDITION_COLUMNS``, `check_ip/README.md`). ``--credit`` and
 friends take ``unknown`` for that third state; **omitting** the flag is the
@@ -61,10 +61,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from check_ip import db, process  # noqa: E402
+from tools.check_ip import db, process  # noqa: E402
 
 DEFAULT_SOURCE = "LinkedIn"
 DEFAULT_LIMIT = 10  # one worker batch; the skill fans out N/10 of them

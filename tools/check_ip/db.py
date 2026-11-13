@@ -26,12 +26,12 @@ from pathlib import Path
 from typing import Iterable, Optional
 from urllib.parse import urlsplit
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from check_ip import process  # noqa: E402 — pure helpers, no store access
 from common.runtime_files import ensure_folder  # noqa: E402
 from config.loader import load_full_config  # noqa: E402
+from tools.check_ip import process  # noqa: E402 — pure helpers, no store access
 
 logger = logging.getLogger("check_ip.db")
 

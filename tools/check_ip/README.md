@@ -46,40 +46,40 @@ a queue of 13,000 links: the worst it can do is propose something wrong.
 
 ```powershell
 # reverse-image search — COSTS MONEY, one SerpAPI call per image
-& .\.venv\Scripts\python.exe -m check_ip.run --dry-run       # what it would search
-& .\.venv\Scripts\python.exe -m check_ip.run --limit 10      # a small live run
-& .\.venv\Scripts\python.exe -m check_ip.run                 # everything that is due
-& .\.venv\Scripts\python.exe -m check_ip.run --force         # ignore re-search windows
+& .\.venv\Scripts\python.exe -m tools.check_ip.run --dry-run       # what it would search
+& .\.venv\Scripts\python.exe -m tools.check_ip.run --limit 10      # a small live run
+& .\.venv\Scripts\python.exe -m tools.check_ip.run                 # everything that is due
+& .\.venv\Scripts\python.exe -m tools.check_ip.run --force         # ignore re-search windows
 
 # re-elect the canonical row of every group — writes only `duplicate`
-& .\.venv\Scripts\python.exe -m check_ip.migrate --recompute-duplicates
+& .\.venv\Scripts\python.exe -m tools.check_ip.migrate --recompute-duplicates
 
 # the screening queue
-& .\.venv\Scripts\python.exe -m check_ip.screen stats
-& .\.venv\Scripts\python.exe -m check_ip.screen next --limit 10
+& .\.venv\Scripts\python.exe -m tools.check_ip.screen stats
+& .\.venv\Scripts\python.exe -m tools.check_ip.screen next --limit 10
 
 # the re-screen backlog only — the rows `stats` counts as not_fully_assessed.
 # `--include-screened` does not select them: it just stops
 # excluding screened rows, so they compete with every pending one. Screening a
 # row removes it from here even if a condition came back `unknown`.
-& .\.venv\Scripts\python.exe -m check_ip.screen next --limit 10 --unassessed
+& .\.venv\Scripts\python.exe -m tools.check_ip.screen next --limit 10 --unassessed
 
 # no credit, nothing else wrong → severity 1
-& .\.venv\Scripts\python.exe -m check_ip.screen verdict --id 123 --verdict infringement `
+& .\.venv\Scripts\python.exe -m tools.check_ip.screen verdict --id 123 --verdict infringement `
     --credit violated --noncommercial met --unmodified met --reason "…"
 
 # credited, but it is a company's marketing → still an infringement
-& .\.venv\Scripts\python.exe -m check_ip.screen verdict --id 123 --verdict infringement `
+& .\.venv\Scripts\python.exe -m tools.check_ip.screen verdict --id 123 --verdict infringement `
     --credit met --noncommercial violated --unmodified met --reason "…"
 
 # the post is gone — permanently unassessable, not "acceptable"
-& .\.venv\Scripts\python.exe -m check_ip.screen verdict --id 123 --verdict unclear `
+& .\.venv\Scripts\python.exe -m tools.check_ip.screen verdict --id 123 --verdict unclear `
     --outcome nothing_to_assess --reason "…"
 
 # looked at all three, but the post cannot say whether the use is commercial —
 # `unknown` stores a 2: an answer, never a pass, and the row leaves the
 # --unassessed queue instead of being served again forever
-& .\.venv\Scripts\python.exe -m check_ip.screen verdict --id 123 --verdict unclear `
+& .\.venv\Scripts\python.exe -m tools.check_ip.screen verdict --id 123 --verdict unclear `
     --outcome ambiguous --credit met --noncommercial unknown --unmodified met --reason "…"
 ```
 
