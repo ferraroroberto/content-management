@@ -11,7 +11,7 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from engagement.db import client
+from tools.engagement.db import client
 
 
 class CascadeWhitelistTests(unittest.TestCase):

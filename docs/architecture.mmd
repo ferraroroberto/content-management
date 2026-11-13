@@ -117,7 +117,7 @@ episode / covers / package / score"]
   NBOOKS -->|"books DB, filtered by\nnewsletter relation"| NOTION
   NSBDRAFT -->|"create_draft_from_sections\none-must-read + one-book leads/trails\nprivate draft — never published"| SBAPI
 
-  subgraph engagement_mod["engagement/ — anti-AI comment triage"]
+  subgraph engagement_mod["tools/engagement/ — anti-AI comment triage"]
     ESCRAPE["linkedin/scrape_comments.py"]
     ECLASSIFY["classify/\nrules -> local_model.joblib -> llm_fallback"]
     EDB["db/client.py\nSupabase commenters + comments"]

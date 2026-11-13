@@ -6,7 +6,7 @@ Pipeline (per pending comment):
 3. Otherwise score against rules in `phrases.json`; if score ≥ threshold
    → ai/like_and_thanks; else → unknown/surface_to_me (bias to human review).
 
-All thresholds and phrase lists live in `engagement/classify/phrases.json`
+All thresholds and phrase lists live in `tools/engagement/classify/phrases.json`
 so tuning never requires a code change.
 """
 
@@ -20,18 +20,18 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from engagement.classify.phrases_io import pick_reply_from_templates
-from engagement.db.client import (
+from tools.engagement.classify.phrases_io import pick_reply_from_templates
+from tools.engagement.db.client import (
     fetch_commenters_by_urls,
     load_engagement_config,
     supabase_client,
 )
-from engagement.db.comment_status import CommentStatus
+from tools.engagement.db.comment_status import CommentStatus
 
 logger = logging.getLogger("engagement.classify")
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-PHRASES_PATH = REPO_ROOT / "engagement" / "classify" / "phrases.json"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+PHRASES_PATH = REPO_ROOT / "tools" / "engagement" / "classify" / "phrases.json"
 
 
 def load_phrases() -> dict:
@@ -144,7 +144,7 @@ def _build_duplicate_set(comments: list[dict]) -> set[str]:
 def _llm_verdict(c: dict, reasons: list, score: float, prob: float, phrases: dict,
                  llm_ai_threshold: float) -> tuple:
     """Third layer: ask the LLM about a comment inside the local model's uncertainty window."""
-    from engagement.classify import llm_fallback
+    from tools.engagement.classify import llm_fallback
     out = llm_fallback.classify_one(c, reasons)
     if out and out["verdict"] == "ai" and out["confidence"] >= llm_ai_threshold:
         return (
@@ -235,7 +235,7 @@ def classify_pending(platform: str = "linkedin") -> dict:
     # Local sklearn classifier (Phase 2a) — lazy import to avoid circular deps
     # (local_model imports the per-comment helpers from this module). Falls
     # back gracefully if the .joblib file isn't on disk yet.
-    from engagement.classify import local_model
+    from tools.engagement.classify import local_model
     local_threshold = phrases["rules"].get("local_model_ai_threshold", 0.70)
     local_available = local_model.model_is_available()
     if local_available:
@@ -245,7 +245,7 @@ def classify_pending(platform: str = "linkedin") -> dict:
 
     # LLM fallback (Phase 3) — third layer; only fires inside the local
     # model's uncertainty window. Cheap to import even when disabled.
-    from engagement.classify import llm_fallback
+    from tools.engagement.classify import llm_fallback
     llm_enabled = llm_fallback.is_enabled(cfg)
     llm_low = phrases["rules"].get("llm_fallback_local_uncertainty_low", 0.30)
     llm_ai_threshold = phrases["rules"].get("llm_fallback_ai_threshold", 0.70)

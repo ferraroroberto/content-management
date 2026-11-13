@@ -10,7 +10,7 @@ Canonical instructions for AI coding agents working in this repository. Claude C
 - All mutable state in `st.session_state`. No module-level globals.
 - `@st.cache_data` for DataFrames/files; `@st.cache_resource` for DB clients/models.
 - Every widget needs a stable, explicit `key=`.
-- UI code only in the UI modules (`app/`, `engagement/ui.py`, `engagement/review_app.py`; `run_app.py` imports `streamlit.web.cli` only to launch). Data logic stays in the non-UI packages. Keep `streamlit` imports out of non-UI code. Guidance, not a guarantee: no lint rule enforces the boundary.
+- UI code only in the UI modules (`app/`, `tools/engagement/ui.py`, `tools/engagement/review_app.py`; `run_app.py` imports `streamlit.web.cli` only to launch). Data logic stays in the non-UI packages. Keep `streamlit` imports out of non-UI code. Guidance, not a guarantee: no lint rule enforces the boundary.
 - User feedback via `st.error()` / `st.warning()` / `st.success()`, not `st.write()`.
 - **App layout:** main file (e.g. `app.py`) handles only page config, shared state, sidebar, and tab/radio routing. Each tab/mode lives in its own file exposing a `main(...)` (or `render_*`) function. Default to `st.tabs()`; use a sidebar radio only when asked.
 

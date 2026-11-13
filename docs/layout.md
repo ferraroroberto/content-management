@@ -16,6 +16,7 @@ The preset folders:
 
 Tool packages under `tools/` (import as `tools.<tool>`):
 
+- `tools/engagement/` — anti-AI comment triage. `linkedin/` (comment scraper), `classify/` (layered classifier), `reputation/` (commenter feedback loop), `db/` (Supabase schema).
 - `tools/podcast/` — one episode folder → its reviewed episode package (transcribe, clips, covers, copy, render).
 - `tools/recorder/` — the self-hosted two-side recorder; `static/` is its page and chunk-upload script.
 - `tools/check_ip/` — illustration copyright check: Google Lens → SQLite → review.
@@ -25,9 +26,8 @@ Tool roots still declared in `extra_roots`:
 - `reporting/` — daily numbers: APIs → Supabase → Notion. `scrape_client/` (HTTP/Playwright scrapers), `social_client/` (RapidAPI fetchers), `process/` (transform, upload, aggregate), `notion/` (editorial helpers and Notion sync).
 - `planning/` — weekly publishing through each platform's native scheduler. One subpackage per platform: `linkedin/`, `instagram/`, `twitter/`, `threads/`, `substack/`, plus `videos/` for the weekly cross-platform video.
 - `newsletter/` — the weekly newsletter (archive, normalize, build, Substack draft). `triage/` turns the Gmail label into an edition shortlist.
-- `engagement/` — anti-AI comment triage. `linkedin/` (comment scraper), `classify/` (layered classifier), `reputation/` (commenter feedback loop), `db/` (Supabase schema).
 - `demo_video/` — demo videos: storyboard → Remotion template (`remotion/`) → MP4 per cut; `examples/` holds a sample storyboard.
-- `app/` — the Streamlit control panel: one `tab_*.py` per tool, routed from `app.py`. UI code lives here and in `engagement/ui.py` and `engagement/review_app.py`.
+- `app/` — the Streamlit control panel: one `tab_*.py` per tool, routed from `app.py`. UI code lives here and in `tools/engagement/ui.py` and `tools/engagement/review_app.py`.
 
 Hidden folders: `.streamlit/` (Streamlit config), `.claude/skills/` (the repo's skills; Codex and Pi reach them through per-skill discovery links that fleet-config generates and git ignores, so a new skill needs no second copy).
 

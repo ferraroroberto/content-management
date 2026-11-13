@@ -12,8 +12,8 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-import engagement.linkedin.scrape_comments as scrape_comments
-from engagement.classify.local_model import ModelVersionMismatch
+import tools.engagement.linkedin.scrape_comments as scrape_comments
+from tools.engagement.classify.local_model import ModelVersionMismatch
 
 COMMENTS = [{"comment_id": "c1"}]
 
@@ -21,7 +21,7 @@ COMMENTS = [{"comment_id": "c1"}]
 def persist(classify_effect):
     """Run ``_persist`` with the Supabase writes faked and ``classify_pending`` raising/returning ``classify_effect``."""
     classify = mock.MagicMock(side_effect=classify_effect) if isinstance(classify_effect, Exception)         else mock.MagicMock(return_value=classify_effect)
-    with mock.patch.object(scrape_comments, "migrate_fallback_ids_to_urn"),             mock.patch.object(scrape_comments, "upsert_commenters"),             mock.patch.object(scrape_comments, "upsert_comments") as upsert,             mock.patch.object(scrape_comments, "mark_replied_as_ignored", return_value=0),             mock.patch("engagement.classify.rules.classify_pending", classify):
+    with mock.patch.object(scrape_comments, "migrate_fallback_ids_to_urn"),             mock.patch.object(scrape_comments, "upsert_commenters"),             mock.patch.object(scrape_comments, "upsert_comments") as upsert,             mock.patch.object(scrape_comments, "mark_replied_as_ignored", return_value=0),             mock.patch("tools.engagement.classify.rules.classify_pending", classify):
         written = scrape_comments._persist(list(COMMENTS), {})
     return written, upsert
 

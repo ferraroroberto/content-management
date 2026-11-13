@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import unittest
 
-from engagement.linkedin.scrape_comments import _dedupe_comments_by_id
+from tools.engagement.linkedin.scrape_comments import _dedupe_comments_by_id
 
 
 class DedupeCommentsByIdTests(unittest.TestCase):

@@ -1,6 +1,6 @@
 """Regression tests for the classifier artefact/runtime version contract (issue #176).
 
-``engagement/classify/local_model.joblib`` is a pickled sklearn pipeline, and a
+``tools/engagement/classify/local_model.joblib`` is a pickled sklearn pipeline, and a
 pickle is bound to the scikit-learn that wrote it. Loading one across a minor
 boundary emits ``InconsistentVersionWarning`` and then keeps going, so the
 pipeline scores every comment from a degraded model. Nothing raises — the rows
@@ -31,8 +31,8 @@ import pandas as pd
 import sklearn
 from sklearn.exceptions import InconsistentVersionWarning
 
-from engagement.classify import local_model
-from engagement.classify.local_model import ModelVersionMismatch
+from tools.engagement.classify import local_model
+from tools.engagement.classify.local_model import ModelVersionMismatch
 
 RUNTIME_VERSION = sklearn.__version__
 

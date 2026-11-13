@@ -8,7 +8,7 @@ drops by 1.
 Usage:
     # Make sure Streamlit is running first:
     #   & .\.venv\Scripts\python.exe -m streamlit run engagement\review_app.py
-    & .\.venv\Scripts\python.exe -m engagement.check_review_app
+    & .\.venv\Scripts\python.exe -m tools.engagement.check_review_app
 
 Screenshots land in results/engagement/e2e/<timestamp>/. Each step prints
 PASS/FAIL/SKIP with a short reason; a SKIP is a check that could not run (NOT
@@ -27,13 +27,13 @@ from pathlib import Path
 from playwright.sync_api import Page, sync_playwright
 from playwright.sync_api import TimeoutError as PWTimeoutError
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(REPO_ROOT))
 
 from config.chrome_launch import doc_capture_context_kwargs, doc_capture_launch_kwargs  # noqa: E402
 from config.console import force_utf8_stdio  # noqa: E402
-from engagement.db.client import supabase_client  # noqa: E402
-from engagement.db.comment_status import CommentStatus  # noqa: E402
+from tools.engagement.db.client import supabase_client  # noqa: E402
+from tools.engagement.db.comment_status import CommentStatus  # noqa: E402
 
 APP_URL = "http://localhost:8501"
 

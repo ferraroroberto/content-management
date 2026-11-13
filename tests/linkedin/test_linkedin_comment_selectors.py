@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from engagement.linkedin.scrape_comments import (
+from tools.engagement.linkedin.scrape_comments import (
     SEL_COMMENT_LIST_CONTAINER,
     SEL_COMMENT_TEXT_NODES,
 )

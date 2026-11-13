@@ -12,12 +12,12 @@ Fourth pipeline in this repo (sibling to `planning/`, `reporting/`, `newsletter/
 - LinkedIn only (other platforms = Phase 4).
 - Scraper that reads my recent posts from the Notion editorial DB (where `link LI` is set) and walks each one in the existing `planning/linkedin/chrome_user_data` session.
 - **Layered classifier**:
-  1. **Rules** (Phase 1) — whitelist / blacklist / generic-praise / short / no-personal-token / emoji-only / exact-text-duplicate / sub-2-min-after-post. Tunable via `engagement/classify/phrases.json`.
+  1. **Rules** (Phase 1) — whitelist / blacklist / generic-praise / short / no-personal-token / emoji-only / exact-text-duplicate / sub-2-min-after-post. Tunable via `tools/engagement/classify/phrases.json`.
   2. **Local sklearn model** (Phase 2a) — logistic regression on TF-IDF (word 1-2 + char_wb 3-5) plus six per-comment scalars, trained on accumulated commenter-level whitelist/blacklist labels. Called only on rows the rules layer left as `unknown`. Lossless when not trained yet — pipeline behaves identically to rules-only.
-  3. **LLM fallback** (Phase 3) — routed through the local LLM hub (`http://127.0.0.1:8000`, version-free alias `claude_haiku`). Fires only on rows where the local model's `P(AI)` sits in the uncertainty window `[llm_fallback_local_uncertainty_low, local_model_ai_threshold)` — i.e. the ambiguous middle the cheap layers can't resolve. Verdicts are cached on disk (`engagement/classify/.llm_cache.json`, gitignored) keyed by `sha256(commenter_url|text)`; database is the truth-of-record.
+  3. **LLM fallback** (Phase 3) — routed through the local LLM hub (`http://127.0.0.1:8000`, version-free alias `claude_haiku`). Fires only on rows where the local model's `P(AI)` sits in the uncertainty window `[llm_fallback_local_uncertainty_low, local_model_ai_threshold)` — i.e. the ambiguous middle the cheap layers can't resolve. Verdicts are cached on disk (`tools/engagement/classify/.llm_cache.json`, gitignored) keyed by `sha256(commenter_url|text)`; database is the truth-of-record.
 - **Reputation feedback loop** (Phase 3) — `engagement.reputation.update` recomputes rolling per-commenter `signals`, `counters`, and `reputation_score` from accumulated comment history and upserts them into `commenters`. Pure batch, idempotent, preserves manual whitelist/blacklist labels.
-- Two Supabase tables (`commenters` + `comments`) — see `engagement/db/schema.sql`.
-- Streamlit review app — `engagement/review_app.py`.
+- Two Supabase tables (`commenters` + `comments`) — see `tools/engagement/db/schema.sql`.
+- Streamlit review app — `tools/engagement/review_app.py`.
 - **No auto-posting worker, ever.** Approved rows sit in Supabase; you copy the suggested reply via `st.code`'s built-in copy button and paste it into LinkedIn's native composer yourself. An automated send worker is permanently out of scope on TOS grounds.
 
 ## Workflow
@@ -40,18 +40,18 @@ flowchart LR
 
 | Command | Purpose |
 |---|---|
-| `python -m engagement.linkedin.scrape_comments --days 5` | Scrape last 5 calendar days **including today** of LI comments → Supabase. Headful by default. `--days N` means N total days, so `--days 1` = today only. |
-| `python -m engagement.linkedin.scrape_comments --days 1 --limit 1 --dry-run` | Smoke test against 1 post (today only); writes `results/engagement/dryrun-*.json` instead of upserting. |
-| `python -m engagement.classify.rules` | Re-classify all `pending` `unknown` rows using current `phrases.json`. If a local model is on disk, it runs as a second pass on the rows the rules layer left as `unknown`. |
-| `python -m engagement.classify.local_model train` | Train the local sklearn classifier on accumulated whitelist/blacklist labels. Refuses to train below `rules.local_model_min_train_per_class` per class. Writes `results/engagement/classify/local_model.joblib` (gitignored) + a metadata sidecar recording the scikit-learn version that pickled it. |
-| `python -m engagement.classify.local_model eval` | 5-fold stratified CV on the same labeled set; prints AUC + precision/recall/F1 at the configured threshold. |
-| `python -m engagement.reputation.update` | Recompute rolling per-commenter signals + counters + reputation_score from the `comments` table and upsert into `commenters`. Idempotent; preserves manual whitelist/blacklist. |
+| `python -m tools.engagement.linkedin.scrape_comments --days 5` | Scrape last 5 calendar days **including today** of LI comments → Supabase. Headful by default. `--days N` means N total days, so `--days 1` = today only. |
+| `python -m tools.engagement.linkedin.scrape_comments --days 1 --limit 1 --dry-run` | Smoke test against 1 post (today only); writes `results/engagement/dryrun-*.json` instead of upserting. |
+| `python -m tools.engagement.classify.rules` | Re-classify all `pending` `unknown` rows using current `phrases.json`. If a local model is on disk, it runs as a second pass on the rows the rules layer left as `unknown`. |
+| `python -m tools.engagement.classify.local_model train` | Train the local sklearn classifier on accumulated whitelist/blacklist labels. Refuses to train below `rules.local_model_min_train_per_class` per class. Writes `results/engagement/classify/local_model.joblib` (gitignored) + a metadata sidecar recording the scikit-learn version that pickled it. |
+| `python -m tools.engagement.classify.local_model eval` | 5-fold stratified CV on the same labeled set; prints AUC + precision/recall/F1 at the configured threshold. |
+| `python -m tools.engagement.reputation.update` | Recompute rolling per-commenter signals + counters + reputation_score from the `comments` table and upsert into `commenters`. Idempotent; preserves manual whitelist/blacklist. |
 | `& .\.venv\Scripts\python.exe -m streamlit run engagement\review_app.py` | Launch the review UI on `http://localhost:8501`. |
 
 ## One-time setup
 
 1. Install deps: `& .\.venv\Scripts\python.exe -m pip install -r requirements.txt`
-2. Apply schema: open the Supabase dashboard → **SQL Editor** → paste `engagement/db/schema.sql` → **Run**. Idempotent. Re-run this whenever `schema.sql` changes — the scrape verifies the live tables against it on startup and refuses to run against a database that is behind (see the schema-preflight gotcha below).
+2. Apply schema: open the Supabase dashboard → **SQL Editor** → paste `tools/engagement/db/schema.sql` → **Run**. Idempotent. Re-run this whenever `schema.sql` changes — the scrape verifies the live tables against it on startup and refuses to run against a database that is behind (see the schema-preflight gotcha below).
 3. Make sure `planning/linkedin/chrome_user_data/` exists (the engagement scraper reuses it). If not: `& .\.venv\Scripts\python.exe -m planning.linkedin.bootstrap_session`.
 
 No new secrets needed — uses `config.supabase.service_role_key` and `config.notion.api_token` that the rest of the repo already uses.
@@ -64,8 +64,8 @@ No new secrets needed — uses `config.supabase.service_role_key` and `config.no
 - **Idempotent.** Both tables are upserted on `(platform, comment_id)` and `(platform, account_url)` respectively — safe to re-run on the same posts.
 - **Relative time parsing is approximate.** LinkedIn shows `2h`, `5m`, `1d`. We reconstruct an absolute timestamp from scrape time, so `posted_at` drifts up to ~one tick of the LI display unit. Fine for cadence rules.
 - **Unknown ≠ AI.** Comments that score below the AI threshold (and below the local-model threshold, if a model is loaded) stay `unknown` and surface in the real-comments tab by default. Bias is toward human review — better to over-surface than wrongly stage a canned reply.
-- **Local model is lossless when missing.** If `local_model.joblib` isn't on disk yet, the rules pass is the only classifier and the verdict reasons match Phase 1 exactly. Train it by running `python -m engagement.classify.local_model train` once you have ≥20 whitelist + ≥20 blacklist commenters.
-- **The artifact is pinned to its scikit-learn.** `local_model.joblib` is a pickle, and sklearn only guarantees pickle portability across *patch* releases — which is why `requirements.txt` pins `scikit-learn` to one minor line. Crossing a minor boundary used to unpickle with a warning and then score every comment from a degraded model, so nothing errored and nothing got classified (`ai=0 human=0 unknown=N` — the diagnostic tell). `train()` now records the writing version in the sidecar and the loader refuses a mismatch, naming both versions. If you see that error, retrain: `python -m engagement.classify.local_model train`. "No model on disk" stays a soft fallback; a version-skewed model does not.
+- **Local model is lossless when missing.** If `local_model.joblib` isn't on disk yet, the rules pass is the only classifier and the verdict reasons match Phase 1 exactly. Train it by running `python -m tools.engagement.classify.local_model train` once you have ≥20 whitelist + ≥20 blacklist commenters.
+- **The artifact is pinned to its scikit-learn.** `local_model.joblib` is a pickle, and sklearn only guarantees pickle portability across *patch* releases — which is why `requirements.txt` pins `scikit-learn` to one minor line. Crossing a minor boundary used to unpickle with a warning and then score every comment from a degraded model, so nothing errored and nothing got classified (`ai=0 human=0 unknown=N` — the diagnostic tell). `train()` now records the writing version in the sidecar and the loader refuses a mismatch, naming both versions. If you see that error, retrain: `python -m tools.engagement.classify.local_model train`. "No model on disk" stays a soft fallback; a version-skewed model does not.
 - **Featurizer is the single source of truth.** `local_model.featurize_one` re-imports `_seconds_after`, `_is_emoji_only`, `_generic_praise_hits`, `_has_personal_token` from `rules.py` so train-time and inference-time signals can never drift. If you tune one of those rules in `phrases.json` (or the helper logic), retrain before relying on the model.
 - **Whitelist/blacklist cascades.** Marking a commenter triggers a retroactive reclassification of their pending comments (`cascade_blacklist_pending` / `cascade_whitelist_pending`).
 - **Thin test coverage.** `tests/` covers the scrape exit-status contract and the classifier's artifact/runtime version guard; everything else is verified by a real scrape + manual eyeball.
@@ -73,7 +73,7 @@ No new secrets needed — uses `config.supabase.service_role_key` and `config.no
 ## Files
 
 ```
-engagement/
+tools/engagement/
 ├── __init__.py
 ├── README.md                         # this file
 ├── linkedin/
@@ -102,7 +102,7 @@ engagement/
         "enabled": true,
         "base_url": "http://127.0.0.1:8000",
         "model": "claude_haiku",
-        "cache_path": "engagement/classify/.llm_cache.json",
+        "cache_path": "tools/engagement/classify/.llm_cache.json",
         "timeout_seconds": 20
     }
 }

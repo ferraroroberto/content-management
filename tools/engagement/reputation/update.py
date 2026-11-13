@@ -10,7 +10,7 @@ classification (whitelist / blacklist / unknown) is **never overwritten** —
 this job preserves it and merely pins the score to the right ±1.0 when set.
 
 CLI:
-    & .\.venv\Scripts\python.exe -m engagement.reputation.update --platform linkedin
+    & .\.venv\Scripts\python.exe -m tools.engagement.reputation.update --platform linkedin
 """
 
 from __future__ import annotations
@@ -23,13 +23,13 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Optional
 
-from engagement.classify.rules import (
+from tools.engagement.classify.rules import (
     _build_duplicate_set,
     _generic_praise_hits,
     _seconds_after,
     load_phrases,
 )
-from engagement.db.client import supabase_client
+from tools.engagement.db.client import supabase_client
 
 logger = logging.getLogger("engagement.reputation")
 

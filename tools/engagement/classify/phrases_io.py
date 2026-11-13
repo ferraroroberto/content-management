@@ -3,7 +3,7 @@
 Deliberately has no dependency on ``engagement.db.client`` or
 ``engagement.classify.rules`` — safe for both to import without a cycle.
 Single source for the reply-picking logic, so two independent
-implementations cannot diverge: ``engagement/db/client.py``'s
+implementations cannot diverge: ``tools/engagement/db/client.py``'s
 ``_pick_thanks_reply`` existed only to dodge the very cycle this module
 avoids (``rules.py`` already imports from ``client.py``), so a
 ``phrases.json`` schema change could update one path and silently miss the
@@ -17,8 +17,8 @@ import random
 from pathlib import Path
 from typing import Optional
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-PHRASES_PATH = REPO_ROOT / "engagement" / "classify" / "phrases.json"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+PHRASES_PATH = REPO_ROOT / "tools" / "engagement" / "classify" / "phrases.json"
 
 
 def first_name(display_name: Optional[str]) -> str:
@@ -45,7 +45,7 @@ def pick_thanks_reply(display_name: Optional[str]) -> str:
     """Pick a random canned thanks-reply, reading ``phrases.json`` itself.
 
     Convenience wrapper around :func:`pick_reply_from_templates` for callers
-    (e.g. ``engagement/db/client.py``) that don't already have a loaded
+    (e.g. ``tools/engagement/db/client.py``) that don't already have a loaded
     ``phrases`` dict on hand. Falls back to a fixed default on any error
     (missing/corrupt file, empty template list).
     """

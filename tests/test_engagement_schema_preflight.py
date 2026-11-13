@@ -1,6 +1,6 @@
 """Regression tests for the engagement schema preflight (issue #262).
 
-`engagement/db/schema.sql` is applied **by hand** through the Supabase
+`tools/engagement/db/schema.sql` is applied **by hand** through the Supabase
 dashboard SQL editor, so nothing stops code that writes a new column from
 shipping before the column exists. That is exactly what happened: the
 `post_posted_at` column added in `fe68ac5` never reached the live database, and
@@ -27,14 +27,14 @@ import unittest
 from pathlib import Path
 from typing import Dict, List, Set
 
-from engagement.db.client import (
+from tools.engagement.db.client import (
     REQUIRED_COLUMNS,
     SchemaDriftError,
     _missing_columns,
     verify_schema,
 )
 
-SCHEMA_PATH = Path(__file__).resolve().parent.parent / "engagement" / "db" / "schema.sql"
+SCHEMA_PATH = Path(__file__).resolve().parent.parent / "tools" / "engagement" / "db" / "schema.sql"
 
 # Line-leading keywords inside a create-table body that introduce a constraint
 # rather than a column.
@@ -210,7 +210,7 @@ class MissingColumnDetection(unittest.TestCase):
 class VerifySchemaBranches(unittest.TestCase):
     def setUp(self) -> None:
         _patch_api_error(self)
-        import engagement.db.client as client_mod
+        import tools.engagement.db.client as client_mod
 
         self.client_mod = client_mod
 

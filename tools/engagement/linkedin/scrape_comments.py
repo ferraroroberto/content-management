@@ -30,20 +30,12 @@ from typing import Optional
 from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PWTimeoutError
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.append(str(REPO_ROOT))
 
 from common.runtime_files import ensure_folder
 from config.console import force_utf8_stdio  # noqa: E402
 from config.logger_config import setup_logger  # noqa: E402
-from engagement.db.client import (  # noqa: E402
-    load_config,
-    mark_replied_as_ignored,
-    migrate_fallback_ids_to_urn,
-    upsert_commenters,
-    upsert_comments,
-    verify_schema,
-)
 from planning.linkedin.linkedin_session import (  # noqa: E402
     LinkedInSession,
     LoginRequiredError,
@@ -53,6 +45,14 @@ from reporting.notion.editorial import (  # noqa: E402
     get_field,
     init_notion_client,
     query_rows_by_filter,
+)
+from tools.engagement.db.client import (  # noqa: E402
+    load_config,
+    mark_replied_as_ignored,
+    migrate_fallback_ids_to_urn,
+    upsert_commenters,
+    upsert_comments,
+    verify_schema,
 )
 
 logger = logging.getLogger("engagement.linkedin.scrape")
@@ -691,9 +691,11 @@ def _persist(persistable_comments: list[dict], all_commenters: dict[str, dict]) 
         logger.info("✓ auto-marked %d already-replied row(s) as ignored", flipped)
     # Chain: apply the rule classifier so new comments from whitelist/
     # blacklist commenters get cascaded immediately (no manual click).
-    from engagement.classify.local_model import ModelVersionMismatch  # late import
+    from tools.engagement.classify.local_model import (
+        ModelVersionMismatch,  # late import
+    )
     try:
-        from engagement.classify.rules import classify_pending  # late import
+        from tools.engagement.classify.rules import classify_pending  # late import
         res = classify_pending(platform="linkedin")
         logger.info("🧮 post-scrape classify: %s", res)
     except ModelVersionMismatch:

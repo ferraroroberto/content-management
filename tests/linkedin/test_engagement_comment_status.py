@@ -1,6 +1,6 @@
 """The engagement comment status: the declared states, the table that reads them and the refused writes.
 
-``engagement/db/comment_status.py`` is the only module that names ``pending`` / ``approved`` /
+``tools/engagement/db/comment_status.py`` is the only module that names ``pending`` / ``approved`` /
 ``sent`` / ``rejected`` / ``ignored``; ``update_comment_status`` writes through it. No network:
 the Supabase client is a mock.
 """
@@ -16,8 +16,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from engagement.db import client  # noqa: E402
-from engagement.db.comment_status import (  # noqa: E402
+from tools.engagement.db import client  # noqa: E402
+from tools.engagement.db.comment_status import (  # noqa: E402
     STORED_STATUSES,
     CommentStatus,
     derive_comment_status,
@@ -46,7 +46,7 @@ class DeriveTableTests(unittest.TestCase):
                 self.assertIs(derive_comment_status(stored), expected)
 
     def test_stored_values_are_the_schema_values(self) -> None:
-        schema = (REPO_ROOT / "engagement" / "db" / "schema.sql").read_text(encoding="utf-8")
+        schema = (REPO_ROOT / "tools" / "engagement" / "db" / "schema.sql").read_text(encoding="utf-8")
         line = next(ln for ln in schema.splitlines() if ln.strip().startswith("status "))
         documented = {w.strip() for w in line.split("--", 1)[1].split("/")}
         self.assertEqual({s.value for s in STORED_STATUSES}, documented)
