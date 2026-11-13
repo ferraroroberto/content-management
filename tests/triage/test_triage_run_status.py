@@ -1,6 +1,6 @@
 """The stored triage run status: the declared states, the table that reads them and the refused moves.
 
-``newsletter/triage/run_status.py`` is the only module that names ``running`` / ``done`` /
+``tools/newsletter/triage/run_status.py`` is the only module that names ``running`` / ``done`` /
 ``failed``; ``db.mark_run`` settles a run through it. No network: the store is the in-memory fake.
 """
 
@@ -15,14 +15,14 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from newsletter.triage import db  # noqa: E402
-from newsletter.triage.run_status import (  # noqa: E402
+from tests.triage.test_triage_db import FakeSupabase  # noqa: E402
+from tools.newsletter.triage import db  # noqa: E402
+from tools.newsletter.triage.run_status import (  # noqa: E402
     IllegalRunTransition,
     RunStatus,
     derive_run_status,
     settled_status,
 )
-from tests.triage.test_triage_db import FakeSupabase  # noqa: E402
 
 DERIVE_TABLE = (
     ("running", RunStatus.RUNNING),

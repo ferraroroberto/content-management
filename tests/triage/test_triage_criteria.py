@@ -11,8 +11,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from newsletter.topics import TOPICS  # noqa: E402
-from newsletter.triage import criteria as cr  # noqa: E402
+from tools.newsletter.topics import TOPICS  # noqa: E402
+from tools.newsletter.triage import criteria as cr  # noqa: E402
 
 _STATS = {
     "window": {"emails": 10, "editions": 2, "positives": 5, "first_email": "2025-08-08", "last_email": "2026-08-21"},

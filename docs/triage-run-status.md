@@ -1,6 +1,6 @@
 # Triage run status
 
-A row of `triage_runs` is one stored newsletter-triage run. `newsletter/triage/run_status.py` is the only module that names its states, maps the stored string to one and says which moves are legal.
+A row of `triage_runs` is one stored newsletter-triage run. `tools/newsletter/triage/run_status.py` is the only module that names its states, maps the stored string to one and says which moves are legal.
 
 ## Why it is declared
 
@@ -27,9 +27,9 @@ The string values are the ones `schema.sql` documents for the column, so they ne
 
 | Reader | Where | Calls |
 |---|---|---|
-| Insert a run | `register_run` in `newsletter/triage/db.py` | `RunStatus.RUNNING` |
-| Settle a run | `mark_run` in `newsletter/triage/db.py` | `settled_status` |
-| Mark done / failed | `run_window` in `newsletter/triage/run.py` | `RunStatus.DONE`, `RunStatus.FAILED` |
+| Insert a run | `register_run` in `tools/newsletter/triage/db.py` | `RunStatus.RUNNING` |
+| Settle a run | `mark_run` in `tools/newsletter/triage/db.py` | `settled_status` |
+| Mark done / failed | `run_window` in `tools/newsletter/triage/run.py` | `RunStatus.DONE`, `RunStatus.FAILED` |
 | Review tab gate and message | `_render_review` in `app/tab_triage.py` | `derive_run_status` |
 
 A new reader calls the module. It does not compare the status string.

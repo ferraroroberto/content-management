@@ -13,10 +13,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-import newsletter  # noqa: E402
-from newsletter.triage import db  # noqa: E402
-from newsletter.triage import handoff as ho  # noqa: E402
 from tests.triage.test_triage_db import FakeSupabase  # noqa: E402
+from tools import newsletter  # noqa: E402
+from tools.newsletter.triage import db  # noqa: E402
+from tools.newsletter.triage import handoff as ho  # noqa: E402
 
 
 class HandoffTests(unittest.TestCase):
@@ -95,12 +95,12 @@ class HandoffTests(unittest.TestCase):
         fake_tabs = types.SimpleNamespace(connect=lambda port: browser, list_tabs=lambda b: [tab],
                                           close_browser=lambda b: None)
         fake_boot = types.SimpleNamespace(ensure_chrome=lambda: 0, configured_debug_port=lambda: 9222)
-        # ``open_in_chrome`` does ``from newsletter import chrome_tabs``, which
+        # ``open_in_chrome`` does ``from tools.newsletter import chrome_tabs``, which
         # reads the package *attribute* whenever the real submodule is already
-        # imported (as it is once any test imports newsletter.pipeline) — so the
+        # imported (as it is once any test imports tools.newsletter.pipeline) — so the
         # sys.modules entry alone is not enough to stand in for it.
-        with unittest.mock.patch.dict(sys.modules, {"newsletter.chrome_tabs": fake_tabs,
-                                                    "newsletter.bootstrap_chrome": fake_boot}), \
+        with unittest.mock.patch.dict(sys.modules, {"tools.newsletter.chrome_tabs": fake_tabs,
+                                                    "tools.newsletter.bootstrap_chrome": fake_boot}), \
              unittest.mock.patch.object(newsletter, "chrome_tabs", fake_tabs, create=True):
             res = ho.open_in_chrome(["https://a.com/x", "https://b.com/y?utm_source=z"], dry_run=True)
             self.assertEqual((res["would_open"], res["skipped_open"], res["opened"]), (1, 1, 0))

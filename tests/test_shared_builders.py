@@ -15,10 +15,10 @@ import unittest
 from unittest import mock
 
 from config.supabase_client import build_supabase_client
-from newsletter import _normalizer_base as nb
-from newsletter.normalize_names import NotionNameNormalizer
-from newsletter.normalize_url import NotionURLNormalizer
 from reporting.notion import _client as notion_client_mod
+from tools.newsletter import _normalizer_base as nb
+from tools.newsletter.normalize_names import NotionNameNormalizer
+from tools.newsletter.normalize_url import NotionURLNormalizer
 
 
 class _FakeSupabase:
@@ -93,7 +93,7 @@ class BuildSupabaseClientTests(unittest.TestCase):
 
 class TriageKeyAcceptanceTests(unittest.TestCase):
     def test_matches_the_original_fall_through_rule(self):
-        from newsletter.triage import db
+        from tools.newsletter.triage import db
 
         self.assertFalse(db._key_accepted(RuntimeError("Invalid API key")))
         self.assertFalse(db._key_accepted(RuntimeError("401 Unauthorized")))

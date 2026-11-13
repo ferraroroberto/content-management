@@ -27,9 +27,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from newsletter.topics import TOPICS  # noqa: E402
-from newsletter.triage import jev as jx  # noqa: E402
-from newsletter.triage import (
+from tools.newsletter.topics import TOPICS  # noqa: E402
+from tools.newsletter.triage import jev as jx  # noqa: E402
+from tools.newsletter.triage import (
     review,  # noqa: E402
     run,  # noqa: E402
 )
@@ -303,7 +303,7 @@ class TabTests(unittest.TestCase):
         at.button(key="triage-rescore").click().run()
         self.assertFalse(at.exception)
         cmd = launched.call_args.args[1]
-        self.assertEqual(cmd[1:], ["-m", "newsletter.triage.run", "--stage-a-engine", "jev+legacy", "--rescore", "18"])
+        self.assertEqual(cmd[1:], ["-m", "tools.newsletter.triage.run", "--stage-a-engine", "jev+legacy", "--rescore", "18"])
 
     def test_fresh_switch_adds_the_flag_and_is_off_by_default(self) -> None:
         at, launched = self._app()

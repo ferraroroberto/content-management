@@ -1,7 +1,7 @@
 """The newsletter -> Substack draft body must be structurally correct (issue #184,
 extended by issue #233 for the "one must read" + "one book" sections).
 
-``newsletter/substack_draft.py`` turns ``build_newsletter``'s grouped articles
+``tools/newsletter/substack_draft.py`` turns ``build_newsletter``'s grouped articles
 into a Substack draft. The body is ProseMirror JSON, and a malformed body fails
 silently — it produces a draft that *exists* but renders as plain text with dead
 links, which you only notice by eye in the Substack editor.
@@ -30,21 +30,21 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from newsletter.build_newsletter import (
+from planning.substack.api_client import (
+    build_book_nodes,
+    build_must_read_nodes,
+    build_section_nodes,
+)
+from tools.newsletter.build_newsletter import (
     build_article_summary_map,
     extract_article_summary,
     must_read_first_index,
     top_article_by_topic,
 )
-from newsletter.substack_draft import (
+from tools.newsletter.substack_draft import (
     build_sections,
     compose_must_read_article,
     compose_title_line,
-)
-from planning.substack.api_client import (
-    build_book_nodes,
-    build_must_read_nodes,
-    build_section_nodes,
 )
 
 TOPICS = ["personal development", "innovation", "leadership and management"]
@@ -266,7 +266,7 @@ class ArticleSummaryExtractionTests(unittest.TestCase):
 
 
 class FindBookForNewsletterTests(unittest.TestCase):
-    """``newsletter/books.py`` — mocked Notion, no network."""
+    """``tools/newsletter/books.py`` — mocked Notion, no network."""
 
     def _row(self, title: str, author: str, url: str) -> dict:
         return {
@@ -278,24 +278,24 @@ class FindBookForNewsletterTests(unittest.TestCase):
         }
 
     def test_returns_none_when_no_book_linked(self):
-        from newsletter.books import find_book_for_newsletter
+        from tools.newsletter.books import find_book_for_newsletter
 
-        with patch("newsletter.books.load_full_config", return_value={
+        with patch("tools.newsletter.books.load_full_config", return_value={
             "notion": {"api_token": "tok"},
             "newsletter_archive": {"books_db_id": "db123"},
-        }), patch("newsletter.books.init_notion_client", return_value=object()), \
-             patch("newsletter.books.query_rows_by_filter", return_value=[]):
+        }), patch("tools.newsletter.books.init_notion_client", return_value=object()), \
+             patch("tools.newsletter.books.query_rows_by_filter", return_value=[]):
             self.assertIsNone(find_book_for_newsletter("page-id"))
 
     def test_returns_title_author_url_from_the_first_match(self):
-        from newsletter.books import find_book_for_newsletter
+        from tools.newsletter.books import find_book_for_newsletter
 
         row = self._row("How Will You Measure Your Life?", "Clayton Christensen", "https://gr/x")
-        with patch("newsletter.books.load_full_config", return_value={
+        with patch("tools.newsletter.books.load_full_config", return_value={
             "notion": {"api_token": "tok"},
             "newsletter_archive": {"books_db_id": "db123"},
-        }), patch("newsletter.books.init_notion_client", return_value=object()), \
-             patch("newsletter.books.query_rows_by_filter", return_value=[row]):
+        }), patch("tools.newsletter.books.init_notion_client", return_value=object()), \
+             patch("tools.newsletter.books.query_rows_by_filter", return_value=[row]):
             book = find_book_for_newsletter("page-id")
         self.assertEqual(book, {
             "title": "How Will You Measure Your Life?",
@@ -304,14 +304,14 @@ class FindBookForNewsletterTests(unittest.TestCase):
         })
 
     def test_returns_none_when_title_or_url_missing(self):
-        from newsletter.books import find_book_for_newsletter
+        from tools.newsletter.books import find_book_for_newsletter
 
         row = self._row("", "Clayton Christensen", "https://gr/x")
-        with patch("newsletter.books.load_full_config", return_value={
+        with patch("tools.newsletter.books.load_full_config", return_value={
             "notion": {"api_token": "tok"},
             "newsletter_archive": {"books_db_id": "db123"},
-        }), patch("newsletter.books.init_notion_client", return_value=object()), \
-             patch("newsletter.books.query_rows_by_filter", return_value=[row]):
+        }), patch("tools.newsletter.books.init_notion_client", return_value=object()), \
+             patch("tools.newsletter.books.query_rows_by_filter", return_value=[row]):
             self.assertIsNone(find_book_for_newsletter("page-id"))
 
 

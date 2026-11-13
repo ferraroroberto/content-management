@@ -1,10 +1,10 @@
 # Newsletter triage — selection criteria (inferred from 54 weeks)
 
-The weekly newsletter picks 8 articles × 3 topics (leadership and management · personal development · innovation), stars one per topic and names one must-read. This document states the criteria that reproduce those picks, **each with the number it was measured on**, so a reader (or the Step-2 ranker, which consumes the machine-readable twin `results/newsletter/triage/criteria.json` — gitignored, rebuilt from the hand-written `RULES` in `newsletter/triage/criteria.py`) can tell a rule from a guess.
+The weekly newsletter picks 8 articles × 3 topics (leadership and management · personal development · innovation), stars one per topic and names one must-read. This document states the criteria that reproduce those picks, **each with the number it was measured on**, so a reader (or the Step-2 ranker, which consumes the machine-readable twin `results/newsletter/triage/criteria.json` — gitignored, rebuilt from the hand-written `RULES` in `tools/newsletter/triage/criteria.py`) can tell a rule from a guess.
 
-**Ground truth** (`python -m newsletter.triage.history`, built 2026-08-21): Gmail label `newsletters`, 2025-08-08 → 2026-08-21 — 4,383 emails (median 82/week, min 25 in the opening week, max 102), 57,849 non-noise links; Notion editions N174–N229 (58 rows, 54 complete) with 1,317 picks. 94.7% of picks were traced to the email that offered them (46% exact URL, 26% Substack slug, 8% anchor-title fuzzy, 14% by the sender's domain in the window); the 70 unmatched are mostly Rishad/Mike Fisher posts whose email anchor is an image or a one-word title.
+**Ground truth** (`python -m tools.newsletter.triage.history`, built 2026-08-21): Gmail label `newsletters`, 2025-08-08 → 2026-08-21 — 4,383 emails (median 82/week, min 25 in the opening week, max 102), 57,849 non-noise links; Notion editions N174–N229 (58 rows, 54 complete) with 1,317 picks. 94.7% of picks were traced to the email that offered them (46% exact URL, 26% Substack slug, 8% anchor-title fuzzy, 14% by the sender's domain in the window); the 70 unmatched are mostly Rishad/Mike Fisher posts whose email anchor is an image or a one-word title.
 
-Regenerate: `python -m newsletter.triage.history --no-gmail --reextract --no-resolve` (cached HTML, no network) then `python -m newsletter.triage.criteria`.
+Regenerate: `python -m tools.newsletter.triage.history --no-gmail --reextract --no-resolve` (cached HTML, no network) then `python -m tools.newsletter.triage.criteria`.
 
 ## 1. Shape of an edition (hard)
 
@@ -55,7 +55,7 @@ Keep: new capability class explained for a business reader · credible adoption/
 
 ## 6. Exclusions that are not "noise"
 
-Beyond the mechanical noise filter (unsubscribe, share, social, app stores — `newsletter/triage/gmail.py`), these anchors were offered thousands of times and picked zero times: book orders/pre-orders, courses/cohorts/workshops/masterclasses/consultations, sponsor and partner promos, job postings, "continue in the Substack app", RSS/feed links, executive-education programme brochures (IMD programme mails: 0 picks; IMD *insight* articles: 21), alumni bulletins.
+Beyond the mechanical noise filter (unsubscribe, share, social, app stores — `tools/newsletter/triage/gmail.py`), these anchors were offered thousands of times and picked zero times: book orders/pre-orders, courses/cohorts/workshops/masterclasses/consultations, sponsor and partner promos, job postings, "continue in the Substack app", RSS/feed links, executive-education programme brochures (IMD programme mails: 0 picks; IMD *insight* articles: 21), alumni bulletins.
 
 ## 7. Style and timing
 

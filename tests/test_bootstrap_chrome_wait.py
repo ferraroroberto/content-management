@@ -20,7 +20,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from newsletter import bootstrap_chrome as bc  # noqa: E402
+from tools.newsletter import bootstrap_chrome as bc  # noqa: E402
 
 
 class WaitForProfileFreeTests(unittest.TestCase):

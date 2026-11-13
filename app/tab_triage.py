@@ -1,7 +1,7 @@
 """Newsletter triage tab — run the engine for a closed Saturday→Saturday week, review the 8+8+8
 suggestions in an editable table, Apply (decisions → sender tiers → watermark), distil lessons.
 
-UI only: every read/write goes through ``newsletter.triage.review`` / ``.db`` / ``.lessons``.
+UI only: every read/write goes through ``tools.newsletter.triage.review`` / ``.db`` / ``.lessons``.
 The engine runs as a subprocess in the shared ``"triage"`` process slot so the
 status badge / live log panel / sidebar work exactly like the other pipelines.
 
@@ -24,9 +24,9 @@ from app.process_runner import (
     render_status_badge,
     start_pipeline,
 )
-from newsletter.triage import db, lessons, review
-from newsletter.triage.rank import TOPICS
-from newsletter.triage.run_status import RunStatus, derive_run_status
+from tools.newsletter.triage import db, lessons, review
+from tools.newsletter.triage.rank import TOPICS
+from tools.newsletter.triage.run_status import RunStatus, derive_run_status
 
 PIPELINE_NAME = "triage"
 _SHORT = {"leadership and management": "leadership", "personal development": "persdev", "innovation": "innovation"}
@@ -158,7 +158,7 @@ def _render_run_controls(runs: list[dict]) -> None:
     stored = next((r for r in runs if r["kind"] == "live" and r["window_start"] == str(start)
                    and r["window_end"] == str(end)), None)
     running = is_running(PIPELINE_NAME)
-    base = [str(VENV_PY), "-m", "newsletter.triage.run", "--stage-a-engine", engine]
+    base = [str(VENV_PY), "-m", "tools.newsletter.triage.run", "--stage-a-engine", engine]
     tail = ["--debug"] if debug else []
     cmd = base + ["--since", str(start), "--until", str(end), "--days", str(max(1, (end - start).days))]
     if offline:
@@ -301,7 +301,7 @@ def _render_handoff(run: dict, run_id: int, prior: dict | None) -> None:
     """The Chrome / Notion hand-off buttons for a reviewed run."""
     # hand-off: the two external writes, each an explicit click, streamed into the log panel
     # like every other pipeline step (Playwright + Notion run in the subprocess, never in the Streamlit thread)
-    handoff = [str(VENV_PY), "-m", "newsletter.triage.handoff", "--run", str(run_id)]
+    handoff = [str(VENV_PY), "-m", "tools.newsletter.triage.handoff", "--run", str(run_id)]
     running = is_running(PIPELINE_NAME)
     with st.container(horizontal=True, gap="small"):
         st.button("🌐 Open ticked in Chrome (:9222)", key=f"triage-open-{run_id}", disabled=running or prior is None,
@@ -398,7 +398,7 @@ def run() -> None:
         runs = _runs()
     except Exception as err:  # noqa: BLE001 — schema missing / network: show the state, never an empty page
         st.error(f"triage store unavailable: {str(err)[:300]}")
-        st.caption("Apply `newsletter/triage/schema.sql` once in the Supabase SQL editor if the tables are missing.")
+        st.caption("Apply `tools/newsletter/triage/schema.sql` once in the Supabase SQL editor if the tables are missing.")
         runs = []
 
     # Two sub-sections (owner request): the run side and the review side stay separate. segmented_control
@@ -412,7 +412,7 @@ def run() -> None:
         return
     if not runs:
         st.info("no stored runs yet — run a week in ▶ run, or import history: "
-                "`python -m newsletter.triage.db import-history` then `python -m newsletter.triage.run --backtest N224,N225,N226,N227`")
+                "`python -m tools.newsletter.triage.db import-history` then `python -m tools.newsletter.triage.run --backtest N224,N225,N226,N227`")
         return
     if is_running(PIPELINE_NAME):
         st.info("a triage process is running — follow it in ▶ run; stored runs below refresh when it finishes")

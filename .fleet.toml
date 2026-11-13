@@ -14,7 +14,6 @@ depends_on  = ["local-llm-hub"]
 shape       = "pipeline-cli"
 extra_roots = [
     "app",
-    "newsletter",
     "planning",
     "reporting",
 ]
@@ -23,9 +22,9 @@ extra_roots = [
 # migrated from; nothing is read from that path at runtime or build time.
 [contracts]
 ignore_refs = [
-    { path = "newsletter/build_newsletter.py", repo = "automation", why = "docstring provenance note naming the legacy script path, not a runtime or build-time read" },
-    { path = "newsletter/normalize_names.py", repo = "automation", why = "docstring provenance note naming the legacy script path, not a runtime or build-time read" },
-    { path = "newsletter/normalize_url.py", repo = "automation", why = "docstring provenance note naming the legacy script path, not a runtime or build-time read" },
+    { path = "tools/newsletter/build_newsletter.py", repo = "automation", why = "docstring provenance note naming the legacy script path, not a runtime or build-time read" },
+    { path = "tools/newsletter/normalize_names.py", repo = "automation", why = "docstring provenance note naming the legacy script path, not a runtime or build-time read" },
+    { path = "tools/newsletter/normalize_url.py", repo = "automation", why = "docstring provenance note naming the legacy script path, not a runtime or build-time read" },
 ]
 
 # Vendored byte-for-byte from project-scaffolding. sha = the source repo commit
@@ -99,7 +98,7 @@ include = [
     "config/README.md",
     "tools/demo_video/README.md",
     "tools/engagement/README.md",
-    "newsletter/README.md",
+    "tools/newsletter/README.md",
     "planning/instagram/README.md",
     "planning/linkedin/README.md",
     "planning/substack/README.md",
@@ -169,7 +168,7 @@ enabled  = true
 baseline = ".conventions-ratchet-baseline.json"
 rules = ["no-window", "logging-not-print", "no-drive-path", "subprocess-timeout", "state-literal", "state-set-repeat", "state-write"]
 # the default print_paths (app/, src/) would skip every library package but app/
-print_paths = ["app/", "tools/", "config/", "newsletter/", "planning/", "reporting/"]
+print_paths = ["app/", "tools/", "config/", "planning/", "reporting/"]
 
 # A raw connect skips the WAL pragma and the schema bootstrap.
 [[conventions_ratchet.must_use]]
@@ -210,7 +209,7 @@ enabled  = true
 baseline = ".runtime-write-ratchet-baseline.json"
 # The tool packages (the extra_roots above) are this repo's code, beside src/, scripts/
 # and config/; src/gmail_readonly/ and src/google_oauth_common/ are vendored copies.
-code_folders = ["src", "scripts", "config", "app", "tools", "newsletter", "planning", "reporting"]
+code_folders = ["src", "scripts", "config", "app", "tools", "planning", "reporting"]
 exclude      = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
 # Each returns a path under results/ or docs/screenshots/ (never a code folder): results_dir() is
 # <repo>/results/<name>, db_path()/raw_sidecar() sit under the check_ip store_folder (default
@@ -241,7 +240,7 @@ derive = "derive_row_status"
 
 [[state_machines]]
 name   = "triage-run-status"
-module = "newsletter/triage/run_status.py"
+module = "tools/newsletter/triage/run_status.py"
 type   = "RunStatus"
 derive = "derive_run_status"
 

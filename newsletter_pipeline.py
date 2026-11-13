@@ -19,10 +19,10 @@ Subcommands::
                                      [--must-read 1|2|3] [--delete-after] [--no-open] [--debug]
 
 * ``bootstrap`` launches the dedicated newsletter Chrome on :9222 **without**
-  killing the everyday browser (see ``newsletter/bootstrap_chrome.py``).
+  killing the everyday browser (see ``tools/newsletter/bootstrap_chrome.py``).
 * ``schedule`` tops the buffer of future newsletter rows in Notion back up to
   8, so ``archive`` always has a row to file articles against (see
-  ``newsletter/schedule_editions.py``). Not part of ``create`` / ``all``.
+  ``tools/newsletter/schedule_editions.py``). Not part of ``create`` / ``all``.
 * ``archive`` / ``normalize`` / ``build`` / ``create`` are all non-interactive.
 * ``create`` = archive -> normalize -> build (no must-read prompt), chained.
 * ``all`` is the one sanctioned interactive console flow: bootstrap -> a single
@@ -53,7 +53,7 @@ from config.logger_config import configure_root_logging  # noqa: E402
 
 force_utf8_stdio()
 
-from newsletter import (  # noqa: E402
+from tools.newsletter import (  # noqa: E402
     bootstrap_chrome,  # noqa: E402
     build_newsletter,
     normalize_names,
@@ -61,8 +61,8 @@ from newsletter import (  # noqa: E402
     schedule_editions,  # noqa: E402
     substack_draft,  # noqa: E402
 )
-from newsletter import pipeline as archive_pipeline  # noqa: E402
-from newsletter._normalizer_base import UpdateFailedError  # noqa: E402
+from tools.newsletter import pipeline as archive_pipeline  # noqa: E402
+from tools.newsletter._normalizer_base import UpdateFailedError  # noqa: E402
 
 logger = logging.getLogger("newsletter_pipeline")
 

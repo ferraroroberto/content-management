@@ -20,8 +20,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from newsletter import classifier, pipeline, topics  # noqa: E402
-from newsletter.triage import score as sc  # noqa: E402
+from tools.newsletter import classifier, pipeline, topics  # noqa: E402
+from tools.newsletter.triage import score as sc  # noqa: E402
 
 CLASSIFY_KW = dict(base_url="http://127.0.0.1:8000", model="m",
                    title="Some title", body_text="x" * 500)
@@ -63,7 +63,7 @@ class SharedMatcherTests(unittest.TestCase):
         self.assertEqual(tuple(sc.TOPICS), tuple(topics.TOPICS))
 
     def test_triage_matching_behaviour_unchanged(self) -> None:
-        # The exact table the pre-move newsletter/triage/score.py:_topic produced.
+        # The exact table the pre-move tools/newsletter/triage/score.py:_topic produced.
         cases = {
             "leadership and management": "leadership and management",
             "Leadership": "leadership and management",

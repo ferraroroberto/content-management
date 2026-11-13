@@ -31,11 +31,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from newsletter import llm  # noqa: E402
-from newsletter.topics import TOPICS  # noqa: E402
-from newsletter.triage import run  # noqa: E402
-from newsletter.triage import score as sc  # noqa: E402
 from tests.triage import test_triage_rescore as rs  # noqa: E402
+from tools.newsletter import llm  # noqa: E402
+from tools.newsletter.topics import TOPICS  # noqa: E402
+from tools.newsletter.triage import run  # noqa: E402
+from tools.newsletter.triage import score as sc  # noqa: E402
 
 MODELS_OLD = ["claude_haiku", "claude-haiku-4-5", "claude_sonnet", "claude-sonnet-4-6"]
 MODELS_NEW = ["claude_haiku", "claude-haiku-5-5", "claude-haiku-4-5", "claude_sonnet", "claude-sonnet-5-5",

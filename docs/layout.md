@@ -12,10 +12,11 @@ The preset folders:
 - `docs/` — durable topic reference; `docs/screenshots/` holds the capture manifest and generated per-tab images.
 - `common/` — code shared by two or more tools. `common/atomic_write.py` is the one atomic file writer (`atomic_write_text`, `atomic_write_bytes`): a unique temp file beside the target, swapped in with `os.replace`, removed on failure; a raw `os.replace` elsewhere is a conventions-ratchet hit.
 - `common/runtime_files.py` — writes at a path the caller supplies (`ensure_folder`, `write_text_at`, `open_for_write`, `copy_file_to`): the pipelines write into operator-named episode/demo folders and `--out` paths the runtime-write ratchet cannot resolve statically, so the reason for the exemption is stated once there instead of on every call site; each entry point refuses a path that resolves under a ratchet code folder.
-- `src/` — two groups. Vendored Google client packages, byte-identical to their source repo and excluded from the ratchets: `src/gmail_readonly/` (read-only Gmail OAuth + search) and `src/google_oauth_common/` (the shared installed-app OAuth bootstrap); they import each other by bare name, so `newsletter/triage/gmail.py`, their one caller, puts `src/` on `sys.path`. Vendored fleet modules, tracked in `.fleet.toml [vendored]` and read by the ratchets: `usage_log.py`, `usage_log_starlette.py`, `runtime_data.py` and `pooled_http.py`. `src/static_versioning.py`, the cache-busting static-file serving the recorder imports, is repo-owned, not vendored.
+- `src/` — two groups. Vendored Google client packages, byte-identical to their source repo and excluded from the ratchets: `src/gmail_readonly/` (read-only Gmail OAuth + search) and `src/google_oauth_common/` (the shared installed-app OAuth bootstrap); they import each other by bare name, so `tools/newsletter/triage/gmail.py`, their one caller, puts `src/` on `sys.path`. Vendored fleet modules, tracked in `.fleet.toml [vendored]` and read by the ratchets: `usage_log.py`, `usage_log_starlette.py`, `runtime_data.py` and `pooled_http.py`. `src/static_versioning.py`, the cache-busting static-file serving the recorder imports, is repo-owned, not vendored.
 
 Tool packages under `tools/` (import as `tools.<tool>`):
 
+- `tools/newsletter/` — the weekly newsletter (archive, normalize, build, Substack draft). `triage/` turns the Gmail label into an edition shortlist.
 - `tools/demo_video/` — demo videos: storyboard → Remotion template (`remotion/`) → MP4 per cut; `examples/` holds a sample storyboard.
 - `tools/engagement/` — anti-AI comment triage. `linkedin/` (comment scraper), `classify/` (layered classifier), `reputation/` (commenter feedback loop), `db/` (Supabase schema).
 - `tools/podcast/` — one episode folder → its reviewed episode package (transcribe, clips, covers, copy, render).
@@ -26,7 +27,6 @@ Tool roots still declared in `extra_roots`:
 
 - `reporting/` — daily numbers: APIs → Supabase → Notion. `scrape_client/` (HTTP/Playwright scrapers), `social_client/` (RapidAPI fetchers), `process/` (transform, upload, aggregate), `notion/` (editorial helpers and Notion sync).
 - `planning/` — weekly publishing through each platform's native scheduler. One subpackage per platform: `linkedin/`, `instagram/`, `twitter/`, `threads/`, `substack/`, plus `videos/` for the weekly cross-platform video.
-- `newsletter/` — the weekly newsletter (archive, normalize, build, Substack draft). `triage/` turns the Gmail label into an edition shortlist.
 - `app/` — the Streamlit control panel: one `tab_*.py` per tool, routed from `app.py`. UI code lives here and in `tools/engagement/ui.py` and `tools/engagement/review_app.py`.
 
 Hidden folders: `.streamlit/` (Streamlit config), `.claude/skills/` (the repo's skills; Codex and Pi reach them through per-skill discovery links that fleet-config generates and git ignores, so a new skill needs no second copy).

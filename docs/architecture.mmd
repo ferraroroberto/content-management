@@ -73,7 +73,7 @@ episode / covers / package / score"]
   PPIPE --> RESULTSPLAN[["results/planning/\nsummary.md + result.json"]]
   RESULTSPLAN -.->|"selector-drift failure"| AUTOHEALSKILL
 
-  subgraph newsletter_mod["newsletter/ — weekly issue pipeline"]
+  subgraph newsletter_mod["tools/newsletter/ — weekly issue pipeline"]
     NSCHED["schedule_editions.py\n(top up future edition rows)"]
     NBOOT["bootstrap_chrome.py\n(dedicated Chrome, CDP :9222)"]
     NARCHIVE["chrome_tabs + extractor +\nauthor_resolver + classifier + summarizer/llm"]

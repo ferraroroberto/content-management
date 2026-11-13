@@ -23,12 +23,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from newsletter.triage import db  # noqa: E402
-from newsletter.triage import feedback as fb  # noqa: E402
-from newsletter.triage import lessons as ls  # noqa: E402
-from newsletter.triage import rank as rk  # noqa: E402
-from newsletter.triage import review as rv  # noqa: E402
-from newsletter.triage.score import MetaScore  # noqa: E402
+from tools.newsletter.triage import db  # noqa: E402
+from tools.newsletter.triage import feedback as fb  # noqa: E402
+from tools.newsletter.triage import lessons as ls  # noqa: E402
+from tools.newsletter.triage import rank as rk  # noqa: E402
+from tools.newsletter.triage import review as rv  # noqa: E402
+from tools.newsletter.triage.score import MetaScore  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # fake supabase-py
@@ -354,13 +354,13 @@ class StoreTests(unittest.TestCase):
             data = json.loads(out.read_text(encoding="utf-8"))
             self.assertEqual(data["lessons"][0]["text"], "Prefer first-person stories over listicles")
             self.assertEqual(data["lessons"][0]["window"], "2026-08-08→2026-08-15")
-            from newsletter.triage import score as sc  # noqa: PLC0415
+            from tools.newsletter.triage import score as sc  # noqa: PLC0415
             self.assertEqual(sc.load_lessons(out), ["Prefer first-person stories over listicles"])
             with unittest.mock.patch.object(sc, "LESSONS_PATH", out):
                 self.assertIn("Prefer first-person stories", sc._criteria_brief({"rules": {}}))
             # control-panel editor path (#231): owner rewording + un-accept, one Save.
             # Every save/accept stays under the patched path — save() exports, and an unpatched call
-            # clobbers the real newsletter/triage/lessons.json with the fake store's rows.
+            # clobbers the real tools/newsletter/triage/lessons.json with the fake store's rows.
             with unittest.mock.patch.object(ls, "LESSONS_PATH", out):
                 ls.save([{"id": rows[0]["id"], "text": "Prefer first-person stories over listicles and roundups",
                           "accepted": True}])
