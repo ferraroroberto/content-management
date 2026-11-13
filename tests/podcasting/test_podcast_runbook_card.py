@@ -13,11 +13,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from app import tab_podcast  # noqa: E402
+from tools.app import tab_podcast  # noqa: E402
 
 
 def _card_script() -> None:
-    from app import tab_podcast  # noqa: PLC0415
+    from tools.app import tab_podcast  # noqa: PLC0415
 
     tab_podcast.render_runbook()
 

@@ -158,6 +158,7 @@ native-scheduler driver under `tools/planning/`.
 ```
 content-management/                   # repo root
 ├── tools/                            # one package per tool (see docs/layout.md)
+│   ├── app/                              # Streamlit control panel (tabs: reporting/editorial/planning/newsletter/triage/engagement/check-IP/podcast/demo-video)
 │   ├── planning/                         # weekly publishing — drives platform schedulers
 │   │   ├── linkedin/                     # LinkedIn weekly post scheduler
 │   │   ├── instagram/                    # Meta planner (story + post) + IG→TW/TH/SB clone step
@@ -185,7 +186,6 @@ content-management/                   # repo root
 │   ├── podcast/                          # episode package: transcript → clips (1:1 + 9:16) → copy, covers, docx, website HTML
 │   ├── recorder/                         # self-hosted two-side recorder: page + chunk upload into the episode folder
 │   └── check_ip/                     # illustration copyright check (Google Lens → SQLite → triage tab)
-├── app/                              # Streamlit control panel (tabs: tools/reporting/editorial/planning/newsletter/triage/engagement/check-IP/podcast/demo-video)
 ├── config/                           # config.json, mapping.json, logger_config, chrome_launch, console
 │   └── doc_capture/                  # deterministic control-panel screenshot engine (README tour)
 ├── common/                           # code shared by two or more tools
@@ -538,7 +538,7 @@ description, source globs, navigation, **required** mask selectors per tab).
 & .\.venv\Scripts\python.exe -m config.doc_capture all --force  # recapture everything
 ```
 
-Idempotent by input hash — a rerun with unchanged `app/tab_*.py` sources
+Idempotent by input hash — a rerun with unchanged `tools/app/tab_*.py` sources
 captures nothing and leaves the README untouched. Hard safety invariant: a
 manifest entry without `mask` selectors is refused (skipped with a warning),
 never captured raw. See [Verification](#-verification) below for the test

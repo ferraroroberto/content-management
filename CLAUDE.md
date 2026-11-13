@@ -10,7 +10,7 @@ Canonical instructions for AI coding agents working in this repository. Claude C
 - All mutable state in `st.session_state`. No module-level globals.
 - `@st.cache_data` for DataFrames/files; `@st.cache_resource` for DB clients/models.
 - Every widget needs a stable, explicit `key=`.
-- UI code only in the UI modules (`app/`, `tools/engagement/ui.py`, `tools/engagement/review_app.py`; `run_app.py` imports `streamlit.web.cli` only to launch). Data logic stays in the non-UI packages. Keep `streamlit` imports out of non-UI code. Guidance, not a guarantee: no lint rule enforces the boundary.
+- UI code only in the UI modules (`tools/app/`, `tools/engagement/ui.py`, `tools/engagement/review_app.py`; `run_app.py` imports `streamlit.web.cli` only to launch). Data logic stays in the non-UI packages. Keep `streamlit` imports out of non-UI code. Guidance, not a guarantee: no lint rule enforces the boundary.
 - User feedback via `st.error()` / `st.warning()` / `st.success()`, not `st.write()`.
 - **App layout:** main file (e.g. `app.py`) handles only page config, shared state, sidebar, and tab/radio routing. Each tab/mode lives in its own file exposing a `main(...)` (or `render_*`) function. Default to `st.tabs()`; use a sidebar radio only when asked.
 
@@ -24,7 +24,7 @@ See `README.md` for setup, layout, and usage.
 
 Six ratchets gate the pre-ship run, in this order: structure, instruction, doc-references, dead-code, conventions, runtime write. Each is `scripts/<name>_ratchet_gate.py` running the vendored `scripts/<name>_ratchet.py` (byte-for-byte from project-scaffolding; re-vendor with `/propagate-vendored <name>_ratchet`, never edit), with a baseline `.<name>-ratchet-baseline.json` (hyphenated name) and a `[<name>_ratchet]` table in `.fleet.toml`. Burn a baseline down with `--update-baseline`; only `--allow-additions` adds. Exit 3 (could not measure, read or parse) is NOT CONFIRMED and fails.
 
-- **Structure:** size caps (1,000-line file, 100-line function, 40-module directory) and the root-folder check against `shape` plus `extra_roots` in `.fleet.toml`. The baselined giants are recorded at their real size, never excluded: they cannot grow, so new code goes in an existing tool package, and a new test in its domain's subfolder of `tests/` (see `docs/layout.md`). A new tool folder is declared in `extra_roots` with a line in `docs/layout.md`.
+- **Structure:** size caps (1,000-line file, 100-line function, 40-module directory) and the root-folder check against `shape` plus `extra_roots` in `.fleet.toml`. The baselined giants are recorded at their real size, never excluded: they cannot grow, so new code goes in an existing tool package, and a new test in its domain's subfolder of `tests/` (see `docs/layout.md`). A new tool is a package under `tools/` with a line in `docs/layout.md`.
 - **Instruction:** lints the instruction files (`CLAUDE.md`, `AGENTS.md`, the skills); reword a hit away rather than baselining it. Rules and caps: `docs/verification-gates.md`.
 - **Doc references:** a dangling repo path, `python -m` module or relative link in `README.md`, `CLAUDE.md` or `docs/` fails. Fix the reference or drop it rather than baselining it; a path named on purpose goes in `allow_refs`.
 - **Dead code:** a new function, class or method nobody references fails; delete it or call it rather than baselining it. A real entry point the rules miss goes in `entry_decorators` or `allow`.
@@ -33,4 +33,4 @@ Six ratchets gate the pre-ship run, in this order: structure, instruction, doc-r
 
 ## Internal architecture
 
-[`docs/architecture.mmd`](docs/architecture.mmd) is a hand-authored Mermaid diagram of this repo's own internal structure (the pipelines — tools/reporting/planning/newsletter/engagement/check_ip/podcast/demo_video — the shared `config/` layer, the Streamlit control panel, and the external dependencies each talks to). Update it in the same PR as any material structural change (a pipeline split, a module moved, a new external dependency) — same anti-staleness contract as this repo's own `.fleet.toml` `description` field. It is not auto-generated and not covered by any test suite.
+[`docs/architecture.mmd`](docs/architecture.mmd) is a hand-authored Mermaid diagram of this repo's own internal structure (the pipelines — reporting/planning/newsletter/engagement/check_ip/podcast/demo_video — the shared `config/` layer, the Streamlit control panel, and the external dependencies each talks to). Update it in the same PR as any material structural change (a pipeline split, a module moved, a new external dependency) — same anti-staleness contract as this repo's own `.fleet.toml` `description` field. It is not auto-generated and not covered by any test suite.

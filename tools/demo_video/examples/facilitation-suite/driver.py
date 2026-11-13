@@ -58,7 +58,7 @@ def _session_id(folder: Path) -> str:
 class FacilitationSuiteDriver:
     def __init__(self, args: dict) -> None:
         self.repo = Path(args["repo"])
-        if not (self.repo / "app" / "webapp").is_dir():
+        if not (self.repo / "tools" / "app" / "webapp").is_dir():
             raise RuntimeError(f"driver_args.repo must point at a facilitation-suite checkout (got {args['repo']!r})")
         self.python = self.repo / ".venv" / "Scripts" / "python.exe"
         if not self.python.is_file():

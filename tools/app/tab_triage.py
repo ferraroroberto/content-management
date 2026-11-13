@@ -17,7 +17,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from app.process_runner import (
+from tools.app.process_runner import (
     VENV_PY,
     is_running,
     render_log_panel,

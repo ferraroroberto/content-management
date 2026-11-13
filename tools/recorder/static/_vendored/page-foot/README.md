@@ -12,7 +12,7 @@ The fleet's canonical **page-foot**: a centered, quiet footer line — `Build: <
 
 ## How to vendor
 
-1. Copy this `page-foot/` folder **verbatim** into your app's static dir (`app/webapp/static/_vendored/page-foot/`). Do **not** edit `page-foot.css` / `page-foot.js` per-app.
+1. Copy this `page-foot/` folder **verbatim** into your app's static dir (`tools/app/webapp/static/_vendored/page-foot/`). Do **not** edit `page-foot.css` / `page-foot.js` per-app.
 2. Link the CSS and paste the skeleton as the last child of the content wrapper `<main class="app">`, outside the tab panels:
    ```html
    <link rel="stylesheet" href="/static/_vendored/page-foot/page-foot.css">

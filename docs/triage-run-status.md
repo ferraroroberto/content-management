@@ -30,7 +30,7 @@ The string values are the ones `schema.sql` documents for the column, so they ne
 | Insert a run | `register_run` in `tools/newsletter/triage/db.py` | `RunStatus.RUNNING` |
 | Settle a run | `mark_run` in `tools/newsletter/triage/db.py` | `settled_status` |
 | Mark done / failed | `run_window` in `tools/newsletter/triage/run.py` | `RunStatus.DONE`, `RunStatus.FAILED` |
-| Review tab gate and message | `_render_review` in `app/tab_triage.py` | `derive_run_status` |
+| Review tab gate and message | `_render_review` in `tools/app/tab_triage.py` | `derive_run_status` |
 
 A new reader calls the module. It does not compare the status string.
 

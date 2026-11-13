@@ -1,4 +1,4 @@
-"""Review logic behind the control-panel tab — no Streamlit here (UI code lives in ``app/tab_triage.py``).
+"""Review logic behind the control-panel tab — no Streamlit here (UI code lives in ``tools/app/tab_triage.py``).
 
 * ``saturday_weeks()`` — the closed Saturday→Saturday windows the tab offers.
 * ``engine_label(stats)`` — the Stage A engine that scored a stored run, as the tab names it.

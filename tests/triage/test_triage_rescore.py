@@ -269,7 +269,7 @@ class EngineLabelTests(unittest.TestCase):
 
 
 def _tab_script() -> None:
-    from app import tab_triage  # noqa: PLC0415
+    from tools.app import tab_triage  # noqa: PLC0415
 
     tab_triage.run()
 
@@ -278,7 +278,7 @@ class TabTests(unittest.TestCase):
     def _app(self) -> tuple:
         week = review.saturday_weeks(8)[1]          # the tab's default window
         stored = dict(RUN, window_start=str(week[0]), window_end=str(week[1]), reviewed=True)
-        from app import tab_triage  # noqa: PLC0415
+        from tools.app import tab_triage  # noqa: PLC0415
 
         tab_triage._invalidate()                    # noqa: SLF001 — st.cache_data outlives a test
         self.addCleanup(tab_triage._invalidate)     # noqa: SLF001

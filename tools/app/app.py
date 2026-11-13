@@ -6,7 +6,7 @@ Routed via st.segmented_control rather than st.tabs() (st.tabs()
 loses the active tab on any widget rerun). Each section owns its own module
 (`app.tab_*`) per the project's per-tab convention (see pdf-to-markdown
 sibling project + CLAUDE.md). Subprocess lifecycle + live log streaming lives
-in `app/process_runner.py`.
+in `tools/app/process_runner.py`.
 
 Launch via the wrapper (recommended — applies logging filters before server start):
     .\launch_app.bat
@@ -29,7 +29,7 @@ logging.getLogger("tornado.general").addFilter(
     })()
 )
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 # ── Theme toggle state ─────────────────────────────────────────────
@@ -126,7 +126,7 @@ st.markdown(
 )
 
 # ── Sidebar ─────────────────────────────────────────────────────────
-from app.process_runner import exit_code, is_running  # noqa: E402
+from tools.app.process_runner import exit_code, is_running  # noqa: E402
 
 PIPELINES = [
     ("reporting",          "📊 reporting"),
@@ -216,29 +216,29 @@ with st.container():
         st.rerun()
 
     if section == "📊 reporting":
-        from app import tab_reporting  # noqa: PLC0415
+        from tools.app import tab_reporting  # noqa: PLC0415
         tab_reporting.run()
     elif section == "📅 editorial":
-        from app import tab_editorial  # noqa: PLC0415
+        from tools.app import tab_editorial  # noqa: PLC0415
         tab_editorial.run()
     elif section == "📅 planning":
-        from app import tab_planning  # noqa: PLC0415
+        from tools.app import tab_planning  # noqa: PLC0415
         tab_planning.run()
     elif section == "📰 newsletter":
-        from app import tab_newsletter  # noqa: PLC0415
+        from tools.app import tab_newsletter  # noqa: PLC0415
         tab_newsletter.run()
     elif section == "🧭 triage":
-        from app import tab_triage  # noqa: PLC0415
+        from tools.app import tab_triage  # noqa: PLC0415
         tab_triage.run()
     elif section == "🛡️ engagement":
-        from app import tab_engagement  # noqa: PLC0415
+        from tools.app import tab_engagement  # noqa: PLC0415
         tab_engagement.run()
     elif section == "⚖️ check IP":
-        from app import tab_check_ip  # noqa: PLC0415
+        from tools.app import tab_check_ip  # noqa: PLC0415
         tab_check_ip.run()
     elif section == "🎙️ podcast":
-        from app import tab_podcast  # noqa: PLC0415
+        from tools.app import tab_podcast  # noqa: PLC0415
         tab_podcast.run()
     elif section == "🎬 demo video":
-        from app import tab_demo_video  # noqa: PLC0415
+        from tools.app import tab_demo_video  # noqa: PLC0415
         tab_demo_video.run()

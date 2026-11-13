@@ -1,7 +1,7 @@
 """Reusable Streamlit render functions for the engagement review UI.
 
 Imported by both the standalone `tools/engagement/review_app.py` entrypoint AND the
-control-panel's `app/tab_engagement.py` — so a UX change here lands in both
+control-panel's `tools/app/tab_engagement.py` — so a UX change here lands in both
 places. No top-level rendering and no `st.set_page_config()` (the caller owns
 those).
 """

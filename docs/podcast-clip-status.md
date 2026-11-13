@@ -30,7 +30,7 @@ The string values are the ones `review.json` holds, so they never change.
 | Clips the revise stage works on | `to_revise` | `derive_clip_status` |
 | Status counts, review gate, summary line | `counts`, `review_done`, `summary` | `derive_clip_status` |
 | Clips kept in the package | `kept_clips` | `derive_clip_status` |
-| Approve, drop and reopen buttons | `_review_controls` in `app/tab_podcast.py` | `ClipStatus` |
+| Approve, drop and reopen buttons | `_review_controls` in `tools/app/tab_podcast.py` | `ClipStatus` |
 | Review CLI actions | `STATUS_OF` in `tools/podcast/review_cli.py` | `ClipStatus` |
 | Round settled by a revision | `close` in `tools/podcast/revise.py` | `ClipStatus` |
 

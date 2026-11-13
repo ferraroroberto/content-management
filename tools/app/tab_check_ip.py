@@ -21,7 +21,7 @@ from contextlib import closing
 import pandas as pd
 import streamlit as st
 
-from app.process_runner import (
+from tools.app.process_runner import (
     VENV_PY,
     is_running,
     render_log_panel,
@@ -414,7 +414,7 @@ to find. The **retired** metric above is how many are being held back.
 
 
 def run() -> None:
-    """Entry point — routed from ``app/app.py``."""
+    """Entry point — routed from ``tools/app/app.py``."""
     st.subheader("⚖️ check IP")
 
     if not review.store_exists():

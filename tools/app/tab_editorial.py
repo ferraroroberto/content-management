@@ -2,7 +2,7 @@
 
 Runs ``reporting.notion.add_editorial_dates``, which creates any missing
 editorial rows for the current + next calendar month (idempotent). One run
-button + the shared streamed-log panel, same as the tools/reporting/planning tabs.
+button + the shared streamed-log panel, same as the reporting/planning tabs.
 No date selector — the default current+next-month range is what runs.
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from app.process_runner import (
+from tools.app.process_runner import (
     VENV_PY,
     is_running,
     render_log_panel,

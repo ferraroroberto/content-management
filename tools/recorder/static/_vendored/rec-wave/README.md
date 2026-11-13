@@ -11,7 +11,7 @@ The level strip every record button shows while the mic is open: bars that follo
 
 ## How to vendor
 
-1. Copy this `rec-wave/` folder **verbatim** into your app's static dir (`app/webapp/static/_vendored/rec-wave/`). Do **not** edit either file per-app.
+1. Copy this `rec-wave/` folder **verbatim** into your app's static dir (`tools/app/webapp/static/_vendored/rec-wave/`). Do **not** edit either file per-app.
 2. Link the CSS and import the functions:
    ```html
    <link rel="stylesheet" href="/static/_vendored/rec-wave/rec-wave.css">

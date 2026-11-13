@@ -13,7 +13,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from app.process_runner import (
+from tools.app.process_runner import (
     VENV_PY,
     is_running,
     render_log_panel,
@@ -35,7 +35,7 @@ from tools.podcast.revise import list_versions
 from tools.podcast.transcribe import fmt_ts
 
 PIPELINE_NAME = "podcast"
-RUNBOOK = Path(__file__).resolve().parent.parent / "docs" / "podcast-runbook.md"
+RUNBOOK = Path(__file__).resolve().parents[2] / "docs" / "podcast-runbook.md"
 RUNBOOK_LABEL = "📖 How the podcast pipeline works"
 STAGES = ["sync", "transcribe", "clean", "select", "copy", "edit", "render", "revise", "episode", "covers", "package",
           "score"]

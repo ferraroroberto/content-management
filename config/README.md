@@ -71,7 +71,7 @@ from config.console import force_utf8_stdio
 force_utf8_stdio()   # called once at each entry-point module's top level
 ```
 
-All entry points (`*_pipeline.py`, `app/*.py`, `tools/newsletter/*.py`, etc.) call this instead of the inline `for _stream in (sys.stdout, sys.stderr): _stream.reconfigure(...)` loop that was previously hand-copied across ~13 modules.
+All entry points (`*_pipeline.py`, `tools/app/*.py`, `tools/newsletter/*.py`, etc.) call this instead of the inline `for _stream in (sys.stdout, sys.stderr): _stream.reconfigure(...)` loop that was previously hand-copied across ~13 modules.
 
 ### 6. `loader.py`
 Single-source loader for `config.json`. Every module that needs the config reads it through here instead of re-implementing its own open/parse helper. Exposes two functions:

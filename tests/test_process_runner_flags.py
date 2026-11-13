@@ -18,7 +18,7 @@ import sys
 import unittest
 from unittest import mock
 
-from app import process_runner as pr
+from tools.app import process_runner as pr
 
 SENTINEL = 0x40000000  # not CREATE_NO_WINDOW (0x08000000), so the source is observable
 

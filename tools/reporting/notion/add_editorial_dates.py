@@ -6,7 +6,7 @@ exist — writing the ``day`` title (``YYYYMMDD``), the ``date`` property
 idempotent: only missing dates are created, so re-running is a no-op.
 
 Default range is the **current calendar month start → next calendar month end**,
-i.e. the rows the upcoming tools/planning/reporting runs will need. This is the spine
+i.e. the rows the upcoming planning/reporting runs will need. This is the spine
 the rest of the pipelines read from (see ``tools/reporting/notion/editorial.py``).
 
 CLI-compatible — runnable standalone and from the control-panel app's

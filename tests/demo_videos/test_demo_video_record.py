@@ -152,7 +152,7 @@ class ExampleTests(unittest.TestCase):
         rec = Recording.model_validate(data["recording"])
         self.assertEqual([t.id for t in rec.takes], ["app-tour", "live", "results"])
         repo = Path(tempfile.mkdtemp())
-        (repo / "app" / "webapp").mkdir(parents=True)
+        (repo / "tools" / "app" / "webapp").mkdir(parents=True)
         driver = load_driver(EXAMPLE / rec.driver, {"repo": str(repo)})
         for method in ("boot", "stop", "act", "chat", "tick"):
             self.assertTrue(callable(getattr(driver, method)), method)
