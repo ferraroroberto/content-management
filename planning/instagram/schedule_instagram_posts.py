@@ -83,8 +83,8 @@ from planning.instagram.instagram_session import (  # noqa: E402
 )
 from planning.instagram.instagram_upload import upload_files  # noqa: E402
 from planning.row_outcome import RowStatus, derive_row_status, is_failure  # noqa: E402
-from reporting.notion.editorial import retrieve_page  # noqa: E402
-from reporting.notion.notion_update import format_database_id  # noqa: E402
+from tools.reporting.notion.editorial import retrieve_page  # noqa: E402
+from tools.reporting.notion.notion_update import format_database_id  # noqa: E402
 
 logger = logging.getLogger("instagram_schedule")
 

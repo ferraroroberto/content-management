@@ -13,7 +13,7 @@ import logging
 import unittest
 from unittest.mock import MagicMock, patch
 
-from reporting.social_client import social_api_client as sac
+from tools.reporting.social_client import social_api_client as sac
 
 
 class ScrapeRetryTests(unittest.TestCase):

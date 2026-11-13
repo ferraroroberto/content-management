@@ -4,7 +4,7 @@ Usage:
     python -m planning.substack.bootstrap_session [--debug]
 
 After login the dedicated profile retains the session, so subsequent runs of
-``post_substack_note`` (and ``reporting/scrape_client/substack.py``) reuse it
+``post_substack_note`` (and ``tools/reporting/scrape_client/substack.py``) reuse it
 without prompting. See ``planning._bootstrap.run_bootstrap`` for the shared
 implementation (mirror of ``instagram/bootstrap_session.py``,
 ``twitter/bootstrap_session.py``, ``threads/bootstrap_session.py``,

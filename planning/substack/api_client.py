@@ -17,7 +17,7 @@ This module is the single source for the native path:
   ``python-substack`` library (which owns the publication resolution and the
   ProseMirror body builder).
 
-The Playwright integration (``reporting/scrape_client/substack.py`` and the rest
+The Playwright integration (``tools/reporting/scrape_client/substack.py`` and the rest
 of ``planning/substack/``) is intentionally **kept** as an alternative ``source``
 — this module does not remove or modify it.
 

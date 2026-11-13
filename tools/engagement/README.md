@@ -1,6 +1,6 @@
 # engagement — anti-AI comment triage
 
-Fourth pipeline in this repo (sibling to `planning/`, `reporting/`, `tools/newsletter/`). Defends my comment threads against AI-generated noise. Two outputs:
+Fourth pipeline in this repo (sibling to `planning/`, `tools/reporting/`, `tools/newsletter/`). Defends my comment threads against AI-generated noise. Two outputs:
 
 1. **Real-comments inbox** — comments worth my personal reply, surfaced in a clean Streamlit view.
 2. **AI-triage queue** — staged canned acknowledgements I one-click approve in a batch.

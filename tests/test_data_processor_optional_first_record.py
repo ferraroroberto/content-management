@@ -13,7 +13,7 @@ import logging
 import unittest
 from unittest.mock import MagicMock
 
-from reporting.process import data_processor as dp
+from tools.reporting.process import data_processor as dp
 
 
 class OptionalIfFirstRecordTests(unittest.TestCase):

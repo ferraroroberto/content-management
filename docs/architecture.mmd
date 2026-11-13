@@ -32,7 +32,7 @@ episode / covers / package / score"]
   LAPP --> APP
   LHEAL --> AUTOHEAL
 
-  subgraph reporting_mod["reporting/ — daily numbers"]
+  subgraph reporting_mod["tools/reporting/ — daily numbers"]
     SC["social_client/social_api_client.py\ndispatch on config 'source'"]
     SCRAPE["scrape_client/\nlinkedin · instagram · twitter · threads ·\nsubstack · substack_native"]
     PROC["process/\ndata_processor · profile_aggregator ·\nposts_consolidator · supabase_uploader"]
@@ -42,7 +42,7 @@ episode / covers / package / score"]
   SC -->|"source: rapidapi"| RAPIDAPI[("RapidAPI\n(paid HTTP)")]
   SC -->|"source: playwright / native"| SCRAPE
   SCRAPE -->|"followers + note engagement\n(cookie auth, no browser)"| SBAPI[("Substack private HTTP API")]
-  SC --> RAW[["reporting/results/raw/*.json"]]
+  SC --> RAW[["tools/reporting/results/raw/*.json"]]
   RAW --> PROC
   PROC --> SUPA[("Supabase / PostgreSQL")]
   PROC --> NOTIONMOD

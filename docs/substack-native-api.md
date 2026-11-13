@@ -90,7 +90,7 @@ payload already carries the engagement numbers, so there is **no** per-note
 request: what the Playwright path did with a feed scroll plus one page load per
 note is `1 + ceil(n/12)` GETs.
 
-The field mapping, against `reporting/scrape_client/substack.py`'s
+The field mapping, against `tools/reporting/scrape_client/substack.py`'s
 scrape:
 
 | Record field | Native source | Was (Playwright) |
@@ -168,7 +168,7 @@ a `page.on("request")` listener attached while clicking the heart icon on a
 throwaway note. A note permalink page renders a *feed* (the subject note plus
 recommended notes), each with its own Like button, so the click was scoped to
 the subject note's own container the same way
-`reporting/scrape_client/substack.py::_scrape_note_permalink` already scopes
+`tools/reporting/scrape_client/substack.py::_scrape_note_permalink` already scopes
 its engagement read — via the timestamp anchor pointing at `/note/c-<id>`,
 walked up to the smallest ancestor owning a `button[aria-label='Like']`.
 
@@ -244,11 +244,11 @@ way, in **0.9 s (native) vs 37.0 s (Playwright)**.
 
 ## How it wires into the reporting pipeline
 
-`reporting/social_client/social_api_client.py::get_api_data` dispatches on a
+`tools/reporting/social_client/social_api_client.py::get_api_data` dispatches on a
 `source` field per config block:
 
-- `"playwright"` → `reporting/scrape_client/<platform>.py`
-- `"native"` → `reporting/scrape_client/<platform>_native.py` (new)
+- `"playwright"` → `tools/reporting/scrape_client/<platform>.py`
+- `"native"` → `tools/reporting/scrape_client/<platform>_native.py` (new)
 - otherwise → RapidAPI
 
 `substack_profile.source = "native"` routes the daily follower count to

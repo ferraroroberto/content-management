@@ -115,7 +115,7 @@ from planning.linkedin.linkedin_session import (  # noqa: E402
     load_notion_token,
 )
 from planning.row_outcome import RowStatus, is_failure  # noqa: E402
-from reporting.notion.editorial import (  # noqa: E402
+from tools.reporting.notion.editorial import (  # noqa: E402
     get_field,
     retrieve_page,
 )

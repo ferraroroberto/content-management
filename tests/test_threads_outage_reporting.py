@@ -43,7 +43,7 @@ class ThreadsOutageReportingTests(unittest.TestCase):
         connection = MagicMock()
         connection.cursor.return_value = cursor
 
-        with patch("reporting.process.supabase_uploader.get_db_connection", return_value=connection):
+        with patch("tools.reporting.process.supabase_uploader.get_db_connection", return_value=connection):
             rp.check_posts_coverage("2026-09-05", failures)
 
         self.assertNotIn("threads", failures.missing_post_metrics)

@@ -57,10 +57,10 @@ from planning.videos.videos_session import (  # noqa: E402
     load_notion_token,
     load_videos_config,
 )
-from reporting.notion.editorial import (  # noqa: E402
+from tools.reporting.notion.editorial import (  # noqa: E402
     set_field,
 )
-from reporting.notion.notion_update import format_database_id  # noqa: E402
+from tools.reporting.notion.notion_update import format_database_id  # noqa: E402
 
 logger = logging.getLogger("videos_schedule")
 
@@ -335,7 +335,7 @@ def _set_post_url(notion, page_id: str, video_cols: dict, platform: str,
 def _scheduled_sentinel(platform: str, day_title: str) -> str:
     """Sentinel URL written into link <P>(v) so re-runs skip already-scheduled platforms.
 
-    The data-collection pipeline (``reporting/social_client``) will overwrite
+    The data-collection pipeline (``tools/reporting/social_client``) will overwrite
     with the real post URL once the scheduled post goes live. The sentinel
     is a real-looking URL so Notion's url-field validation accepts it.
     """

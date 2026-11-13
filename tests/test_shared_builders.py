@@ -15,10 +15,10 @@ import unittest
 from unittest import mock
 
 from config.supabase_client import build_supabase_client
-from reporting.notion import _client as notion_client_mod
 from tools.newsletter import _normalizer_base as nb
 from tools.newsletter.normalize_names import NotionNameNormalizer
 from tools.newsletter.normalize_url import NotionURLNormalizer
+from tools.reporting.notion import _client as notion_client_mod
 
 
 class _FakeSupabase:

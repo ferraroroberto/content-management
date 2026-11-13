@@ -7,7 +7,7 @@ block and fails loud when it's missing.
 
 Both raise on a missing or corrupt ``config.json`` rather than returning
 ``None`` — config is mandatory, so a clear exception beats a silent skip.
-This matches the contracts already used by ``reporting/scrape_client/base.py``
+This matches the contracts already used by ``tools/reporting/scrape_client/base.py``
 and ``planning/_session_base.py``.
 """
 

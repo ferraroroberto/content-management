@@ -215,7 +215,7 @@ What it does:
 
 Cross-module dependencies:
 
-- `reporting/notion/editorial.py` — shared Notion helper (`query_rows_by_filter`, `get_field`, `set_field`, `retrieve_page`, `get_page_body_text` — the last includes `code` blocks).
+- `tools/reporting/notion/editorial.py` — shared Notion helper (`query_rows_by_filter`, `get_field`, `set_field`, `retrieve_page`, `get_page_body_text` — the last includes `code` blocks).
 - `config/chrome_launch.py` — shared stealth launch flags.
 - `config/logger_config.py` — shared logger setup.
 - `planning/videos/videos_linkedin.py` — imports its schedule-dialog helpers and `finalize_schedule` from `linkedin_composer` and `set_schedule_datetime` from `linkedin_schedule_picker`; no dependency on `schedule_linkedin_posts` in either direction.

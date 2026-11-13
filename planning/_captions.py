@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 
-from reporting.notion.editorial import get_field, retrieve_page
+from tools.reporting.notion.editorial import get_field, retrieve_page
 
 
 def canonical_caption_from_publish_ig(

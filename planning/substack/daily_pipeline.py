@@ -5,7 +5,7 @@ CLI:
                                       [--skip-post] [--force] [--debug]
 
 Follower-count scraping was folded into
-``reporting/scrape_client/substack.py::fetch_profile`` and now flows through
+``tools/reporting/scrape_client/substack.py::fetch_profile`` and now flows through
 the standard reporting pipeline (``data_processor`` → ``profile_aggregator``
 → ``notion_update``) like every other platform's metrics.
 """

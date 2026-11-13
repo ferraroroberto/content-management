@@ -85,8 +85,8 @@ class StyleExamplesTests(unittest.TestCase):
     def _run(self) -> dict:
         rows = {"clips-db": CLIPS, "episodes-db": EPISODES}
         with mock.patch("config.loader.load_full_config", return_value={"notion": {"api_token": "x"}}), \
-                mock.patch("reporting.notion._client.init_notion_client", return_value=object()), \
-                mock.patch("reporting.notion.editorial.query_rows_by_filter",
+                mock.patch("tools.reporting.notion._client.init_notion_client", return_value=object()), \
+                mock.patch("tools.reporting.notion.editorial.query_rows_by_filter",
                            side_effect=lambda _n, db, _f: rows[db]):
             return clips.style_examples(self.cfg, self.ep)
 

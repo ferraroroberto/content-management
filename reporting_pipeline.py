@@ -6,7 +6,7 @@ Initialization script to run the complete data processing pipeline:
 3. profile_aggregator - Aggregate profile data across platforms
 4. posts_consolidator - Consolidate posts data across platforms
 5. notion_update - Update Notion databases with processed data
-6. substack.daily_pipeline - Publish daily Substack Note (follower scrape now lives in reporting/scrape_client/substack.py)
+6. substack.daily_pipeline - Publish daily Substack Note (follower scrape now lives in tools/reporting/scrape_client/substack.py)
 """
 
 import argparse
@@ -34,33 +34,35 @@ from planning.substack.daily_pipeline import (
 from planning.substack.daily_pipeline import (
     main as run_substack_daily_pipeline,
 )
-from reporting.notion.notion_update import configure_logger as configure_notion_logger
-from reporting.notion.notion_update import main as run_notion_update
-from reporting.process.data_processor import (
+from tools.reporting.notion.notion_update import (
+    configure_logger as configure_notion_logger,
+)
+from tools.reporting.notion.notion_update import main as run_notion_update
+from tools.reporting.process.data_processor import (
     configure_logger as configure_data_processor_logger,
 )
-from reporting.process.data_processor import (
+from tools.reporting.process.data_processor import (
     load_mapping_config,
     process_json_file,
 )
-from reporting.process.data_processor import (
+from tools.reporting.process.data_processor import (
     main as run_data_processor,
 )
-from reporting.process.posts_consolidator import (
+from tools.reporting.process.posts_consolidator import (
     configure_logger as configure_posts_logger,
 )
-from reporting.process.posts_consolidator import main as run_posts_consolidator
-from reporting.process.profile_aggregator import (
+from tools.reporting.process.posts_consolidator import main as run_posts_consolidator
+from tools.reporting.process.profile_aggregator import (
     configure_logger as configure_profile_logger,
 )
-from reporting.process.profile_aggregator import main as run_profile_aggregator
-from reporting.social_client.social_api_client import (
+from tools.reporting.process.profile_aggregator import main as run_profile_aggregator
+from tools.reporting.social_client.social_api_client import (
     check_file_exists_for_date,
 )
-from reporting.social_client.social_api_client import (
+from tools.reporting.social_client.social_api_client import (
     configure_logger as configure_social_logger,
 )
-from reporting.social_client.social_api_client import (
+from tools.reporting.social_client.social_api_client import (
     main as run_social_api_client,
 )
 
@@ -244,7 +246,7 @@ def _planned_post(platform: str, day_yyyymmdd: str) -> Optional[bool]:
     """
     block, columns_key, text_role = PLANNED_TEXT_SOURCES[platform]
     try:
-        from reporting.notion.editorial import (
+        from tools.reporting.notion.editorial import (
             get_field,
             get_row_by_day,
             init_notion_client,
@@ -312,7 +314,7 @@ def check_posts_coverage(processing_date: str, failures: "PipelineFailures") -> 
     against the editorial calendar.
     """
     try:
-        from reporting.process.supabase_uploader import get_db_connection
+        from tools.reporting.process.supabase_uploader import get_db_connection
         connection = get_db_connection()
         if not connection:
             logger.error("❌ Posts-coverage check: no DB connection — could not verify, treating as unverified")
@@ -390,14 +392,14 @@ def check_policy_drift_coverage(failures: "PipelineFailures") -> None:
     security-advisor email. DB errors degrade gracefully (logged) —
     mirrors ``check_posts_coverage``; the run is never crashed by this posture
     check. Remediation stays a deliberate human action: re-run
-    ``reporting/process/supabase_policy_script.sql``, then re-run the pipeline.
+    ``tools/reporting/process/supabase_policy_script.sql``, then re-run the pipeline.
     """
     try:
-        from reporting.process.supabase_policy_script import (
+        from tools.reporting.process.supabase_policy_script import (
             check_policy_drift,
             summarize_drift,
         )
-        from reporting.process.supabase_uploader import get_db_connection
+        from tools.reporting.process.supabase_uploader import get_db_connection
         connection = get_db_connection()
         if not connection:
             logger.error("❌ Policy-drift check: no DB connection — could not verify, treating as unverified")
@@ -693,7 +695,7 @@ def run_pipeline(debug_mode=False, skip_api=False, skip_processing=False,
     else:
         logger.info("⏭️ Skipping Notion Update step")
 
-    # Step 6: Publish Substack Note (follower scrape now happens in step 1 via reporting/scrape_client/substack.py)
+    # Step 6: Publish Substack Note (follower scrape now happens in step 1 via tools/reporting/scrape_client/substack.py)
     if not skip_substack:
         logger.info("📰 Step 6: Running Substack Daily Pipeline")
         run_module(run_substack_daily_pipeline, "Substack Daily Pipeline", debug_mode, extra_args=date_args,

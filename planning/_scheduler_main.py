@@ -30,8 +30,8 @@ from planning._dates import parse_week_start
 from planning._failure import attempt_row
 from planning._session_base import LoginRequiredError
 from planning.row_outcome import RowStatus, is_failure
-from reporting.notion.editorial import init_notion_client, set_field
-from reporting.notion.notion_update import format_database_id
+from tools.reporting.notion.editorial import init_notion_client, set_field
+from tools.reporting.notion.notion_update import format_database_id
 
 
 @dataclass(frozen=True)

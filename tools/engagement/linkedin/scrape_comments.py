@@ -41,11 +41,6 @@ from planning.linkedin.linkedin_session import (  # noqa: E402
     LoginRequiredError,
     load_linkedin_config,
 )
-from reporting.notion.editorial import (  # noqa: E402
-    get_field,
-    init_notion_client,
-    query_rows_by_filter,
-)
 from tools.engagement.db.client import (  # noqa: E402
     load_config,
     mark_replied_as_ignored,
@@ -53,6 +48,11 @@ from tools.engagement.db.client import (  # noqa: E402
     upsert_commenters,
     upsert_comments,
     verify_schema,
+)
+from tools.reporting.notion.editorial import (  # noqa: E402
+    get_field,
+    init_notion_client,
+    query_rows_by_filter,
 )
 
 logger = logging.getLogger("engagement.linkedin.scrape")

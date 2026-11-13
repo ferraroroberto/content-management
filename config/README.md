@@ -83,7 +83,7 @@ cfg = load_full_config()        # full config.json, cached for the process
 notion = load_block("notion")   # one top-level block, raises if missing
 ```
 
-Both raise on a missing or corrupt `config.json` (config is mandatory — a clear exception beats a silent skip), matching the contracts already used by `reporting/scrape_client/base.py` and `planning/_session_base.py`. This replaced seven hand-copied `load_config()` variants scattered across `reporting/`, `tools/engagement/`, and `tools/newsletter/`.
+Both raise on a missing or corrupt `config.json` (config is mandatory — a clear exception beats a silent skip), matching the contracts already used by `tools/reporting/scrape_client/base.py` and `planning/_session_base.py`. This replaced seven hand-copied `load_config()` variants scattered across `tools/reporting/`, `tools/engagement/`, and `tools/newsletter/`.
 
 ### 7. `chrome_launch.py`
 Shared real-Chrome launch options for every Playwright-driven platform (LinkedIn, Instagram, Twitter, Threads, Substack). Builds the kwargs that make an automated Chrome session indistinguishable from a human-driven one — real Chrome (not bundled Chromium) via `channel="chrome"`, no "Chrome is being controlled by automated test software" infobar, no detectable `navigator.webdriver`, a pinned 1280×900 viewport, and a forced `en-US` locale so English selectors don't break on a localized OS/account.

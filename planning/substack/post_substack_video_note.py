@@ -61,7 +61,7 @@ from planning.videos.videos_session import (  # noqa: E402
     load_clip_payload,
     load_videos_config,
 )
-from reporting.notion.editorial import (  # noqa: E402
+from tools.reporting.notion.editorial import (  # noqa: E402
     get_row_by_day,
     init_notion_client,
     set_field,

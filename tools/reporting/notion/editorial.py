@@ -1,0 +1,175 @@
+"""Thin layer over the existing Notion client helpers, scoped to the editorial DB.
+
+Column names in the editorial database are never hardcoded — callers pass a
+role→column map (from config) and we resolve role names like ``text_body`` or
+``follower_count`` to actual Notion property names at call time.
+
+Used by every per-platform scheduler (``substack/``, ``linkedin/``,
+``twitter/``, ``threads/``, ``instagram/``). The helper is platform-agnostic;
+each caller passes its own ``notion_columns`` map from ``config.json``.
+"""
+
+from __future__ import annotations
+
+import logging
+import sys
+from pathlib import Path
+from typing import Any, Optional
+
+from notion_client import Client
+
+sys.path.append(str(Path(__file__).parents[3]))
+from tools.reporting.notion._client import (  # noqa: E402
+    extract_property_value,
+    format_database_id,
+    init_notion_client,
+    prepare_notion_update,
+)
+
+logger = logging.getLogger("notion_editorial")
+
+
+def _resolve_column(role: str, columns_map: dict) -> str:
+    if role not in columns_map:
+        raise KeyError(
+            f"Role '{role}' not present in notion_columns map. "
+            f"Available roles: {sorted(columns_map.keys())}"
+        )
+    return columns_map[role]
+
+
+def get_row_by_day(notion: Client, db_id: str, day_yyyymmdd: str, columns_map: dict) -> Optional[dict]:
+    """Find the editorial row whose title (``title_day`` role) equals ``day_yyyymmdd``."""
+    title_col = _resolve_column("title_day", columns_map)
+    formatted_db = format_database_id(db_id)
+    logger.debug("🔍 Querying editorial DB for %s == %s", title_col, day_yyyymmdd)
+    response = notion.databases.query(
+        database_id=formatted_db,
+        filter={"property": title_col, "title": {"equals": day_yyyymmdd}},
+    )
+    results = response.get("results", [])
+    if not results:
+        logger.warning("⚠️ No editorial row found for day=%s", day_yyyymmdd)
+        return None
+    if len(results) > 1:
+        logger.warning("⚠️ Multiple editorial rows for %s — using the first", day_yyyymmdd)
+    return results[0]
+
+
+def query_rows_by_filter(notion: Client, db_id: str, filter_obj: dict) -> list[dict]:
+    """Generic paginated query — returns all results (handles ``next_cursor``)."""
+    formatted_db = format_database_id(db_id)
+    results: list[dict] = []
+    cursor: Optional[str] = None
+    while True:
+        kwargs: dict = {"database_id": formatted_db, "filter": filter_obj}
+        if cursor:
+            kwargs["start_cursor"] = cursor
+        response = notion.databases.query(**kwargs)
+        results.extend(response.get("results", []))
+        if not response.get("has_more"):
+            break
+        cursor = response.get("next_cursor")
+        if not cursor:
+            break
+    return results
+
+
+def get_field(row: dict, role: str, columns_map: dict) -> Any:
+    """Read the value of a role-named column from a Notion row."""
+    col = _resolve_column(role, columns_map)
+    props = row.get("properties", {})
+    if col not in props:
+        logger.warning("⚠️ Column '%s' missing from row %s", col, row.get("id"))
+        return None
+    return extract_property_value(props[col])
+
+
+def get_property_type(row: dict, role: str, columns_map: dict) -> str:
+    """Return the Notion property type for a role-named column ('rich_text' by default)."""
+    col = _resolve_column(role, columns_map)
+    return row.get("properties", {}).get(col, {}).get("type", "rich_text")
+
+
+def set_field(
+    notion: Client,
+    page_id: str,
+    role: str,
+    value: Any,
+    columns_map: dict,
+    property_type: str,
+) -> Optional[dict]:
+    """Write `value` to the page's role-named column using the existing payload helper."""
+    col = _resolve_column(role, columns_map)
+    payload = prepare_notion_update(property_type, value)
+    if payload is None:
+        logger.warning("⚠️ Nothing to write to %s (value=%r)", col, value)
+        return None
+    logger.info("📝 Notion update: page=%s field=%s (%s) value=%r", page_id, col, property_type, value)
+    return notion.pages.update(page_id=page_id, properties={col: payload})
+
+
+def retrieve_page(notion: Client, page_id: str) -> dict:
+    """Fetch a full page (used to follow a relation into another DB)."""
+    return notion.pages.retrieve(page_id=page_id)
+
+
+def get_page_body_text(notion: Client, page_id: str) -> str:
+    """Read all top-level rich-text blocks from a page body and join with newlines.
+
+    Used by the video planner to extract the LinkedIn long-caption that lives
+    as the clip page's body content (not as a property). Walks
+    ``blocks.children.list`` with pagination and concatenates the rich_text of
+    every block type that exposes one (paragraph, heading_*, quote, callout,
+    bulleted/numbered_list_item, to_do). Inert blocks (divider, image,
+    embed, child_page, ...) are silently skipped.
+    """
+    text_block_types = {
+        "paragraph",
+        "heading_1",
+        "heading_2",
+        "heading_3",
+        "quote",
+        "callout",
+        "bulleted_list_item",
+        "numbered_list_item",
+        "to_do",
+        "toggle",
+        # The clip pages store the LinkedIn long caption inside a single
+        # ``code`` block (language="plain text") to preserve whitespace and
+        # newlines verbatim. Without this, the API call returns no body text
+        # and the LI driver fails the strict empty-body check.
+        "code",
+    }
+    out: list[str] = []
+    cursor: Optional[str] = None
+    while True:
+        kwargs: dict = {"block_id": page_id, "page_size": 100}
+        if cursor:
+            kwargs["start_cursor"] = cursor
+        response = notion.blocks.children.list(**kwargs)
+        for block in response.get("results", []):
+            btype = block.get("type")
+            if btype not in text_block_types:
+                continue
+            rich = block.get(btype, {}).get("rich_text", []) or []
+            piece = "".join(seg.get("plain_text", "") for seg in rich)
+            out.append(piece)
+        if not response.get("has_more"):
+            break
+        cursor = response.get("next_cursor")
+        if not cursor:
+            break
+    return "\n".join(out)
+
+
+__all__ = [
+    "init_notion_client",
+    "get_row_by_day",
+    "query_rows_by_filter",
+    "get_field",
+    "get_property_type",
+    "set_field",
+    "retrieve_page",
+    "get_page_body_text",
+]

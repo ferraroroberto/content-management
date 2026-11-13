@@ -16,9 +16,9 @@ from unittest import mock
 
 import requests
 
-from reporting.notion import notion_database_list as ndl
-from reporting.notion import notion_supabase_sync as nss
-from reporting.notion._client import NOTION_REQUEST_TIMEOUT
+from tools.reporting.notion import notion_database_list as ndl
+from tools.reporting.notion import notion_supabase_sync as nss
+from tools.reporting.notion._client import NOTION_REQUEST_TIMEOUT
 
 
 def _lister() -> ndl.NotionDatabaseLister:
