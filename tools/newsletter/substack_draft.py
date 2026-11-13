@@ -20,7 +20,7 @@ cleanly when none is linked.
 
 **Never publishes.** The draft is private and emails no one; publishing stays a
 deliberate human action in the Substack editor. There is no ``--confirm`` here
-by design — see ``planning/substack/api_create.py`` for the manual path that
+by design — see ``tools/planning/substack/api_create.py`` for the manual path that
 can publish.
 
 The created draft opens in the browser automatically (``--no-open`` to
@@ -28,7 +28,7 @@ suppress), the same way ``build_newsletter.run()`` opens the built HTML —
 there is nothing further to run, so the operator lands straight on the thing
 to review.
 
-Requires a harvested API session (``planning/substack/api_session.json``, ~89
+Requires a harvested API session (``tools/planning/substack/api_session.json``, ~89
 day cookie). If it has expired, ``SessionExpiredError`` is reported as a single
 actionable line pointing at ``planning.substack.extract_session``.
 
@@ -47,16 +47,6 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from config.loader import load_block
 from config.logger_config import configure_root_logging
-
-# NOTE: config comes from ``config.loader`` rather than
-# ``planning.substack.substack_session.load_substack_config`` on purpose — the
-# latter transitively imports Playwright, and this path is pure HTTP.
-from planning.substack.api_client import (
-    SessionExpiredError,
-    SubstackAPI,
-    build_book_nodes,
-    build_must_read_nodes,
-)
 from tools.newsletter.books import find_book_for_newsletter
 from tools.newsletter.build_newsletter import (
     SECTION_ORDER,
@@ -68,6 +58,16 @@ from tools.newsletter.build_newsletter import (
     normalize_newsletter_number,
     top_article_by_topic,
     top_article_names_by_topic,
+)
+
+# NOTE: config comes from ``config.loader`` rather than
+# ``planning.substack.substack_session.load_substack_config`` on purpose — the
+# latter transitively imports Playwright, and this path is pure HTTP.
+from tools.planning.substack.api_client import (
+    SessionExpiredError,
+    SubstackAPI,
+    build_book_nodes,
+    build_must_read_nodes,
 )
 
 Grouped = Dict[str, List[Tuple[str, str]]]

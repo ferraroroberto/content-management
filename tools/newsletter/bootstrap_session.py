@@ -8,7 +8,7 @@ written to disk on close; future ``bootstrap_chrome.bat`` runs reuse it.
 Usage:
     .venv\\Scripts\\python -m tools.newsletter.bootstrap_session
 
-Pattern mirrors ``planning/linkedin/bootstrap_session.py`` and friends.
+Pattern mirrors ``tools/planning/linkedin/bootstrap_session.py`` and friends.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ def main() -> int:
     USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
     print(f"📁 Newsletter Chrome profile: {USER_DATA_DIR}")
     print("   (this profile is separate from your normal Chrome — same pattern as")
-    print("   planning/linkedin/chrome_user_data, planning/instagram/..., etc.)")
+    print("   tools/planning/linkedin/chrome_user_data, tools/planning/instagram/..., etc.)")
     print()
 
     with sync_playwright() as pw:

@@ -1,0 +1,225 @@
+"""X (Twitter) video composer driver for the weekly-video orchestrator.
+
+Walks the X /home composer for one clip: side-nav Post → upload .mp4 →
+caption (short) → schedule modal → date+time → Confirm → final Schedule.
+Mirrors the photo flow in ``planning.twitter.schedule_twitter_posts`` and
+re-uses every composer helper from that module — the only platform-level
+difference is that the file pushed through ``fileInput`` is an .mp4.
+"""
+
+from __future__ import annotations
+
+import logging
+import sys
+from pathlib import Path
+from typing import Optional
+
+sys.path.append(str(Path(__file__).parents[3]))
+from tools.planning._session_base import results_dir  # noqa: E402
+from tools.planning.twitter.schedule_twitter_posts import return_to_home  # noqa: E402
+from tools.planning.twitter.twitter_composer import (  # noqa: E402
+    cancel_composer,
+    click_compose_area,
+    click_confirm_in_modal,
+    click_final_schedule_action,
+    click_schedule_toolbar,
+    close_schedule_modal,
+    dismiss_blocking_modals,
+    set_schedule_modal,
+    type_caption,
+    upload_image,
+    wait_composer_clears,
+)
+from tools.planning.twitter.twitter_session import (  # noqa: E402
+    TwitterSession,
+    load_twitter_config,
+)
+from tools.planning.videos.videos_session import (  # noqa: E402
+    VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS,
+    VideoRow,
+    run_video_driver,
+)
+
+logger = logging.getLogger("videos_twitter")
+
+
+def _primary_button_enabled(page) -> Optional[bool]:
+    """Tri-state for X's composer primary action button.
+
+    Returns True if enabled, False if present-but-disabled, None if not found.
+    X keeps this button (``tweetButton``) disabled while an attached video is
+    still uploading / processing and re-enables it once the clip is ready (we
+    always type a caption first, so a disabled button after attaching media
+    means the upload is still in flight, not an empty composer).
+
+    Scoped to the composer ``[role="dialog"]`` on purpose: the home timeline's
+    inline composer (``tweetButtonInline``, outside any dialog) is always present
+    and permanently disabled because it's empty. An unscoped ``.last`` selector
+    picks *that* button and so never sees the real, enabled Schedule button —
+    the actual root cause of the "X never schedules the video" hang. Confirmed live: the in-dialog ``tweetButton`` enables ~8 s
+    after the upload's STATUS=succeeded while the inline one stays disabled.
+    """
+    loc = page.locator(
+        '[role="dialog"] [data-testid="tweetButton"], '
+        '[role="dialog"] [data-testid="tweetButtonInline"]'
+    ).last
+    try:
+        if not loc.count():
+            return None
+        aria = loc.get_attribute("aria-disabled")
+        dis = loc.get_attribute("disabled")
+        return aria in (None, "false") and dis is None
+    except Exception:
+        return None
+
+
+def _video_upload_in_progress(page) -> bool:
+    """True while X is still uploading / processing the attached clip.
+
+    Signal: the composer's primary action button is present-but-disabled. We
+    always type a caption before attaching media, so a disabled button means the
+    clip is still uploading/processing, not an empty composer. (We deliberately
+    do NOT key off ``[role="progressbar"]`` — the composer's video *player* mounts
+    its own scrubber/volume progressbars once the preview renders, so that signal
+    is a false positive that never clears; confirmed live.)
+    """
+    return _primary_button_enabled(page) is False
+
+
+def _wait_for_video_upload_ready(page, timeout_ms: int) -> None:
+    """Block until X finishes uploading / processing the clip, BEFORE scheduling.
+
+    ``upload_image`` only waits for the preview thumbnail to render — X keeps
+    uploading the full clip in the background. Opening the schedule modal and
+    confirming *during* that window stalls finalization: the final Schedule
+    button then never enables, even for a small, platform-safe clip. So we wait for the upload to settle here, before touching
+    the schedule flow — mirroring LinkedIn's ``_wait_for_video_ready`` and the
+    IG upload settle. Raises ``RuntimeError`` if it never settles.
+    """
+    # Give the upload a moment to register an in-progress signal — a tiny clip
+    # may already be done, in which case we proceed straight away.
+    appear_deadline = page.evaluate("() => Date.now()") + 10000
+    saw_progress = False
+    while page.evaluate("() => Date.now()") < appear_deadline:
+        if _video_upload_in_progress(page):
+            saw_progress = True
+            break
+        page.wait_for_timeout(250)
+    if not saw_progress:
+        logger.info("ℹ️ TW: no upload-in-progress signal seen — clip appears ready.")
+        return
+
+    logger.info("⏳ TW clip still uploading/processing — waiting before schedule…")
+    deadline = page.evaluate("() => Date.now()") + timeout_ms
+    last = None
+    while page.evaluate("() => Date.now()") < deadline:
+        if not _video_upload_in_progress(page):
+            logger.info("✅ TW clip upload/processing complete — proceeding to schedule.")
+            page.wait_for_timeout(800)
+            return
+        state = f"progress/button-disabled (btn_enabled={_primary_button_enabled(page)})"
+        if state != last:
+            logger.debug("⏳ TW upload not ready (%s) — polling…", state)
+            last = state
+        page.wait_for_timeout(500)
+    raise RuntimeError(
+        "TW clip upload/processing never settled — X did not finish accepting the "
+        "clip within the wait window. The .mp4 may still exceed X's limits "
+        "(≈512 MB / 2:20 / ~25 Mbps) or X is degraded; retry later."
+    )
+
+
+def _wait_tweet_button_enabled(page, timeout_ms: int) -> None:
+    """Wait until X's final Schedule (tweetButton) is no longer disabled.
+
+    Safety net after Confirm in the schedule modal — by this point the upload
+    has already settled (see ``_wait_for_video_upload_ready``), so this normally
+    returns immediately. ``click_final_schedule_action`` uses a JS-click
+    fallback that *bypasses* the disabled state, so clicking while still disabled
+    is a silent no-op — the schedule never submits and the composer never clears. Raises ``RuntimeError`` if it never enables.
+    """
+    deadline = page.evaluate("() => Date.now()") + timeout_ms
+    last = None
+    while page.evaluate("() => Date.now()") < deadline:
+        enabled = _primary_button_enabled(page)
+        if enabled is True:
+            return
+        state = "not found" if enabled is None else "disabled"
+        if state != last:
+            logger.debug("⏳ TW final Schedule not ready (%s) — polling…", state)
+            last = state
+        page.wait_for_timeout(500)
+    raise RuntimeError(
+        "TW final Schedule button never enabled — X has not accepted the clip. "
+        "Most often the .mp4 exceeds X's limits (≈512 MB / 2:20 / ~25 Mbps) or "
+        "carries an embedded subtitle track; re-encode the clip lower / strip "
+        "extra tracks for X."
+    )
+
+
+def schedule_one_video(
+    session: TwitterSession,
+    tw_cfg: dict,
+    video_cfg: dict,
+    row: VideoRow,
+    *,
+    dry_run: bool,
+) -> str:
+    """Drive the X UI for one clip; returns a one-line status string."""
+    page = session.page
+    label = row.day_title
+
+    click_compose_area(page)
+    type_caption(page, row.payload.caption_short)
+    # X's fileInput accepts .mp4 directly — same helper as image upload.
+    upload_image(page, row.payload.video_path)
+    page.wait_for_timeout(2500)
+    # Wait for X to finish uploading/processing the clip BEFORE opening the
+    # schedule modal — confirming a schedule mid-upload stalls finalization and
+    # the final Schedule button then never enables.
+    _wait_for_video_upload_ready(page, VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS)
+    click_schedule_toolbar(page)
+    set_schedule_modal(
+        page, row.day,
+        video_cfg["post_hour_local"], video_cfg["post_minute_local"],
+    )
+
+    out_dir = results_dir("videos")
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if dry_run:
+        shot = out_dir / f"{label}-tw-dryrun.png"
+        page.screenshot(path=str(shot), full_page=False)
+        logger.info("✅ DRY-RUN %s TW: schedule modal ready, screenshot → %s", label, shot)
+        close_schedule_modal(page)
+        return "TW:DRY"
+
+    click_confirm_in_modal(page)
+    # X keeps the final Schedule button disabled until the video finishes
+    # processing; clicking before then is a silent no-op.
+    _wait_tweet_button_enabled(page, VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS)
+    click_final_schedule_action(page)
+    # A large clip is still committing server-side after Schedule; the inline
+    # composer only reverts once that finishes. Use the video budget, not the
+    # image-sized default.
+    if not wait_composer_clears(page, timeout_ms=VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS):
+        shot = out_dir / f"{label}-tw-FAIL.png"
+        page.screenshot(path=str(shot), full_page=False)
+        raise RuntimeError(f"TW composer did not clear — see {shot}")
+    page.wait_for_timeout(1200)
+    logger.info("✅ LIVE %s TW video scheduled", label)
+    return "TW:LIVE"
+
+
+def _after_login(page) -> None:
+    dismiss_blocking_modals(page)
+    page.wait_for_timeout(400)
+
+
+def run(rows: list[VideoRow], video_cfg: dict, *, dry_run: bool) -> list[dict]:
+    return run_video_driver(
+        rows, video_cfg, dry_run=dry_run, platform="TW", log=logger,
+        load_cfg=load_twitter_config, session_cls=TwitterSession, schedule_one=schedule_one_video,
+        return_home=return_to_home, cancel_composer=cancel_composer, login_settle_ms=3500,
+        after_login=_after_login,
+    )

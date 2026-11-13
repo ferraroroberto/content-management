@@ -13,7 +13,7 @@ import unittest
 
 from playwright.sync_api import TimeoutError as PWTimeoutError
 
-from planning._session_base import (
+from tools.planning._session_base import (
     LoginRequiredError,
     NavigationTimeoutError,
     PlatformSession,

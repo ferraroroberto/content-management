@@ -3,7 +3,7 @@
 Pipeline:
 1. Read editorial DB rows where `date >= today - (days-1)` AND `link LI` is
    set — i.e. a window of N total calendar days including today.
-2. For each post URL, open in the planning/linkedin chrome_user_data session.
+2. For each post URL, open in the tools/planning/linkedin chrome_user_data session.
 3. Click "Load more comments" until exhausted, expand replies.
 4. Extract per-comment: commenter URL, display name, text, posted_at.
 5. Upsert into `comments` + `commenters` tables.
@@ -13,7 +13,7 @@ extraction step is wrapped in try/except and logged so we can iterate
 live without losing the run. The scraper is idempotent: re-running on the
 same posts upserts.
 
-Reuses `planning/linkedin/chrome_user_data` — no separate bootstrap.
+Reuses `tools/planning/linkedin/chrome_user_data` — no separate bootstrap.
 """
 
 from __future__ import annotations
@@ -36,11 +36,6 @@ sys.path.append(str(REPO_ROOT))
 from common.runtime_files import ensure_folder
 from config.console import force_utf8_stdio  # noqa: E402
 from config.logger_config import setup_logger  # noqa: E402
-from planning.linkedin.linkedin_session import (  # noqa: E402
-    LinkedInSession,
-    LoginRequiredError,
-    load_linkedin_config,
-)
 from tools.engagement.db.client import (  # noqa: E402
     load_config,
     mark_replied_as_ignored,
@@ -48,6 +43,11 @@ from tools.engagement.db.client import (  # noqa: E402
     upsert_commenters,
     upsert_comments,
     verify_schema,
+)
+from tools.planning.linkedin.linkedin_session import (  # noqa: E402
+    LinkedInSession,
+    LoginRequiredError,
+    load_linkedin_config,
 )
 from tools.reporting.notion.editorial import (  # noqa: E402
     get_field,
@@ -740,7 +740,7 @@ def run(days: int, *, headless: bool = False, dry_run: bool = False, limit: Opti
         try:
             session.goto_with_login_check(li_cfg["feed_url"])
         except LoginRequiredError:
-            logger.error("❌ LinkedIn session expired — run `python -m planning.linkedin.bootstrap_session`")
+            logger.error("❌ LinkedIn session expired — run `python -m tools.planning.linkedin.bootstrap_session`")
             raise
 
         for p in posts:

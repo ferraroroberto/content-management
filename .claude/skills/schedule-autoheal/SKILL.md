@@ -23,10 +23,10 @@ project references in issues, PRs, commit messages, or pings.
 ## Step 1 — run (unless `--from-result`)
 
 - `all` → `& .\.venv\Scripts\python.exe planning_pipeline.py <mode> [--debug] [--skip-*]`
-- single platform → `& .\.venv\Scripts\python.exe -m planning.<platform>.schedule_<platform>_posts --all-wip <mode> [--debug]`
+- single platform → `& .\.venv\Scripts\python.exe -m tools.planning.<platform>.schedule_<platform>_posts --all-wip <mode> [--debug]`
 
 Then read `results/planning/latest-result.json`, written by `planning_pipeline.py`; its
-schema fields `status`, `detail`, `screenshot`, `failure_kind` live in `planning/_failure.py`.
+schema fields `status`, `detail`, `screenshot`, `failure_kind` live in `tools/planning/_failure.py`.
 
 ## Step 2 — triage
 
@@ -42,16 +42,16 @@ Heal at most **one platform per invocation cycle**; re-run to pick up the next.
 
 1. From the failing row, note the platform, the failing step (in `detail`), and the
    `screenshot` path. Read the screenshot if helpful.
-2. **Probe the live DOM:** `& .\.venv\Scripts\python.exe -m planning._probe <platform>`
+2. **Probe the live DOM:** `& .\.venv\Scripts\python.exe -m tools.planning._probe <platform>`
    (`--url <page>` targets a specific page). It opens the platform's real-Chrome session
    through the existing session helper (stealth + shared-profile lock-wait handled there, **never re-inline launch args**) and prints ranked `role + accessible name`
    candidates.
 3. **Locate the broken selector:**
    - Every platform centralises its accessible-name labels in its own
-     `planning/<platform>/<platform>_labels.py` registry (`linkedin_labels.py`,
+     `tools/planning/<platform>/<platform>_labels.py` registry (`linkedin_labels.py`,
      `twitter_labels.py`, `threads_labels.py`, `instagram_labels.py`) — keep the
      `EN | ES` alternations where present. That registry is the first edit target.
-   - Fall back to `planning/<platform>/schedule_<platform>_posts.py` only for a
+   - Fall back to `tools/planning/<platform>/schedule_<platform>_posts.py` only for a
      structural selector still inline there (`data-testid`, `role="dialog"`,
      CSS/`text=` engine selectors) — those deliberately stay out of the registry.
 4. **Apply a selector-only edit.** Re-anchor the role/text selector on the new accessible
@@ -116,7 +116,7 @@ install at `~/.claude/hooks/notify_send.py`):
 - **Bounded autonomy.** Max 2 heal attempts per row; one platform healed per cycle; hard
   stop on `login-required`, `data-error`, ambiguous DOM, or anything unexpected.
 - **Anti-bot discipline preserved.** Always go through the existing
-  `planning/<platform>/<platform>_session.py` helpers (real Chrome, stealth, profile
+  `tools/planning/<platform>/<platform>_session.py` helpers (real Chrome, stealth, profile
   lock-wait). Never re-inline launch args.
 - **Human-reviewable trail.** Every landed fix has an issue + PR with before/after selector
   and probe evidence; never a silent push to `main`.

@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.append(str(Path(__file__).resolve().parents[3]))
-from planning.substack.api_client import (  # noqa: E402
+from tools.planning.substack.api_client import (  # noqa: E402
     SessionExpiredError,
     fetch_follower_count,
     fetch_own_notes,

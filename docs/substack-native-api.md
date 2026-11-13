@@ -1,7 +1,7 @@
 # Substack native HTTP API integration
 
 How this repo talks to Substack over its private HTTP API (cookie-auth) instead
-of driving a browser, and why. Companion to `planning/substack/README.md` (the
+of driving a browser, and why. Companion to `tools/planning/substack/README.md` (the
 Playwright integration, which is **kept** as an alternative path — this does not
 replace it).
 
@@ -28,7 +28,7 @@ dedicated Chrome profile that `bootstrap_session` already logs in:
 
 1. `extract_session.py` launches that profile via `SubstackSession` (real Chrome),
    confirms the login is still valid, then reads `context.cookies()` and the
-   browser User-Agent, and writes `planning/substack/api_session.json` (gitignored).
+   browser User-Agent, and writes `tools/planning/substack/api_session.json` (gitignored).
 2. `api_client.py::load_session` builds a `requests.Session` from those cookies +
    UA for every subsequent call — **no browser launch** until the cookie expires.
 
@@ -262,7 +262,7 @@ the endpoint loop only iterates blocks that have an `api_url`.
 
 A draft body is ProseMirror JSON, not HTML or markdown. The weekly newsletter's
 sectioned layout (a heading per topic, a bullet list of linked article titles) is
-built node-by-node in `planning/substack/api_client.py::build_section_nodes`:
+built node-by-node in `tools/planning/substack/api_client.py::build_section_nodes`:
 
 ```
 paragraph    — optional intro (the must-read line)

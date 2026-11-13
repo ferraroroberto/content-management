@@ -24,12 +24,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from planning import _scheduler_main as sm
-from planning._wip_rows import ScheduleRow
-from planning.instagram import schedule_instagram_posts as ig
-from planning.linkedin import schedule_linkedin_posts as li
-from planning.videos import schedule_videos_posts as svp
-from planning.videos.videos_ledger import TagAlongLedger
+from tools.planning import _scheduler_main as sm
+from tools.planning._wip_rows import ScheduleRow
+from tools.planning.instagram import schedule_instagram_posts as ig
+from tools.planning.linkedin import schedule_linkedin_posts as li
+from tools.planning.videos import schedule_videos_posts as svp
+from tools.planning.videos.videos_ledger import TagAlongLedger
 
 LOG = logging.getLogger("test_wip_untick")
 

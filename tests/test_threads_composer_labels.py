@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import unittest
 
-from planning.threads.threads_labels import (
+from tools.planning.threads.threads_labels import (
     COMPOSE_ENTRY_BTN_RE,
     WHATS_NEW_PLACEHOLDER_RE,
     WHATS_NEW_TEXTBOX_RE,

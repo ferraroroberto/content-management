@@ -20,14 +20,14 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from planning.linkedin import linkedin_composer as lc
-from planning.linkedin import schedule_linkedin_posts as sl
-from planning.linkedin.linkedin_labels import (
+from tools.planning.linkedin import linkedin_composer as lc
+from tools.planning.linkedin import schedule_linkedin_posts as sl
+from tools.planning.linkedin.linkedin_labels import (
     COMPOSER_EDITOR_SEL,
     DIALOG_SEL,
     MEDIA_FILE_INPUT_SEL,
 )
-from planning.videos import videos_linkedin as vl
+from tools.planning.videos import videos_linkedin as vl
 
 
 class _Effect:

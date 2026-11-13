@@ -30,11 +30,6 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from planning.substack.api_client import (
-    build_book_nodes,
-    build_must_read_nodes,
-    build_section_nodes,
-)
 from tools.newsletter.build_newsletter import (
     build_article_summary_map,
     extract_article_summary,
@@ -45,6 +40,11 @@ from tools.newsletter.substack_draft import (
     build_sections,
     compose_must_read_article,
     compose_title_line,
+)
+from tools.planning.substack.api_client import (
+    build_book_nodes,
+    build_must_read_nodes,
+    build_section_nodes,
 )
 
 TOPICS = ["personal development", "innovation", "leadership and management"]

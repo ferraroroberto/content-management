@@ -15,21 +15,21 @@ import re
 import unittest
 from pathlib import Path
 
-from planning._session_base import REPO_ROOT, results_dir
-from planning.videos.videos_ledger import DEFAULT_LEDGER_PATH
+from tools.planning._session_base import REPO_ROOT, results_dir
+from tools.planning.videos.videos_ledger import DEFAULT_LEDGER_PATH
 
 # module path (relative to the repo root) -> results sub-folder it wrote to
 SITES = {
-    "planning/instagram/schedule_instagram_posts.py": "instagram",
-    "planning/instagram/instagram_upload.py": "instagram",
-    "planning/threads/schedule_threads_posts.py": "threads",
-    "planning/twitter/schedule_twitter_posts.py": "twitter",
-    "planning/linkedin/schedule_linkedin_posts.py": "linkedin",
-    "planning/substack/post_substack_note.py": "substack",
-    "planning/videos/videos_instagram.py": "videos",
-    "planning/videos/videos_twitter.py": "videos",
-    "planning/videos/videos_threads.py": "videos",
-    "planning/videos/videos_linkedin.py": "videos",
+    "tools/planning/instagram/schedule_instagram_posts.py": "instagram",
+    "tools/planning/instagram/instagram_upload.py": "instagram",
+    "tools/planning/threads/schedule_threads_posts.py": "threads",
+    "tools/planning/twitter/schedule_twitter_posts.py": "twitter",
+    "tools/planning/linkedin/schedule_linkedin_posts.py": "linkedin",
+    "tools/planning/substack/post_substack_note.py": "substack",
+    "tools/planning/videos/videos_instagram.py": "videos",
+    "tools/planning/videos/videos_twitter.py": "videos",
+    "tools/planning/videos/videos_threads.py": "videos",
+    "tools/planning/videos/videos_linkedin.py": "videos",
 }
 
 
@@ -37,7 +37,7 @@ class ResultsDirTests(unittest.TestCase):
     def test_resolves_to_the_path_each_site_used_to_build(self) -> None:
         for rel, name in SITES.items():
             with self.subTest(module=rel):
-                old = Path(REPO_ROOT / rel).resolve().parent.parent.parent / "results" / name
+                old = Path(REPO_ROOT / rel).resolve().parents[3] / "results" / name
                 self.assertEqual(results_dir(name), old)
 
     def test_ledger_default_is_unchanged(self) -> None:
@@ -47,8 +47,8 @@ class ResultsDirTests(unittest.TestCase):
         )
 
     def test_no_planning_module_counts_parents_to_reach_results(self) -> None:
-        counted = re.compile(r"\.parent\.parent\.parent\s*/\s*[\"']results[\"']")
-        for path in (REPO_ROOT / "planning").rglob("*.py"):
+        counted = re.compile(r"\.parent\.parent\.parent(\.parent)?\s*/\s*[\"']results[\"']")
+        for path in (REPO_ROOT / "tools" / "planning").rglob("*.py"):
             with self.subTest(module=path.name):
                 self.assertIsNone(counted.search(path.read_text(encoding="utf-8")))
 

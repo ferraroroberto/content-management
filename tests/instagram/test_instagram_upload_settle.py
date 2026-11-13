@@ -15,11 +15,11 @@ import ast
 import unittest
 from pathlib import Path
 
-from planning.instagram.instagram_upload import _upload_settle_ms
+from tools.planning.instagram.instagram_upload import _upload_settle_ms
 
 MODULE_PATH = (
     Path(__file__).resolve().parents[2]
-    / "planning" / "instagram" / "instagram_upload.py"
+    / "tools" / "planning" / "instagram" / "instagram_upload.py"
 )
 
 

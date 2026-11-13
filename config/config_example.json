@@ -222,7 +222,7 @@
     "instagram": {
         "feed_url": "https://business.facebook.com/latest/content_calendar?business_id=your_business_id&asset_id=your_asset_id",
         "login_url": "https://business.facebook.com/",
-        "user_data_dir": "planning/instagram/chrome_user_data",
+        "user_data_dir": "tools/planning/instagram/chrome_user_data",
         "illustrations_folder": "C:/path/to/illustrations",
         "editorial_db_id": "your_editorial_database_id_here",
         "illustrations_db_id": "your_illustrations_database_id_here",
@@ -288,7 +288,7 @@
     "twitter": {
         "feed_url": "https://x.com/home",
         "login_url": "https://x.com/home",
-        "user_data_dir": "planning/twitter/chrome_user_data",
+        "user_data_dir": "tools/planning/twitter/chrome_user_data",
         "illustrations_folder": "C:/path/to/illustrations",
         "editorial_db_id": "your_editorial_database_id_here",
         "illustrations_db_id": "your_illustrations_database_id_here",
@@ -314,7 +314,7 @@
     "threads": {
         "feed_url": "https://www.threads.com/@your_threads_handle",
         "login_url": "https://www.threads.com/@your_threads_handle",
-        "user_data_dir": "planning/threads/chrome_user_data",
+        "user_data_dir": "tools/planning/threads/chrome_user_data",
         "illustrations_folder": "C:/path/to/illustrations",
         "editorial_db_id": "your_editorial_database_id_here",
         "illustrations_db_id": "your_illustrations_database_id_here",
@@ -340,7 +340,7 @@
     "linkedin": {
         "feed_url": "https://www.linkedin.com/feed/",
         "login_url": "https://www.linkedin.com/login",
-        "user_data_dir": "planning/linkedin/chrome_user_data",
+        "user_data_dir": "tools/planning/linkedin/chrome_user_data",
         "illustrations_folder": "C:/path/to/illustrations",
         "editorial_db_id": "your_editorial_database_id_here",
         "illustrations_db_id": "your_illustrations_database_id_here",

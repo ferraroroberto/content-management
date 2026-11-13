@@ -31,7 +31,7 @@ pre-existing `get_alternative_mapping_keys` helper. **No
 ## Browser launch — never re-inline stealth
 
 Every scraper module imports the platform's existing session class
-(`planning/<platform>/<platform>_session.py`) which itself uses
+(`tools/planning/<platform>/<platform>_session.py`) which itself uses
 `config/chrome_launch.py::stealth_launch_kwargs()` + `STEALTH_INIT_SCRIPT`.
 That is the single source of truth for stealth Chrome flags and re-
 inlining them anywhere else is explicitly rejected — the docstring in

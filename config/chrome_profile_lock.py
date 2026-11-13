@@ -3,7 +3,7 @@
 A persistent Chrome profile (``channel="chrome"`` + a dedicated ``user-data-dir``)
 allows only **one live instance**. Several unattended jobs in this suite target the
 *same* profile — e.g. the engagement scrape and the reporting follower-scrape both
-drive ``planning/linkedin/chrome_user_data`` and both fire from the app-launcher
+drive ``tools/planning/linkedin/chrome_user_data`` and both fire from the app-launcher
 around the same time. The second job to launch gets Playwright's "Opening in
 existing browser session" error and dies.
 

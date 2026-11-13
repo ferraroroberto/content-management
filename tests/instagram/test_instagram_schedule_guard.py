@@ -24,11 +24,11 @@ import ast
 import unittest
 from pathlib import Path
 
-from planning.instagram.schedule_instagram_posts import wait_action_button_enabled
+from tools.planning.instagram.schedule_instagram_posts import wait_action_button_enabled
 
 MODULE_PATH = (
     Path(__file__).resolve().parents[2]
-    / "planning" / "instagram" / "schedule_instagram_posts.py"
+    / "tools" / "planning" / "instagram" / "schedule_instagram_posts.py"
 )
 
 GUARD = "wait_action_button_enabled"

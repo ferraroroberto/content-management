@@ -1,6 +1,6 @@
 """One illustration-path resolver for every planning caller (issue #371).
 
-``planning/_wip_rows.resolve_image_path`` is the only resolver; LinkedIn and
+``tools/planning/_wip_rows.resolve_image_path`` is the only resolver; LinkedIn and
 the Substack Note used to carry their own variants. The equivalence tests
 below drive each caller through its real entry point and pass on the old
 per-module copies and on the shared function alike. The drift tests pin the
@@ -32,10 +32,10 @@ from pathlib import Path
 from typing import Optional
 from unittest import mock
 
-from planning import _wip_rows as wr
-from planning.instagram import schedule_instagram_posts as ig
-from planning.linkedin import schedule_linkedin_posts as li
-from planning.substack import post_substack_note as sn
+from tools.planning import _wip_rows as wr
+from tools.planning.instagram import schedule_instagram_posts as ig
+from tools.planning.linkedin import schedule_linkedin_posts as li
+from tools.planning.substack import post_substack_note as sn
 
 SUBSTACK_EMPTY = "Notion editorial row has no image filename for this date."
 

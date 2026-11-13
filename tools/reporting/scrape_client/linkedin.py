@@ -1,6 +1,6 @@
 """LinkedIn Playwright scraper — fetches profile + posts via the logged-in browser.
 
-Reuses the existing ``planning/linkedin`` persistent profile via
+Reuses the existing ``tools/planning/linkedin`` persistent profile via
 ``LinkedInSession`` so the real-Chrome + stealth contract from
 ``config/chrome_launch.py`` stays the single source of truth.
 
@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.append(str(Path(__file__).resolve().parents[3]))
-from planning.linkedin.linkedin_session import (  # noqa: E402
+from tools.planning.linkedin.linkedin_session import (  # noqa: E402
     LinkedInSession,
     LoginRequiredError,
     load_linkedin_config,

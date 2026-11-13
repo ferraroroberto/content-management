@@ -13,10 +13,10 @@ delegates to `reporting.scrape_client.<platform>_native.fetch_<data_type>`
 (note engagement, a couple of GETs instead of a feed scroll plus one page load
 per note). The note path was verified record-for-record against the Playwright
 scrape on the live account — 10/10 identical, 0.9 s vs 37.0 s. Both need the
-one-time cookie harvest (`python -m planning.substack.extract_session`, re-run
+one-time cookie harvest (`python -m tools.planning.substack.extract_session`, re-run
 ~quarterly when the cookie expires); flip either back to `"playwright"` to use
 the browser scrape. See [`substack-native-api.md`](substack-native-api.md)
-and [`../planning/substack/README.md`](../planning/substack/README.md). `"native"` is
+and [`../tools/planning/substack/README.md`](../tools/planning/substack/README.md). `"native"` is
 Substack-only for now; other platforms use rapidapi/playwright.
 
 Note *posting* has its own flag, `substack.note_source` (`"playwright"` default
@@ -40,7 +40,7 @@ with no other change.
 |---|---|---|
 | **Cost** | Monthly subscription per provider | Free — drives the existing logged-in Chrome profile |
 | **Speed** | ~2s per endpoint | ~5–30s per endpoint (browser launch + scroll + read; one open per endpoint) |
-| **Session** | API key in config | Persistent profile at `planning/<platform>/chrome_user_data/`; re-login via `python -m planning.<p>.bootstrap_session` if Chrome forgets the session |
+| **Session** | API key in config | Persistent profile at `tools/planning/<platform>/chrome_user_data/`; re-login via `python -m tools.planning.<p>.bootstrap_session` if Chrome forgets the session |
 | **Breakage mode** | Provider may rate-limit, change pricing, deprecate endpoints | Selectors break when the platform's DOM changes — patch the per-platform module under `tools/reporting/scrape_client/` |
 | **Site coverage** | 1:1 with provider's API | Whatever's visible in the logged-in browser; see [`playwright-social-scraping.md`](playwright-social-scraping.md) for per-platform quirks |
 

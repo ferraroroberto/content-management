@@ -233,7 +233,7 @@ The pipeline stops here. Everything below is the owner's, by hand:
 - [ ] **Clips:** place the approved 1:1 / 9:16 files where the planning rows
   will point, then create one Notion clip page per clip with its title, copy,
   `clipPC` (folder) and `filePC` (file name). The weekly planning pipeline
-  (`planning/videos/`, see its README) schedules them on LinkedIn, Instagram,
+  (`tools/planning/videos/`, see its README) schedules them on LinkedIn, Instagram,
   X and Threads. A title with a `:` is fine: the scheduler falls back to the
   Windows-safe file name.
 - [ ] **LinkedIn / Instagram copy:** take each clip's post and caption from

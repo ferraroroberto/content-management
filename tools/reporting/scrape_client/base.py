@@ -1,7 +1,7 @@
 """Shared helpers for the Playwright-based scrape client.
 
 Every per-platform scraper module in this package reuses the existing
-``planning/<platform>/<platform>_session.py`` session classes so the
+``tools/planning/<platform>/<platform>_session.py`` session classes so the
 real-Chrome / stealth-launch contract from ``config/chrome_launch.py`` stays
 the single source of truth.
 """

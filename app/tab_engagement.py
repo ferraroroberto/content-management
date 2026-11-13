@@ -37,7 +37,7 @@ The pipeline **never auto-sends**. Every reply is a manual copy-paste — by des
 
 **Source.** The Notion editorial database (the same one the planning pipeline writes into). Rows where `link LI` is set and `date >= today - (days-1)` are the inputs. `days` is the input above; `days=5` means today plus the four prior days.
 
-**Browser session.** Each post URL is opened in the **`planning/linkedin/chrome_user_data`** profile — a persistent Chrome session that's already logged into your LinkedIn account. Reused so we don't need a separate engagement bootstrap. Headful by default for first runs (so you can watch selector iteration); headless is opt-in once selectors are stable.
+**Browser session.** Each post URL is opened in the **`tools/planning/linkedin/chrome_user_data`** profile — a persistent Chrome session that's already logged into your LinkedIn account. Reused so we don't need a separate engagement bootstrap. Headful by default for first runs (so you can watch selector iteration); headless is opt-in once selectors are stable.
 
 **Selectors.** LinkedIn obfuscates CSS class names and shuffles them every deploy, so the scraper hooks the *stable* parts:
 

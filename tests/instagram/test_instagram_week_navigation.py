@@ -14,7 +14,7 @@ from __future__ import annotations
 import unittest
 from datetime import date
 
-from planning.instagram.instagram_composer import navigate_to_week
+from tools.planning.instagram.instagram_composer import navigate_to_week
 
 _TARGET = date(2026, 11, 13)
 

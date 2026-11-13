@@ -35,13 +35,13 @@ structured `results/planning/<ts>-result.json` plus a stable
 | `status`       | scheduler row status (`LIVE`/`DRY`/`FAIL`/`LOGIN-REQUIRED`/…)   |
 | `detail`       | free-text error / status detail                                |
 | `screenshot`   | failure screenshot path, lifted out of `detail`                |
-| `failure_kind` | heal-eligibility class from `planning/_failure.py`             |
+| `failure_kind` | heal-eligibility class from `tools/planning/_failure.py`             |
 
-## Run state — `planning/run_state.py`
+## Run state — `tools/planning/run_state.py`
 
 The pipeline writes the record at the start of the run and before each stage, with `verdict: "running"`, the `pid`, the `stage` under way and `completed_stages`; the final write replaces it with `clean` or `failures`. A killed process writes nothing, so a record still saying `running` whose pid is gone (or older than six hours, in case the OS reused the pid) reads as `interrupted`: `effective_verdict` makes that call for the planning tab, and the autoheal skill treats a `running` record after its own run as the same case. The record also carries `skipped_stages` (the `--skip-*` opt-outs), so `not_run_stages` can name the stages after the one that died that never started, and `resume_command` builds the `planning_pipeline.py` invocation that skips what finished and redoes the rest. The planning tab shows both, and the daily `reporting_pipeline.py` run reads the record (`check_planning_run`) and adds it to its one Telegram alert and non-zero exit, so a dead run reaches the owner without opening the tab; the alert repeats daily until the remainder is re-run or the next weekly run replaces the record, and a record that cannot be read is listed as unverified. The command re-runs the stage that died too: check that platform's own scheduler first, because a post it half scheduled is not undone. The first log line of a run carries its pid and its parent's pid: when a run dies silently, the log ending mid-stage with no traceback means the process was ended from outside (a host sleep or logoff, a task-scheduler stop, a manual kill), and the parent pid on that line names the launcher to look at in the host's own logs. An interrupted run is never heal-eligible. The rows of the stage it died in keep their WIP tick, so the next run picks them up again; a post that stage had half scheduled on the platform is not undone.
 
-## Failure classification — `planning/_failure.py`
+## Failure classification — `tools/planning/_failure.py`
 
 `classify(status, detail)` is a pure function imported by **both** the pipeline
 (which stamps `failure_kind`) and the skill (which reads it), so the two can
@@ -57,10 +57,10 @@ never disagree.
 
 Only `ui-drift` is auto-fixed, and only with **selector-only** edits.
 
-## The probe — `planning/_probe.py`
+## The probe — `tools/planning/_probe.py`
 
-`python -m planning._probe <platform>` opens the platform's live page through its
-existing `planning/<platform>/<platform>_session.py` helper (real Chrome,
+`python -m tools.planning._probe <platform>` opens the platform's live page through its
+existing `tools/planning/<platform>/<platform>_session.py` helper (real Chrome,
 stealth, shared-profile lock-wait — never re-inlined) and dumps the accessibility
 tree as a ranked list of `role + accessible name` candidates — exactly the shape
 a Playwright `get_by_role(role, name=...)` selector needs. Class-based candidates
@@ -68,8 +68,8 @@ are deliberately omitted: the per-platform READMEs warn class names rotate, so a
 class-anchored fix would re-break next week.
 
 Every platform now centralises selectors in its own `*_labels.py` registry —
-`planning/linkedin/linkedin_labels.py`, `planning/twitter/twitter_labels.py`,
-`planning/threads/threads_labels.py`, `planning/instagram/instagram_labels.py`
+`tools/planning/linkedin/linkedin_labels.py`, `tools/planning/twitter/twitter_labels.py`,
+`tools/planning/threads/threads_labels.py`, `tools/planning/instagram/instagram_labels.py`
 — that registry is the first edit target for a fix. Fall back to any
 structural test-id still inline in `schedule_<platform>_posts.py` only when
 the registry has no matching entry.

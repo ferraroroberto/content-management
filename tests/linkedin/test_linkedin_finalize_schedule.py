@@ -37,10 +37,13 @@ from datetime import date
 from pathlib import Path
 from unittest import mock
 
-from planning.linkedin import schedule_linkedin_posts as li
-from planning.linkedin.linkedin_labels import CONFIRM_BTN_RE, FINAL_SCHEDULE_BTN_RE
-from planning.videos import videos_linkedin as vl
-from planning.videos.videos_session import ClipPayload, VideoRow
+from tools.planning.linkedin import schedule_linkedin_posts as li
+from tools.planning.linkedin.linkedin_labels import (
+    CONFIRM_BTN_RE,
+    FINAL_SCHEDULE_BTN_RE,
+)
+from tools.planning.videos import videos_linkedin as vl
+from tools.planning.videos.videos_session import ClipPayload, VideoRow
 
 DAY = date(2026, 9, 29)
 DAY_TITLE = "20260929"
@@ -245,7 +248,7 @@ class DriftTests(unittest.TestCase):
     def test_video_driver_imports_nothing_from_the_photo_scheduler(self) -> None:
         tree = ast.parse(inspect.getsource(vl))
         sources = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
-        self.assertNotIn("planning.linkedin.schedule_linkedin_posts", sources)
+        self.assertNotIn("tools.planning.linkedin.schedule_linkedin_posts", sources)
 
 
 if __name__ == "__main__":

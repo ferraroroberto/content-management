@@ -1,0 +1,871 @@
+"""LinkedIn composer helpers shared between the photo, video, post, and
+carousel flows.
+
+This module owns the two patterns that are identical across every LI
+scheduler (photo + video + posts-DB + carousel-PDF) but were originally
+written inside ``tools/planning/videos/videos_linkedin.py``:
+
+* ``_fill_caption_with_mentions`` — type a caption into LI's composer
+  while resolving every ``@FirstName Last`` through LI's typeahead
+  (so mentions render in blue, not as black literal text).
+* ``_wait_for_upload_complete`` — block until LI's background media
+  upload (video or PDF) signals completion, with an explicit-signal
+  fast path and a 60-second fallback.
+
+It also owns the post-Schedule confirmation wait
+(``schedule_pre_state`` + ``wait_for_schedule_confirmation``). That one lives
+here rather than in either driver because both drivers ran a byte-identical
+copy of it and the copies have to agree: they encode when a row counts as
+scheduled, and a driver that disagreed would either drop a post or duplicate
+one.
+
+For the same reason it owns the dialog locators and ``finalize_schedule`` —
+the Confirm → final Schedule → confirmed tail every route (photo, POST,
+carousel, video) ends on. The video driver used to import them as private
+names from the photo scheduler and keep its own copy of the tail.
+The Schedule dialog's date/time setters live beside it in
+``linkedin_schedule_picker``.
+
+All are pure Playwright drivers; nothing in here is route-specific.
+Living in ``tools/planning/linkedin`` (instead of ``tools/planning/videos``) reflects
+that these are LI-composer concerns, not video-only ones.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+import time
+from pathlib import Path
+from typing import Optional
+
+from playwright.sync_api import Page
+
+from tools.planning._session_base import (
+    CLICK_SETTLE_MS,
+    COMPOSER_SETTLE_MS,
+    FIELD_FOCUS_MS,
+    FILL_COMMIT_MS,
+    POLL_FAST_MS,
+    POLL_MS,
+    UPLOAD_DONE_MS,
+    UPLOAD_POLL_MS,
+    UPLOAD_SAFETY_BUFFER_MS,
+)
+from tools.planning.linkedin.linkedin_labels import (
+    CONFIRM_BTN_RE,
+    DIALOG_SEL,
+    DISCARD_BTN_RE,
+    FINAL_SCHEDULE_BTN_RE,
+    POST_SCHEDULED_TOAST_RE,
+    SCHEDULE_CLOCK_NAME_RE,
+    SCHEDULE_CLOCK_SEL,
+)
+
+logger = logging.getLogger("linkedin_composer")
+
+
+# ---------- Feed-entry click timeout ----------
+
+# The first feed-action of each Playwright session was timing out on the
+# Photo / Video / "Start a post" buttons. LinkedIn redirects
+# ``/feed/`` to ``/`` for logged-in users and re-renders the share-box client-
+# side; the 10 s default we were using wasn't enough for cold sessions, but
+# subsequent rows always succeeded within ~1 s because the share box is
+# already mounted. A longer click timeout is exactly the right tolerance
+# because Playwright's ``.click()`` internally polls for actionability
+# (attached + visible + stable + receives events) and returns the instant
+# the button is clickable — so the cost on a warm session is essentially
+# zero, and only the cold first click pays.
+FEED_ENTRY_CLICK_TIMEOUT_MS = 30000
+
+# Per-attempt budget for one click try *inside* the retry loop below. Short
+# enough that a detached-element failure ends the attempt fast (so the next
+# attempt re-resolves against the settled DOM); long enough that a warm,
+# already-mounted button is clicked on the very first try.
+FEED_ENTRY_ATTEMPT_TIMEOUT_MS = 6000
+
+# How long to wait, after a click reports success, for its expected effect
+# (``expect_selector`` attaching) before treating the click as inert and
+# retrying. Short: on a hydrated feed the effect is near-
+# instant, so this only costs time on the inert-click path we're guarding.
+FEED_ENTRY_EFFECT_TIMEOUT_MS = 4000
+
+
+def click_feed_entry(
+    page: Page,
+    text_re: re.Pattern,
+    label: str,
+    *,
+    expect_selector: Optional[str] = None,
+) -> None:
+    """Click a feed share-box affordance ('Photo' / 'Video' / 'Start a post')
+    by its VISIBLE TEXT, surviving the cold-start + feed-rehydration race.
+
+    LinkedIn's redesigned share box mounts each affordance as a role-less
+    ``<a tabindex=0 onclick>`` whose label is a child ``<p>Photo</p>`` — there is
+    no ``role="button"`` or aria-label once the feed hydrates, so the old
+    ``get_by_role("button", name=...)`` anchor resolved nothing and the click
+    burned its whole 30 s timeout (the pre-hydration placeholder
+    briefly *is* a ``<div role="button">``, which is why the failure read
+    "element was detached from the DOM, retrying" — Playwright caught the
+    placeholder, LinkedIn swapped it for the role-less ``<a>``, and the name
+    never matched again). ``get_by_text`` matches the visible ``<p>`` in both the
+    placeholder and hydrated forms; clicking it bubbles up to the ``<a onclick>``.
+
+    We re-resolve on each attempt with a short per-attempt timeout, so a
+    cold-start miss (the share box not mounted yet) or a transient
+    detachment fails fast and the next attempt clicks against the settled DOM.
+    Attempts accumulate up to ``FEED_ENTRY_CLICK_TIMEOUT_MS``; a warm share box
+    still returns on the first attempt in ~1 s.
+
+    ``expect_selector``, when given, guards a THIRD failure mode Playwright's
+    own actionability checks can't see: the target node can be
+    attached, visible and stable — and receive the click — before LinkedIn's
+    framework finishes hydrating that node's own click handler, so the click
+    is delivered but silently swallowed. That reads as success to ``.click()``
+    but nothing happens (no composer, no file input). When ``expect_selector``
+    is passed, a successful click is only accepted once ``expect_selector``
+    attaches within ``FEED_ENTRY_EFFECT_TIMEOUT_MS``; otherwise the click is
+    treated as inert and retried like any other failed attempt, within the
+    same overall ``FEED_ENTRY_CLICK_TIMEOUT_MS`` budget.
+
+    Before each re-click the effect is checked once more: a click whose effect
+    merely landed *late* has already opened the editor, whose modal now covers
+    the share box, so re-clicking would only be intercepted until the budget
+    ran out and fail a row that was in fact fine (the 2026-08-28
+    Photo failure shows that interception).
+    """
+    deadline = time.monotonic() + FEED_ENTRY_CLICK_TIMEOUT_MS / 1000
+    last_err: Optional[Exception] = None
+    attempts = 0
+    while True:
+        attempts += 1
+        if (attempts > 1 and expect_selector is not None
+                and page.locator(expect_selector).count() > 0):
+            logger.info("✅ '%s' click took effect late ('%s' attached) — not re-clicking.",
+                        label, expect_selector)
+            return
+        try:
+            page.get_by_text(text_re).first.click(
+                timeout=FEED_ENTRY_ATTEMPT_TIMEOUT_MS,
+            )
+            if expect_selector is None:
+                return
+            try:
+                page.locator(expect_selector).first.wait_for(
+                    state="attached", timeout=FEED_ENTRY_EFFECT_TIMEOUT_MS,
+                )
+                return
+            except Exception as effect_err:
+                last_err = RuntimeError(
+                    f"click landed but '{expect_selector}' never attached: "
+                    f"{effect_err}"
+                )
+                logger.info(
+                    "↻ '%s' click landed but had no visible effect "
+                    "('%s' didn't attach) — retrying click.",
+                    label, expect_selector,
+                )
+        except Exception as err:  # not-yet-mounted, detachment, or attempt timeout
+            last_err = err
+        if time.monotonic() >= deadline:
+            break
+        # Brief settle before re-resolving against the churning feed.
+        page.wait_for_timeout(CLICK_SETTLE_MS)
+    raise RuntimeError(
+        f"Could not click '{label}' on the LinkedIn feed after {attempts} "
+        f"attempt(s): {last_err}"
+    )
+
+
+# ---------- Mention resolution ----------
+
+# A LinkedIn mention starts at "@" and runs through one or more capitalized
+# tokens separated by HORIZONTAL whitespace (space/tab). We intentionally STOP
+# at the first non-letter (punctuation, newline) so "@Hannah Wilson. " resolves
+# the mention "Hannah Wilson" and leaves the period + space as literal text.
+#
+# The inter-token separator is ``[ \t]+`` rather than ``\s+`` on purpose: ``\s``
+# also matches ``\n``/``\r``, so a capitalized word after a blank line would
+# continue the name ("@Andre Muller\n\nThanks" → "Andre Muller\n\nThanks"),
+# typed verbatim (newlines and all) into the composer and mis-resolved by the
+# typeahead. Restricting to horizontal whitespace keeps a name on a
+# single line: "@Mercè Brey\n\nGreat book" resolves the chip "Mercè Brey" and
+# leaves "\n\nGreat book" as literal text.
+#
+# Letters are Unicode-aware (``[^\W\d_]`` = any word char that is not a digit
+# or underscore, i.e. any Unicode letter) so accented names — "@Mercè Brey",
+# "@Begoña Núñez" — are captured WHOLE. The old ASCII-only ``[a-zA-Z]`` stopped
+# at the first accented character, capturing only the prefix ("Merc"), which
+# made the chip resolve on the prefix and then dumped the accented tail
+# ("è Brey") into the composer as stale literal text beside the blue chip.
+#
+# stdlib ``re`` has no Unicode uppercase class, so the regex matches a greedy
+# run of letter tokens (any case) and ``_leading_capitalized_run`` trims it
+# down to the leading run of *capitalized* tokens. That keeps two behaviours
+# the old ``[A-Z]``-anchored regex had for free: a lowercase-initial match
+# (the "@gmail" of an email) yields an empty run and is skipped, and a name
+# does not greedily swallow following lowercase words ("Thanks @John for help"
+# resolves "John", not "John for help").
+#
+# Periods/apostrophes/hyphens inside names ("@O'Connor", "@Jean-Paul") are
+# still NOT supported; extend the token class if you hit a real case.
+_MENTION_RE = re.compile(r"@([^\W\d_]+(?:[ \t]+[^\W\d_]+)*)", re.UNICODE)
+_NAME_TOKEN_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
+
+
+def _leading_capitalized_run(raw: str) -> str:
+    """Return the leading run of capitalized whitespace-separated tokens.
+
+    ``raw`` is a ``_MENTION_RE`` group-1 capture (letter tokens joined by
+    whitespace). Tokens are kept while their first character is uppercase and
+    the result is a verbatim prefix of ``raw`` (original separators preserved),
+    so the caller can locate its end with ``match.start(1) + len(result)``.
+    Returns ``""`` when the first token is not capitalized.
+    """
+    end = 0
+    for tok in _NAME_TOKEN_RE.finditer(raw):
+        if tok.group(0)[0].isupper():
+            end = tok.end()
+        else:
+            break
+    return raw[:end]
+
+# Selector candidates for the LinkedIn mention typeahead dropdown, in
+# specificity order. LinkedIn's UI varies across rollouts; the generic
+# fallbacks at the bottom catch builds that drop the testid / aria hooks.
+_MENTION_DROPDOWN_SELECTORS = (
+    'div.mentions-typeahead-content [role="option"]',
+    'div[data-test-id="mentions-typeahead"] [role="option"]',
+    '[aria-label*="mention" i] [role="option"]',
+    '.artdeco-typeahead__results-list li',
+    '[role="listbox"] [role="option"]',
+)
+
+
+def _click_mention_suggestion(page: Page, name: str, *, timeout_ms: int = 6000) -> bool:
+    """Wait for the LI mention typeahead and click the matching option.
+
+    Strategy: poll the candidate selectors above until at least one returns
+    a visible option list, then pick the first item whose visible text
+    contains the typed name (case-insensitive). If no name match within
+    the first six items, click the topmost (LinkedIn's typeahead ranks
+    relevant matches first). Returns True on click, False on timeout.
+    """
+    deadline = page.evaluate("() => Date.now()") + timeout_ms
+    name_lower = name.lower()
+    while page.evaluate("() => Date.now()") < deadline:
+        for sel in _MENTION_DROPDOWN_SELECTORS:
+            try:
+                items = page.locator(sel)
+                count = items.count()
+                if count == 0:
+                    continue
+                for i in range(min(count, 6)):
+                    item = items.nth(i)
+                    try:
+                        text = (item.inner_text(timeout=400) or "").lower()
+                    except Exception:
+                        continue
+                    if name_lower in text:
+                        try:
+                            item.click(timeout=2000)
+                            return True
+                        except Exception:
+                            continue
+                try:
+                    items.first.click(timeout=2000)
+                    return True
+                except Exception:
+                    continue
+            except Exception:
+                continue
+        page.wait_for_timeout(POLL_FAST_MS)
+    return False
+
+
+def fill_caption_with_mentions(page: Page, caption: str) -> None:
+    """Type ``caption`` into the LI composer, resolving every @mention.
+
+    For each ``@CapitalizedName`` (or ``@First Last``) in the caption:
+      1. Type the literal text up to the @.
+      2. Type @, then the name letter-by-letter (typeahead populates per
+         keystroke; ~80ms delay per char is enough for LinkedIn to fetch).
+      3. Click the matching suggestion in the dropdown.
+      4. Resume typing the tail.
+
+    If a mention can't be resolved (no dropdown, no matching suggestion),
+    the ``@<name>`` stays as literal text and a warning is logged — we
+    don't fail the whole row over one missing mention.
+    """
+    if not caption:
+        return
+    editor = page.locator('div[role="textbox"][contenteditable="true"]')
+    try:
+        editor.first.wait_for(state="visible", timeout=10000)
+        editor.first.click()
+    except Exception as err:
+        raise RuntimeError(f"Could not focus the LinkedIn caption editor: {err}")
+
+    pos = 0
+    mention_count = 0
+    resolved_count = 0
+    for m in _MENTION_RE.finditer(caption):
+        # Trim the greedy letter run to its leading capitalized tokens. An
+        # empty run means the "@" is lowercase-initial (e.g. an email's
+        # "@gmail"): leave it untouched — we don't type or advance ``pos``, so
+        # it stays in the literal stream typed by the next iteration's leading
+        # chunk (or the final tail).
+        name = _leading_capitalized_run(m.group(1))
+        if not name:
+            continue
+        name_end = m.start(1) + len(name)  # caption index just past the name
+        if m.start() > pos:
+            page.keyboard.type(caption[pos:m.start()], delay=4)
+        mention_count += 1
+        page.keyboard.type("@", delay=20)
+        page.wait_for_timeout(POLL_MS)
+        page.keyboard.type(name, delay=80)
+        page.wait_for_timeout(FILL_COMMIT_MS)
+        clicked = _click_mention_suggestion(page, name)
+        if clicked:
+            resolved_count += 1
+            logger.info("🔗 Resolved LinkedIn mention @%s", name)
+            # LinkedIn quirk: committing the mention chip (clicking the
+            # typeahead suggestion) absorbs the immediately-following
+            # SPACE keystroke, fusing the next word into the chip
+            # ("@Michelle Kempton says" → "Kemptonsays"). Newlines pass
+            # through unaffected (verified against the videos flow:
+            # "@Hannah Wilson\n\nShe shared" renders correctly with no
+            # extra padding). Strategy: peek at the next source char and
+            # inject one space when it's whitespace (replace the eaten
+            # one) or alphanumeric (defensive — source missed a space).
+            # Newlines, punctuation, EOF: leave alone.
+            page.wait_for_timeout(FIELD_FOCUS_MS)
+            next_char = caption[name_end:name_end+1]
+            if next_char in (" ", "\t"):
+                page.keyboard.type(" ", delay=40)
+                pos = name_end + 1  # skip the (would-be-eaten) source space
+                continue
+            if next_char and next_char.isalnum():
+                page.keyboard.type(" ", delay=40)
+        else:
+            logger.warning(
+                "⚠️ Could not resolve LinkedIn mention @%s — left as literal text. "
+                "The composer may still show the unresolved @<name>.", name,
+            )
+        pos = name_end
+    if pos < len(caption):
+        page.keyboard.type(caption[pos:], delay=4)
+    if mention_count:
+        logger.info("📝 Caption typed (%d mentions, %d resolved).",
+                    mention_count, resolved_count)
+    else:
+        logger.debug("📝 Caption typed (%d chars, no mentions).", len(caption))
+
+
+# ---------- Post-Schedule upload-complete wait ----------
+
+# After the final Schedule click, LinkedIn closes the composer immediately
+# but keeps uploading media in the background (videos AND document PDFs).
+# Tearing down Playwright before the upload finishes results in a scheduled
+# post with no media attached ("Something went wrong, please try reloading").
+# We hunt several rollout-dependent signals, then fall back to a fixed
+# conservative wait if none is found.
+_UPLOAD_IN_PROGRESS_SELECTORS = (
+    'div[aria-label*="upload" i]:not([aria-label*="complete" i])',
+    'div[role="status"]:has-text("Uploading")',
+    'div[role="alert"]:has-text("upload" i)',
+    'div:has-text("don\'t close")',
+    'div:has-text("Don\'t close")',
+    'div:has-text("Do not close")',
+    'div:has-text("video is uploading")',
+    'div:has-text("Uploading your video")',
+    'div:has-text("document is uploading")',
+    'div:has-text("Uploading your document")',
+    'div.global-alert',
+    '[data-test-global-alert-id]',
+)
+
+_UPLOAD_COMPLETE_TEXT_RE = re.compile(
+    r"(upload\s*complete|video\s*uploaded|document\s*uploaded|"
+    r"successfully\s*scheduled|post\s*scheduled|"
+    r"your\s*post\s*will\s*be\s*published)",
+    re.I,
+)
+
+
+def _upload_in_progress_visible(page: Page) -> bool:
+    for sel in _UPLOAD_IN_PROGRESS_SELECTORS:
+        try:
+            if page.locator(sel).count() > 0:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def wait_for_upload_complete(page: Page, *, timeout_ms: int = 420000) -> bool:
+    """Block until LI's background media upload signals completion.
+
+    Strategy:
+      1. Settle ~2s post-Schedule so the toast/banner has time to mount.
+      2. If an explicit "upload complete" / "post scheduled" text appears,
+         return immediately.
+      3. Otherwise, if an in-progress indicator was at any point visible,
+         poll until they all disappear (then add a 3-second buffer).
+      4. If no indicator ever showed (LI may already be done, or use a
+         selector not on the list), hold the browser open for 60 seconds
+         as a safety buffer.
+
+    ``timeout_ms`` is the hard cap on the in-progress polling loop
+    (default 7 minutes) — long enough for a 30-50 MB clip on a slow uplink.
+    """
+    page.wait_for_timeout(UPLOAD_POLL_MS)
+
+    try:
+        if page.get_by_text(_UPLOAD_COMPLETE_TEXT_RE).count() > 0:
+            logger.info("✅ LI upload-complete signal already visible — proceeding.")
+            page.wait_for_timeout(UPLOAD_POLL_MS)
+            return True
+    except Exception:
+        pass
+
+    saw_in_progress = _upload_in_progress_visible(page)
+    if not saw_in_progress:
+        for _ in range(8):  # ~4s
+            page.wait_for_timeout(CLICK_SETTLE_MS)
+            if _upload_in_progress_visible(page):
+                saw_in_progress = True
+                break
+            try:
+                if page.get_by_text(_UPLOAD_COMPLETE_TEXT_RE).count() > 0:
+                    logger.info("✅ LI upload-complete signal appeared during settle.")
+                    page.wait_for_timeout(UPLOAD_POLL_MS)
+                    return True
+            except Exception:
+                pass
+
+    if not saw_in_progress:
+        logger.info(
+            "ℹ️ No LI upload-in-progress indicator detected; holding the browser "
+            "open for 60s as a safety buffer so a slow background upload can finish."
+        )
+        page.wait_for_timeout(UPLOAD_SAFETY_BUFFER_MS)
+        return True
+
+    logger.info(
+        "⏳ LI background upload in progress — polling for completion "
+        "(max %ds). Browser will stay open until done.", timeout_ms // 1000,
+    )
+    deadline = page.evaluate("() => Date.now()") + timeout_ms
+    last_log = 0
+    while page.evaluate("() => Date.now()") < deadline:
+        try:
+            if page.get_by_text(_UPLOAD_COMPLETE_TEXT_RE).count() > 0:
+                logger.info("✅ LI upload-complete text detected.")
+                page.wait_for_timeout(UPLOAD_DONE_MS)
+                return True
+        except Exception:
+            pass
+        if not _upload_in_progress_visible(page):
+            logger.info("✅ LI upload-in-progress indicator gone; upload likely complete.")
+            page.wait_for_timeout(UPLOAD_DONE_MS)
+            return True
+        now = page.evaluate("() => Date.now()")
+        if now - last_log > 15000:
+            logger.info("⏳ ...still uploading (%ds elapsed).",
+                        (now - (deadline - timeout_ms)) // 1000)
+            last_log = now
+        page.wait_for_timeout(UPLOAD_POLL_MS)
+
+    logger.warning(
+        "⚠️ LI upload-complete signal not received within %ds. "
+        "The scheduled post MAY be incomplete — verify in Scheduled posts.",
+        timeout_ms // 1000,
+    )
+    return False
+
+
+# ---------- Post-Schedule confirmation wait ----------
+
+# Budget for confirming a scheduled post after the final Schedule click.
+#
+# The previous 20 s was tuned against the dry run, which discards instead of
+# scheduling and therefore never exercised this wait at all. The first real
+# ``--live`` run put 2 of 7 rows over it — and both had in fact
+# been scheduled: their failure screenshots are indistinguishable from the
+# successful rows' (composer gone, feed restored, LinkedIn's own "Post
+# scheduled" toast on screen). So the wait was reporting a false negative on a
+# post that had landed, and because the caller only unticks Work-in-Progress on
+# success, those rows stayed queued for a duplicate on the next run.
+SCHEDULE_CONFIRM_TIMEOUT_MS = 45000
+
+# Gap between polls. The confirmation is a human-scale UI transition; polling
+# faster just burns CDP round-trips.
+SCHEDULE_CONFIRM_POLL_MS = 400
+
+# Budget for the composer to re-mount after the Schedule dialog's Confirm.
+#
+# Confirm closes the Schedule dialog and LinkedIn then re-renders the composer
+# from scratch; for a video that took ~2.1 s after the click in a live probe,
+# while the callers only sleep 1.5 s. A snapshot inside that gap matched zero
+# composers, which disables the composer-closed signal and leaves the row to
+# the toast alone — and for videos the toast often lands after the 45 s wait,
+# so a scheduled post was reported FAIL. Only paid in full when
+# the composer genuinely never comes back.
+COMPOSER_REMOUNT_TIMEOUT_MS = 10000
+COMPOSER_REMOUNT_POLL_MS = 250
+
+
+def _wait_for_composer(page: Page, composer) -> int:
+    """Poll until ``composer`` matches, up to ``COMPOSER_REMOUNT_TIMEOUT_MS``.
+
+    Returns the last count seen (0 on timeout). A locator that raises counts as
+    0 — this runs one click away from a scheduled post and must never be what
+    fails the row.
+    """
+    start = page.evaluate("() => Date.now()")
+    deadline = start + COMPOSER_REMOUNT_TIMEOUT_MS
+    polls = 0
+    while True:
+        try:
+            count = composer.count()
+        except Exception:
+            count = 0
+        now = page.evaluate("() => Date.now()")
+        if count or now >= deadline:
+            break
+        polls += 1
+        page.wait_for_timeout(COMPOSER_REMOUNT_POLL_MS)
+    if count and polls:
+        logger.info("ℹ️ Composer re-mounted %d ms after the Schedule dialog closed.", now - start)
+    elif not count:
+        logger.warning(
+            "⚠️ Composer did not re-mount within %d s of the Schedule dialog "
+            "closing.", COMPOSER_REMOUNT_TIMEOUT_MS // 1000,
+        )
+    return count
+
+
+def schedule_pre_state(page: Page, composer) -> tuple[int, bool]:
+    """Snapshot the two signals ``wait_for_schedule_confirmation`` compares against.
+
+    Must be called immediately BEFORE the final Schedule click. Waits (bounded)
+    for the composer to re-mount first — see ``COMPOSER_REMOUNT_TIMEOUT_MS``.
+
+    Returns ``(composer_count, toast_already_visible)``:
+
+    * ``composer_count`` — how many composer dialogs are open right now. The
+      wait looks for this to *drop*, which is only meaningful relative to a
+      non-zero baseline (see the guard in the waiter).
+    * ``toast_already_visible`` — whether a "Post scheduled" toast is *already*
+      on screen, left over from the previous row in the same session. When it
+      is, the toast cannot confirm THIS row and the waiter ignores it.
+    """
+    count = _wait_for_composer(page, composer)
+    try:
+        toast_visible = page.get_by_text(POST_SCHEDULED_TOAST_RE).count() > 0
+    except Exception:
+        toast_visible = False
+    return count, toast_visible
+
+
+def wait_for_schedule_confirmation(
+    page: Page,
+    composer,
+    pre_state: tuple[int, bool],
+    *,
+    label: str,
+    timeout_ms: int = SCHEDULE_CONFIRM_TIMEOUT_MS,
+) -> str:
+    """Block until LinkedIn confirms the post was scheduled. Return the signal.
+
+    Two independent signals, either of which ends the wait:
+
+    * ``"toast"`` — LinkedIn's own "Post scheduled" toast appears. This is the
+      authoritative one; the UI is telling us directly.
+    * ``"composer-closed"`` — the composer dialog count drops below the
+      pre-click baseline.
+
+    The composer signal is only consulted when the baseline was non-zero. A
+    zero baseline means the composer wasn't matched at snapshot time, so "the
+    count dropped" can never become true and "the count is zero" was already
+    true before the click — neither is evidence of anything. In that case only
+    the toast can confirm the row, which is deliberate: reporting success
+    without positive evidence is how a *missing* post would get silently
+    unticked and dropped from the next run.
+
+    Raises ``RuntimeError`` on timeout, worded so the operator knows the post
+    may nonetheless have been scheduled — the caller leaves the row's
+    Work-in-Progress flag set, so an unconfirmed row is retried rather than
+    lost, at the cost of a possible duplicate that needs checking by hand.
+    """
+    pre_count, toast_was_visible = pre_state
+    if not pre_count:
+        logger.warning(
+            "⚠️ %s: composer not matched before the Schedule click — relying on "
+            "LinkedIn's confirmation toast alone for this row.", label,
+        )
+    toast = page.get_by_text(POST_SCHEDULED_TOAST_RE)
+    deadline = page.evaluate("() => Date.now()") + timeout_ms
+    while page.evaluate("() => Date.now()") < deadline:
+        if not toast_was_visible:
+            try:
+                if toast.count() > 0:
+                    return "toast"
+            except Exception:
+                pass
+        if pre_count:
+            try:
+                if composer.count() < pre_count:
+                    return "composer-closed"
+            except Exception:
+                pass
+        page.wait_for_timeout(SCHEDULE_CONFIRM_POLL_MS)
+    raise RuntimeError(
+        f"No schedule confirmation within {timeout_ms // 1000}s of clicking "
+        f"Schedule (composer still open, no 'Post scheduled' toast). The post "
+        f"MAY still have been scheduled — check LinkedIn's Scheduled posts "
+        f"before re-running, as this row stays flagged Work-in-Progress and "
+        f"the next run would schedule it again."
+    )
+
+
+# ---------- Composer dialogs and the Schedule dialog ----------
+
+def dialog_locator(page: Page):
+    """Locator for whatever modal container LinkedIn currently renders.
+
+    Scoping matters: the feed leaves carousel arrow buttons (aria-label="Next")
+    visible behind the modal, and those would otherwise win resolution and
+    cause spurious clicks.
+
+    ``DIALOG_SEL`` matches both the legacy ``<div role="dialog">`` and the
+    native ``<dialog open>`` LinkedIn's 2026 rebuild replaced it with — see
+    ``linkedin_labels.DIALOG_SEL`` for the full account.
+
+    Always chain off this locator (``dialog_locator(page).locator("button…")``)
+    rather than interpolating ``DIALOG_SEL`` into a bigger selector string:
+    the constant is a comma-separated selector list, so ``f'{DIALOG_SEL}
+    button'`` would parse as ``[role="dialog"]`` OR ``dialog[open] button``
+    and silently match the hidden video.js modals left in the feed.
+    """
+    return page.locator(DIALOG_SEL)
+
+
+def dialog_button(page: Page, name_re: re.Pattern):
+    """Find a button matching `name_re` scoped to any open dialog."""
+    return dialog_locator(page).get_by_role("button", name=name_re)
+
+
+def composer_dialog(page: Page):
+    """The post-composer modal, identified by the caption editor it contains.
+
+    Both the photo/carousel and the video flows watch this locator's count
+    drop to confirm the composer actually closed after the final Schedule
+    click — a post-scheduled signal that doesn't depend on any copy string.
+    Expressed as a ``filter(has=…)`` rather than a ``:has()`` CSS suffix so it
+    composes with the two-branch ``DIALOG_SEL`` without re-parsing it.
+    """
+    return dialog_locator(page).filter(
+        has=page.locator('div[role="textbox"][contenteditable="true"]')
+    )
+
+
+def dialog_next_button(page: Page):
+    """The dialog's primary 'Next' / 'Siguiente' button, matched by visible text.
+
+    Not by accessible name: the feed's carousel arrow also carries
+    aria-label="Next" but renders no visible text, so ``:has-text``
+    disambiguates correctly across locales.
+    """
+    return dialog_locator(page).locator(
+        'button:has-text("Next"), button:has-text("Siguiente")'
+    )
+
+
+def button_is_enabled(btn) -> bool:
+    """True when a located button is actually clickable.
+
+    ``get_attribute("disabled")`` returns ``""`` for ``<button disabled>`` —
+    an *empty string*, which is falsy — so the obvious ``if not disabled``
+    test reports every disabled button as ready. That is why the carousel's
+    PDF wait (``schedule_linkedin_posts._wait_for_pdf_upload``) used to return
+    instantly and hand a still-processing dialog to the next step. Presence,
+    not truthiness, is the test.
+    """
+    try:
+        if btn.get_attribute("disabled") is not None:
+            return False
+        aria_dis = btn.get_attribute("aria-disabled")
+        return aria_dis is None or aria_dis.lower() == "false"
+    except Exception:
+        return False
+
+
+def schedule_clock(page: Page):
+    """Locator for the composer's clock affordance, by the first anchor that matches.
+
+    Anchors, in order: the accessible name as a link or a button, then the icon
+    id prefix (``SCHEDULE_CLOCK_SEL``). Each is scoped to the open dialog so the
+    feed behind the modal cannot win. When none matches, the icon locator is
+    returned so the caller's click fails with a timeout naming the selector.
+    """
+    dialog = dialog_locator(page)
+    candidates = (
+        ("role=link", dialog.get_by_role("link", name=SCHEDULE_CLOCK_NAME_RE)),
+        ("role=button", dialog.get_by_role("button", name=SCHEDULE_CLOCK_NAME_RE)),
+    )
+    for anchor, locator in candidates:
+        if locator.count() > 0:
+            logger.info("ℹ️ Schedule clock matched by %s", anchor)
+            return locator.first
+    logger.info("ℹ️ Schedule clock matched by icon id prefix")
+    return dialog.locator(SCHEDULE_CLOCK_SEL).first
+
+
+def open_schedule_dialog(page: Page) -> None:
+    """Click the composer's clock affordance to open the Schedule dialog."""
+    try:
+        schedule_clock(page).click(timeout=10000)
+    except Exception as err:
+        raise RuntimeError(f"Could not open the Schedule dialog: {err}")
+
+
+def click_schedule_confirm(page: Page) -> None:
+    """Commit the date+time and return to the composer.
+
+    The Schedule dialog's primary action is 'Confirm' since the rebuild ('Next'
+    before it); ``CONFIRM_BTN_RE`` carries both. It stays ``disabled`` until
+    LinkedIn has parsed both fields, so a click that finds it disabled means
+    ``set_schedule_datetime`` did not actually take.
+    """
+    try:
+        dialog_button(page, CONFIRM_BTN_RE).first.click(timeout=10000)
+    except Exception as err:
+        raise RuntimeError(f"Could not click 'Confirm' in Schedule dialog: {err}")
+
+
+def click_final_schedule(page: Page) -> None:
+    """Click the final 'Schedule' / 'Programar' button in the composer (live mode).
+
+    Once a schedule is attached, the composer's primary action flips from
+    'Post' to exactly 'Schedule' (or 'Programar'). ``FINAL_SCHEDULE_BTN_RE`` is
+    anchored on ``^...$`` so it matches that standalone button and not the
+    'Schedule post' tab inside the Schedule dialog.
+    """
+    try:
+        dialog_button(page, FINAL_SCHEDULE_BTN_RE).first.click(timeout=10000)
+    except Exception as err:
+        raise RuntimeError(f"Could not click final 'Schedule' button: {err}")
+
+
+def close_dialogs(page: Page) -> None:
+    """Best-effort attempt to close any open dialogs (for dry-run cleanup).
+
+    The post composer has unsaved changes — Escape triggers a discard prompt.
+    """
+    try:
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(CLICK_SETTLE_MS)
+    except Exception:
+        return
+    # A discard-confirmation dialog may appear; accept it.
+    try:
+        discard = dialog_button(page, DISCARD_BTN_RE)
+        if discard.count() > 0:
+            discard.first.click(timeout=2000)
+            page.wait_for_timeout(CLICK_SETTLE_MS)
+    except Exception:
+        pass
+    # Repeat in case a second dialog remains.
+    try:
+        page.keyboard.press("Escape")
+    except Exception:
+        pass
+
+
+def finalize_schedule(
+    page: Page,
+    out_dir: Path,
+    shot_stem: str,
+    *,
+    log_label: str,
+    wait_for_upload: bool = False,
+) -> None:
+    """Shared tail of every LinkedIn route: Confirm → final Schedule → confirmed.
+
+    The photo, POST, carousel and video flows all end here once the Schedule
+    dialog holds the right date and time. Screenshots land in ``out_dir`` as
+    ``<shot_stem>-pre.png`` / ``-after.png`` (best effort) and
+    ``<shot_stem>-FAIL.png`` when no confirmation arrives; ``log_label``
+    prefixes the log lines.
+
+    ``wait_for_upload`` adds the background-upload wait media posts need
+    (carousel PDFs, videos): LinkedIn closes the composer at once but keeps
+    uploading, and tearing the session down early leaves a scheduled post with
+    no media ("Something went wrong, please try reloading"). That wait runs
+    after the post is confirmed scheduled, so an error inside it is logged and
+    swallowed: raising would report a scheduled row as FAIL, leave it
+    Work-in-Progress and schedule it again on the next run.
+    """
+    click_schedule_confirm(page)
+    page.wait_for_timeout(COMPOSER_SETTLE_MS)
+
+    pre_shot = out_dir / f"{shot_stem}-pre.png"
+    try:
+        page.screenshot(path=str(pre_shot), full_page=False)
+    except Exception:
+        pass
+
+    composer_locator = composer_dialog(page)
+    pre_state = schedule_pre_state(page, composer_locator)
+
+    click_final_schedule(page)
+
+    try:
+        signal = wait_for_schedule_confirmation(
+            page, composer_locator, pre_state, label=log_label,
+        )
+    except RuntimeError as err:
+        shot = out_dir / f"{shot_stem}-FAIL.png"
+        page.screenshot(path=str(shot), full_page=False)
+        raise RuntimeError(f"{err} See {shot}")
+    logger.info("🔔 %s: schedule confirmed via %s", log_label, signal)
+
+    page.wait_for_timeout(COMPOSER_SETTLE_MS)
+    if wait_for_upload:
+        try:
+            wait_for_upload_complete(page)
+        except Exception as err:
+            logger.warning("⚠️ %s: upload-complete wait raised %s — continuing.", log_label, err)
+
+    shot = out_dir / f"{shot_stem}-after.png"
+    try:
+        page.screenshot(path=str(shot), full_page=False)
+    except Exception:
+        pass
+    logger.info("✅ LIVE %s: scheduled (composer closed). Screenshot → %s", log_label, shot)
+
+
+__all__ = [
+    "button_is_enabled",
+    "click_feed_entry",
+    "click_final_schedule",
+    "click_schedule_confirm",
+    "close_dialogs",
+    "composer_dialog",
+    "dialog_button",
+    "dialog_locator",
+    "dialog_next_button",
+    "finalize_schedule",
+    "open_schedule_dialog",
+    "fill_caption_with_mentions",
+    "wait_for_upload_complete",
+    "schedule_pre_state",
+    "wait_for_schedule_confirmation",
+    "SCHEDULE_CONFIRM_TIMEOUT_MS",
+    "COMPOSER_REMOUNT_TIMEOUT_MS",
+]

@@ -1,7 +1,7 @@
 """Facts the pipelines used to spell out by hand in several places have one source.
 
 * Every pacing wait in a converted planning driver names a tier from
-  ``planning/_session_base.py``; a bare ``wait_for_timeout(<ms>)`` literal fails.
+  ``tools/planning/_session_base.py``; a bare ``wait_for_timeout(<ms>)`` literal fails.
 * Every ``PipelineFailures`` kind carries its alert heading, so ``any()`` and the
   alert body cannot disagree about which kinds exist.
 * The planning orchestrator runs the stages ``run_state.STAGES`` lists, in order.
@@ -21,18 +21,18 @@ from unittest import mock
 
 import planning_pipeline
 import reporting_pipeline as rp
-from planning import run_state
+from tools.planning import run_state
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Drivers whose waits are all named; add a driver here when its literals are converted.
 _PACED_DRIVERS = (
-    "planning/instagram/instagram_composer.py",
-    "planning/instagram/schedule_instagram_posts.py",
-    "planning/linkedin/linkedin_composer.py",
-    "planning/linkedin/schedule_linkedin_posts.py",
-    "planning/threads/threads_composer.py",
-    "planning/twitter/twitter_composer.py",
+    "tools/planning/instagram/instagram_composer.py",
+    "tools/planning/instagram/schedule_instagram_posts.py",
+    "tools/planning/linkedin/linkedin_composer.py",
+    "tools/planning/linkedin/schedule_linkedin_posts.py",
+    "tools/planning/threads/threads_composer.py",
+    "tools/planning/twitter/twitter_composer.py",
 )
 
 

@@ -14,7 +14,7 @@ import unittest
 from datetime import date
 
 from config.dates import parse_day
-from planning.substack.substack_session import normalize_day
+from tools.planning.substack.substack_session import normalize_day
 from tools.reporting.notion._client import page_title
 from tools.reporting.scrape_client.base import normalize_target_date
 

@@ -1,6 +1,6 @@
 """Shared scheduler prelude + single-post loop + WIP-page iterator (issue #322).
 
-``planning/_scheduler_main.py`` and ``planning/_wip_rows.iter_wip_pages`` replace
+``tools/planning/_scheduler_main.py`` and ``tools/planning/_wip_rows.iter_wip_pages`` replace
 copies that lived in all five planning schedulers. No browser, no Notion, no
 network: Notion is a fake ``databases.query`` and the Playwright session is a stub.
 
@@ -17,9 +17,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from planning import _scheduler_main as sm
-from planning._session_base import LoginRequiredError
-from planning._wip_rows import ScheduleRow, fetch_wip_rows, iter_wip_pages
+from tools.planning import _scheduler_main as sm
+from tools.planning._session_base import LoginRequiredError
+from tools.planning._wip_rows import ScheduleRow, fetch_wip_rows, iter_wip_pages
 
 LOG = logging.getLogger("test_scheduler_main")
 

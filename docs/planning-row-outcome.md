@@ -1,6 +1,6 @@
 # Planning row outcome
 
-Every planning scheduler ends each Notion row in one of six outcomes. `planning/row_outcome.py` is the only module that names them, derives a row's outcome from its legs and answers "did this row fail?" and "did something get scheduled?".
+Every planning scheduler ends each Notion row in one of six outcomes. `tools/planning/row_outcome.py` is the only module that names them, derives a row's outcome from its legs and answers "did this row fail?" and "did something get scheduled?".
 
 ## Why it is declared
 
@@ -40,10 +40,10 @@ A failed leg therefore never reads as a clean `DRY` or `LIVE`. A `PARTIAL` row i
 | Summary table buckets | `PlatformResult.status_counts` in `planning_pipeline.py` | `parse` |
 | Failure flag, exit code, JSON verdict | `_platform_failed` in `planning_pipeline.py` | `is_failure` |
 | Markdown verdict ("Mixed result") | `_build_summary_md` in `planning_pipeline.py` | `has_scheduled`, `is_failure` |
-| Failure kind in the result JSON | `classify` in `planning/_failure.py` | `parse` |
+| Failure kind in the result JSON | `classify` in `tools/planning/_failure.py` | `parse` |
 | Per-platform exit code | each driver's `failed = [...]` list | `is_failure` |
-| Videos row status | `_aggregate_row_status` in `planning/videos/schedule_videos_posts.py` | `derive_row_status` |
-| Instagram row status | `main` in `planning/instagram/schedule_instagram_posts.py` | `derive_row_status` |
+| Videos row status | `_aggregate_row_status` in `tools/planning/videos/schedule_videos_posts.py` | `derive_row_status` |
+| Instagram row status | `main` in `tools/planning/instagram/schedule_instagram_posts.py` | `derive_row_status` |
 
 A new reader calls the module. It does not compare a status string, build its own list of failing statuses or substring-test a leg's free text; a fact the derive does not carry joins its inputs.
 

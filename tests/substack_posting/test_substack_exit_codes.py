@@ -21,8 +21,8 @@ import unittest
 from unittest import mock
 
 import reporting_pipeline as rp
-from planning.substack import daily_pipeline as dp
-from planning.substack import post_substack_note as sn
+from tools.planning.substack import daily_pipeline as dp
+from tools.planning.substack import post_substack_note as sn
 
 LINK_NOT_WRITTEN = getattr(sn, "RC_POSTED_LINK_NOT_WRITTEN", 11)
 DAY = "20260929"

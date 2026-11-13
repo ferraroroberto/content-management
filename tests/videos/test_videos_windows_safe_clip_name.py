@@ -23,7 +23,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from planning.videos import videos_session as vs  # noqa: E402
+from tools.planning.videos import videos_session as vs  # noqa: E402
 
 LIVE_FILE_PC = "start small: the 10-at-10 method"
 ON_DISK_STEM = "start small the 10-at-10 method"
