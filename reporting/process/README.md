@@ -128,7 +128,7 @@ auto-remediates, so an unintended schema change can't be silently papered over.
 - PostgreSQL database (local or Supabase cloud)
 - Required Python packages:
   ```bash
-  pip install pandas psycopg2-binary python-dotenv argparse
+  ./.venv/Scripts/python.exe -m pip install pandas psycopg2-binary python-dotenv argparse
   ```
 
 ### 🔧 Environment Configuration
@@ -169,7 +169,7 @@ The process module relies on configuration files in the `../config` directory:
 Process all JSON files and create DataFrames:
 
 ```bash
-python -m reporting.process.data_processor
+./.venv/Scripts/python.exe -m reporting.process.data_processor
 ```
 
 ### 🔒 Applying RLS Policies
@@ -178,22 +178,22 @@ Apply Row Level Security policies to all existing tables:
 
 ```bash
 # Preview what would be done without executing
-python supabase_policy_script.py --dry-run
+./.venv/Scripts/python.exe supabase_policy_script.py --dry-run
 
 # Detect drift only (read-only; exits non-zero if any table/view drifted)
-python supabase_policy_script.py --check
+./.venv/Scripts/python.exe supabase_policy_script.py --check
 
 # Apply policies to all tables (skips tables that already have policies)
-python supabase_policy_script.py
+./.venv/Scripts/python.exe supabase_policy_script.py
 
 # Force apply policies (drops existing policies first)
-python supabase_policy_script.py --force
+./.venv/Scripts/python.exe supabase_policy_script.py --force
 
 # Use local environment
-python supabase_policy_script.py --environment local
+./.venv/Scripts/python.exe supabase_policy_script.py --environment local
 
 # Enable debug logging
-python supabase_policy_script.py --debug
+./.venv/Scripts/python.exe supabase_policy_script.py --debug
 ```
 
 ### 📝 Command Line Options
@@ -202,46 +202,46 @@ python supabase_policy_script.py --debug
 
 ```bash
 # Enable debug mode
-python -m reporting.process.data_processor --debug
+./.venv/Scripts/python.exe -m reporting.process.data_processor --debug
 
 # Skip upload to database
-python -m reporting.process.data_processor --upload n
+./.venv/Scripts/python.exe -m reporting.process.data_processor --upload n
 
 # Export as Excel instead of CSV
-python -m reporting.process.data_processor --format excel
+./.venv/Scripts/python.exe -m reporting.process.data_processor --format excel
 
 # All options combined
-python -m reporting.process.data_processor --debug --upload n --format excel
+./.venv/Scripts/python.exe -m reporting.process.data_processor --debug --upload n --format excel
 ```
 
 #### supabase_uploader.py
 
 ```bash
 # Test with a CSV file (cloud environment)
-python -m reporting.process.supabase_uploader --csv path/to/file.csv
+./.venv/Scripts/python.exe -m reporting.process.supabase_uploader --csv path/to/file.csv
 
 # Use local database
-python -m reporting.process.supabase_uploader --environment local --csv path/to/file.csv
+./.venv/Scripts/python.exe -m reporting.process.supabase_uploader --environment local --csv path/to/file.csv
 ```
 
 #### profile_aggregator.py
 
 ```bash
 # Run profile aggregation
-python -m reporting.process.profile_aggregator
+./.venv/Scripts/python.exe -m reporting.process.profile_aggregator
 
 # Debug mode
-python -m reporting.process.profile_aggregator --debug
+./.venv/Scripts/python.exe -m reporting.process.profile_aggregator --debug
 ```
 
 #### posts_consolidator.py
 
 ```bash
 # Run posts consolidation
-python -m reporting.process.posts_consolidator
+./.venv/Scripts/python.exe -m reporting.process.posts_consolidator
 
 # Debug mode
-python -m reporting.process.posts_consolidator --debug
+./.venv/Scripts/python.exe -m reporting.process.posts_consolidator --debug
 ```
 
 ## 📊 Data Flow
@@ -351,7 +351,7 @@ The module is designed to be extensible:
 
 Enable debug mode for detailed logging:
 ```bash
-python -m reporting.process.data_processor --debug
+./.venv/Scripts/python.exe -m reporting.process.data_processor --debug
 ```
 
 This provides:

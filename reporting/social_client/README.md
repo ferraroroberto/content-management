@@ -59,7 +59,7 @@ for the full trade-offs and how to flip a platform.
 ### Command Line Arguments
 
 ```bash
-python -m reporting.social_client.social_api_client [options]
+./.venv/Scripts/python.exe -m reporting.social_client.social_api_client [options]
 ```
 
 #### Options:
@@ -74,27 +74,27 @@ python -m reporting.social_client.social_api_client [options]
 
 1. **Process all platforms (skip existing)**:
    ```bash
-   python -m reporting.social_client.social_api_client
+   ./.venv/Scripts/python.exe -m reporting.social_client.social_api_client
    ```
 
 2. **Process all platforms in debug mode**:
    ```bash
-   python -m reporting.social_client.social_api_client --debug
+   ./.venv/Scripts/python.exe -m reporting.social_client.social_api_client --debug
    ```
 
 3. **Process specific platform**:
    ```bash
-   python -m reporting.social_client.social_api_client --platform twitter_posts
+   ./.venv/Scripts/python.exe -m reporting.social_client.social_api_client --platform twitter_posts
    ```
 
 4. **Force re-fetch all data**:
    ```bash
-   python -m reporting.social_client.social_api_client --no-skip
+   ./.venv/Scripts/python.exe -m reporting.social_client.social_api_client --no-skip
    ```
 
 5. **Debug mode with specific platform**:
    ```bash
-   python -m reporting.social_client.social_api_client --debug --platform instagram_profile
+   ./.venv/Scripts/python.exe -m reporting.social_client.social_api_client --debug --platform instagram_profile
    ```
 
 ## Output

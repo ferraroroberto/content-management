@@ -34,7 +34,7 @@ below so they aren't mistaken for daily-suite steps.
 
 1. Install required packages:
 ```bash
-pip install notion-client psycopg2-binary pandas python-dotenv requests
+./.venv/Scripts/python.exe -m pip install notion-client psycopg2-binary pandas python-dotenv requests
 ```
 
 2. Configure your environment:
@@ -100,7 +100,7 @@ Updates specific Notion database entries with data from Supabase based on date m
 
 **Usage:**
 ```bash
-python -m reporting.notion.notion_update YYYYMMDD [--debug] [--database-id DATABASE_ID] [-y|--yes]
+./.venv/Scripts/python.exe -m reporting.notion.notion_update YYYYMMDD [--debug] [--database-id DATABASE_ID] [-y|--yes]
 ```
 
 **Arguments:**
@@ -111,7 +111,7 @@ python -m reporting.notion.notion_update YYYYMMDD [--debug] [--database-id DATAB
 
 **Example:**
 ```bash
-python -m reporting.notion.notion_update 20240115 --debug
+./.venv/Scripts/python.exe -m reporting.notion.notion_update 20240115 --debug
 ```
 
 **Features:**
@@ -126,7 +126,7 @@ Continuously syncs Notion databases to Supabase PostgreSQL tables.
 
 **Usage:**
 ```bash
-python -m reporting.notion.notion_supabase_sync [--environment ENV] [--once] [--full-sync]
+./.venv/Scripts/python.exe -m reporting.notion.notion_supabase_sync [--environment ENV] [--once] [--full-sync]
 ```
 
 **Arguments:**
@@ -139,13 +139,13 @@ python -m reporting.notion.notion_supabase_sync [--environment ENV] [--once] [--
 **Example:**
 ```bash
 # Run continuous sync
-python -m reporting.notion.notion_supabase_sync
+./.venv/Scripts/python.exe -m reporting.notion.notion_supabase_sync
 
 # Run once with full sync
-python -m reporting.notion.notion_supabase_sync --once --full-sync
+./.venv/Scripts/python.exe -m reporting.notion.notion_supabase_sync --once --full-sync
 
 # Use local database
-python -m reporting.notion.notion_supabase_sync --environment local
+./.venv/Scripts/python.exe -m reporting.notion.notion_supabase_sync --environment local
 ```
 
 **Features:**
@@ -161,7 +161,7 @@ Analyzes Notion database structures and exports sample data.
 
 **Usage:**
 ```bash
-python -m reporting.notion.notion_database_structure [--debug]
+./.venv/Scripts/python.exe -m reporting.notion.notion_database_structure [--debug]
 ```
 
 **Arguments:**
@@ -169,7 +169,7 @@ python -m reporting.notion.notion_database_structure [--debug]
 
 **Example:**
 ```bash
-python -m reporting.notion.notion_database_structure --debug
+./.venv/Scripts/python.exe -m reporting.notion.notion_database_structure --debug
 ```
 
 **Features:**
@@ -185,7 +185,7 @@ Lists and manages all Notion databases, creating a comprehensive database invent
 
 **Usage:**
 ```bash
-python -m reporting.notion.notion_database_list [--config CONFIG_PATH] [--output OUTPUT_PATH]
+./.venv/Scripts/python.exe -m reporting.notion.notion_database_list [--config CONFIG_PATH] [--output OUTPUT_PATH]
 ```
 
 **Arguments:**
@@ -194,7 +194,7 @@ python -m reporting.notion.notion_database_list [--config CONFIG_PATH] [--output
 
 **Example:**
 ```bash
-python -m reporting.notion.notion_database_list --output notion_database_list.json
+./.venv/Scripts/python.exe -m reporting.notion.notion_database_list --output notion_database_list.json
 ```
 
 **Features:**
@@ -210,7 +210,7 @@ Executes SQL scripts to unify editorial data into consolidated tables.
 
 **Usage:**
 ```bash
-python -m reporting.notion.notion_unify_data [--debug]
+./.venv/Scripts/python.exe -m reporting.notion.notion_unify_data [--debug]
 ```
 
 **Arguments:**
@@ -218,7 +218,7 @@ python -m reporting.notion.notion_unify_data [--debug]
 
 **Example:**
 ```bash
-python -m reporting.notion.notion_unify_data --debug
+./.venv/Scripts/python.exe -m reporting.notion.notion_unify_data --debug
 ```
 
 **Features:**
@@ -244,7 +244,7 @@ initialization function. Run once when provisioning the database; see the
 companion `setup_notion_relations_system.md` for the SQL design.
 
 ```bash
-python -m reporting.notion.setup_notion_relations_system [--debug]
+./.venv/Scripts/python.exe -m reporting.notion.setup_notion_relations_system [--debug]
 ```
 
 ### add_editorial_dates.py — seed editorial-calendar rows
@@ -258,9 +258,9 @@ or from the control-panel app's **📅 editorial** tab — both share this one c
 path.
 
 ```bash
-python -m reporting.notion.add_editorial_dates            # current + next month
-python -m reporting.notion.add_editorial_dates --debug
-python -m reporting.notion.add_editorial_dates --database-id <id>
+./.venv/Scripts/python.exe -m reporting.notion.add_editorial_dates            # current + next month
+./.venv/Scripts/python.exe -m reporting.notion.add_editorial_dates --debug
+./.venv/Scripts/python.exe -m reporting.notion.add_editorial_dates --database-id <id>
 ```
 
 ### next_relation_check.py — read-only diagnostic preview
@@ -270,8 +270,8 @@ row for a target date and the day after and prints what a real run *would* write
 **No Notion writes.** A manual sanity check, not a scheduled step.
 
 ```bash
-python -m reporting.notion.next_relation_check            # today
-python -m reporting.notion.next_relation_check 20260513   # explicit date
+./.venv/Scripts/python.exe -m reporting.notion.next_relation_check            # today
+./.venv/Scripts/python.exe -m reporting.notion.next_relation_check 20260513   # explicit date
 ```
 
 ## 📊 Database Sample Directory
