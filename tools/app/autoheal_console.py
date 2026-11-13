@@ -19,7 +19,7 @@ Two details are load-bearing, both learned from the app-launcher sister project
   run ``gh``, and call MCP tools with no human at the prompt.
 
 Run standalone via ``launch_autoheal.bat`` or as
-``python -m app.autoheal_console --log <path> --skill-cmd "/schedule-autoheal all --dry-run"``.
+``python -m tools.app.autoheal_console --log <path> --skill-cmd "/schedule-autoheal all --dry-run"``.
 """
 
 from __future__ import annotations
@@ -32,11 +32,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-# Run as a script (python app/autoheal_console.py via the app or launch_autoheal.bat),
-# so sys.path[0] is app/, not the repo root — without this the `from config.console`
+REPO_ROOT = Path(__file__).resolve().parents[2]
+# Run as a script (python tools/app/autoheal_console.py via the app or launch_autoheal.bat),
+# so sys.path[0] is tools/app/, not the repo root — without this the `from config.console`
 # import below raises ModuleNotFoundError and the wrapper dies before opening its log.
-# Mirrors app/app.py's own sys.path bootstrap.
+# Mirrors tools/app/app.py's own sys.path bootstrap.
 sys.path.insert(0, str(REPO_ROOT))
 from common.runtime_files import ensure_folder, open_for_write
 from config.no_window import NO_WINDOW  # noqa: E402

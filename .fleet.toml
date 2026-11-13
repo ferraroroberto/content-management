@@ -9,12 +9,8 @@ tag         = ["→", "Notion"]
 depends_on  = ["local-llm-hub"]
 
 # Repo layout (project-scaffolding docs/repo-layout.md): a multi-tool pipeline-cli
-# repo keeps one root package per tool, so each tool folder below is a declared
-# root, not drift. docs/layout.md says what each one holds.
+# repo keeps one package per tool under tools/. docs/layout.md says what each one holds.
 shape       = "pipeline-cli"
-extra_roots = [
-    "app",
-]
 
 # Reviewed false positive: the docstring names the old location this module was
 # migrated from; nothing is read from that path at runtime or build time.
@@ -165,8 +161,8 @@ exclude  = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
 enabled  = true
 baseline = ".conventions-ratchet-baseline.json"
 rules = ["no-window", "logging-not-print", "no-drive-path", "subprocess-timeout", "state-literal", "state-set-repeat", "state-write"]
-# the default print_paths (app/, src/) would skip every library package but app/
-print_paths = ["app/", "tools/", "config/", "tools/reporting/"]
+# the default print_paths (app/, src/) would skip every tool package
+print_paths = ["tools/", "config/"]
 
 # A raw connect skips the WAL pragma and the schema bootstrap.
 [[conventions_ratchet.must_use]]
@@ -205,9 +201,9 @@ why    = "static assets go through CachingStaticFiles"
 [runtime_write_ratchet]
 enabled  = true
 baseline = ".runtime-write-ratchet-baseline.json"
-# The tool packages (the extra_roots above) are this repo's code, beside src/, scripts/
+# The tool packages (tools/) are this repo's code, beside src/, scripts/
 # and config/; src/gmail_readonly/ and src/google_oauth_common/ are vendored copies.
-code_folders = ["src", "scripts", "config", "app", "tools"]
+code_folders = ["src", "scripts", "config", "tools"]
 exclude      = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
 # Each returns a path under results/ or docs/screenshots/ (never a code folder): results_dir() is
 # <repo>/results/<name>, db_path()/raw_sidecar() sit under the check_ip store_folder (default

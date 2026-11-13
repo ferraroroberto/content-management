@@ -7,8 +7,8 @@ the loop that turns that break-and-fix cycle into a set-and-forget operation.
 
 ## The flow
 
-1. The **planning tab** (`app/tab_planning.py`) has a **🔧 run + autoheal
-   (console)** button. It launches `app/autoheal_console.py` in a **visible,
+1. The **planning tab** (`tools/app/tab_planning.py`) has a **🔧 run + autoheal
+   (console)** button. It launches `tools/app/autoheal_console.py` in a **visible,
    detached console** (`CREATE_NEW_CONSOLE`) running the `/schedule-autoheal`
    skill headless. The window shows the live run; the in-app panel mirrors it by
    tailing the tee'd log file. `launch_autoheal.bat` is the equivalent manual
@@ -103,7 +103,7 @@ see that repo's `docs/lessons-launcher-owned-pty.md`):
   everything at the end. `--output-format stream-json` (requires `--verbose`)
   emits one JSON event the instant each step happens (init, each assistant
   thinking/text/tool_use block, each tool_result, the final result).
-  `app/autoheal_console.py` reads those events with `readline()` and
+  `tools/app/autoheal_console.py` reads those events with `readline()` and
   pretty-prints each into a readable live feed (`💭` thinking, `🔧` tool calls,
   `↳` results), teed to **both** the visible console and a log file the app
   tails.
@@ -112,7 +112,7 @@ see that repo's `docs/lessons-launcher-owned-pty.md`):
 - **Remote Control for mobile.** The invocation adds `--remote-control autoheal`
   so the run is also viewable/drivable from the Claude mobile/web app — handy for
   answering a "not confident" escalation from the phone. Toggle off with
-  `--no-remote-control` on `app/autoheal_console.py`.
+  `--no-remote-control` on `tools/app/autoheal_console.py`.
 
 ## Guardrails
 

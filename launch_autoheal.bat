@@ -46,7 +46,7 @@ echo ========================================
 echo.
 REM Keep this call at top level, NOT inside an if/else: %ERRORLEVEL% inside a
 REM parenthesised block is expanded at parse time and reads stale.
-"%VENV_DIR%\Scripts\python.exe" app\autoheal_console.py --skill-cmd "/schedule-autoheal %SCOPE% %MODE%"
+"%VENV_DIR%\Scripts\python.exe" tools\app\autoheal_console.py --skill-cmd "/schedule-autoheal %SCOPE% %MODE%"
 REM Capture on the very next line — any intervening command overwrites it.
 set RC=%ERRORLEVEL%
 

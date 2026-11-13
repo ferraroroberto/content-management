@@ -14,19 +14,19 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from app import tab_demo_video  # noqa: E402
+from tools.app import tab_demo_video  # noqa: E402
 
 EXAMPLE = REPO_ROOT / "tools" / "demo_video" / "examples" / "facilitation-suite"
 
 
 def _card_script() -> None:
-    from app import tab_demo_video  # noqa: PLC0415
+    from tools.app import tab_demo_video  # noqa: PLC0415
 
     tab_demo_video.render_runbook()
 
 
 def _tab_script() -> None:
-    from app import tab_demo_video  # noqa: PLC0415
+    from tools.app import tab_demo_video  # noqa: PLC0415
 
     tab_demo_video.run()
 

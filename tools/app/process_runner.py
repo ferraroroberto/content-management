@@ -11,7 +11,7 @@ controlled.
 
 Usage from a tab module:
 
-    from app.process_runner import (
+    from tools.app.process_runner import (
         start_pipeline, render_log_panel, is_running, stop_pipeline,
     )
 
@@ -37,11 +37,11 @@ from typing import Optional
 
 import streamlit as st
 
-from app.autoheal_console import DEFAULT_MODEL
 from common.runtime_files import ensure_folder
 from config.no_window import NO_WINDOW
+from tools.app.autoheal_console import DEFAULT_MODEL
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 VENV_PY = REPO_ROOT / ".venv" / "Scripts" / "python.exe"
 LOG_TAIL_MAX = 800  # lines kept in memory per pipeline
 # `taskkill /T /F` on one process tree answers in well under a second; 15 s means it is
@@ -152,7 +152,7 @@ def start_skill_console(name: str, skill_cmd: str, *, model: str = DEFAULT_MODEL
     """Launch the ``/schedule-autoheal`` skill in a **visible, detached console**.
 
     Unlike :func:`start_pipeline` (which PIPEs the child into an in-app panel),
-    this spawns ``app/autoheal_console.py`` with ``CREATE_NEW_CONSOLE`` so the
+    this spawns ``tools/app/autoheal_console.py`` with ``CREATE_NEW_CONSOLE`` so the
     agent's live ``--verbose`` stream appears in its own OS window — the user
     watches it directly. We can't also PIPE a new-console child, so the wrapper
     tees its output to a log file and a background thread tails that file into
@@ -174,7 +174,7 @@ def start_skill_console(name: str, skill_cmd: str, *, model: str = DEFAULT_MODEL
     # FileNotFoundError — masking the child's real failure. touch() closes that race.
     log_path.touch()
 
-    wrapper = REPO_ROOT / "app" / "autoheal_console.py"
+    wrapper = REPO_ROOT / "tools" / "app" / "autoheal_console.py"
     cmd = [
         str(VENV_PY), str(wrapper),
         "--skill-cmd", skill_cmd,

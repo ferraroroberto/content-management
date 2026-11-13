@@ -27,7 +27,7 @@ import streamlit as st
 if TYPE_CHECKING:  # annotation only — the real import stays lazy (app startup)
     from tools.newsletter.schedule_editions import BufferState
 
-from app.process_runner import (
+from tools.app.process_runner import (
     VENV_PY,
     is_running,
     render_log_panel,

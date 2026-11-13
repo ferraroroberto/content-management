@@ -7,7 +7,7 @@
 Schema: ``tools/newsletter/triage/schema.sql`` — applied once by the owner in the Supabase SQL
 editor (PostgREST cannot run DDL). The client is supabase-py from ``config.supabase``
 (service_role_key → key → anon_key, same priority as the engagement pipeline). The UI
-(``app/tab_triage.py``) never touches the client: it calls ``newsletter.triage.review``.
+(``tools/app/tab_triage.py``) never touches the client: it calls ``newsletter.triage.review``.
 
 Tests inject a fake client with ``set_client()``.
 """

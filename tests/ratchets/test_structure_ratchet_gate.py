@@ -65,11 +65,12 @@ class WiringTests(unittest.TestCase):
         self.assertEqual(entry["dest"], "scripts/structure_ratchet.py")
         self.assertTrue((REPO_ROOT / entry["dest"]).is_file())
 
-    def test_every_declared_root_is_documented_in_the_layout_doc(self) -> None:
-        fleet = tomllib.loads((REPO_ROOT / ".fleet.toml").read_text(encoding="utf-8"))
+    def test_every_tool_package_is_documented_in_the_layout_doc(self) -> None:
         layout = (REPO_ROOT / "docs" / "layout.md").read_text(encoding="utf-8")
-        for root in fleet["extra_roots"]:
-            self.assertIn(f"`{root}/`", layout, root)
+        tools = sorted(p.name for p in (REPO_ROOT / "tools").iterdir() if (p / "__init__.py").is_file())
+        self.assertTrue(tools)
+        for tool in tools:
+            self.assertIn(f"`tools/{tool}/`", layout, tool)
 
     def test_the_committed_baseline_is_current(self) -> None:
         with redirect_stdout(io.StringIO()):

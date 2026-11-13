@@ -3,7 +3,7 @@
 Two run paths:
 - **plain run** — the scheduler pipeline streamed into the in-app log panel.
 - **run + autoheal** — launches the ``/schedule-autoheal`` skill in a visible
-  console window (see ``app/autoheal_console.py``); on a UI-drift failure the
+  console window (see ``tools/app/autoheal_console.py``); on a UI-drift failure the
   agent self-heals end-to-end. The tab mirrors the window's output in-app and
   shows the last run's machine-readable outcome.
 """
@@ -15,7 +15,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from app.process_runner import (
+from tools.app.process_runner import (
     VENV_PY,
     is_running,
     render_log_panel,

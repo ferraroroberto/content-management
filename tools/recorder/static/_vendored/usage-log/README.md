@@ -20,7 +20,7 @@ The server half is `src/usage_log.py` (a separate manifest key, `usage_log`, bec
 
 ## How to vendor
 
-1. Copy this `usage-log/` folder **verbatim** into your app's static dir (`app/webapp/static/_vendored/usage-log/`), and `src/usage_log.py` verbatim into your `src/`. Do not edit either per-app.
+1. Copy this `usage-log/` folder **verbatim** into your app's static dir (`tools/app/webapp/static/_vendored/usage-log/`), and `src/usage_log.py` verbatim into your `src/`. Do not edit either per-app.
 2. Mount the router, with the database path resolved through `runtime_db_path` and the app's own auth:
    ```python
    from src.runtime_data import runtime_db_path

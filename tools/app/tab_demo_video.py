@@ -14,7 +14,7 @@ from typing import Optional
 import streamlit as st
 from pydantic import ValidationError
 
-from app.process_runner import (
+from tools.app.process_runner import (
     VENV_PY,
     is_running,
     render_log_panel,
@@ -31,7 +31,7 @@ from tools.demo_video.storyboard import (
 )
 
 PIPELINE_NAME = "demo_video"
-RUNBOOK = Path(__file__).resolve().parent.parent / "docs" / "demo-video-runbook.md"
+RUNBOOK = Path(__file__).resolve().parents[2] / "docs" / "demo-video-runbook.md"
 RUNBOOK_LABEL = "📖 How demo videos are made"
 ALL_CUTS = "all cuts"
 

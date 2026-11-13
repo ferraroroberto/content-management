@@ -1,7 +1,7 @@
 r"""Standalone Streamlit entry for the engagement review UI.
 
 Thin wrapper around `engagement.ui` — keeps the legacy launch command
-working while the unified control panel (`app/app.py`) reuses the same
+working while the unified control panel (`tools/app/app.py`) reuses the same
 render functions.
 
 Launch:

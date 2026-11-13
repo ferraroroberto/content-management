@@ -25,7 +25,7 @@ def _entry(**overrides) -> dict:
     entry = {
         "title": "📊 Reporting",
         "description": "Daily numbers pipeline.",
-        "source_globs": ["app/tab_reporting.py"],
+        "source_globs": ["tools/app/tab_reporting.py"],
         "reach": {"label": "📊 reporting"},
         "wait": {"text": "daily numbers"},
         "mask": ['[data-testid="stCode"]'],
@@ -42,8 +42,8 @@ class PlanTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         self.root = Path(self._tmp.name)
-        (self.root / "app").mkdir()
-        (self.root / "app" / "tab_reporting.py").write_text("print('v1')\n", encoding="utf-8")
+        (self.root / "tools" / "app").mkdir(parents=True)
+        (self.root / "tools" / "app" / "tab_reporting.py").write_text("print('v1')\n", encoding="utf-8")
 
     def _plan(self, manifest, **kwargs):
         return engine.plan_features(manifest, repo_root=self.root, **kwargs)
@@ -85,7 +85,7 @@ class PlanTests(unittest.TestCase):
         out = engine.screenshot_path("reporting", self.root)
         out.parent.mkdir(parents=True)
         out.write_bytes(b"png")
-        (self.root / "app" / "tab_reporting.py").write_text("print('v2')\n", encoding="utf-8")
+        (self.root / "tools" / "app" / "tab_reporting.py").write_text("print('v2')\n", encoding="utf-8")
         items = self._plan(_manifest({"reporting": entry}))
         self.assertEqual(items[0].action, engine.ACTION_CAPTURE)
 

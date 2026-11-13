@@ -19,9 +19,9 @@ flowchart TB
   RPIPE["reporting_pipeline.py"]
   PPIPE["planning_pipeline.py --all-wip"]
   NPIPE["newsletter_pipeline.py\nschedule / bootstrap / archive / normalize / build /\nsubstack-draft"]
-  APP["app/app.py — Streamlit control panel\ntab_reporting · tab_planning · tab_newsletter ·\ntab_triage · tab_editorial · tab_engagement · tab_check_ip ·
+  APP["tools/app/app.py — Streamlit control panel\ntab_reporting · tab_planning · tab_newsletter ·\ntab_triage · tab_editorial · tab_engagement · tab_check_ip ·
 tab_podcast · tab_demo_video"]
-  AUTOHEAL["app/autoheal_console.py"]
+  AUTOHEAL["tools/app/autoheal_console.py"]
   PODPIPE["podcast_pipeline.py
 transcribe / clean / select / copy / render /
 episode / covers / package / score"]

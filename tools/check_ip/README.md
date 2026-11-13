@@ -23,7 +23,7 @@ flowchart TB
     SCREEN --> SKILL["/check-ip skill<br/>browser pass"]
     SKILL -->|"proposed verdict only"| STORE
     STORE --> REVIEW["check_ip.review"]
-    REVIEW --> TAB["app/tab_check_ip.py<br/>⚖️ check IP"]
+    REVIEW --> TAB["tools/app/tab_check_ip.py<br/>⚖️ check IP"]
     TAB -->|"Apply — the owner's decision"| STORE
 ```
 

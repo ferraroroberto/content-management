@@ -39,7 +39,7 @@ logging.getLogger("uvicorn.error").addFilter(_no_invalid_http)
 # Suppress ConnectionResetError / BrokenPipeError tracebacks from asyncio callbacks.
 logging.getLogger("asyncio").addFilter(_SuppressConnReset())
 
-sys.argv = ["streamlit", "run", "app/app.py", "--browser.gatherUsageStats=false"]
+sys.argv = ["streamlit", "run", "tools/app/app.py", "--browser.gatherUsageStats=false"]
 
 from streamlit.web import cli as stcli  # noqa: E402
 

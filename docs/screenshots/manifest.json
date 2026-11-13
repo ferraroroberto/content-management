@@ -9,9 +9,9 @@
       "title": "📊 Reporting",
       "description": "Daily-numbers pipeline: pulls the day's metrics from the social APIs into Supabase, syncs Notion, and posts the Substack followers Note. Date picker, skip-Substack and debug toggles, and the live streamed log panel.",
       "source_globs": [
-        "app/app.py",
-        "app/process_runner.py",
-        "app/tab_reporting.py"
+        "tools/app/app.py",
+        "tools/app/process_runner.py",
+        "tools/app/tab_reporting.py"
       ],
       "reach": {
         "label": "reporting",
@@ -36,9 +36,9 @@
       "title": "📅 Editorial",
       "description": "Seeds the Notion editorial calendar: adds any missing day-rows (day · date · DoW) for the current + next calendar month. Idempotent — re-running only fills gaps.",
       "source_globs": [
-        "app/app.py",
-        "app/process_runner.py",
-        "app/tab_editorial.py"
+        "tools/app/app.py",
+        "tools/app/process_runner.py",
+        "tools/app/tab_editorial.py"
       ],
       "reach": {
         "label": "editorial"
@@ -61,9 +61,9 @@
       "title": "📅 Planning",
       "description": "Weekly content scheduler: walks every WIP-* row in the Notion editorial DB across LinkedIn, Instagram (story + post), Twitter, Threads and the weekly video clip — dry-run or live, with per-platform skip toggles.",
       "source_globs": [
-        "app/app.py",
-        "app/process_runner.py",
-        "app/tab_planning.py"
+        "tools/app/app.py",
+        "tools/app/process_runner.py",
+        "tools/app/tab_planning.py"
       ],
       "reach": {
         "label": "planning"
@@ -86,9 +86,9 @@
       "title": "📰 Newsletter",
       "description": "Weekly newsletter pipeline: bootstrap the dedicated Chrome, archive the open article tabs into Notion, normalize author names + URLs, and build the HTML issue — each step runnable alone or chained.",
       "source_globs": [
-        "app/app.py",
-        "app/process_runner.py",
-        "app/tab_newsletter.py"
+        "tools/app/app.py",
+        "tools/app/process_runner.py",
+        "tools/app/tab_newsletter.py"
       ],
       "reach": {
         "label": "newsletter"
@@ -111,9 +111,9 @@
       "title": "🛡️ Engagement",
       "description": "LinkedIn comment triage: scrape the comments on your recent posts, classify each as human / AI / unknown, and review the queues — canned acknowledgements are staged for copy-paste, never auto-sent.",
       "source_globs": [
-        "app/app.py",
-        "app/process_runner.py",
-        "app/tab_engagement.py",
+        "tools/app/app.py",
+        "tools/app/process_runner.py",
+        "tools/app/tab_engagement.py",
         "tools/engagement/ui.py"
       ],
       "reach": {
@@ -142,9 +142,9 @@
       "title": "🧭 Triage",
       "description": "Weekly newsletter inbox → edition shortlist: pick a closed Saturday→Saturday week, run the triage engine (Gmail → links → two-stage scoring → 8+8+8 suggestions stored in Supabase) with the live log, then review the editable table — tick / untick / promote, ⭐ / 🏆, notes — and Apply to persist decisions, learn sender tiers and advance the watermark. A review comment can be distilled into criteria notes you accept one by one. Stage A's engine switch (`legacy` / `jev` / `both` shadow mode) and the `jev_pilot` replay CLI are documented in [`tools/newsletter/README.md`](tools/newsletter/README.md#weekly-engine-step-24-issue-211).",
       "source_globs": [
-        "app/app.py",
-        "app/process_runner.py",
-        "app/tab_triage.py",
+        "tools/app/app.py",
+        "tools/app/process_runner.py",
+        "tools/app/tab_triage.py",
         "tools/newsletter/triage/review.py"
       ],
       "reach": {
@@ -172,9 +172,9 @@
       "title": "⚖️ Check IP",
       "description": "Illustration copyright check: reverse-image-search results for every published illustration, ranked most-reused first. Shows what the /check-ip skill proposed for each link, and the verdict plus follow-up trail the owner sets and saves with Apply. Platform, status and illustration filters; the cost-gated search run sits behind its own expander.",
       "source_globs": [
-        "app/app.py",
-        "app/process_runner.py",
-        "app/tab_check_ip.py",
+        "tools/app/app.py",
+        "tools/app/process_runner.py",
+        "tools/app/tab_check_ip.py",
         "tools/check_ip/review.py"
       ],
       "reach": {
