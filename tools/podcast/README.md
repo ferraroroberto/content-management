@@ -1,4 +1,4 @@
-# podcast/ — episode package pipeline
+# tools/podcast/ — episode package pipeline
 
 Turns one raw two-track interview recording (Riverside: one video per speaker)
 into the full episode package, locally. Nothing is published, posted,
@@ -6,7 +6,7 @@ scheduled or written to Notion. The only Notion access is a read of the Clips
 table for past titles and LinkedIn intros (style examples).
 
 This page is the module reference. **To take an episode from recording to
-published, follow [`docs/podcast-runbook.md`](../docs/podcast-runbook.md)**:
+published, follow [`docs/podcast-runbook.md`](../../docs/podcast-runbook.md)**:
 the ordered steps, who does each (code, LLM or owner), times and costs, the
 publishing checklist and troubleshooting. The Podcast tab shows the same
 runbook in its collapsed "How the podcast pipeline works" card.
@@ -50,7 +50,7 @@ the package files.
 **Review loop.** In the tab, each clip is approved, dropped, or sent back with
 free-text feedback ("at 0:12 'happy' should be 'crappy'", "start at 'sleep'",
 "no punch-ins", "title: why eight hours"). The same review can be recorded
-from a terminal with `python -m podcast.review_cli "<episode folder>" show |
+from a terminal with `python -m tools.podcast.review_cli "<episode folder>" show |
 approve N… | drop N… | pending N… | feedback N "<note>"`. `▶ apply feedback` runs the
 `revise` stage, which re-renders only those clips as a new version (the old one
 stays viewable) and puts them back up for review. `covers` and `package` wait
@@ -69,7 +69,7 @@ The episode facts are private, so they live next to the recording in an
 leaves as `TODO`:
 
 ```powershell
-& .\.venv\Scripts\python.exe -m podcast.init_episode "<episode folder>" --guest "Full Name" --adjective brilliant --link "LinkedIn=https://..."
+& .\.venv\Scripts\python.exe -m tools.podcast.init_episode "<episode folder>" --guest "Full Name" --adjective brilliant --link "LinkedIn=https://..."
 ```
 
 It finds a recorder session (`recorder - <side> - <date time>.mp4`, the

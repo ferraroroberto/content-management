@@ -25,8 +25,8 @@ import uvicorn  # noqa: E402
 from dotenv import load_dotenv  # noqa: E402
 
 from config.logger_config import setup_logger  # noqa: E402
-from podcast.episode import load_podcast_config  # noqa: E402
 from src.runtime_data import runtime_db_path  # noqa: E402
+from tools.podcast.episode import load_podcast_config  # noqa: E402
 from tools.recorder.server import create_app, ensure_links, ice_servers  # noqa: E402
 from tools.recorder.store import ChunkStore  # noqa: E402
 

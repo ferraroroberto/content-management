@@ -32,7 +32,7 @@ from demo_video.storyboard import (
     load_marks,
     media_root,
 )
-from podcast.media import ffmpeg_pipe, probe
+from tools.podcast.media import ffmpeg_pipe, probe
 
 logger = logging.getLogger("demo_video.checks")
 

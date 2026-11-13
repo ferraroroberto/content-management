@@ -20,13 +20,13 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 from common.runtime_files import ensure_folder
-from podcast.clips import load_clips
-from podcast.episode import Episode, work_dir
-from podcast.media import frame_at
-from podcast.metrics import StageRecord
-from podcast.package import load_episode_copy
-from podcast.render import clip_outputs
-from podcast.review_state import kept_clips, load_review
+from tools.podcast.clips import load_clips
+from tools.podcast.episode import Episode, work_dir
+from tools.podcast.media import frame_at
+from tools.podcast.metrics import StageRecord
+from tools.podcast.package import load_episode_copy
+from tools.podcast.render import clip_outputs
+from tools.podcast.review_state import kept_clips, load_review
 
 logger = logging.getLogger("podcast.covers")
 

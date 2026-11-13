@@ -14,8 +14,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import podcast_pipeline  # noqa: E402
-from podcast import review_state, revise  # noqa: E402
-from podcast.episode import Episode  # noqa: E402
+from tools.podcast import review_state, revise  # noqa: E402
+from tools.podcast.episode import Episode  # noqa: E402
 
 FOOTER = "the footer"
 
@@ -278,7 +278,7 @@ class GateTests(unittest.TestCase):
             with mock.patch.dict(podcast_pipeline.STAGES, stages, clear=True), \
                     mock.patch.object(podcast_pipeline, "load_podcast_config", return_value={}), \
                     mock.patch.object(podcast_pipeline, "load_episode", return_value=ep), \
-                    mock.patch("podcast.report.write_report", return_value=Path(d) / "m.md"):
+                    mock.patch("tools.podcast.report.write_report", return_value=Path(d) / "m.md"):
                 podcast_pipeline.main([d, "--stages", "covers,package"])
                 self.assertEqual(ran, [])
                 podcast_pipeline.main([d, "--stages", "covers,package", "--unreviewed"])

@@ -10,7 +10,7 @@ import time
 from typing import Any, Optional
 
 from newsletter.llm import call_with_usage
-from podcast.metrics import StageRecord
+from tools.podcast.metrics import StageRecord
 
 logger = logging.getLogger("podcast.hub")
 

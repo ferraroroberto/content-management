@@ -1,6 +1,6 @@
 """The podcast clip review status: the declared states, the table that reads them and the refused moves.
 
-``podcast/review_state.py`` is the only module that names ``pending`` / ``approved`` / ``changes`` /
+``tools/podcast/review_state.py`` is the only module that names ``pending`` / ``approved`` / ``changes`` /
 ``dropped`` and moves a clip between them. A temp episode folder stands in for ``review.json``.
 """
 
@@ -17,8 +17,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from podcast import review_state  # noqa: E402
-from podcast.review_state import ClipStatus, derive_clip_status  # noqa: E402
+from tools.podcast import review_state  # noqa: E402
+from tools.podcast.review_state import ClipStatus, derive_clip_status  # noqa: E402
 
 DERIVE_TABLE = (
     ("pending", ClipStatus.PENDING),

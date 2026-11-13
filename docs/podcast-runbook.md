@@ -1,7 +1,7 @@
 # Podcast runbook: from recording to published
 
 The ordered procedure for one episode, start to finish. The module reference
-(stages, outputs, config) is [`podcast/README.md`](../podcast/README.md); the
+(stages, outputs, config) is [`tools/podcast/README.md`](../tools/podcast/README.md); the
 recorder's is [`tools/recorder/README.md`](../tools/recorder/README.md). This page only
 says what to do, in which order, and who does it. The `/podcast` skill
 (`.claude/skills/podcast/SKILL.md`) drives these same steps with the owner in
@@ -88,7 +88,7 @@ aligned, so the `sync` stage passes through.
 1. **[code]** Generate it from the tracks:
 
    ```powershell
-   & .\.venv\Scripts\python.exe -m podcast.init_episode "<episode folder>" --guest "Full Name" --adjective brilliant --link "LinkedIn=https://..."
+   & .\.venv\Scripts\python.exe -m tools.podcast.init_episode "<episode folder>" --guest "Full Name" --adjective brilliant --link "LinkedIn=https://..."
    ```
 
    It finds the recorder's main recordings or the Riverside per-speaker
@@ -100,7 +100,7 @@ aligned, so the `sync` stage passes through.
    `episode.json` without `--force`. Seconds; no model.
 2. **[human]** Fill what it leaves as `TODO` (listed at the end of its run),
    and check the rest. The schema is in
-   [`podcast/README.md`](../podcast/README.md#the-episode-folder); the facts
+   [`tools/podcast/README.md`](../tools/podcast/README.md#the-episode-folder); the facts
    only the owner knows:
    - `guest`, `guest_display` (e.g. with a title), `guest_first`,
      `guest_pronoun_possessive` (`--pronoun`, default `their`).
@@ -178,9 +178,9 @@ Outside the app, the same review is recorded from a terminal (it writes the
 same `review.json`):
 
 ```powershell
-& .\.venv\Scripts\python.exe -m podcast.review_cli "<episode folder>" show
-& .\.venv\Scripts\python.exe -m podcast.review_cli "<episode folder>" approve 3 5
-& .\.venv\Scripts\python.exe -m podcast.review_cli "<episode folder>" feedback 4 "at 0:12 'happy' should be 'crappy'"
+& .\.venv\Scripts\python.exe -m tools.podcast.review_cli "<episode folder>" show
+& .\.venv\Scripts\python.exe -m tools.podcast.review_cli "<episode folder>" approve 3 5
+& .\.venv\Scripts\python.exe -m tools.podcast.review_cli "<episode folder>" feedback 4 "at 0:12 'happy' should be 'crappy'"
 ```
 
 **[LLM: `revise`] + [code]** **▶ apply feedback (N clips)** (or
@@ -248,7 +248,7 @@ To compare the pipeline's result with a package made by hand, run it in a
 **separate trial folder**, so the existing package is never touched:
 
 ```powershell
-& .\.venv\Scripts\python.exe -m podcast.init_episode "<trials root>\<episode name> (trial)" --from "<episode folder>"
+& .\.venv\Scripts\python.exe -m tools.podcast.init_episode "<trials root>\<episode name> (trial)" --from "<episode folder>"
 ```
 
 **[code]** The trial folder gets its own `episode.json` that reads the source's

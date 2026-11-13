@@ -25,7 +25,7 @@ from planning.videos import videos_session  # noqa: E402
 
 def _no_tool():
     """``podcast.media`` finds neither ffprobe nor ffmpeg on PATH."""
-    return mock.patch("podcast.media._tool", side_effect=RuntimeError("ffprobe not found on PATH"))
+    return mock.patch("tools.podcast.media._tool", side_effect=RuntimeError("ffprobe not found on PATH"))
 
 
 def _completed(payload: dict, returncode: int = 0, stderr: bytes = b"") -> subprocess.CompletedProcess:
@@ -42,8 +42,8 @@ class _FakeTools:
 
     def __init__(self, test: unittest.TestCase, run: mock.Mock):
         self.run = run
-        for target, new in (("podcast.media._tool", lambda name: f"/fake/{name}"),
-                            ("podcast.media.subprocess.run", run)):
+        for target, new in (("tools.podcast.media._tool", lambda name: f"/fake/{name}"),
+                            ("tools.podcast.media.subprocess.run", run)):
             patcher = mock.patch(target, new)
             patcher.start()
             test.addCleanup(patcher.stop)

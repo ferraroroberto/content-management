@@ -78,7 +78,7 @@ Six surfaces, one repo:
   never files a report, and cannot write the verdict. See
   [`tools/check_ip/README.md`](tools/check_ip/README.md).
 
-- **Podcast** (`podcast/`, `podcast_pipeline.py`) — turns a raw two-track
+- **Podcast** (`tools/podcast/`, `podcast_pipeline.py`) — turns a raw two-track
   interview recording into the episode package, locally: a cleaned
   transcript (whisper per track, with a mic-bleed gate and loop repair),
   15 clips in 1:1 and 9:16 with word-timed captions in the house style
@@ -95,7 +95,7 @@ Six surfaces, one repo:
   checklist; it can re-run an episode edited by hand in a separate trial
   folder. Start to finish, one episode:
   [`docs/podcast-runbook.md`](docs/podcast-runbook.md); module reference:
-  [`podcast/README.md`](podcast/README.md). The recorder (`tools/recorder/`,
+  [`tools/podcast/README.md`](tools/podcast/README.md). The recorder (`tools/recorder/`,
   `recorder_server.py`) holds the interview's peer-to-peer video call and
   records each side in the browser, uploading into the episode folder,
   replacing Riverside for that job: [`tools/recorder/README.md`](tools/recorder/README.md).
@@ -181,9 +181,9 @@ content-management/                   # repo root
 │   ├── reputation/                   # per-commenter reputation feedback loop
 │   └── db/                           # Supabase schema (commenters + comments tables)
 ├── tools/                            # one package per tool (see docs/layout.md)
+│   ├── podcast/                          # episode package: transcript → clips (1:1 + 9:16) → copy, covers, docx, website HTML
 │   ├── recorder/                         # self-hosted two-side recorder: page + chunk upload into the episode folder
 │   └── check_ip/                     # illustration copyright check (Google Lens → SQLite → triage tab)
-├── podcast/                          # episode package: transcript → clips (1:1 + 9:16) → copy, covers, docx, website HTML
 ├── demo_video/                       # demo videos: demo.json storyboard → Remotion template (remotion/) → MP4 per cut
 ├── app/                              # Streamlit control panel (tabs: reporting/editorial/planning/newsletter/triage/engagement/check-IP/podcast/demo-video)
 ├── config/                           # config.json, mapping.json, logger_config, chrome_launch, console
@@ -242,7 +242,7 @@ gotchas, files.
   [`tools/check_ip/README.md`](tools/check_ip/README.md)
 - **Podcast** —
   [`docs/podcast-runbook.md`](docs/podcast-runbook.md) ·
-  [`podcast/README.md`](podcast/README.md) ·
+  [`tools/podcast/README.md`](tools/podcast/README.md) ·
   [`tools/recorder/README.md`](tools/recorder/README.md)
 - **Demo videos** —
   [`docs/demo-video-runbook.md`](docs/demo-video-runbook.md) ·

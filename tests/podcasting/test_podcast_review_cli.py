@@ -13,8 +13,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from podcast import review_cli, review_state  # noqa: E402
-from podcast.episode import load_episode  # noqa: E402
+from tools.podcast import review_cli, review_state  # noqa: E402
+from tools.podcast.episode import load_episode  # noqa: E402
 
 CFG = {"package_dirname": "podcast package"}
 

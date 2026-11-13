@@ -27,8 +27,8 @@ from pathlib import Path
 from typing import Optional
 
 from common.runtime_files import copy_file_to, ensure_folder, write_text_at
-from podcast.captions import LAYOUTS
-from podcast.clips import (
+from tools.podcast.captions import LAYOUTS
+from tools.podcast.clips import (
     clip_text,
     instagram_caption,
     linkedin_post,
@@ -36,7 +36,7 @@ from podcast.clips import (
     save_clips,
     write_clips_md,
 )
-from podcast.edit import (
+from tools.podcast.edit import (
     CLIP_WORDS_FILE,
     FPS,
     LEAD_S,
@@ -50,12 +50,12 @@ from podcast.edit import (
     output_words,
     remap,
 )
-from podcast.episode import Episode, work_dir
-from podcast.hub import ask_json
-from podcast.metrics import StageRecord
-from podcast.render import clip_filename, clip_outputs, prepare_fonts, render_clip
-from podcast.review import _same, apply_corrections, review_clip
-from podcast.review_state import (
+from tools.podcast.episode import Episode, work_dir
+from tools.podcast.hub import ask_json
+from tools.podcast.metrics import StageRecord
+from tools.podcast.render import clip_filename, clip_outputs, prepare_fonts, render_clip
+from tools.podcast.review import _same, apply_corrections, review_clip
+from tools.podcast.review_state import (
     ClipStatus,
     clip_state,
     load_review,
@@ -64,7 +64,7 @@ from podcast.review_state import (
     to_revise,
     update,
 )
-from podcast.transcribe import load_words
+from tools.podcast.transcribe import load_words
 
 logger = logging.getLogger("podcast.revise")
 

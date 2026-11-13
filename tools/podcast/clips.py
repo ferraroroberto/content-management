@@ -14,10 +14,10 @@ import logging
 from pathlib import Path
 
 from common.runtime_files import ensure_folder, write_text_at
-from podcast.episode import Episode, work_dir
-from podcast.hub import ask_json
-from podcast.metrics import StageRecord
-from podcast.transcribe import fmt_ts, load_words, sentences
+from tools.podcast.episode import Episode, work_dir
+from tools.podcast.hub import ask_json
+from tools.podcast.metrics import StageRecord
+from tools.podcast.transcribe import fmt_ts, load_words, sentences
 
 logger = logging.getLogger("podcast.clips")
 
