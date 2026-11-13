@@ -1,4 +1,4 @@
-"""Render one cut through the Remotion template (``demo_video/remotion``)."""
+"""Render one cut through the Remotion template (``tools/demo_video/remotion``)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from typing import Optional
 
 from common.runtime_files import ensure_folder, write_text_at
 from config.no_window import NO_WINDOW
-from demo_video.storyboard import Cut, Demo, media_root, resolve_cut
+from tools.demo_video.storyboard import Cut, Demo, media_root, resolve_cut
 from tools.podcast.media import probe
 
 logger = logging.getLogger("demo_video.render")

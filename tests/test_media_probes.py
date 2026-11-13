@@ -23,7 +23,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from demo_video import media as demo_media  # noqa: E402
+from tools.demo_video import media as demo_media  # noqa: E402
 from tools.podcast import init_episode, sync  # noqa: E402
 from tools.podcast.media import NO_WINDOW  # noqa: E402
 from tools.recorder import store  # noqa: E402

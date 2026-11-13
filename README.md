@@ -100,7 +100,7 @@ Six surfaces, one repo:
   records each side in the browser, uploading into the episode folder,
   replacing Riverside for that job: [`tools/recorder/README.md`](tools/recorder/README.md).
 
-- **Demo videos** (`demo_video/`, `demo_video_pipeline.py`) — turns screen
+- **Demo videos** (`tools/demo_video/`, `demo_video_pipeline.py`) — turns screen
   recordings of an app plus music into an animated product demo video
   (16:9, 1:1 or 4:5) from one `demo.json` storyboard, rendered through a
   data-driven Remotion template: a new video is new data, not new code.
@@ -110,7 +110,7 @@ Six surfaces, one repo:
   with the owner, from the message brief to the MP4s; the control panel's
   🎬 demo video section shows the runbook and runs the deterministic
   stages. Start to finish: [`docs/demo-video-runbook.md`](docs/demo-video-runbook.md);
-  module reference: [`demo_video/README.md`](demo_video/README.md).
+  module reference: [`tools/demo_video/README.md`](tools/demo_video/README.md).
 
 The four content pipelines read from the same Notion editorial database;
 check IP is independent of Notion and keeps its own local store. Each per-folder
@@ -176,6 +176,7 @@ content-management/                   # repo root
 │                                     # substack_draft pushes the same lists to a private Substack draft
 │   └── triage/                       # Gmail inbox → edition shortlist (criteria, engine, Supabase store, review, lessons)
 ├── tools/                            # one package per tool (see docs/layout.md)
+│   ├── demo_video/                       # demo videos: demo.json storyboard → Remotion template (remotion/) → MP4 per cut
 │   ├── engagement/                       # anti-AI comment triage (rules → sklearn → LLM fallback)
 │   │   ├── linkedin/                     # LinkedIn comment scraper
 │   │   ├── classify/                     # layered classifier + phrase config
@@ -184,7 +185,6 @@ content-management/                   # repo root
 │   ├── podcast/                          # episode package: transcript → clips (1:1 + 9:16) → copy, covers, docx, website HTML
 │   ├── recorder/                         # self-hosted two-side recorder: page + chunk upload into the episode folder
 │   └── check_ip/                     # illustration copyright check (Google Lens → SQLite → triage tab)
-├── demo_video/                       # demo videos: demo.json storyboard → Remotion template (remotion/) → MP4 per cut
 ├── app/                              # Streamlit control panel (tabs: reporting/editorial/planning/newsletter/triage/engagement/check-IP/podcast/demo-video)
 ├── config/                           # config.json, mapping.json, logger_config, chrome_launch, console
 │   └── doc_capture/                  # deterministic control-panel screenshot engine (README tour)
@@ -246,7 +246,7 @@ gotchas, files.
   [`tools/recorder/README.md`](tools/recorder/README.md)
 - **Demo videos** —
   [`docs/demo-video-runbook.md`](docs/demo-video-runbook.md) ·
-  [`demo_video/README.md`](demo_video/README.md) ·
+  [`tools/demo_video/README.md`](tools/demo_video/README.md) ·
   [`docs/demo-video-driver-playbook.md`](docs/demo-video-driver-playbook.md)
 - **Shared** — [`config/README.md`](config/README.md)
 

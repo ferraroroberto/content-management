@@ -14,10 +14,10 @@ if str(REPO_ROOT) not in sys.path:
 
 from pydantic import ValidationError  # noqa: E402
 
-from demo_video.record import Runner, load_driver  # noqa: E402
-from demo_video.storyboard import Recording, Step  # noqa: E402
+from tools.demo_video.record import Runner, load_driver  # noqa: E402
+from tools.demo_video.storyboard import Recording, Step  # noqa: E402
 
-EXAMPLE = REPO_ROOT / "demo_video" / "examples" / "facilitation-suite"
+EXAMPLE = REPO_ROOT / "tools" / "demo_video" / "examples" / "facilitation-suite"
 
 
 class FakeClock:

@@ -15,11 +15,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from demo_video import checks, media  # noqa: E402
-from demo_video.storyboard import Demo, load_demo  # noqa: E402
+from tools.demo_video import checks, media  # noqa: E402
+from tools.demo_video.storyboard import Demo, load_demo  # noqa: E402
 from tools.podcast.media import NO_WINDOW  # noqa: E402
 
-EXAMPLE = REPO_ROOT / "demo_video" / "examples" / "facilitation-suite"
+EXAMPLE = REPO_ROOT / "tools" / "demo_video" / "examples" / "facilitation-suite"
 HAS_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
 
 

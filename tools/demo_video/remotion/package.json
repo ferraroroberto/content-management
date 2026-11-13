@@ -1,7 +1,7 @@
 {
   "name": "content-management-demo-video",
   "private": true,
-  "description": "Remotion template for demo_video: renders a resolved demo.json (see demo_video/README.md).",
+  "description": "Remotion template for demo_video: renders a resolved demo.json (see tools/demo_video/README.md).",
   "scripts": {
     "studio": "remotion studio src/index.ts",
     "typecheck": "tsc -p ."

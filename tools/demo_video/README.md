@@ -1,8 +1,8 @@
-# demo_video/ — product demo videos from a storyboard
+# tools/demo_video/ — product demo videos from a storyboard
 
 Turns screen recordings of an app plus music into a finished, animated demo video (16:9, 1:1 or 4:5), from one `demo.json` storyboard. The renderer is a [Remotion](https://www.remotion.dev/) template driven entirely by data: a new video is a new `demo.json`, not new code. Nothing is published, posted or uploaded.
 
-To make a demo, run the **`/demo-video` skill** in Claude Code from this repo. It follows [`docs/demo-video-runbook.md`](../docs/demo-video-runbook.md) with you, from the message brief to the MP4s. The control panel's 🎬 demo video section shows the same runbook and runs the deterministic stages. This page is the module reference, covering the renderer, the prep/checks stage, the recorder, and the skill + runbook + tab.
+To make a demo, run the **`/demo-video` skill** in Claude Code from this repo. It follows [`docs/demo-video-runbook.md`](../../docs/demo-video-runbook.md) with you, from the message brief to the MP4s. The control panel's 🎬 demo video section shows the same runbook and runs the deterministic stages. This page is the module reference, covering the renderer, the prep/checks stage, the recorder, and the skill + runbook + tab.
 
 ```mermaid
 flowchart LR
@@ -17,7 +17,7 @@ flowchart LR
     V --> C{check<br/>overrun · privacy · licence}
     C -->|all pass| R[resolve_cut<br/>props per cut]
     C -->|fail / unknown| S[stop: nothing renders]
-    R --> X[Remotion template<br/>demo_video/remotion]
+    R --> X[Remotion template<br/>tools/demo_video/remotion]
     D[media/<br/>clips + music] --> X
     X --> O[out/&lt;cut&gt;.mp4<br/>or .preview.mp4]
     O --> Q[verify + contact sheet]
@@ -48,7 +48,7 @@ flowchart LR
   - runs every take in real Chrome at 1920×1080, one browser context per page;
   - writes `rec/<lang>/<page>.webm` and the marks file, for each language the selected cuts use. Old measured states are dropped, and `prep` measures them again.
 
-  How to write a driver for a new app: [`docs/demo-video-driver-playbook.md`](../docs/demo-video-driver-playbook.md).
+  How to write a driver for a new app: [`docs/demo-video-driver-playbook.md`](../../docs/demo-video-driver-playbook.md).
 - **`prep`:**
   - transcodes each clip's raw `source` recording to CFR H.264 (when the clip is missing or older);
   - measures every `legend.measure` state timeline into the marks file (`_states`);
@@ -73,7 +73,7 @@ flowchart LR
 
 A final 1080p render takes about 2½–3 min per 83 s cut on this PC.
 
-**One-time setup:** `npm install` in `demo_video/remotion/` (Node.js 20+). `node_modules` is gitignored and lives there, never under OneDrive. The optional `demo_video.node_root` in `config/config.json` points at another install.
+**One-time setup:** `npm install` in `tools/demo_video/remotion/` (Node.js 20+). `node_modules` is gitignored and lives there, never under OneDrive. The optional `demo_video.node_root` in `config/config.json` points at another install.
 
 ## A demo folder
 
@@ -193,4 +193,4 @@ A `caption` is `{kicker?, title, sub?, color?, size?, width?}`. Colours are a pa
 | `remotion/src/scenes.tsx` | One component per scene type, landscape and stacked layouts |
 | `remotion/src/Demo.tsx`, `Root.tsx` | The scene sequence and soundtrack; one `Demo` composition sized from the props |
 | `examples/facilitation-suite/` | The worked example: `demo.json` (with its `recording`), `marks.json`, a synthetic `roster.txt`, and `driver.py`, the reference throwaway driver |
-| `../demo_video_pipeline.py` | The CLI |
+| `../../demo_video_pipeline.py` | The CLI |

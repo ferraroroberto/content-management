@@ -7,9 +7,9 @@ import logging
 from pathlib import Path
 
 from common.runtime_files import ensure_folder, write_text_at
-from demo_video import media
-from demo_video.checks import state_timeline
-from demo_video.storyboard import (
+from tools.demo_video import media
+from tools.demo_video.checks import state_timeline
+from tools.demo_video.storyboard import (
     STATES_KEY,
     Demo,
     WindowStates,
