@@ -23,12 +23,12 @@ import unittest
 from datetime import date
 from pathlib import Path
 
-from planning.row_outcome import RowStatus, derive_row_status
-from planning.videos.schedule_videos_posts import _aggregate_row_status, _RowState
+from tools.planning.row_outcome import RowStatus, derive_row_status
+from tools.planning.videos.schedule_videos_posts import _aggregate_row_status, _RowState
 
 INSTAGRAM_MODULE_PATH = (
     Path(__file__).resolve().parent.parent
-    / "planning" / "instagram" / "schedule_instagram_posts.py"
+    / "tools" / "planning" / "instagram" / "schedule_instagram_posts.py"
 )
 
 

@@ -1,6 +1,6 @@
 # engagement — anti-AI comment triage
 
-Fourth pipeline in this repo (sibling to `planning/`, `tools/reporting/`, `tools/newsletter/`). Defends my comment threads against AI-generated noise. Two outputs:
+Fourth pipeline in this repo (sibling to `tools/planning/`, `tools/reporting/`, `tools/newsletter/`). Defends my comment threads against AI-generated noise. Two outputs:
 
 1. **Real-comments inbox** — comments worth my personal reply, surfaced in a clean Streamlit view.
 2. **AI-triage queue** — staged canned acknowledgements I one-click approve in a batch.
@@ -10,7 +10,7 @@ Fourth pipeline in this repo (sibling to `planning/`, `tools/reporting/`, `tools
 ## What's here
 
 - LinkedIn only (other platforms = Phase 4).
-- Scraper that reads my recent posts from the Notion editorial DB (where `link LI` is set) and walks each one in the existing `planning/linkedin/chrome_user_data` session.
+- Scraper that reads my recent posts from the Notion editorial DB (where `link LI` is set) and walks each one in the existing `tools/planning/linkedin/chrome_user_data` session.
 - **Layered classifier**:
   1. **Rules** (Phase 1) — whitelist / blacklist / generic-praise / short / no-personal-token / emoji-only / exact-text-duplicate / sub-2-min-after-post. Tunable via `tools/engagement/classify/phrases.json`.
   2. **Local sklearn model** (Phase 2a) — logistic regression on TF-IDF (word 1-2 + char_wb 3-5) plus six per-comment scalars, trained on accumulated commenter-level whitelist/blacklist labels. Called only on rows the rules layer left as `unknown`. Lossless when not trained yet — pipeline behaves identically to rules-only.
@@ -52,7 +52,7 @@ flowchart LR
 
 1. Install deps: `& .\.venv\Scripts\python.exe -m pip install -r requirements.txt`
 2. Apply schema: open the Supabase dashboard → **SQL Editor** → paste `tools/engagement/db/schema.sql` → **Run**. Idempotent. Re-run this whenever `schema.sql` changes — the scrape verifies the live tables against it on startup and refuses to run against a database that is behind (see the schema-preflight gotcha below).
-3. Make sure `planning/linkedin/chrome_user_data/` exists (the engagement scraper reuses it). If not: `& .\.venv\Scripts\python.exe -m planning.linkedin.bootstrap_session`.
+3. Make sure `tools/planning/linkedin/chrome_user_data/` exists (the engagement scraper reuses it). If not: `& .\.venv\Scripts\python.exe -m tools.planning.linkedin.bootstrap_session`.
 
 No new secrets needed — uses `config.supabase.service_role_key` and `config.notion.api_token` that the rest of the repo already uses.
 

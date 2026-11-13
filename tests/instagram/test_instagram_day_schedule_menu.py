@@ -24,7 +24,7 @@ import unittest
 from datetime import date
 from unittest import mock
 
-from planning.instagram import instagram_composer as composer
+from tools.planning.instagram import instagram_composer as composer
 
 FIXTURE = """
 <style>

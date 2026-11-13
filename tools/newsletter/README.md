@@ -66,7 +66,7 @@ flowchart LR
    & .\.venv\Scripts\python.exe -m tools.newsletter.bootstrap_session
    ```
    Opens Chrome against `tools/newsletter/chrome_user_data/` (gitignored, same
-   pattern as `planning/linkedin/chrome_user_data/`). Sign in, press
+   pattern as `tools/planning/linkedin/chrome_user_data/`). Sign in, press
    Enter to save. Future runs reuse the session.
 
 ## Weekly run — the orchestrator
@@ -507,15 +507,15 @@ database id is the `books_db_id` key in the `newsletter_archive` config block
 
 - **It never publishes.** The draft is private and emails no one — publishing
   stays a deliberate action in the Substack editor. There is no `--confirm`
-  flag here by design (`planning/substack/api_create.py` is the manual path that
+  flag here by design (`tools/planning/substack/api_create.py` is the manual path that
   can publish).
 - **Not part of `create` / `all`.** It writes to an external platform, so it
   stays an explicit, separately re-runnable step.
 - `--delete-after` creates and immediately deletes the draft — the smoke test
   for "is my cookie still good and does the body build cleanly?".
-- Needs the harvested API session (`planning/substack/api_session.json`, ~89-day
+- Needs the harvested API session (`tools/planning/substack/api_session.json`, ~89-day
   cookie). On expiry the step exits `2` with a single line telling you to re-run
-  `python -m planning.substack.extract_session`.
+  `python -m tools.planning.substack.extract_session`.
 
 Article titles are inserted as **literal text**, never parsed as markdown —
 titles scraped from arbitrary sites routinely contain `*`, `[` or backticks that

@@ -150,7 +150,7 @@ def get_api_data(platform_key: str, config: Optional[dict[str, Any]], reference_
 
     * ``"playwright"`` → delegates to ``reporting.scrape_client.<platform>.fetch_<data_type>``
       which drives the platform's persistent Chrome profile via the existing
-      ``planning/<platform>/<platform>_session.py`` session class (stealth
+      ``tools/planning/<platform>/<platform>_session.py`` session class (stealth
       launch comes from ``config/chrome_launch.py``). Retried per
       ``SCRAPE_RETRY_BACKOFF``.
     * ``"native"`` → delegates to ``reporting.scrape_client.<platform>_native.fetch_<data_type>``

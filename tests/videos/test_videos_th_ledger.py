@@ -29,9 +29,9 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from planning import _scheduler_main as sm  # noqa: E402
-from planning.videos import schedule_videos_posts as svp  # noqa: E402
-from planning.videos.videos_ledger import TagAlongLedger  # noqa: E402
+from tools.planning import _scheduler_main as sm  # noqa: E402
+from tools.planning.videos import schedule_videos_posts as svp  # noqa: E402
+from tools.planning.videos.videos_ledger import TagAlongLedger  # noqa: E402
 
 
 class _LedgerTestCase(unittest.TestCase):

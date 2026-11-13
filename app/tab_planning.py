@@ -23,7 +23,7 @@ from app.process_runner import (
     start_pipeline,
     start_skill_console,
 )
-from planning import run_state
+from tools.planning import run_state
 
 PIPELINE_NAME = "planning"
 AUTOHEAL_NAME = "planning-autoheal"

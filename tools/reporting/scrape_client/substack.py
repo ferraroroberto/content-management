@@ -1,6 +1,6 @@
 """Substack Playwright scraper — fetches profile + posts via the logged-in browser.
 
-Reuses ``planning/substack`` persistent profile via ``SubstackSession``.
+Reuses ``tools/planning/substack`` persistent profile via ``SubstackSession``.
 
 Profile follower count: drives ``substack.stats_audience_url`` and reads the
 ``"Total followers (N)"`` line — this is the same logic that used to live in
@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.append(str(Path(__file__).resolve().parents[3]))
-from planning.substack.substack_session import (  # noqa: E402
+from tools.planning.substack.substack_session import (  # noqa: E402
     LoginRequiredError,
     SubstackSession,
     load_substack_config,

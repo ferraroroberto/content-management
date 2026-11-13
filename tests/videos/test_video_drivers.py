@@ -20,8 +20,8 @@ from unittest import mock
 
 from playwright.sync_api import TimeoutError as PWTimeoutError
 
-from planning._session_base import LoginRequiredError
-from planning.videos import videos_instagram, videos_threads, videos_twitter
+from tools.planning._session_base import LoginRequiredError
+from tools.planning.videos import videos_instagram, videos_threads, videos_twitter
 
 CFG = {"feed_url": "https://feed"}
 

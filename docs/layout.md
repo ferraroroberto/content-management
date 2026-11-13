@@ -16,6 +16,7 @@ The preset folders:
 
 Tool packages under `tools/` (import as `tools.<tool>`):
 
+- `tools/planning/` — weekly publishing through each platform's native scheduler. One subpackage per platform: `linkedin/`, `instagram/`, `twitter/`, `threads/`, `substack/`, plus `videos/` for the weekly cross-platform video.
 - `tools/reporting/` — daily numbers: APIs → Supabase → Notion. `scrape_client/` (HTTP/Playwright scrapers), `social_client/` (RapidAPI fetchers), `process/` (transform, upload, aggregate), `notion/` (editorial helpers and Notion sync).
 - `tools/newsletter/` — the weekly newsletter (archive, normalize, build, Substack draft). `triage/` turns the Gmail label into an edition shortlist.
 - `tools/demo_video/` — demo videos: storyboard → Remotion template (`remotion/`) → MP4 per cut; `examples/` holds a sample storyboard.
@@ -26,7 +27,6 @@ Tool packages under `tools/` (import as `tools.<tool>`):
 
 Tool roots still declared in `extra_roots`:
 
-- `planning/` — weekly publishing through each platform's native scheduler. One subpackage per platform: `linkedin/`, `instagram/`, `twitter/`, `threads/`, `substack/`, plus `videos/` for the weekly cross-platform video.
 - `app/` — the Streamlit control panel: one `tab_*.py` per tool, routed from `app.py`. UI code lives here and in `tools/engagement/ui.py` and `tools/engagement/review_app.py`.
 
 Hidden folders: `.streamlit/` (Streamlit config), `.claude/skills/` (the repo's skills; Codex and Pi reach them through per-skill discovery links that fleet-config generates and git ignores, so a new skill needs no second copy).

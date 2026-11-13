@@ -1,4 +1,4 @@
-"""Regression test for issue #321 finding 2: ``planning/_probe.py`` crashed with
+"""Regression test for issue #321 finding 2: ``tools/planning/_probe.py`` crashed with
 ``AttributeError`` because ``page.accessibility`` no longer exists in the
 installed Playwright (1.61.0+; ``hasattr(Page, "accessibility")`` is ``False``).
 The fix switches to ``page.locator("body").aria_snapshot()``, which returns an
@@ -14,7 +14,7 @@ import sys
 import types
 import unittest
 
-import planning._probe as probe_mod
+import tools.planning._probe as probe_mod
 
 
 class ParseAriaSnapshotTests(unittest.TestCase):

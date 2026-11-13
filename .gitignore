@@ -20,33 +20,28 @@ logs/
 config.json
 .env
 **/.env
-tools/reporting/process/.env
 
 # Per-platform dedicated Chrome user-data directories (cookies, profile) — never commit.
 # These are SEPARATE profiles created by each platform's bootstrap script; they have
-# nothing to do with the user's regular ~/Chrome User Data profile.
-planning/substack/chrome_user_data/
-planning/linkedin/chrome_user_data/
+# nothing to do with the user's regular ~/Chrome User Data profile. Matched at any depth,
+# so a profile left at a tool's old root path stays ignored.
+chrome_user_data/
 # Native Substack API session cache (live auth cookies + UA) — never commit.
-/planning/substack/api_session.json
-planning/twitter/chrome_user_data/
-planning/threads/chrome_user_data/
-planning/instagram/chrome_user_data/
-tools/newsletter/chrome_user_data/
+**/planning/substack/api_session.json
 
-# Ignore contents of any results directory (root and tools/reporting/ package)
+# Ignore contents of any results directory (root and the reporting package, at its old and new path)
 results/*
 !results/README.md
-tools/reporting/results/*
+**/reporting/results/*
 
 # Ignore Python cache files
 __pycache__/
 
 # demo_video's Remotion template: npm install output
-tools/demo_video/remotion/node_modules/
+**/demo_video/remotion/node_modules/
 
 # Ignore Notion sample DB
-/tools/reporting/notion/database_sample
+**/reporting/notion/database_sample
 
 # supabase cli state
 supabase/.temp/cli-latest
@@ -63,17 +58,17 @@ supabase/.branches/_current_branch
 /tmp
 
 # Local sklearn classifier artifact (user-specific, trained from accumulated labels).
-tools/engagement/classify/local_model.joblib
-tools/engagement/classify/local_model.json
+**/engagement/classify/local_model.joblib
+**/engagement/classify/local_model.json
 
 # LLM fallback verdict cache (per-machine performance cache; truth lives in Supabase).
-tools/engagement/classify/.llm_cache.json
+**/engagement/classify/.llm_cache.json
 # Launcher scratch (ephemeral images/logs written by the tray launcher)
 .launcher-tmp/
 
 # Owner-accepted triage lessons — exported from Supabase triage_lessons on every accept/save;
 # local, regenerated, would otherwise mean a public commit every week
-tools/newsletter/triage/lessons.json
+**/newsletter/triage/lessons.json
 
 # Google OAuth client + tokens (Gmail read-only for newsletter triage) — never commit
 auth/

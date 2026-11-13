@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import unittest
 
-from planning.linkedin.linkedin_labels import DONE_CTRL_SEL, DONE_TEXTS
+from tools.planning.linkedin.linkedin_labels import DONE_CTRL_SEL, DONE_TEXTS
 
 
 class DoneControlSelectorTests(unittest.TestCase):

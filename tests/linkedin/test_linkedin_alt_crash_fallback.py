@@ -19,7 +19,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from planning.linkedin import schedule_linkedin_posts as sl
+from tools.planning.linkedin import schedule_linkedin_posts as sl
 
 
 class _FakePage:

@@ -18,8 +18,8 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from planning._session_base import LoginRequiredError
-from planning.linkedin.linkedin_session import LinkedInSession
+from tools.planning._session_base import LoginRequiredError
+from tools.planning.linkedin.linkedin_session import LinkedInSession
 from tools.reporting.scrape_client import linkedin as li
 from tools.reporting.scrape_client.base import ScrapeError
 

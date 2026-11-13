@@ -14,17 +14,17 @@ import ast
 import unittest
 from pathlib import Path
 
-from planning.threads.threads_composer import discard_composer
-from planning.twitter.twitter_composer import close_schedule_modal
+from tools.planning.threads.threads_composer import discard_composer
+from tools.planning.twitter.twitter_composer import close_schedule_modal
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Every module that drives a Threads or Twitter composer from outside the composer.
 _CALLERS = {
-    "planning/threads/schedule_threads_posts.py": "planning.threads.threads_labels",
-    "planning/videos/videos_threads.py": "planning.threads.threads_labels",
-    "planning/twitter/schedule_twitter_posts.py": "planning.twitter.twitter_labels",
-    "planning/videos/videos_twitter.py": "planning.twitter.twitter_labels",
+    "tools/planning/threads/schedule_threads_posts.py": "tools.planning.threads.threads_labels",
+    "tools/planning/videos/videos_threads.py": "tools.planning.threads.threads_labels",
+    "tools/planning/twitter/schedule_twitter_posts.py": "tools.planning.twitter.twitter_labels",
+    "tools/planning/videos/videos_twitter.py": "tools.planning.twitter.twitter_labels",
 }
 
 

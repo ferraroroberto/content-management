@@ -5,7 +5,7 @@ Six surfaces, one repo:
 - **Reporting** (`tools/reporting/`, `reporting_pipeline.py`) — pulls daily
   metrics from social media APIs, processes through Supabase, syncs to
   Notion, and runs the daily Substack Note.
-- **Planning** (`planning/`, `planning_pipeline.py`) — schedules next
+- **Planning** (`tools/planning/`, `planning_pipeline.py`) — schedules next
   week's (or weeks') content on LinkedIn, Instagram (+ Meta planner story
   + post), Twitter, Threads, and the weekly **video** clip (cross-platform
   LI/IG/TW/TH at 19:00 Madrid + a Substack video Note posted by the daily
@@ -149,7 +149,7 @@ flowchart TB
 LinkedIn · Instagram · Twitter/X · Threads · Substack (Note posting, follower
 count and note engagement — all three with a browser-free path over Substack's
 own HTTP API). All five have a Notion editorial column set; four have a
-native-scheduler driver under `planning/`.
+native-scheduler driver under `tools/planning/`.
 
 ## Project structure
 
@@ -157,15 +157,15 @@ native-scheduler driver under `planning/`.
 
 ```
 content-management/                   # repo root
-├── planning/                         # weekly publishing — drives platform schedulers
-│   ├── linkedin/                     # LinkedIn weekly post scheduler
-│   ├── instagram/                    # Meta planner (story + post) + IG→TW/TH/SB clone step
-│   ├── twitter/                      # X /home composer scheduler
-│   ├── threads/                      # threads.com composer + calendar scheduler
-│   ├── substack/                     # Substack Note publisher + followers scraper
-│   │                                 # (with a video-day branch for the weekly clip)
-│   └── videos/                       # weekly cross-platform video orchestrator
 ├── tools/                            # one package per tool (see docs/layout.md)
+│   ├── planning/                         # weekly publishing — drives platform schedulers
+│   │   ├── linkedin/                     # LinkedIn weekly post scheduler
+│   │   ├── instagram/                    # Meta planner (story + post) + IG→TW/TH/SB clone step
+│   │   ├── twitter/                      # X /home composer scheduler
+│   │   ├── threads/                      # threads.com composer + calendar scheduler
+│   │   ├── substack/                     # Substack Note publisher + followers scraper
+│   │   │                                 # (with a video-day branch for the weekly clip)
+│   │   └── videos/                       # weekly cross-platform video orchestrator
 │   ├── reporting/                        # daily numbers — APIs → Supabase → Notion
 │   │   ├── social_client/                # RapidAPI fetchers
 │   │   ├── scrape_client/                # HTTP/Playwright scrapers
@@ -224,12 +224,12 @@ Notion field map (where relevant), validated selectors (planning packages),
 gotchas, files.
 
 - **Planning** —
-  [`planning/linkedin/README.md`](planning/linkedin/README.md) ·
-  [`planning/instagram/README.md`](planning/instagram/README.md) ·
-  [`planning/twitter/README.md`](planning/twitter/README.md) ·
-  [`planning/threads/README.md`](planning/threads/README.md) ·
-  [`planning/substack/README.md`](planning/substack/README.md) ·
-  [`planning/videos/README.md`](planning/videos/README.md)
+  [`tools/planning/linkedin/README.md`](tools/planning/linkedin/README.md) ·
+  [`tools/planning/instagram/README.md`](tools/planning/instagram/README.md) ·
+  [`tools/planning/twitter/README.md`](tools/planning/twitter/README.md) ·
+  [`tools/planning/threads/README.md`](tools/planning/threads/README.md) ·
+  [`tools/planning/substack/README.md`](tools/planning/substack/README.md) ·
+  [`tools/planning/videos/README.md`](tools/planning/videos/README.md)
 - **Reporting** —
   [`tools/reporting/social_client/README.md`](tools/reporting/social_client/README.md) ·
   [`tools/reporting/process/README.md`](tools/reporting/process/README.md) ·
@@ -354,11 +354,11 @@ block (caching the result into a `textLI` rich_text property, chunked across
 resolving `@FirstName Last` mentions through LinkedIn's typeahead dropdown,
 and waiting for LinkedIn's background media upload (video or document/PDF)
 to settle after the composer closes. The shared helpers live in
-[`planning/linkedin/linkedin_composer.py`](planning/linkedin/linkedin_composer.py).
-See [`planning/videos/README.md`](planning/videos/README.md) and the
+[`tools/planning/linkedin/linkedin_composer.py`](tools/planning/linkedin/linkedin_composer.py).
+See [`tools/planning/videos/README.md`](tools/planning/videos/README.md) and the
 *"Reading post body text from Notion"*, *"Resolving @mentions"*, *"Waiting
 for the post-Schedule upload-complete signal"* sections in
-[`planning/linkedin/README.md`](planning/linkedin/README.md) for the
+[`tools/planning/linkedin/README.md`](tools/planning/linkedin/README.md) for the
 canonical write-ups.
 
 The LinkedIn scheduler dispatches three routes off each WIP-LI row's
@@ -366,7 +366,7 @@ Notion relation pattern (no read of a `type` property required):
 illustration-only (ILL), illustration + article + post body (POST), and
 post-only with a PDF located by fuzzy folder match (CAROUSEL). Newsletter
 rows are skipped (separate manual process). Full table + selectors in
-[`planning/linkedin/README.md`](planning/linkedin/README.md).
+[`tools/planning/linkedin/README.md`](tools/planning/linkedin/README.md).
 
 - Each platform is run with `--all-wip` — no date filter, so you can plan
   one, two, or three weeks in a single run.
@@ -377,8 +377,8 @@ rows are skipped (separate manual process). Full table + selectors in
   `Work in Progress <P>` checkbox is unticked in Notion so re-runs are
   idempotent no-ops.
 - Each platform package owns its own dedicated Chrome profile under
-  `planning/<P>/chrome_user_data/` (gitignored). One-time bootstrap per
-  platform: `python -m planning.<P>.bootstrap_session`.
+  `tools/planning/<P>/chrome_user_data/` (gitignored). One-time bootstrap per
+  platform: `python -m tools.planning.<P>.bootstrap_session`.
 
 ### Self-healing planning runs
 
@@ -394,7 +394,7 @@ machine-readable `results/planning/latest-result.json`, written as `running` at 
 loop, failure classification, and guardrails.
 
 Each scheduled row ends in one of six declared outcomes (`LIVE`, `DRY`, `SKIP`,
-`FAIL`, `PARTIAL`, `LOGIN-REQUIRED`) owned by `planning/row_outcome.py`; the
+`FAIL`, `PARTIAL`, `LOGIN-REQUIRED`) owned by `tools/planning/row_outcome.py`; the
 summary table, the verdict and every exit code read it from there. See
 [`docs/planning-row-outcome.md`](docs/planning-row-outcome.md).
 
@@ -470,11 +470,11 @@ Copy-Item config\config_example.json config\config.json
 # PostgreSQL connection credentials go in .env instead (read by python-dotenv)
 
 # One-time per-platform browser session bootstrap (interactive login):
-& .\.venv\Scripts\python.exe -m planning.linkedin.bootstrap_session
-& .\.venv\Scripts\python.exe -m planning.instagram.bootstrap_session
-& .\.venv\Scripts\python.exe -m planning.twitter.bootstrap_session
-& .\.venv\Scripts\python.exe -m planning.threads.bootstrap_session
-& .\.venv\Scripts\python.exe -m planning.substack.bootstrap_session
+& .\.venv\Scripts\python.exe -m tools.planning.linkedin.bootstrap_session
+& .\.venv\Scripts\python.exe -m tools.planning.instagram.bootstrap_session
+& .\.venv\Scripts\python.exe -m tools.planning.twitter.bootstrap_session
+& .\.venv\Scripts\python.exe -m tools.planning.threads.bootstrap_session
+& .\.venv\Scripts\python.exe -m tools.planning.substack.bootstrap_session
 # planning.videos reuses the four sister sessions above — no separate bootstrap.
 ```
 
@@ -523,7 +523,7 @@ orientation map stays short. See that file for column-level detail.
 & .\.venv\Scripts\python.exe -m tools.reporting.social_client.social_api_client --platform linkedin_profile --debug
 
 # Smoke-test one planning scheduler (dry-run, no posts written)
-& .\.venv\Scripts\python.exe -m planning.twitter.schedule_twitter_posts --all-wip --dry-run --debug
+& .\.venv\Scripts\python.exe -m tools.planning.twitter.schedule_twitter_posts --all-wip --dry-run --debug
 ```
 
 ## 🖼️ Regenerating the screenshots

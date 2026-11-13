@@ -1,6 +1,6 @@
 """Twitter/X Playwright scraper — fetches profile + posts via the logged-in browser.
 
-Reuses ``planning/twitter`` persistent profile via ``TwitterSession``.
+Reuses ``tools/planning/twitter`` persistent profile via ``TwitterSession``.
 
 Profile page: ``https://x.com/<handle>``
   → exact follower count from the tooltip that appears when hovering the
@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.append(str(Path(__file__).resolve().parents[3]))
-from planning.twitter.twitter_session import (  # noqa: E402
+from tools.planning.twitter.twitter_session import (  # noqa: E402
     LoginRequiredError,
     TwitterSession,
     load_twitter_config,

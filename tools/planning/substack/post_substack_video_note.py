@@ -1,0 +1,349 @@
+"""Publish a Substack VIDEO Note from a Notion editorial row's video clip.
+
+Triggered from the daily Substack pipeline on video days (rows where
+``Work in Progress Video`` is checked AND ``clip SB(v)`` is populated).
+Resolves the shared clip page once, then hands ``post_substack_note``'s
+``publish_note_flow`` the video-specific steps: it either publishes natively
+or drives the same Note composer (the video file input instead of the image
+one), uploading the .mp4 from the clip's ``clipPC``/``filePC`` properties. On success, writes ``link SB(v)`` on the
+editorial row so the videos orchestrator's next run can untick the shared
+``Work in Progress Video`` checkbox.
+
+The video Note's caption is the clip page's ``Text`` property (the same
+short caption that feeds IG/TW/TH).
+
+**Two publish backends**, chosen by ``substack.note_source`` in
+``config.json`` (same flag and one-key rollback as ``post_substack_note.py``):
+
+* ``"playwright"`` (default) — drives the real-Chrome Note composer.
+* ``"native"`` — chunked multipart upload to Substack's HTTP API + Mux
+  transcode, no browser at request time. The video's duration
+  is probed via ffprobe (``planning.videos.videos_session.probe_duration_seconds``)
+  before the upload, since the transcode call needs it up front.
+
+CLI (standalone — same flags shape as ``post_substack_note``):
+
+    python -m tools.planning.substack.post_substack_video_note \\
+        [--date YYYYMMDD]  [--dry-run] [--force] [--debug]
+
+When run inside ``planning.substack.daily_pipeline``, call
+``post_video_note_if_applicable()`` which returns ``None`` for non-video
+days (caller falls back to the image-Note flow).
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+from playwright.sync_api import TimeoutError as PWTimeoutError
+
+sys.path.append(str(Path(__file__).parents[3]))
+from tools.planning.substack.post_substack_note import (  # noqa: E402
+    COMPOSER_SCOPE_XPATH,
+    NotePublish,
+    _locate_note_editor,
+    publish_note_flow,
+)
+from tools.planning.substack.substack_session import (  # noqa: E402
+    SubstackSession,
+    configure_logger,
+    load_notion_token,
+    load_substack_config,
+    normalize_day,
+)
+from tools.planning.videos.videos_session import (  # noqa: E402
+    VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS,
+    load_clip_payload,
+    load_videos_config,
+)
+from tools.reporting.notion.editorial import (  # noqa: E402
+    get_row_by_day,
+    init_notion_client,
+    set_field,
+)
+
+logger = logging.getLogger("substack_post_video_note")
+
+
+def _publish_native(cfg: dict, body_text: str, video_path: Path) -> str:
+    """Publish the video Note over the HTTP API; return its permalink.
+
+    Same shape as ``post_substack_note.py::_publish_native`` — imported
+    lazily so the Playwright path never pays for it and a missing
+    ``api_session.json`` can't break the default backend.
+    """
+    from tools.planning.substack.api_client import (
+        fetch_self_handle,
+        note_permalink,
+        publish_note,
+    )
+    from tools.planning.videos.videos_session import probe_duration_seconds
+
+    duration = probe_duration_seconds(video_path)
+    note = publish_note(body_text, video_path=video_path, video_duration_seconds=duration)
+    handle = note.get("handle") or cfg.get("handle") or fetch_self_handle()
+    return note_permalink(handle, note["id"])
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Publish a Substack VIDEO Note from Notion editorial (weekly video day)."
+    )
+    parser.add_argument("--date", type=str, default=None,
+                        help="Target day (YYYYMMDD); defaults to today (local).")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Skip clicking Post; save composer screenshot instead.")
+    parser.add_argument("--force", action="store_true",
+                        help="Post even if link SB(v) is already populated.")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging.")
+    return parser.parse_args()
+
+
+def _attach_video_via_composer(composer, page, video_path: Path) -> bool:
+    """Attach an .mp4 inside the Substack composer container. Returns True on success.
+
+    Substack's Note composer pre-mounts TWO hidden file inputs (probe-confirmed):
+
+    * ``input[type=file] accept="image/*,.heic"`` -- image upload
+    * ``input[type=file] accept="video/*"``       -- video upload
+
+    The visible image/video toolbar buttons have NO aria-label, NO title,
+    NO data-testid; only their position distinguishes them (both are 40x40
+    SVG-only buttons). The robust approach is to bypass the visible
+    buttons entirely and push the .mp4 directly at the ``accept="video/*"``
+    input. The earlier version grabbed ``.first`` -- which is the IMAGE
+    input -- and Substack silently rejected the .mp4: the note posted
+    text-only and the URL inside the body got auto-embedded as a
+    link-preview card (screenshot 5).
+    """
+    video_inputs = composer.locator('input[type="file"][accept*="video"]')
+    if video_inputs.count() > 0:
+        try:
+            video_inputs.first.set_input_files(str(video_path))
+            logger.debug("Pushed .mp4 into composer-scoped video file input.")
+            return True
+        except Exception as err:
+            logger.debug("Composer video input set_input_files failed: %s", err)
+
+    page_video_inputs = page.locator('input[type="file"][accept*="video"]')
+    if page_video_inputs.count() > 0:
+        try:
+            page_video_inputs.first.set_input_files(str(video_path))
+            logger.debug("Pushed .mp4 into page-level video file input.")
+            return True
+        except Exception as err:
+            logger.debug("Page-level video input set_input_files failed: %s", err)
+
+    return False
+
+
+def _fill_video_note_dialog(page, body_text: str, video_path: Path) -> None:
+    """Fill the body and attach the .mp4 inside the open Note composer."""
+    editor = _locate_note_editor(page, body_text)
+
+    composer = editor.locator(COMPOSER_SCOPE_XPATH)
+    if composer.count() == 0:
+        logger.warning("⚠️ Could not scope composer container; falling back to page-wide search.")
+        composer = page.locator("body")
+
+    if not _attach_video_via_composer(composer, page, video_path):
+        raise RuntimeError("Could not attach video — no video-icon button or composer-scoped file input found.")
+
+    # Wait for the video preview / processing UI to render. Substack shows a
+    # <video> element with a real src once upload completes.
+    try:
+        composer_handle = composer.element_handle()
+        page.wait_for_function(
+            """(el) => {
+                if (!el) return false;
+                for (const v of el.querySelectorAll('video')) {
+                    if (v.readyState >= 1 || (v.src && v.src.length > 0)) return true;
+                }
+                return false;
+            }""",
+            arg=composer_handle,
+            timeout=180000,
+        )
+        logger.info("🎬 Video preview rendered in composer.")
+    except PWTimeoutError:
+        logger.warning("⚠️ Video preview did not render within 180s — Post may still be disabled.")
+
+
+def _wait_for_post_enabled(page) -> None:
+    """Block until the composer's Post button is enabled; PWTimeoutError if never.
+
+    The Post button stays ``disabled`` until the clip finishes uploading
+    server-side; for a large video that runs well past the click's own retry
+    window, so wait for it to enable before clicking.
+    """
+    page.wait_for_function(
+        """() => {
+            const b = document.querySelector('[role="dialog"] button[data-testid="composer-post"]')
+                      || document.querySelector('button[data-testid="composer-post"]');
+            return !!b && !b.disabled;
+        }""",
+        timeout=VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS,
+    )
+
+
+def _click_composer_post(page) -> None:
+    """Click the video Note composer's Post button, anchored on its test id."""
+    page.locator(
+        '[role="dialog"] button[data-testid="composer-post"], '
+        'button[data-testid="composer-post"]'
+    ).first.click()
+
+
+def _post_video_note_for_row(
+    cfg: dict,
+    videos_cfg: dict,
+    notion_token: str,
+    row: dict,
+    *,
+    dry_run: bool,
+    force: bool,
+    session: SubstackSession,
+) -> int:
+    """Core driver. Returns 0 on success / dry-run, non-zero exit code on failure.
+
+    Caller owns the SubstackSession (so it can be shared with other daily steps).
+    """
+    notion = init_notion_client(notion_token)
+    if notion is None:
+        logger.error("❌ Could not initialize Notion client.")
+        return 3
+
+    video_cols = videos_cfg["editorial_columns"]
+    clip_cols = videos_cfg["clip_columns"]
+
+    page_id = row["id"]
+    props = row.get("properties", {})
+
+    # Idempotency: link SB(v) populated?
+    link_sb_col = video_cols.get("post_url_sb")
+    link_sb = (props.get(link_sb_col, {}) or {}).get("url") if link_sb_col else None
+    if link_sb and not force:
+        logger.info("ℹ️ link SB(v) already populated (%s) — skipping (use --force to re-post).", link_sb)
+        return 0
+
+    try:
+        payload = load_clip_payload(notion, row, video_cols, clip_cols)
+    except (RuntimeError, FileNotFoundError) as err:
+        logger.error("❌ Clip payload resolution failed: %s", err)
+        return 8
+
+    if not payload.caption_short:
+        logger.error("❌ Clip page has empty 'Text' caption — refusing to post empty Note.")
+        return 5
+
+    def write_link(note_url: str) -> None:
+        set_field(notion, page_id, "post_url_sb", note_url, video_cols, "url")
+        logger.info("✅ Wrote %s on editorial row.", video_cols.get("post_url_sb", "link SB"))
+
+    caption, video_path = payload.caption_short, payload.video_path
+    return publish_note_flow(
+        cfg,
+        NotePublish(
+            noun="video Note",
+            failure_label=payload.title or "video",
+            dry_run_shot=f"{datetime.now():%Y%m%d-%H%M%S}-video-dryrun.png",
+            native_dry_run=f"video {video_path.name} ({len(caption)} chars caption)",
+            publish_native=lambda: _publish_native(cfg, caption, video_path),
+            fill=lambda page: _fill_video_note_dialog(page, caption, video_path),
+            click_post=_click_composer_post,
+            write_link=write_link,
+            wait_post_ready=_wait_for_post_enabled,
+            close_timeout_ms=120000,
+        ),
+        dry_run=dry_run,
+        session=session,
+    )
+
+
+def post_video_note_if_applicable(
+    target_day: str,
+    *,
+    dry_run: bool,
+    force: bool,
+    session: SubstackSession,
+) -> Optional[int]:
+    """Detect a video day and post the video Note if applicable.
+
+    Returns:
+        ``None`` if the day is not a video day (caller should run the
+        normal image-note flow).
+        Integer exit code if the day was processed (0 on success, non-zero
+        on failure).
+
+    Conditions for "video day":
+      - An editorial row exists for ``target_day``.
+      - That row's ``Work in Progress Video`` checkbox is True.
+      - That row's ``clip SB(v)`` relation is populated.
+    """
+    sub_cfg = load_substack_config()
+    videos_cfg = load_videos_config()
+    notion_token = load_notion_token()
+
+    notion = init_notion_client(notion_token)
+    if notion is None:
+        logger.error("❌ Could not initialize Notion client.")
+        return 3
+
+    video_cols = videos_cfg["editorial_columns"]
+    row = get_row_by_day(notion, videos_cfg["editorial_db_id"], target_day, video_cols)
+    if row is None:
+        return None
+
+    props = row.get("properties", {})
+    wip_prop = props.get(video_cols["wip_checkbox"], {})
+    is_wip_video = bool(wip_prop.get("checkbox", False))
+
+    # Detection: the editorial DB doesn't (yet) have a dedicated `clip SB(v)`
+    # relation, so we infer a video day from WIP-Vd checked AND any of the
+    # populated per-platform clip relations (LI / IG / TW). The video Note
+    # uses the SAME clip page all four platforms share.
+    has_any_clip = False
+    for p in ("li", "ig", "tw"):
+        col = video_cols.get(f"clip_rel_{p}")
+        rels = (props.get(col, {}) or {}).get("relation", []) or [] if col else []
+        if rels:
+            has_any_clip = True
+            break
+
+    if not is_wip_video or not has_any_clip:
+        return None
+
+    logger.info("📹 %s is a video day for Substack — posting video Note.", target_day)
+    return _post_video_note_for_row(
+        sub_cfg, videos_cfg, notion_token, row,
+        dry_run=dry_run, force=force, session=session,
+    )
+
+
+def main() -> int:
+    args = parse_args()
+    configure_logger("substack_post_video_note", debug=args.debug)
+    sub_cfg = load_substack_config()
+    target_day = normalize_day(args.date)
+    dry_run = args.dry_run or (sub_cfg.get("dry_run_default", False) and not args.force)
+    logger.info("🚀 Substack VIDEO Note publish — day=%s dry_run=%s force=%s",
+                target_day, dry_run, args.force)
+
+    with SubstackSession(sub_cfg) as session:
+        rc = post_video_note_if_applicable(
+            target_day, dry_run=dry_run, force=args.force, session=session,
+        )
+        if rc is None:
+            logger.info("ℹ️ %s is not a video day (no WIP-Video row or no clip SB(v)). Nothing to do.",
+                        target_day)
+            return 0
+        return rc
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

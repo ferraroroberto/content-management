@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import unittest
 
-from planning.linkedin.linkedin_composer import (
+from tools.planning.linkedin.linkedin_composer import (
     COMPOSER_REMOUNT_TIMEOUT_MS,
     SCHEDULE_CONFIRM_TIMEOUT_MS,
     schedule_pre_state,

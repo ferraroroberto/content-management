@@ -39,10 +39,13 @@ from unittest import mock
 
 from playwright.sync_api import TimeoutError as PWTimeoutError
 
-from planning.substack import post_substack_note as sn
-from planning.substack import post_substack_video_note as vn
-from planning.substack.substack_session import LoginRequiredError
-from planning.videos.videos_session import VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS, ClipPayload
+from tools.planning.substack import post_substack_note as sn
+from tools.planning.substack import post_substack_video_note as vn
+from tools.planning.substack.substack_session import LoginRequiredError
+from tools.planning.videos.videos_session import (
+    VIDEO_UPLOAD_FINALIZE_TIMEOUT_MS,
+    ClipPayload,
+)
 
 DAY = "20260929"
 URL = "https://example.invalid/@someone/note/c-1"

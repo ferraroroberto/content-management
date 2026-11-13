@@ -19,7 +19,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from planning.videos import videos_instagram as vi
+from tools.planning.videos import videos_instagram as vi
 
 HELPERS = (
     "click_reel_footer",

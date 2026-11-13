@@ -15,8 +15,11 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from planning.linkedin import linkedin_composer
-from planning.linkedin.linkedin_labels import SCHEDULE_CLOCK_NAME_RE, SCHEDULE_CLOCK_SEL
+from tools.planning.linkedin import linkedin_composer
+from tools.planning.linkedin.linkedin_labels import (
+    SCHEDULE_CLOCK_NAME_RE,
+    SCHEDULE_CLOCK_SEL,
+)
 
 
 class ClockNameTests(unittest.TestCase):

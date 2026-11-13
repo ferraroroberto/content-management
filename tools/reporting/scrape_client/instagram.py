@@ -1,6 +1,6 @@
 """Instagram Playwright scraper — fetches profile + posts via the logged-in browser.
 
-Reuses ``planning/instagram`` persistent profile via ``InstagramSession``.
+Reuses ``tools/planning/instagram`` persistent profile via ``InstagramSession``.
 
 Profile page: ``https://www.instagram.com/<handle>/``
   → exact follower count from the tooltip on the "132K followers" link.
@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.append(str(Path(__file__).resolve().parents[3]))
-from planning.instagram.instagram_session import (  # noqa: E402
+from tools.planning.instagram.instagram_session import (  # noqa: E402
     InstagramSession,
     LoginRequiredError,
     load_instagram_config,

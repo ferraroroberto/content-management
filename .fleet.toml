@@ -14,7 +14,6 @@ depends_on  = ["local-llm-hub"]
 shape       = "pipeline-cli"
 extra_roots = [
     "app",
-    "planning",
 ]
 
 # Reviewed false positive: the docstring names the old location this module was
@@ -98,12 +97,12 @@ include = [
     "tools/demo_video/README.md",
     "tools/engagement/README.md",
     "tools/newsletter/README.md",
-    "planning/instagram/README.md",
-    "planning/linkedin/README.md",
-    "planning/substack/README.md",
-    "planning/threads/README.md",
-    "planning/twitter/README.md",
-    "planning/videos/README.md",
+    "tools/planning/instagram/README.md",
+    "tools/planning/linkedin/README.md",
+    "tools/planning/substack/README.md",
+    "tools/planning/threads/README.md",
+    "tools/planning/twitter/README.md",
+    "tools/planning/videos/README.md",
     "tools/podcast/README.md",
     "tools/recorder/README.md",
     "tools/reporting/notion/README.md",
@@ -167,7 +166,7 @@ enabled  = true
 baseline = ".conventions-ratchet-baseline.json"
 rules = ["no-window", "logging-not-print", "no-drive-path", "subprocess-timeout", "state-literal", "state-set-repeat", "state-write"]
 # the default print_paths (app/, src/) would skip every library package but app/
-print_paths = ["app/", "tools/", "config/", "planning/", "tools/reporting/"]
+print_paths = ["app/", "tools/", "config/", "tools/reporting/"]
 
 # A raw connect skips the WAL pragma and the schema bootstrap.
 [[conventions_ratchet.must_use]]
@@ -208,7 +207,7 @@ enabled  = true
 baseline = ".runtime-write-ratchet-baseline.json"
 # The tool packages (the extra_roots above) are this repo's code, beside src/, scripts/
 # and config/; src/gmail_readonly/ and src/google_oauth_common/ are vendored copies.
-code_folders = ["src", "scripts", "config", "app", "tools", "planning"]
+code_folders = ["src", "scripts", "config", "app", "tools"]
 exclude      = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
 # Each returns a path under results/ or docs/screenshots/ (never a code folder): results_dir() is
 # <repo>/results/<name>, db_path()/raw_sidecar() sit under the check_ip store_folder (default
@@ -233,7 +232,7 @@ paths    = ["tools/recorder/static/**"]
 # docs/engagement-comment-status.md.
 [[state_machines]]
 name   = "planning-row-outcome"
-module = "planning/row_outcome.py"
+module = "tools/planning/row_outcome.py"
 type   = "RowStatus"
 derive = "derive_row_status"
 

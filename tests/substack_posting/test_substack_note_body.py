@@ -1,6 +1,6 @@
 """A Note's ProseMirror body must match what Substack's composer sends (issue #185).
 
-``planning/substack/api_client.py::publish_note`` posts a Note over the HTTP API
+``tools/planning/substack/api_client.py::publish_note`` posts a Note over the HTTP API
 instead of driving the composer. The body is ProseMirror JSON and the endpoint
 accepts a malformed-but-parseable doc happily, so a wrong shape publishes a
 mangled Note **to the whole follower list** — irreversibly, since a Note has no
@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import unittest
 
-from planning.substack.api_client import build_note_body_json, note_permalink
+from tools.planning.substack.api_client import build_note_body_json, note_permalink
 
 
 class NoteBodyJsonTests(unittest.TestCase):

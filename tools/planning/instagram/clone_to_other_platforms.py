@@ -1,0 +1,351 @@
+"""Clone next week's Instagram editorial plan to Threads, Twitter, and Substack.
+
+Reads rows from the editorial DB where ``Work in Progress IG`` is checked, then
+mirrors the Instagram plan onto each per-platform tab of the same DB:
+
+* Non-thread days: copy ``illustration IG`` + ``text IG`` + ``repost IG`` to
+  the matching ``illustration <P>`` / ``text <P>`` / ``repost <P>`` fields
+  for each platform.
+* Sunday thread days (``thread IG`` = true): the IG-side carries a 10-image
+  carousel and a template caption; TW/TH/SB still post a single image, so the
+  source is derived:
+      - illustration = first item in the related ``post IG`` page's
+        ``illustration`` relation (the order Notion returns is the order
+        the user added them to the thread).
+      - caption = canonical first-publication ``text IG`` of THAT illustration
+        (follow ``publishIG`` → earliest editorial row's ``text IG``;
+        fallback ``text IG to copy`` formula). Same rule the LinkedIn
+        scheduler uses.
+  In addition, the Sunday IG row itself is back-filled when missing:
+  ``illustration IG`` ← derived first thread image (so the downstream Meta
+  planner can read it as the day's "first" image), and ``text IG`` ←
+  ``instagram.sunday_template_text`` from config (the canonical template
+  "Ten visuals on personal development, management and leadership…").
+
+Per-platform tweaks:
+
+* Threads + Twitter: also set ``Work in Progress <P>`` = true (so the
+  downstream per-platform scheduler picks them up next).
+* Substack: never set WIP — Substack is posted day-by-day by a separate
+  pipeline (see ``substack/daily_pipeline.py``), and a WIP tick here would
+  confuse that flow.
+* ``thread <P>`` is **never** replicated. The thread concept only exists on
+  Instagram.
+
+Idempotency: by default, a target platform row is left alone if it already
+has either an illustration relation OR a non-empty caption — use ``--force``
+to overwrite.
+
+CLI:
+    python -m tools.planning.instagram.clone_to_other_platforms \
+        [--week-start YYYY-MM-DD]   # default: next Monday
+        [--date YYYYMMDD]           # single-day mode
+        [--dry-run | --live]        # default: dry-run
+        [--force]                   # overwrite already-populated targets
+        [--debug]
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
+
+sys.path.append(str(Path(__file__).parents[3]))
+from tools.planning._captions import canonical_caption_from_publish_ig  # noqa: E402
+from tools.planning._scheduler_main import (  # noqa: E402
+    build_scheduler_parser,
+    notion_or_none,
+    resolve_scope,
+)
+from tools.planning._wip_rows import IgRow, fetch_wip_ig_rows  # noqa: E402
+from tools.planning.instagram.instagram_session import (  # noqa: E402
+    configure_logger,
+    load_clone_config,
+    load_instagram_config,
+    load_notion_token,
+)
+from tools.reporting.notion.editorial import retrieve_page  # noqa: E402
+from tools.reporting.notion.notion_update import (  # noqa: E402
+    format_database_id,
+    prepare_notion_update,
+)
+
+logger = logging.getLogger("instagram_clone")
+
+
+@dataclass
+class CloneSource:
+    """The resolved (illustration_id, caption) that gets written to TW/TH/SB.
+
+    ``ig_row_illustration_id`` and ``ig_row_text`` are filled ONLY when the IG
+    row itself needs a back-fill (thread Sundays whose illustration IG/text IG
+    are currently empty). When they are None we leave the IG row alone.
+    """
+
+    illustration_id: str
+    caption_text: str
+    ig_row_illustration_id: Optional[str] = None
+    ig_row_text: Optional[str] = None
+
+
+# ---------- Source resolution ----------
+
+
+def _first_thread_illustration_id(notion, post_page_id: str, posts_cols: dict) -> str:
+    """Read the posts-page ``illustration`` relation and return its first id."""
+    page = retrieve_page(notion, post_page_id)
+    col = posts_cols["illustration_rel"]
+    rels = page.get("properties", {}).get(col, {}).get("relation", []) or []
+    if not rels:
+        raise RuntimeError(
+            f"post page {post_page_id} has no '{col}' relations — cannot derive "
+            "first thread illustration."
+        )
+    return rels[0]["id"]
+
+
+def resolve_source(notion, cfg: dict, row: IgRow) -> CloneSource:
+    """Compute the (illustration_id, caption) to write to TW/TH/SB.
+
+    Sunday-thread rows also surface back-fills for the IG row itself
+    (illustration IG ← derived; text IG ← sunday_template_text from config).
+    """
+    illust_cols = cfg["illustration_columns"]
+    ed_cols = cfg["editorial_columns"]
+    posts_cols = cfg["posts_columns"]
+    template_text = cfg.get("sunday_template_text", "")
+
+    if not row.thread_ig:
+        if not row.illustration_ig_ids:
+            raise RuntimeError(
+                f"{row.day_title}: non-thread day but illustration IG is empty."
+            )
+        illust_id = row.illustration_ig_ids[0]
+        if row.text_ig:
+            caption = row.text_ig
+            ig_back_text: Optional[str] = None
+        else:
+            # Repost (or any non-thread row where `text IG` is empty): derive
+            # the canonical caption from the illustration's publishIG chain
+            # (earliest first-publication row's `text IG`, with the
+            # `text IG to copy` formula as fallback). Same rule the LinkedIn
+            # scheduler and the Sunday-thread branch below use.
+            caption = canonical_caption_from_publish_ig(
+                notion, illust_id, illust_cols, ed_cols, logger
+            )
+            if not caption:
+                raise RuntimeError(
+                    f"{row.day_title}: text IG is empty and no canonical "
+                    "caption could be derived from the illustration's "
+                    "publishIG chain."
+                )
+            # Back-fill the IG row's own `text IG` with the canonical caption
+            # so downstream readers (Meta planner, manual review) see the
+            # actual text instead of an empty field.
+            ig_back_text = caption
+        return CloneSource(
+            illustration_id=illust_id,
+            caption_text=caption,
+            ig_row_text=ig_back_text,
+        )
+
+    # Thread day (Sunday).
+    if not row.post_ig_ids:
+        raise RuntimeError(
+            f"{row.day_title}: thread IG is checked but post IG is empty — "
+            "set the post relation first."
+        )
+    first_illust_id = _first_thread_illustration_id(
+        notion, row.post_ig_ids[0], posts_cols
+    )
+    canonical = canonical_caption_from_publish_ig(
+        notion, first_illust_id, illust_cols, ed_cols, logger
+    )
+    if not canonical:
+        raise RuntimeError(
+            f"{row.day_title}: could not resolve canonical caption for the "
+            "first thread illustration."
+        )
+
+    ig_row_illust = None if row.illustration_ig_ids else first_illust_id
+    ig_row_text = None if row.text_ig else (template_text or None)
+
+    return CloneSource(
+        illustration_id=first_illust_id,
+        caption_text=canonical,
+        ig_row_illustration_id=ig_row_illust,
+        ig_row_text=ig_row_text,
+    )
+
+
+# ---------- Write phase ----------
+
+def _target_already_populated(props: dict, target: dict) -> bool:
+    """True if the target platform row already has illustration OR text set."""
+    illust_col = target["illustration_rel"]
+    text_col = target["caption_text"]
+    illust_rels = props.get(illust_col, {}).get("relation", []) or []
+    text_rt = props.get(text_col, {}).get("rich_text", []) or []
+    has_text = any(seg.get("plain_text", "").strip() for seg in text_rt)
+    return bool(illust_rels) or has_text
+
+
+def apply_to_targets(
+    notion,
+    row: IgRow,
+    source: CloneSource,
+    ig_cfg: dict,
+    clone_cfg: dict,
+    *,
+    dry_run: bool,
+    force: bool,
+) -> list[str]:
+    """Write the cloned plan onto each platform target. Returns per-target status strings."""
+    ed_cols = ig_cfg["editorial_columns"]
+    statuses: list[str] = []
+
+    # IG row back-fill: Sunday template text + first thread illustration; OR
+    # canonical caption derived for non-thread repost days. Only the fields
+    # surfaced by resolve_source are written — empty source fields are no-ops.
+    ig_updates: dict = {}
+    if source.ig_row_illustration_id:
+        ig_updates[ed_cols["illustration_rel"]] = prepare_notion_update(
+            "relation", source.ig_row_illustration_id
+        )
+    if source.ig_row_text:
+        ig_updates[ed_cols["caption_text"]] = prepare_notion_update(
+            "rich_text", source.ig_row_text
+        )
+    if ig_updates:
+        if dry_run:
+            logger.info(
+                "🟡 DRY-RUN %s IG back-fill: %s",
+                row.day_title, sorted(ig_updates.keys()),
+            )
+        else:
+            notion.pages.update(page_id=row.page_id, properties=ig_updates)
+            logger.info(
+                "✅ %s IG back-fill written: %s",
+                row.day_title, sorted(ig_updates.keys()),
+            )
+
+    for target in clone_cfg["targets"]:
+        name = target["name"]
+        if not force and _target_already_populated(row.raw_properties, target):
+            statuses.append(f"{name}:SKIP-populated")
+            logger.info(
+                "⏭️  %s/%s already has illustration/text — skipping (use --force to overwrite).",
+                row.day_title, name,
+            )
+            continue
+
+        payload: dict = {
+            target["illustration_rel"]: prepare_notion_update(
+                "relation", source.illustration_id
+            ),
+            target["caption_text"]: prepare_notion_update(
+                "rich_text", source.caption_text
+            ),
+            target["repost_checkbox"]: prepare_notion_update(
+                "checkbox", row.repost_ig
+            ),
+        }
+        if target.get("set_wip"):
+            payload[target["wip_checkbox"]] = prepare_notion_update("checkbox", True)
+
+        if dry_run:
+            logger.info(
+                "🟡 DRY-RUN %s → %s: write %s",
+                row.day_title, name, sorted(payload.keys()),
+            )
+            statuses.append(f"{name}:DRY-OK")
+        else:
+            notion.pages.update(page_id=row.page_id, properties=payload)
+            logger.info(
+                "✅ %s → %s written (%d fields)",
+                row.day_title, name, len(payload),
+            )
+            statuses.append(f"{name}:WRITTEN")
+
+    return statuses
+
+
+# ---------- Main ----------
+
+def parse_args() -> argparse.Namespace:
+    return build_scheduler_parser(
+        "Clone IG editorial plan to Threads / Twitter / Substack.",
+        all_wip_help=None,
+        dry_run_help="Log planned writes only.",
+        live_help="Actually update Notion.",
+        force_help="Overwrite target rows that already have illustration/text set.",
+    ).parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    configure_logger("instagram_clone", debug=args.debug)
+    ig_cfg = load_instagram_config()
+    clone_cfg = load_clone_config()
+
+    scope = resolve_scope(args, ig_cfg, wip_label="WIP-IG", log=logger)
+    if scope is None:
+        return 2
+    dry_run = scope.dry_run
+    target_days = scope.target_days
+    logger.info("🛠  Mode: %s%s", "DRY-RUN" if dry_run else "LIVE",
+                " --force" if args.force else "")
+
+    notion = notion_or_none(load_notion_token(), log=logger)
+    if notion is None:
+        return 3
+
+    db_id = format_database_id(ig_cfg["editorial_db_id"])
+    rows = fetch_wip_ig_rows(
+        notion, db_id, ig_cfg["editorial_columns"], target_days, logger=logger,
+    )
+    if not rows:
+        logger.warning("⚠️ No WIP-IG rows in target range. Nothing to do.")
+        return 0
+
+    logger.info("📋 %d in-scope WIP-IG row(s):", len(rows))
+    for r in rows:
+        logger.info(
+            "   - %s  thread=%s  illust_ids=%d  text_len=%d  repost=%s",
+            r.day_title, r.thread_ig, len(r.illustration_ig_ids), len(r.text_ig), r.repost_ig,
+        )
+
+    all_statuses: list[tuple[str, list[str]]] = []
+    failures: list[str] = []
+    for row in rows:
+        try:
+            source = resolve_source(notion, ig_cfg, row)
+        except RuntimeError as err:
+            logger.error("❌ %s: source resolution failed: %s", row.day_title, err)
+            failures.append(f"{row.day_title}: {err}")
+            continue
+        try:
+            statuses = apply_to_targets(
+                notion, row, source, ig_cfg, clone_cfg,
+                dry_run=dry_run, force=args.force,
+            )
+        except Exception as err:  # Notion API surface is broad
+            logger.exception("❌ %s: write failed: %s", row.day_title, err)
+            failures.append(f"{row.day_title}: write {err}")
+            continue
+        all_statuses.append((row.day_title, statuses))
+
+    logger.info("══════════ Clone summary ══════════")
+    for day_title, statuses in all_statuses:
+        logger.info("   %s → %s", day_title, ", ".join(statuses))
+    for f in failures:
+        logger.error("   FAIL %s", f)
+    return 0 if not failures else 11
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

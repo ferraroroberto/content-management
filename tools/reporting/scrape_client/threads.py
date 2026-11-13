@@ -1,6 +1,6 @@
 """Threads Playwright scraper — fetches profile + posts via the logged-in browser.
 
-Reuses ``planning/threads`` persistent profile via ``ThreadsSession``.
+Reuses ``tools/planning/threads`` persistent profile via ``ThreadsSession``.
 
 Profile page: ``https://www.threads.com/@<handle>``
   → exact follower count from the tooltip on the "31K followers" link.
@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.append(str(Path(__file__).resolve().parents[3]))
-from planning.threads.threads_session import (  # noqa: E402
+from tools.planning.threads.threads_session import (  # noqa: E402
     LoginRequiredError,
     ThreadsSession,
     load_threads_config,

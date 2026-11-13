@@ -24,7 +24,7 @@ from unittest import mock
 
 import planning_pipeline
 from config.no_window import NO_WINDOW
-from planning import run_state
+from tools.planning import run_state
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -34,7 +34,7 @@ _KILL_BETWEEN_STAGES = """
 import logging, os, sys
 from pathlib import Path
 import planning_pipeline as pp
-from planning import run_state
+from tools.planning import run_state
 
 run_state.RESULTS_DIR = Path(sys.argv[1])
 pp.configure_logger = lambda debug: setattr(pp, "logger", logging.getLogger("kill_probe"))

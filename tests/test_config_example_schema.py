@@ -21,7 +21,7 @@ import json
 import re
 import unittest
 
-from planning._session_base import REPO_ROOT
+from tools.planning._session_base import REPO_ROOT
 
 CONFIG_EXAMPLE_PATH = REPO_ROOT / "config" / "config_example.json"
 

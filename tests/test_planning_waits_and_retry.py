@@ -21,8 +21,8 @@ from __future__ import annotations
 
 import unittest
 
-from planning._failure import PostMayBeLiveError, attempt_row, classify
-from planning._waits import (
+from tools.planning._failure import PostMayBeLiveError, attempt_row, classify
+from tools.planning._waits import (
     READY_TIMEOUT_MS,
     click_until_effect,
     wait_for_first_ready,

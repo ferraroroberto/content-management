@@ -17,7 +17,7 @@ import logging
 from pathlib import Path
 
 from common.runtime_files import copy_file_to, ensure_folder, write_text_at
-from planning.videos.videos_session import windows_safe_filename
+from tools.planning.videos.videos_session import windows_safe_filename
 from tools.podcast.captions import LAYOUTS, Layout, build_ass
 from tools.podcast.clips import load_clips, save_clips
 from tools.podcast.edit import FPS, load_clip_words, output_words
