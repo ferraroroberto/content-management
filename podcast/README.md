@@ -135,7 +135,7 @@ Large intermediates (WAVs, frames, caption files) go to `podcast.work_dir`
 
 ## Stages
 
-- **sync** (recorder sessions only): the two sides of a `recorder/` session
+- **sync** (recorder sessions only): the two sides of a `tools/recorder/` session
   were recorded on two computers' clocks, so they start at different moments
   and drift apart. Each side's reference of the other voice (heard over the
   call) is cross-correlated (GCC-PHAT, 8 kHz, telephone band) against that

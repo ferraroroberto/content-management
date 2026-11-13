@@ -53,9 +53,9 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from common.runtime_files import write_text_at
 from config.no_window import NO_WINDOW
-from recorder.store import RECORDING_ID, ChunkStore, MissingChunks
 from src.static_versioning import CachingStaticFiles, fleet_hash, stamp_assets
 from src.usage_log_starlette import usage_route
+from tools.recorder.store import RECORDING_ID, ChunkStore, MissingChunks
 
 logger = logging.getLogger("recorder.server")
 
@@ -76,7 +76,7 @@ REPLACED = 4001      # ... for a socket its side opened again
 def _build_identity() -> dict[str, str]:
     """The checkout's short SHA and commit time, read once at import: the running
     process shows the build it was started from, so a stale process is visible."""
-    root = Path(__file__).resolve().parent.parent
+    root = Path(__file__).resolve().parents[2]
     try:
         out = subprocess.run(
             ["git", "-C", str(root), "log", "-1", "--format=%h%n%cI"],

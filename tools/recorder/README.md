@@ -1,4 +1,4 @@
-# recorder/ — self-hosted two-side podcast recorder
+# tools/recorder/ — self-hosted two-side podcast recorder
 
 Each participant opens their own link. The page holds a **peer-to-peer video
 call** between the two, and records each side's camera and mic **locally at
@@ -101,10 +101,10 @@ server says so at start, and some guests may not connect.
   (`/have`), so nothing is sent twice. A reload resumes the upload, and a
   recording the tab never stopped (a crash, a closed tab) is closed at the
   last chunk either side holds.
-- **Server:** `recorder/server.py` (Starlette on uvicorn, loopback by
+- **Server:** `tools/recorder/server.py` (Starlette on uvicorn, loopback by
   default) stores each chunk as its own file in a staging folder
   (`podcast.recorder.staging_dir`, default the system temp folder, off
-  OneDrive). `recorder/store.py` makes a re-sent chunk a no-op. On *finish*
+  OneDrive). `tools/recorder/store.py` makes a re-sent chunk a no-op. On *finish*
   it checks that every chunk `0..n-1` is there (it answers 409 with the
   missing numbers otherwise), joins them in order and remuxes into `.mp4`
   with `ffmpeg -c copy` (no re-encode; MP4 holds H.264 and Opus). The remux

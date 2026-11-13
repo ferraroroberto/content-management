@@ -16,9 +16,9 @@ if str(REPO_ROOT) not in sys.path:
 
 from starlette.testclient import TestClient  # noqa: E402
 
-from recorder import server  # noqa: E402
-from recorder.store import ChunkStore  # noqa: E402
 from src.static_versioning import fleet_hash, stamp_assets  # noqa: E402
+from tools.recorder import server  # noqa: E402
+from tools.recorder.store import ChunkStore  # noqa: E402
 
 IMMUTABLE = "public, max-age=31536000, immutable"
 
