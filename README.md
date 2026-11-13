@@ -95,10 +95,10 @@ Six surfaces, one repo:
   checklist; it can re-run an episode edited by hand in a separate trial
   folder. Start to finish, one episode:
   [`docs/podcast-runbook.md`](docs/podcast-runbook.md); module reference:
-  [`podcast/README.md`](podcast/README.md). The recorder (`recorder/`,
+  [`podcast/README.md`](podcast/README.md). The recorder (`tools/recorder/`,
   `recorder_server.py`) holds the interview's peer-to-peer video call and
   records each side in the browser, uploading into the episode folder,
-  replacing Riverside for that job: [`recorder/README.md`](recorder/README.md).
+  replacing Riverside for that job: [`tools/recorder/README.md`](tools/recorder/README.md).
 
 - **Demo videos** (`demo_video/`, `demo_video_pipeline.py`) — turns screen
   recordings of an app plus music into an animated product demo video
@@ -181,10 +181,10 @@ content-management/                   # repo root
 │   ├── reputation/                   # per-commenter reputation feedback loop
 │   └── db/                           # Supabase schema (commenters + comments tables)
 ├── tools/                            # one package per tool (see docs/layout.md)
+│   ├── recorder/                         # self-hosted two-side recorder: page + chunk upload into the episode folder
 │   └── check_ip/                     # illustration copyright check (Google Lens → SQLite → triage tab)
 ├── podcast/                          # episode package: transcript → clips (1:1 + 9:16) → copy, covers, docx, website HTML
 ├── demo_video/                       # demo videos: demo.json storyboard → Remotion template (remotion/) → MP4 per cut
-├── recorder/                         # self-hosted two-side recorder: page + chunk upload into the episode folder
 ├── app/                              # Streamlit control panel (tabs: reporting/editorial/planning/newsletter/triage/engagement/check-IP/podcast/demo-video)
 ├── config/                           # config.json, mapping.json, logger_config, chrome_launch, console
 │   └── doc_capture/                  # deterministic control-panel screenshot engine (README tour)
@@ -243,7 +243,7 @@ gotchas, files.
 - **Podcast** —
   [`docs/podcast-runbook.md`](docs/podcast-runbook.md) ·
   [`podcast/README.md`](podcast/README.md) ·
-  [`recorder/README.md`](recorder/README.md)
+  [`tools/recorder/README.md`](tools/recorder/README.md)
 - **Demo videos** —
   [`docs/demo-video-runbook.md`](docs/demo-video-runbook.md) ·
   [`demo_video/README.md`](demo_video/README.md) ·

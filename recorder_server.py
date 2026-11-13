@@ -6,7 +6,7 @@
 Prints the two links (host side, guest side) and serves until stopped. The
 links stay the same across restarts (``<episode folder>/recorder.json``).
 Recordings land in ``<episode folder>/video editing/``. A guest outside this
-machine needs an HTTPS URL for the camera to work: see ``recorder/README.md``.
+machine needs an HTTPS URL for the camera to work: see ``tools/recorder/README.md``.
 """
 
 from __future__ import annotations
@@ -26,9 +26,9 @@ from dotenv import load_dotenv  # noqa: E402
 
 from config.logger_config import setup_logger  # noqa: E402
 from podcast.episode import load_podcast_config  # noqa: E402
-from recorder.server import create_app, ensure_links, ice_servers  # noqa: E402
-from recorder.store import ChunkStore  # noqa: E402
 from src.runtime_data import runtime_db_path  # noqa: E402
+from tools.recorder.server import create_app, ensure_links, ice_servers  # noqa: E402
+from tools.recorder.store import ChunkStore  # noqa: E402
 
 DEFAULT_PORT = 8470
 

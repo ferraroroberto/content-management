@@ -1,7 +1,7 @@
 # BEGIN vendored-copies (generated from .fleet.toml [vendored]; edit the manifest, not this block)
-/recorder/static/_vendored/page-foot
-/recorder/static/_vendored/rec-wave
-/recorder/static/_vendored/usage-log
+/tools/recorder/static/_vendored/page-foot
+/tools/recorder/static/_vendored/rec-wave
+/tools/recorder/static/_vendored/usage-log
 /scripts/comment_ratchet.py
 /scripts/conventions_ratchet.py
 /scripts/conventions_readers.py

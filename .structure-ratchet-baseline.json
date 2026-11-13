@@ -1,7 +1,7 @@
 {
   "version": 1,
   "band": {"files": 3, "functions": 16},
-  "root_extras": ["app", "demo_video", "engagement", "newsletter", "planning", "podcast", "recorder", "reporting"],
+  "root_extras": ["app", "demo_video", "engagement", "newsletter", "planning", "podcast", "reporting"],
   "shape_contract": {
     "root_files": ["demo_video_pipeline.py", "newsletter_pipeline.py", "planning_pipeline.py", "podcast_pipeline.py", "recorder_server.py", "reporting_pipeline.py", "run_app.py"],
     "redundant": [],

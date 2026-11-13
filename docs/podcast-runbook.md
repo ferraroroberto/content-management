@@ -2,7 +2,7 @@
 
 The ordered procedure for one episode, start to finish. The module reference
 (stages, outputs, config) is [`podcast/README.md`](../podcast/README.md); the
-recorder's is [`recorder/README.md`](../recorder/README.md). This page only
+recorder's is [`tools/recorder/README.md`](../tools/recorder/README.md). This page only
 says what to do, in which order, and who does it. The `/podcast` skill
 (`.claude/skills/podcast/SKILL.md`) drives these same steps with the owner in
 a Claude Code session.
@@ -62,7 +62,7 @@ The pipeline needs **two video tracks, one per speaker**, in the episode
 folder's `video editing/` subfolder. Create the episode folder under
 `podcast.episodes_root` first.
 
-**With the recorder** (preferred, see `recorder/README.md`):
+**With the recorder** (preferred, see `tools/recorder/README.md`):
 
 1. **[human]** `& .\.venv\Scripts\python.exe recorder_server.py "<episode folder>"`.
    It prints a host link and a guest link.

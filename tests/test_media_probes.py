@@ -1,7 +1,7 @@
 """Characterization tests for the ffmpeg/ffprobe call sites outside ``podcast.media`` (issue #406).
 
 ``podcast.sync.video_fps``, ``podcast.init_episode`` (duration / recording
-date), ``demo_video.media.has_audio`` and ``recorder.store``
+date), ``demo_video.media.has_audio`` and ``tools.recorder.store``
 (``remux`` / ``probe_duration``) each spawned ffprobe/ffmpeg by hand. These pin
 what each returns — on a real clip, a video-only clip and an unreadable file —
 so routing them through ``podcast.media`` keeps the results unchanged.
@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from demo_video import media as demo_media  # noqa: E402
 from podcast import init_episode, sync  # noqa: E402
 from podcast.media import NO_WINDOW  # noqa: E402
-from recorder import store  # noqa: E402
+from tools.recorder import store  # noqa: E402
 
 HAS_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
 

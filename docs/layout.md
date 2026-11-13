@@ -16,6 +16,7 @@ The preset folders:
 
 Tool packages under `tools/` (import as `tools.<tool>`):
 
+- `tools/recorder/` — the self-hosted two-side recorder; `static/` is its page and chunk-upload script.
 - `tools/check_ip/` — illustration copyright check: Google Lens → SQLite → review.
 
 Tool roots still declared in `extra_roots`:
@@ -26,7 +27,6 @@ Tool roots still declared in `extra_roots`:
 - `engagement/` — anti-AI comment triage. `linkedin/` (comment scraper), `classify/` (layered classifier), `reputation/` (commenter feedback loop), `db/` (Supabase schema).
 - `podcast/` — one episode folder → its reviewed episode package (transcribe, clips, covers, copy, render).
 - `demo_video/` — demo videos: storyboard → Remotion template (`remotion/`) → MP4 per cut; `examples/` holds a sample storyboard.
-- `recorder/` — the self-hosted two-side recorder; `static/` is its page and chunk-upload script.
 - `app/` — the Streamlit control panel: one `tab_*.py` per tool, routed from `app.py`. UI code lives here and in `engagement/ui.py` and `engagement/review_app.py`.
 
 Hidden folders: `.streamlit/` (Streamlit config), `.claude/skills/` (the repo's skills; Codex and Pi reach them through per-skill discovery links that fleet-config generates and git ignores, so a new skill needs no second copy).

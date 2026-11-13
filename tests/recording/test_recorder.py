@@ -20,8 +20,8 @@ from starlette.testclient import TestClient  # noqa: E402
 from starlette.websockets import WebSocketDisconnect  # noqa: E402
 
 from config.no_window import NO_WINDOW  # noqa: E402
-from recorder import server, store  # noqa: E402
-from recorder.store import ChunkStore, MissingChunks  # noqa: E402
+from tools.recorder import server, store  # noqa: E402
+from tools.recorder.store import ChunkStore, MissingChunks  # noqa: E402
 
 FFMPEG = shutil.which("ffmpeg") and shutil.which("ffprobe")
 

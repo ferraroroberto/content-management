@@ -22,8 +22,8 @@ if str(REPO_ROOT) not in sys.path:
 
 from starlette.testclient import TestClient  # noqa: E402
 
-from recorder import server  # noqa: E402
-from recorder.store import ChunkStore  # noqa: E402
+from tools.recorder import server  # noqa: E402
+from tools.recorder.store import ChunkStore  # noqa: E402
 
 LOOPBACK = ("127.0.0.1", 50000)
 GUEST_PEER = ("203.0.113.9", 50000)

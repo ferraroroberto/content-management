@@ -32,7 +32,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 #: The folders ``[runtime_write_ratchet] code_folders`` in ``.fleet.toml`` guards;
 #: a test keeps the two lists equal.
 CODE_FOLDERS = ("src", "scripts", "config", "app", "tools", "demo_video", "engagement",
-                "newsletter", "planning", "podcast", "recorder", "reporting")
+                "newsletter", "planning", "podcast", "reporting")
 
 
 def _key(path: Path) -> Path:

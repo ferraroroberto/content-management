@@ -180,7 +180,7 @@ keys.
 
 ## 10. Usage track ratchet (`scripts/usage_track_ratchet_gate.py`)
 
-Holds the recorder page (`recorder/static/**`) to the fleet usage log and fails
+Holds the recorder page (`tools/recorder/static/**`) to the fleet usage log and fails
 when a file's count for a rule rises above `.usage-track-ratchet-baseline.json`,
 which is empty today: `untracked-control` (a button, select, radio group or
 other control with no constant `data-track` id), `untracked-sheet` (a `<dialog>`
