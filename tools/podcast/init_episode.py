@@ -1,6 +1,6 @@
 """Write a new episode's ``episode.json`` from the tracks in its folder.
 
-    python -m podcast.init_episode "<episode folder>" [--guest "Full Name"] [--adjective brilliant]
+    python -m tools.podcast.init_episode "<episode folder>" [--guest "Full Name"] [--adjective brilliant]
         [--link "LinkedIn=https://..."] [--host-track <file>] [--guest-track <file>] [--force]
 
 The tracks are found in ``<episode folder>/video editing/``:
@@ -42,7 +42,7 @@ from pathlib import Path
 from typing import Optional
 
 from common.runtime_files import ensure_folder, write_text_at
-from podcast.episode import SPEAKERS, VIDEO_DIR, episode_path, load_podcast_config
+from tools.podcast.episode import SPEAKERS, VIDEO_DIR, episode_path, load_podcast_config
 
 logger = logging.getLogger("podcast.init")
 
@@ -125,7 +125,7 @@ def discover(folder: Path, host_first: str, overrides: dict[str, Optional[str]])
 
 
 def _ffprobe_format(path: Path) -> dict:
-    from podcast.media import ffprobe_json  # noqa: PLC0415
+    from tools.podcast.media import ffprobe_json  # noqa: PLC0415
 
     return ffprobe_json(path, "format=duration:format_tags=creation_time").get("format") or {}
 

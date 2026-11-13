@@ -27,7 +27,7 @@ from typing import Optional
 
 from common.atomic_write import atomic_write_bytes, atomic_write_text
 from common.runtime_files import ensure_folder, open_for_write, write_text_at
-from podcast.media import ffprobe_json, run_ffmpeg
+from tools.podcast.media import ffprobe_json, run_ffmpeg
 
 logger = logging.getLogger("recorder.store")
 

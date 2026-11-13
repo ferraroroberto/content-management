@@ -19,12 +19,12 @@ from pathlib import Path
 from typing import Optional
 
 from common.runtime_files import ensure_folder, write_text_at
-from podcast.clips import clip_length, load_clips
-from podcast.episode import Episode, work_dir
-from podcast.hub import ask, ask_json
-from podcast.metrics import StageRecord
-from podcast.review_state import kept_clips, load_review
-from podcast.transcribe import fmt_ts, load_turns
+from tools.podcast.clips import clip_length, load_clips
+from tools.podcast.episode import Episode, work_dir
+from tools.podcast.hub import ask, ask_json
+from tools.podcast.metrics import StageRecord
+from tools.podcast.review_state import kept_clips, load_review
+from tools.podcast.transcribe import fmt_ts, load_turns
 
 logger = logging.getLogger("podcast.package")
 

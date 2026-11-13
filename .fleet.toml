@@ -18,7 +18,6 @@ extra_roots = [
     "engagement",
     "newsletter",
     "planning",
-    "podcast",
     "reporting",
 ]
 
@@ -109,7 +108,7 @@ include = [
     "planning/threads/README.md",
     "planning/twitter/README.md",
     "planning/videos/README.md",
-    "podcast/README.md",
+    "tools/podcast/README.md",
     "tools/recorder/README.md",
     "reporting/notion/README.md",
     "reporting/process/README.md",
@@ -172,7 +171,7 @@ enabled  = true
 baseline = ".conventions-ratchet-baseline.json"
 rules = ["no-window", "logging-not-print", "no-drive-path", "subprocess-timeout", "state-literal", "state-set-repeat", "state-write"]
 # the default print_paths (app/, src/) would skip every library package but app/
-print_paths = ["app/", "tools/", "config/", "demo_video/", "engagement/", "newsletter/", "planning/", "podcast/", "reporting/"]
+print_paths = ["app/", "tools/", "config/", "demo_video/", "engagement/", "newsletter/", "planning/", "reporting/"]
 
 # A raw connect skips the WAL pragma and the schema bootstrap.
 [[conventions_ratchet.must_use]]
@@ -214,7 +213,7 @@ baseline = ".runtime-write-ratchet-baseline.json"
 # The tool packages (the extra_roots above) are this repo's code, beside src/, scripts/
 # and config/; src/gmail_readonly/ and src/google_oauth_common/ are vendored copies.
 code_folders = ["src", "scripts", "config", "app", "tools", "demo_video", "engagement",
-                "newsletter", "planning", "podcast", "reporting"]
+                "newsletter", "planning", "reporting"]
 exclude      = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
 # Each returns a path under results/ or docs/screenshots/ (never a code folder): results_dir() is
 # <repo>/results/<name>, db_path()/raw_sidecar() sit under the check_ip store_folder (default
@@ -251,7 +250,7 @@ derive = "derive_run_status"
 
 [[state_machines]]
 name   = "podcast-clip-status"
-module = "podcast/review_state.py"
+module = "tools/podcast/review_state.py"
 type   = "ClipStatus"
 derive = "derive_clip_status"
 

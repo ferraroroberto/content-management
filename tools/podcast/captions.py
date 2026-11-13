@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from podcast.transcribe import drop_backchannel
+from tools.podcast.transcribe import drop_backchannel
 
 HIGHLIGHT_BGR = "&H0001ECFD&"   # #FDEC01 in ASS (&HAABBGGRR)
 WHITE_BGR = "&H00FFFFFF&"

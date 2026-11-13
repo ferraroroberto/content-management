@@ -36,12 +36,12 @@ from typing import Optional
 import numpy as np
 
 from common.runtime_files import ensure_folder, write_text_at
-from podcast.clips import load_clips, save_clips
-from podcast.episode import Episode, work_dir
-from podcast.media import extract_mix_wav, extract_wav, read_wav, write_wav
-from podcast.metrics import StageRecord
-from podcast.review import review_clip
-from podcast.transcribe import (
+from tools.podcast.clips import load_clips, save_clips
+from tools.podcast.episode import Episode, work_dir
+from tools.podcast.media import extract_mix_wav, extract_wav, read_wav, write_wav
+from tools.podcast.metrics import StageRecord
+from tools.podcast.review import review_clip
+from tools.podcast.transcribe import (
     BLEED_RATIO,
     FRAME_MS,
     find_loops,

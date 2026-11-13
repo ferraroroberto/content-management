@@ -48,7 +48,7 @@ Copy this into the conversation and tick it as you go:
 
 Run all four checks, report them in one block, and fix and re-check until they all pass:
 
-1. Config: `./.venv/Scripts/python.exe -c "from podcast.episode import load_podcast_config as c; p=c(); print(p['models'], p.get('trials_root'))"`. If it says *Missing 'podcast' block*, `config/config.json` is machine-local and this checkout lacks it, which is common in a git worktree or a fresh clone. Stop, and ask the owner to copy the block from the primary checkout or from `config/config_example.json`. Every font and host asset path in it must exist.
+1. Config: `./.venv/Scripts/python.exe -c "from tools.podcast.episode import load_podcast_config as c; p=c(); print(p['models'], p.get('trials_root'))"`. If it says *Missing 'podcast' block*, `config/config.json` is machine-local and this checkout lacks it, which is common in a git worktree or a fresh clone. Stop, and ask the owner to copy the block from the primary checkout or from `config/config_example.json`. Every font and host asset path in it must exist.
 2. Hub: `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/v1/models` → `200`.
 3. Whisper (via the hub): `curl -s -o /dev/null -w "%{http_code}" -F file=@clip.wav http://127.0.0.1:8000/v1/audio/transcriptions` → `200`.
 4. `ffmpeg -version` and `ffprobe -version` both resolve.
@@ -60,7 +60,7 @@ If the hub or whisper is down, report it and stop. They are started from the hub
 **1a. New episode.** If the folder has no `episode.json`, ask the owner in **one message** for the guest's full name, the display name (with a title, if any), the pronoun, the adjective ("my conversation with the ___") and the "where to find" links. Also ask whether the guest interviewed the owner (`host_is_interviewee`). Then run:
 
 ```
-./.venv/Scripts/python.exe -m podcast.init_episode "<folder>" --guest "<name>" --guest-display "<display>" --pronoun <her|his|their> --adjective <adjective> --link "LinkedIn=<url>"
+./.venv/Scripts/python.exe -m tools.podcast.init_episode "<folder>" --guest "<name>" --guest-display "<display>" --pronoun <her|his|their> --adjective <adjective> --link "LinkedIn=<url>"
 ```
 
 - **[code]** It finds the recorder's main recordings or the Riverside per-speaker downloads in `video editing/`, and fills the tracks, `date`, `start_s` 0, `end_s`, `website_slug` and `host_is_interviewee: false`.
@@ -71,7 +71,7 @@ If the hub or whisper is down, report it and stop. They are started from the hub
 **1b. Trial of a hand-edited episode.** Create the trial and **snapshot the source**:
 
 ```
-./.venv/Scripts/python.exe -m podcast.init_episode "<trial folder>" --from "<source folder>"
+./.venv/Scripts/python.exe -m tools.podcast.init_episode "<trial folder>" --from "<source folder>"
 find "<source folder>" -type f -printf "%P %s %T@\n" | sort > "<scratchpad>/source-before.txt"
 ```
 
@@ -124,15 +124,15 @@ The first full run stops before `covers` and `package` with "waiting for review"
 The owner reviews; you record and apply. The owner watches the clips either in the Podcast tab (the episode, or a trial under `trials_root`) or straight from the files `review_cli show` lists. Show the review state at any time with:
 
 ```
-./.venv/Scripts/python.exe -m podcast.review_cli "<folder>" show
+./.venv/Scripts/python.exe -m tools.podcast.review_cli "<folder>" show
 ```
 
 Walk the clips in the order the owner prefers. Lowest score first is a good default. For each clip, give its title, length, score, caption doubts and the two file paths, then ask: **approve, drop, or changes?** Record what the owner says:
 
 ```
-./.venv/Scripts/python.exe -m podcast.review_cli "<folder>" approve 3 5
-./.venv/Scripts/python.exe -m podcast.review_cli "<folder>" drop 7
-./.venv/Scripts/python.exe -m podcast.review_cli "<folder>" feedback 4 "at 0:12 'happy' should be 'crappy'"
+./.venv/Scripts/python.exe -m tools.podcast.review_cli "<folder>" approve 3 5
+./.venv/Scripts/python.exe -m tools.podcast.review_cli "<folder>" drop 7
+./.venv/Scripts/python.exe -m tools.podcast.review_cli "<folder>" feedback 4 "at 0:12 'happy' should be 'crappy'"
 ```
 
 How to phrase feedback: write one note per problem, in the owner's words, and give the moment and the word when the note is about captions or cuts. The notes the revise step understands:

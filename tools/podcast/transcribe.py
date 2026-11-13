@@ -28,10 +28,10 @@ from typing import Optional
 import numpy as np
 
 from common.runtime_files import ensure_folder, write_text_at
-from podcast.episode import SPEAKERS, Episode, work_dir
-from podcast.media import extract_wav, read_wav, write_wav
-from podcast.metrics import StageRecord
 from src.pooled_http import pooled_request
+from tools.podcast.episode import SPEAKERS, Episode, work_dir
+from tools.podcast.media import extract_wav, read_wav, write_wav
+from tools.podcast.metrics import StageRecord
 
 logger = logging.getLogger("podcast.transcribe")
 

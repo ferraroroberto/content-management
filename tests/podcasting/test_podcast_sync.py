@@ -22,9 +22,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from podcast import sync  # noqa: E402
-from podcast.episode import Episode, load_episode  # noqa: E402
-from podcast.media import NO_WINDOW, read_wav, run_ffmpeg, write_wav  # noqa: E402
+from tools.podcast import sync  # noqa: E402
+from tools.podcast.episode import Episode, load_episode  # noqa: E402
+from tools.podcast.media import NO_WINDOW, read_wav, run_ffmpeg, write_wav  # noqa: E402
 
 RATE = sync.RATE
 FRAME = 1 / 24

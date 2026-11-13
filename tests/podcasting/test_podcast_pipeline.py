@@ -14,7 +14,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import podcast_pipeline  # noqa: E402
-from podcast import (  # noqa: E402
+from tools.podcast import (  # noqa: E402
     captions,
     clips,
     covers,
@@ -25,7 +25,7 @@ from podcast import (  # noqa: E402
     score,
     transcribe,
 )
-from podcast.episode import Episode  # noqa: E402
+from tools.podcast.episode import Episode  # noqa: E402
 
 
 def _w(text: str, start: float, spk: str = "guest", dur: float = 0.3) -> dict:
@@ -193,7 +193,7 @@ class MetricsTests(unittest.TestCase):
     def test_backend_without_usage_is_estimated_and_flagged(self) -> None:
         from unittest.mock import patch
 
-        from podcast import hub
+        from tools.podcast import hub
         rec = metrics.StageRecord("clean")
         empty = {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0,
                  "cache_creation_input_tokens": 0}
@@ -375,7 +375,7 @@ class WordTimingTests(unittest.TestCase):
         self.assertEqual([(w["w"], w["s"], w["e"]) for w in out], [("we", 2.0, 2.3), ("sleep", 3.5, 3.8)])
 
     def test_render_graph_trims_the_same_spans_for_picture_and_sound(self) -> None:
-        from podcast import render
+        from tools.podcast import render
         clip = {"start": 100.0, "end": 110.0, "speaker": "guest", "keep": [list(s) for s in self.KEEP],
                 "shots": [{"a": 100.0, "b": 103.0, "spk": "guest", "zoom": 1.0},
                           {"a": 104.0, "b": 107.0, "spk": "host", "zoom": 1.0},

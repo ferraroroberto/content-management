@@ -31,9 +31,9 @@ from config.console import force_utf8_stdio  # noqa: E402
 force_utf8_stdio()
 from common.runtime_files import ensure_folder
 from config.logger_config import setup_logger  # noqa: E402
-from podcast.episode import Episode, load_episode, load_podcast_config  # noqa: E402
-from podcast.metrics import stage_timer  # noqa: E402
-from podcast.review_state import (  # noqa: E402
+from tools.podcast.episode import Episode, load_episode, load_podcast_config  # noqa: E402
+from tools.podcast.metrics import stage_timer  # noqa: E402
+from tools.podcast.review_state import (  # noqa: E402
     kept_clips,
     load_review,
     review_done,
@@ -45,62 +45,62 @@ logger: logging.Logger = logging.getLogger("podcast")
 
 
 def _sync(ep, cfg, rec, force):
-    from podcast import sync  # noqa: PLC0415
+    from tools.podcast import sync  # noqa: PLC0415
     sync.run(ep, cfg, rec)
 
 
 def _transcribe(ep, cfg, rec, force):
-    from podcast import transcribe  # noqa: PLC0415
+    from tools.podcast import transcribe  # noqa: PLC0415
     transcribe.run(ep, cfg, rec)
 
 
 def _clean(ep, cfg, rec, force):
-    from podcast import package  # noqa: PLC0415
+    from tools.podcast import package  # noqa: PLC0415
     package.run_clean(ep, cfg, rec)
 
 
 def _select(ep, cfg, rec, force):
-    from podcast import clips  # noqa: PLC0415
+    from tools.podcast import clips  # noqa: PLC0415
     clips.run_select(ep, cfg, rec)
 
 
 def _copy(ep, cfg, rec, force):
-    from podcast import clips  # noqa: PLC0415
+    from tools.podcast import clips  # noqa: PLC0415
     clips.run_copy(ep, cfg, rec)
 
 
 def _edit(ep, cfg, rec, force):
-    from podcast import edit  # noqa: PLC0415
+    from tools.podcast import edit  # noqa: PLC0415
     edit.run(ep, cfg, rec)
 
 
 def _render(ep, cfg, rec, force):
-    from podcast import render  # noqa: PLC0415
+    from tools.podcast import render  # noqa: PLC0415
     render.run(ep, cfg, rec, force=force)
 
 
 def _revise(ep, cfg, rec, force):
-    from podcast import revise  # noqa: PLC0415
+    from tools.podcast import revise  # noqa: PLC0415
     revise.run(ep, cfg, rec)
 
 
 def _episode(ep, cfg, rec, force):
-    from podcast import package  # noqa: PLC0415
+    from tools.podcast import package  # noqa: PLC0415
     package.run_episode_copy(ep, cfg, rec)
 
 
 def _covers(ep, cfg, rec, force):
-    from podcast import covers  # noqa: PLC0415
+    from tools.podcast import covers  # noqa: PLC0415
     covers.run(ep, cfg, rec, force=force)
 
 
 def _package(ep, cfg, rec, force):
-    from podcast import package  # noqa: PLC0415
+    from tools.podcast import package  # noqa: PLC0415
     package.run_package(ep, cfg, rec)
 
 
 def _score(ep, cfg, rec, force):
-    from podcast import score  # noqa: PLC0415
+    from tools.podcast import score  # noqa: PLC0415
     score.run(ep, cfg, rec)
 
 
@@ -112,8 +112,8 @@ def _every_clip_has(kind: str) -> Callable[[Episode], bool]:
     """Done only when every selected clip has its output — a crash mid-stage
     must not look finished on resume (the stage itself skips files on disk)."""
     def done(ep: Episode) -> bool:
-        from podcast.clips import load_clips  # noqa: PLC0415
-        from podcast.render import clip_outputs  # noqa: PLC0415
+        from tools.podcast.clips import load_clips  # noqa: PLC0415
+        from tools.podcast.render import clip_outputs  # noqa: PLC0415
         clips = kept_clips(load_clips(ep), load_review(ep))  # a dropped clip needs no files
         return bool(clips) and all(
             c.get("file") and all(path.exists() for path in clip_outputs(ep, c, kind)) for c in clips)
@@ -121,13 +121,13 @@ def _every_clip_has(kind: str) -> Callable[[Episode], bool]:
 
 
 def _every_clip_edited(ep: Episode) -> bool:
-    from podcast.clips import load_clips  # noqa: PLC0415
+    from tools.podcast.clips import load_clips  # noqa: PLC0415
     clips = load_clips(ep)
     return bool(clips) and all("keep" in c and "caption_review" in c for c in clips)
 
 
 def _no_open_feedback(ep: Episode) -> bool:
-    from podcast.clips import load_clips  # noqa: PLC0415
+    from tools.podcast.clips import load_clips  # noqa: PLC0415
     return not to_revise(load_clips(ep), load_review(ep))
 
 
@@ -152,14 +152,14 @@ REVIEW_GATED = ("covers", "package")
 
 def status(ep: Episode) -> int:
     """Log where the episode stands; read-only. 2 when a track is missing."""
-    from podcast.clips import load_clips  # noqa: PLC0415
+    from tools.podcast.clips import load_clips  # noqa: PLC0415
     logger.info("ℹ️ episode: %s → %s", ep.folder, ep.package)
     missing = [side for side, path in ep.tracks.items() if not path.is_file()]
     for side, path in ep.tracks.items():
         logger.info("ℹ️ %s track: %s%s", side, path, "" if path.is_file() else " (missing)")
     clips, review = load_clips(ep), load_review(ep)
     pending = []
-    from podcast.sync import references  # noqa: PLC0415
+    from tools.podcast.sync import references  # noqa: PLC0415
     for name, (_, is_done) in STAGES.items():
         if is_done(ep):
             label = "done"
@@ -216,7 +216,7 @@ def main(argv: list[str] | None = None) -> int:
             logger.info("ℹ️ %s: output exists, skipping (use --force to redo)", name)
             continue
         if name in REVIEW_GATED and not args.unreviewed:
-            from podcast.clips import load_clips  # noqa: PLC0415
+            from tools.podcast.clips import load_clips  # noqa: PLC0415
             clips, review = load_clips(ep), load_review(ep)
             if not review_done(clips, review):
                 logger.warning("⚠️ %s: waiting for review (%s); use --unreviewed to run it anyway",
@@ -232,7 +232,7 @@ def main(argv: list[str] | None = None) -> int:
         logger.info("✅ %s done in %.0fs", name, rec.wall_s)
         if name == "sync":
             ep = load_episode(Path(args.episode), cfg)  # the later stages read the aligned tracks
-    from podcast.report import write_report  # noqa: PLC0415
+    from tools.podcast.report import write_report  # noqa: PLC0415
     path = write_report(ep, cfg)
     logger.info("✅ metrics: %s", path)
     return 0

@@ -1,11 +1,11 @@
 """The clip review from the command line — the same ``review.json`` the Podcast
 tab writes, for a review walked through in a terminal.
 
-    python -m podcast.review_cli "<episode folder>" show
-    python -m podcast.review_cli "<episode folder>" approve 1 3 5
-    python -m podcast.review_cli "<episode folder>" drop 7
-    python -m podcast.review_cli "<episode folder>" pending 7
-    python -m podcast.review_cli "<episode folder>" feedback 4 "at 0:12 'happy' should be 'crappy'"
+    python -m tools.podcast.review_cli "<episode folder>" show
+    python -m tools.podcast.review_cli "<episode folder>" approve 1 3 5
+    python -m tools.podcast.review_cli "<episode folder>" drop 7
+    python -m tools.podcast.review_cli "<episode folder>" pending 7
+    python -m tools.podcast.review_cli "<episode folder>" feedback 4 "at 0:12 'happy' should be 'crappy'"
 
 ``feedback`` opens (or extends) a round; ``podcast_pipeline.py --stages revise``
 applies it. Nothing here renders or calls a model.
@@ -19,10 +19,10 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from podcast import review_state
-from podcast.clips import clip_length, load_clips
-from podcast.episode import load_episode, load_podcast_config
-from podcast.review_state import ClipStatus
+from tools.podcast import review_state
+from tools.podcast.clips import clip_length, load_clips
+from tools.podcast.episode import load_episode, load_podcast_config
+from tools.podcast.review_state import ClipStatus
 
 logger = logging.getLogger("podcast.review_cli")
 

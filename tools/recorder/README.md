@@ -6,7 +6,7 @@ full resolution**, uploading in chunks while it runs. The finished files land
 in the episode's `video editing/` folder, which is where `podcast_pipeline.py`
 reads its tracks from. This replaces the one job Riverside did for the
 podcast. It covers the browser recorder, the peer-to-peer call, and the
-track sync (the pipeline's `sync` stage, see `podcast/README.md`).
+track sync (the pipeline's `sync` stage, see `tools/podcast/README.md`).
 
 ## Run
 

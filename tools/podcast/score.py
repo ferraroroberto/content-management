@@ -24,15 +24,15 @@ import re
 from PIL import Image
 
 from common.runtime_files import write_text_at
-from podcast.captions import caption_text
-from podcast.clips import load_clips, save_clips, write_clips_md
-from podcast.edit import load_clip_words, output_words
-from podcast.episode import Episode, work_dir
-from podcast.hub import ask_json
-from podcast.media import frame_at
-from podcast.metrics import StageRecord
-from podcast.report import SCORES_FILE
-from podcast.transcribe import load_words
+from tools.podcast.captions import caption_text
+from tools.podcast.clips import load_clips, save_clips, write_clips_md
+from tools.podcast.edit import load_clip_words, output_words
+from tools.podcast.episode import Episode, work_dir
+from tools.podcast.hub import ask_json
+from tools.podcast.media import frame_at
+from tools.podcast.metrics import StageRecord
+from tools.podcast.report import SCORES_FILE
+from tools.podcast.transcribe import load_words
 
 logger = logging.getLogger("podcast.score")
 

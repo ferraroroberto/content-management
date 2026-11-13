@@ -18,7 +18,7 @@ from typing import Literal, Optional
 import numpy as np
 
 from common.runtime_files import ensure_folder
-from podcast.media import (
+from tools.podcast.media import (
     extract_wav,
     ffprobe_json,
     frame_at,

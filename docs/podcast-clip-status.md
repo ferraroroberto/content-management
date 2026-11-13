@@ -1,6 +1,6 @@
 # Podcast clip status
 
-Each clip of a podcast episode has one review status in `<episode folder>/review.json`. `podcast/review_state.py` is the only module that names the states, maps a stored string to one and moves a clip between them.
+Each clip of a podcast episode has one review status in `<episode folder>/review.json`. `tools/podcast/review_state.py` is the only module that names the states, maps a stored string to one and moves a clip between them.
 
 ## Why it is declared
 
@@ -31,8 +31,8 @@ The string values are the ones `review.json` holds, so they never change.
 | Status counts, review gate, summary line | `counts`, `review_done`, `summary` | `derive_clip_status` |
 | Clips kept in the package | `kept_clips` | `derive_clip_status` |
 | Approve, drop and reopen buttons | `_review_controls` in `app/tab_podcast.py` | `ClipStatus` |
-| Review CLI actions | `STATUS_OF` in `podcast/review_cli.py` | `ClipStatus` |
-| Round settled by a revision | `close` in `podcast/revise.py` | `ClipStatus` |
+| Review CLI actions | `STATUS_OF` in `tools/podcast/review_cli.py` | `ClipStatus` |
+| Round settled by a revision | `close` in `tools/podcast/revise.py` | `ClipStatus` |
 
 A new reader calls the module. It does not compare a status string.
 

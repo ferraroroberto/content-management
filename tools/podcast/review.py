@@ -14,10 +14,10 @@ import json
 import logging
 import re
 
-from podcast.episode import Episode
-from podcast.hub import ask_json
-from podcast.metrics import StageRecord
-from podcast.transcribe import sentences
+from tools.podcast.episode import Episode
+from tools.podcast.hub import ask_json
+from tools.podcast.metrics import StageRecord
+from tools.podcast.transcribe import sentences
 
 logger = logging.getLogger("podcast.review")
 

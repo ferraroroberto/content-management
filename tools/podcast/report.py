@@ -7,8 +7,8 @@ import json
 from pathlib import Path
 
 from common.runtime_files import write_text_at
-from podcast.episode import Episode
-from podcast.metrics import load_metrics, summarize
+from tools.podcast.episode import Episode
+from tools.podcast.metrics import load_metrics, summarize
 
 SCORES_FILE = "scores.json"
 

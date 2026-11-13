@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from common.atomic_write import atomic_write_text
-from podcast.episode import Episode
+from tools.podcast.episode import Episode
 
 REVIEW_FILE = "review.json"
 

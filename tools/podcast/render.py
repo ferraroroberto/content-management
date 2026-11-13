@@ -18,12 +18,12 @@ from pathlib import Path
 
 from common.runtime_files import copy_file_to, ensure_folder, write_text_at
 from planning.videos.videos_session import windows_safe_filename
-from podcast.captions import LAYOUTS, Layout, build_ass
-from podcast.clips import load_clips, save_clips
-from podcast.edit import FPS, load_clip_words, output_words
-from podcast.episode import Episode, work_dir
-from podcast.media import run_ffmpeg
-from podcast.metrics import StageRecord
+from tools.podcast.captions import LAYOUTS, Layout, build_ass
+from tools.podcast.clips import load_clips, save_clips
+from tools.podcast.edit import FPS, load_clip_words, output_words
+from tools.podcast.episode import Episode, work_dir
+from tools.podcast.media import run_ffmpeg
+from tools.podcast.metrics import StageRecord
 
 logger = logging.getLogger("podcast.render")
 

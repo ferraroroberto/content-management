@@ -14,8 +14,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from podcast import clips  # noqa: E402
-from podcast.episode import Episode  # noqa: E402
+from tools.podcast import clips  # noqa: E402
+from tools.podcast.episode import Episode  # noqa: E402
 
 MARK = "A clip from my conversation"
 
@@ -91,7 +91,7 @@ class StyleExamplesTests(unittest.TestCase):
             return clips.style_examples(self.cfg, self.ep)
 
     def test_n_comes_from_config_and_an_old_all_episodes_cache_is_not_reused(self) -> None:
-        from podcast.episode import work_dir  # noqa: PLC0415
+        from tools.podcast.episode import work_dir  # noqa: PLC0415
         stale = work_dir(self.cfg, self.ep) / "style_examples.json"
         stale.write_text(json.dumps({"titles": ["an old style title"], "linkedin": ["old intro"]}),
                          encoding="utf-8")

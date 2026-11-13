@@ -46,9 +46,9 @@ from typing import Optional
 import numpy as np
 
 from common.runtime_files import ensure_folder, write_text_at
-from podcast.episode import SYNC_FILE, VIDEO_DIR, Episode, episode_path, work_dir
-from podcast.media import ffprobe_json, read_wav, run_ffmpeg
-from podcast.metrics import StageRecord
+from tools.podcast.episode import SYNC_FILE, VIDEO_DIR, Episode, episode_path, work_dir
+from tools.podcast.media import ffprobe_json, read_wav, run_ffmpeg
+from tools.podcast.metrics import StageRecord
 
 logger = logging.getLogger("podcast.sync")
 
