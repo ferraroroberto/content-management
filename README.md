@@ -13,7 +13,7 @@ Six surfaces, one repo:
   with a dedicated profile. The Instagram step also clones captions /
   illustrations into the TW/TH/SB Notion columns so the other planners
   and the daily Substack run can consume them.
-- **Newsletter** (`newsletter/`, `newsletter_pipeline.py`) — the weekly
+- **Newsletter** (`tools/newsletter/`, `newsletter_pipeline.py`) — the weekly
   newsletter workflow, split into independent non-interactive steps
   (`schedule` / `bootstrap` / `archive` / `normalize` / `build`, plus
   `create` and `all` composites) so each runs on its own from the app or
@@ -42,7 +42,7 @@ Six surfaces, one repo:
   with that line and leads the body with a "one must read" section (the
   featured article, linked, plus its AI-generated summary), and trails
   the last topic with a "one book" section pulled from the Notion books
-  database when one is linked to the newsletter. It never publishes. **Triage** (`newsletter/triage/`)
+  database when one is linked to the newsletter. It never publishes. **Triage** (`tools/newsletter/triage/`)
   sits upstream of all that: it reads the `newsletters` Gmail label for a
   closed week, scores every link against the owner's inferred criteria
   (54 weeks of ground truth, two-stage hub scoring, paywall/promo vetoes,
@@ -170,12 +170,12 @@ content-management/                   # repo root
 │   ├── scrape_client/                # HTTP/Playwright scrapers
 │   ├── process/                      # transform, upload to Supabase, aggregate
 │   └── notion/                       # editorial helpers + Notion sync
-├── newsletter/                       # weekly newsletter pipeline (archive + normalize + build)
-│                                     # archive=chrome tabs → notion; normalize_names + normalize_url
-│                                     # rewrite titles + clean URLs; build_newsletter renders HTML
-│                                     # substack_draft pushes the same lists to a private Substack draft
-│   └── triage/                       # Gmail inbox → edition shortlist (criteria, engine, Supabase store, review, lessons)
 ├── tools/                            # one package per tool (see docs/layout.md)
+│   ├── newsletter/                       # weekly newsletter pipeline (archive + normalize + build)
+│   │                                     # archive=chrome tabs → notion; normalize_names + normalize_url
+│   │                                     # rewrite titles + clean URLs; build_newsletter renders HTML
+│   │                                     # substack_draft pushes the same lists to a private Substack draft
+│   │   └── triage/                       # Gmail inbox → edition shortlist (criteria, engine, Supabase store, review, lessons)
 │   ├── demo_video/                       # demo videos: demo.json storyboard → Remotion template (remotion/) → MP4 per cut
 │   ├── engagement/                       # anti-AI comment triage (rules → sklearn → LLM fallback)
 │   │   ├── linkedin/                     # LinkedIn comment scraper
@@ -235,7 +235,7 @@ gotchas, files.
   [`reporting/process/README.md`](reporting/process/README.md) ·
   [`reporting/notion/README.md`](reporting/notion/README.md)
 - **Newsletter** —
-  [`newsletter/README.md`](newsletter/README.md)
+  [`tools/newsletter/README.md`](tools/newsletter/README.md)
 - **Engagement** —
   [`tools/engagement/README.md`](tools/engagement/README.md)
 - **Check IP** —
@@ -319,7 +319,7 @@ LinkedIn comment triage: scrape the comments on your recent posts, classify each
 
 ### 🧭 Triage
 
-Weekly newsletter inbox → edition shortlist: pick a closed Saturday→Saturday week, run the triage engine (Gmail → links → two-stage scoring → 8+8+8 suggestions stored in Supabase) with the live log, then review the editable table — tick / untick / promote, ⭐ / 🏆, notes — and Apply to persist decisions, learn sender tiers and advance the watermark. A review comment can be distilled into criteria notes you accept one by one. A stored week can be re-scored from its stored links with a chosen Stage A engine (Jev deciding with a Claude Haiku shadow by default, Jev alone, or Claude Haiku) without fetching Gmail again; your decisions and review comment survive. Stage A's engine switch (`legacy` / `jev` / `both` / the recommended `jev+legacy` shadow modes) and the `jev_pilot` replay CLI are documented in [`newsletter/README.md`](newsletter/README.md#weekly-engine-step-24-issue-211).
+Weekly newsletter inbox → edition shortlist: pick a closed Saturday→Saturday week, run the triage engine (Gmail → links → two-stage scoring → 8+8+8 suggestions stored in Supabase) with the live log, then review the editable table — tick / untick / promote, ⭐ / 🏆, notes — and Apply to persist decisions, learn sender tiers and advance the watermark. A review comment can be distilled into criteria notes you accept one by one. A stored week can be re-scored from its stored links with a chosen Stage A engine (Jev deciding with a Claude Haiku shadow by default, Jev alone, or Claude Haiku) without fetching Gmail again; your decisions and review comment survive. Stage A's engine switch (`legacy` / `jev` / `both` / the recommended `jev+legacy` shadow modes) and the `jev_pilot` replay CLI are documented in [`tools/newsletter/README.md`](tools/newsletter/README.md#weekly-engine-step-24-issue-211).
 
 ![🧭 Triage screenshot](docs/screenshots/triage-desktop.png)
 

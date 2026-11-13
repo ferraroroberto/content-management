@@ -1,0 +1,475 @@
+"""Scoring: deterministic priors from ``criteria.json`` + two LLM stages via the hub.
+
+* ``sender_weight`` / ``domain_bonus`` — owner overrides first (tier), then the
+  data priors (hit-rate per email, domain picks); unknown senders get a neutral
+  weight and the ``new`` flag.
+* **Stage A** (``score_metadata``) — batched, cheap: sender + anchor/title +
+  domain for every candidate → topic, fit 0–5, news/promo flags. Ranks the
+  long tail without fetching anything.
+* **Stage B** (``score_content``) — per candidate, after the page fetch: topic,
+  relevance 0–5, star-worthiness, news/promo/paywall signals, one-line summary.
+
+Both stages go through ``newsletter.llm.call`` (hub ``/v1/messages``), the
+model alias comes from ``config.newsletter_triage.llm_model``; responses are
+JSON and parsed defensively — a bad answer is an ``unknown`` state, never a 0.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import re
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from functools import partial
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+
+from tools.newsletter import llm
+from tools.newsletter.topics import TOPICS, match_topic
+from tools.newsletter.triage.criteria import load_overrides
+from tools.newsletter.triage.json_cache import JsonFileCache
+
+logger = logging.getLogger("newsletter_triage.score")
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+LLM_CACHE_PATH = REPO_ROOT / "results" / "newsletter" / "triage" / "llm_cache.json"
+DEFAULT_LEGACY_BUDGET_S = 1200   # `jev+legacy`: the most the legacy shadow may run (a legacy pass is ~10–15 min)
+
+
+class LLMCache(JsonFileCache):
+    """JSON cache for both stages, keyed by a hash of (model, prompt inputs).
+
+    Makes re-runs and backtest iterations free for unchanged items. The model in the key is the *served*
+    version once ``use_version`` has recorded it: an alias like ``claude_haiku`` is repointed by the hub
+    when a newer model ships, and answers from the old one must not be replayed for the new. ``fresh`` makes
+    every ``get`` a miss (a re-score that must call the model) while ``put`` still stores the new answers.
+    """
+
+    def __init__(self, path: Path = LLM_CACHE_PATH, *, fresh: bool = False) -> None:
+        super().__init__(path, label="llm cache")
+        self.hits = self.misses = 0
+        self.fresh = fresh
+        self._served: Dict[str, str] = {}
+
+    @staticmethod
+    def key(model: str, *parts: str) -> str:
+        return hashlib.sha1(("\x1f".join([model, *parts])).encode("utf-8", "ignore")).hexdigest()
+
+    def use_version(self, alias: str, version: Optional[str]) -> str:
+        """Record the version served for ``alias``; with none (couldn't be read) keep keying by the alias."""
+        if version and version != alias:
+            self._served[alias] = version
+        elif not version:
+            logger.warning("⚠️ served version of %r unknown — cache keyed by the alias, so answers from an older "
+                           "model behind it may be reused (use the fresh option to bypass)", alias)
+        return self._served.get(alias, alias)
+
+    def key_for(self, model: str, *parts: str) -> str:
+        return self.key(f"{model}@{self._served[model]}" if model in self._served else model, *parts)
+
+    def get(self, k: str) -> Any:
+        v = None if self.fresh else self._data.get(k)
+        if v is None:
+            self.misses += 1
+        else:
+            self.hits += 1
+        return v
+
+    def put(self, k: str, v: Any) -> None:
+        with self._lock:
+            self._data[k] = v
+
+
+TIER_WEIGHT = {"never": 0.0, "rarely": 0.35, "review": 1.0, "usually": 1.25, "always": 1.5}
+NEW_SENDER_WEIGHT = 0.85
+FLOOR_WEIGHT = 0.25
+
+
+# ---------------------------------------------------------------------------
+# priors
+
+
+class Priors:
+    def __init__(self, criteria: Dict[str, Any], *, live_overrides: Optional[Dict[str, Any]] = None) -> None:
+        self.criteria = criteria
+        self.overrides: Dict[str, Dict[str, Any]] = {k.lower(): v for k, v in criteria.get("sender_overrides", {}).items()}
+        # The baked copy above is only as fresh as the last
+        # `python -m tools.newsletter.triage.criteria` build; nothing in the run/
+        # review flow re-runs it, so a tier the owner sets today (Apply, the
+        # tier picker, feedback.py) would silently keep being ignored until
+        # the next rebuild. Read the live overrides.json on every
+        # run and let it win over the baked copy. ``live_overrides`` is an
+        # injection point for tests; production callers always take the
+        # default (a fresh disk read).
+        if live_overrides is None:
+            try:
+                live_overrides = load_overrides().get("senders", {})
+            except Exception as exc:
+                logger.warning("⚠️ live overrides.json unreadable (%s) — using baked criteria.json copy only", exc)
+                live_overrides = {}
+        self.overrides.update({k.lower(): v for k, v in live_overrides.items()})
+        self.ranked: Dict[str, Dict[str, Any]] = {r["address"].lower(): r for r in criteria.get("sender_priors", {}).get("ranked", [])}
+        self.floor: Dict[str, Dict[str, Any]] = {r["address"].lower(): r for r in criteria.get("sender_priors", {}).get("floor", [])}
+        self.domains: Dict[str, Dict[str, Any]] = {d["domain"]: d for d in criteria.get("domain_priors", [])}
+        self.max_domain_picks = max([d["picks"] for d in self.domains.values()] + [1])
+
+    def sender(self, address: str) -> Tuple[float, str, bool]:
+        """→ (weight, basis, is_new)."""
+        a = (address or "").lower()
+        ov = self.overrides.get(a)
+        if ov:
+            tier = ov.get("tier", "review")
+            return TIER_WEIGHT.get(tier, 1.0), f"override:{tier}", False
+        r = self.ranked.get(a)
+        if r:
+            hit = float(r.get("hit_rate_per_email", 0.0))
+            return round(0.6 + min(1.0, hit) * 0.9, 3), f"hit {hit:.2f}/email", False
+        if a in self.floor:
+            return FLOOR_WEIGHT, "floor (0 picks in 54 weeks)", False
+        return NEW_SENDER_WEIGHT, "new sender", True
+
+    def sender_topics(self, address: str) -> Dict[str, int]:
+        r = self.ranked.get((address or "").lower())
+        return dict(r.get("topics", {})) if r else {}
+
+    def domain(self, dom: str) -> Tuple[float, int]:
+        d = self.domains.get(dom)
+        if not d:
+            return 0.0, 0
+        return round(0.3 * min(1.0, d["picks"] / max(10, self.max_domain_picks * 0.2)), 3), int(d["picks"])
+
+    def topic_prior(self, address: str, dom: str) -> Optional[str]:
+        """Most frequent topic of this sender, else of the domain — a weak prior for rule-only mode."""
+        for mix in (self.sender_topics(address), (self.domains.get(dom) or {}).get("topics", {})):
+            mix = {k: v for k, v in mix.items() if k in TOPICS}
+            if mix:
+                return max(mix, key=mix.get)
+        return None
+
+
+# ---------------------------------------------------------------------------
+# prompts
+
+LESSONS_PATH = REPO_ROOT / "results" / "newsletter" / "triage" / "lessons.json"
+# Where the export wrote before it moved out of the code folder; read until the next export replaces it.
+_LEGACY_LESSONS_PATH = Path(__file__).with_name("lessons.json")
+
+
+def load_lessons(path: Optional[Path] = None) -> List[str]:
+    """Owner-accepted criteria notes distilled from reviews (local gitignored file, text-only; exported from the
+    store by ``lessons.py`` — absent on a fresh clone until the first accept/save)."""
+    if path is None:
+        path = LESSONS_PATH if LESSONS_PATH.exists() else _LEGACY_LESSONS_PATH
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("⚠️ accepted lessons %s are unreadable (%s) — scoring without them", path, type(exc).__name__)
+        return []
+    return [str(x.get("text") if isinstance(x, dict) else x).strip() for x in data.get("lessons", []) if x]
+
+
+def _criteria_brief(criteria: Dict[str, Any]) -> str:
+    rules = criteria.get("rules", {})
+    parts = ["Newsletter selection criteria (owner-validated, measured on 54 weeks):"]
+    for t in TOPICS:
+        tr = rules.get("topics", {}).get(t, {})
+        parts.append(f"- {t}: themes = {', '.join(tr.get('themes', []))}. Avoid: {', '.join(tr.get('anti_themes', []))}.")
+    np_ = rules.get("news_policy", {})
+    parts.append(f"- News policy: {np_.get('rule', '')} Keep: {'; '.join(np_.get('keep_if', []))}. Drop: {'; '.join(np_.get('drop_if', []))}.")
+    parts.append(f"- Never: {'; '.join(rules.get('content_exclusions', {}).get('anchors', []))}; paywalled content.")
+    parts.append(f"- Style: {rules.get('title_style', {}).get('note', '')}")
+    learned = load_lessons()
+    if learned:
+        parts.append("Learned from the owner's reviews (apply as soft preferences):")
+        parts.extend(f"- {x}" for x in learned)
+    return "\n".join(parts)
+
+
+_JSON_BLOCK = re.compile(r"\[.*\]|\{.*\}", re.DOTALL)
+
+
+def _parse_json(text: str) -> Any:
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.DOTALL)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        m = _JSON_BLOCK.search(text)
+        if m:
+            try:
+                return json.loads(m.group(0))
+            except json.JSONDecodeError:
+                return None
+    return None
+
+
+def _clamp(v: Any, lo: int = 0, hi: int = 5) -> Optional[int]:
+    try:
+        return max(lo, min(hi, int(round(float(v)))))
+    except (TypeError, ValueError):
+        return None
+
+
+# ---------------------------------------------------------------------------
+# stage A — metadata, batched
+
+STAGE_A_BATCH = 25    # links per Stage A hub call; ``run`` sizes its call estimate from it
+DEFAULT_LLM_WORKERS = 3    # per-link hub threads (Stage B) when config has no ``llm_workers``
+
+
+def stage_a_workers(cfg: Dict[str, Any]) -> int:
+    """Hub threads for the legacy Stage A pass: one above ``llm_workers``.
+
+    Stage A sends whole batches (``STAGE_A_BATCH`` links per call) concurrently while Stage B sends one call
+    per link, so the batch pass gets one extra thread over the per-link pool. ``run`` and ``jev_pilot`` both
+    size it here so the replay measures the engine as the weekly run configures it.
+    """
+    return int(cfg.get("llm_workers", DEFAULT_LLM_WORKERS)) + 1
+
+
+@dataclass
+class MetaScore:
+    topic: Optional[str] = None
+    fit: Optional[int] = None          # 0–5
+    news: bool = False
+    promo: bool = False
+    reason: str = ""
+    ok: bool = False
+
+
+def _meta_key(cache: LLMCache, model: str, it: Dict[str, str]) -> str:
+    return cache.key_for(model, "A", it.get("sender", ""), it.get("label", ""), it.get("domain", ""), it.get("path", ""))
+
+
+def meta_request(brief: str, chunk: Sequence[Dict[str, str]]) -> Tuple[str, int]:
+    """One Stage A batch → (prompt, max_tokens): the exact request ``score_metadata`` sends."""
+    lines = [f"{i + 1}. sender=\"{it['sender'][:40]}\" | anchor=\"{it['label'][:120]}\" | domain={it['domain']} | path={it['path'][:80]}"
+             for i, it in enumerate(chunk)]
+    prompt = (f"{brief}\n\nYou triage links from newsletter emails for a weekly curated newsletter with three sections. "
+              f"For EACH numbered link below, judge from the metadata only (no fetching): the best-fitting topic, how well it fits "
+              f"the criteria (fit 0–5: 0 = promo/noise/irrelevant, 3 = plausible, 5 = textbook pick), whether it is a news/"
+              f"release announcement, whether it is a promo (course, book, product, event, sponsor). Be strict: most links are 0–2.\n"
+              f"Return ONLY a JSON array with one object per link, in order: "
+              f"{{\"i\": <number>, \"topic\": \"leadership and management|personal development|innovation\", \"fit\": 0-5, "
+              f"\"news\": true|false, \"promo\": true|false, \"reason\": \"<= 12 words\"}}\n\n" + "\n".join(lines))
+    return prompt, 70 * len(chunk) + 150
+
+
+def score_metadata(items: Sequence[Dict[str, str]], criteria: Dict[str, Any], *, base_url: str, model: str,
+                   batch: int = STAGE_A_BATCH, timeout: int = 180, workers: int = 4,
+                   cache: Optional["LLMCache"] = None, calls: Optional[List[Dict[str, Any]]] = None,
+                   stop: Optional[threading.Event] = None,
+                   results: Optional[List[MetaScore]] = None) -> List[MetaScore]:
+    """``items``: dicts with sender, label, domain, path. Returns one MetaScore per item (same order).
+
+    Batches run concurrently (``workers``) — the hub's per-call overhead (~8 s
+    CLI start for the Claude aliases) dominates, not generation. Cached items
+    are not re-sent. ``calls``, when given, receives one record per hub call
+    (links, monotonic start/end, ok, the response's token usage) for the
+    engine comparison in ``jev_pilot --legacy``. ``stop`` ends the pass early (batches not yet
+    started stay unscored) and ``results`` lets a caller read finished items while it runs — the
+    ``jev+legacy`` shadow, like ``jev.score_metadata_jev``.
+    """
+    brief = _criteria_brief(criteria)
+    out: List[MetaScore] = results if results is not None else [MetaScore() for _ in items]
+    todo_idx: List[int] = []
+    for i, it in enumerate(items):
+        hit = cache.get(_meta_key(cache, model, it)) if cache is not None else None
+        if hit:
+            out[i] = MetaScore(**hit)
+        else:
+            todo_idx.append(i)
+    if cache is not None:
+        logger.info("  stage A cache: %d hits, %d to score", len(items) - len(todo_idx), len(todo_idx))
+    starts = list(range(0, len(todo_idx), batch))
+    t0 = time.monotonic()
+    done = 0
+
+    def one(start: int) -> None:
+        if stop is not None and stop.is_set():
+            return
+        idxs = todo_idx[start:start + batch]
+        chunk = [items[i] for i in idxs]
+        prompt, max_tokens = meta_request(brief, chunk)
+        usage: Dict[str, int] = {}
+        t_call = time.monotonic()
+        try:
+            text, usage = llm.call_with_usage(base_url=base_url, model=model, prompt=prompt, max_tokens=max_tokens,
+                                              timeout=timeout)
+            data = _parse_json(text)
+        except Exception as exc:  # noqa: BLE001 — logged, stays unknown
+            logger.warning("⚠️ stage-A batch %d failed: %s", start // batch, type(exc).__name__)
+            data = None
+        if calls is not None:
+            calls.append({"links": len(chunk), "start": t_call, "end": time.monotonic(),
+                          "ok": isinstance(data, list), "usage": usage})
+        if not isinstance(data, list):
+            if data is not None:
+                logger.warning("⚠️ stage-A batch %d reply is not a JSON list (%s) — batch left unscored",
+                               start // batch, type(data).__name__)
+            else:
+                logger.warning("⚠️ stage-A batch %d reply did not parse as JSON — batch left unscored", start // batch)
+            return
+        for obj in data:
+            if not isinstance(obj, dict):
+                continue
+            idx = _clamp(obj.get("i"), 1, len(chunk))
+            if idx is None:
+                continue
+            gi = idxs[idx - 1]
+            ms = out[gi]
+            ms.topic, ms.fit = match_topic(obj.get("topic")), _clamp(obj.get("fit"))
+            ms.news, ms.promo = bool(obj.get("news")), bool(obj.get("promo"))
+            ms.reason, ms.ok = str(obj.get("reason") or "")[:160], ms.fit is not None
+            if cache is not None and ms.ok:
+                cache.put(_meta_key(cache, model, items[gi]), ms.__dict__)
+
+    if starts:
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+            for _ in pool.map(one, starts):
+                done += 1
+                if done % 5 == 0 or done == len(starts):
+                    logger.info("  … stage A %d/%d batches (%.0fs)", done, len(starts), time.monotonic() - t0)
+    if cache is not None:
+        cache.flush()
+    return out
+
+
+class ShadowPass:
+    """One Stage A engine scoring on a background thread while the other decides (``both``: ``jev.Shadow``;
+    ``jev+legacy``: ``LegacyShadow``).
+
+    ``score(stop=, results=)`` fills the pre-built ``results`` in place and checks ``stop`` between batches.
+    ``collect()`` waits at most until ``budget_s`` after start, then stops the pass and returns
+    ``snapshot(result)`` for every item — anything unfinished keeps its empty value. Nothing here can raise
+    into the deciding run.
+    """
+
+    def __init__(self, engine: str, score: Callable[..., Any], results: List[Any], *, model: str,
+                 budget_s: float, snapshot: Callable[[Any], Any], log: logging.Logger) -> None:
+        self.engine = engine
+        self.model = model
+        self.budget_s = budget_s
+        self.results = results
+        self._score, self._snapshot, self._log = score, snapshot, log
+        self._stop = threading.Event()
+        self._t0 = time.monotonic()
+        self._thread = threading.Thread(target=self._run, name=f"{engine}-shadow", daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        try:
+            self._score(stop=self._stop, results=self.results)
+        except Exception as exc:  # noqa: BLE001 — the shadow must never surface into the deciding run
+            self._log.warning("⚠️ %s shadow pass failed: %s", self.engine, type(exc).__name__)
+
+    def collect(self) -> List[Any]:
+        remaining = self.budget_s - (time.monotonic() - self._t0)
+        self._thread.join(timeout=max(0.0, remaining))
+        if self._thread.is_alive():
+            self._stop.set()
+            self._log.warning("⚠️ %s shadow over its %.0fs budget — unfinished links recorded as not evaluated",
+                              self.engine, self.budget_s)
+        return [self._snapshot(m) for m in list(self.results)]
+
+
+class LegacyShadow(ShadowPass):
+    """``jev+legacy`` mode: legacy scores the same Stage A items in the background while Jev decides."""
+
+    def __init__(self, items: Sequence[Dict[str, str]], criteria: Dict[str, Any], *, base_url: str, model: str,
+                 workers: int = 4, cache: Optional["LLMCache"] = None,
+                 budget_s: float = DEFAULT_LEGACY_BUDGET_S) -> None:
+        # snapshot copies: a batch still in flight keeps writing into ``results`` after the budget
+        super().__init__("legacy", partial(score_metadata, items, criteria, base_url=base_url, model=model,
+                                           workers=workers, cache=cache),
+                         [MetaScore() for _ in items], model=model, budget_s=budget_s,
+                         snapshot=lambda m: MetaScore(**m.__dict__), log=logger)
+
+
+def legacy_shadow_rows(cids: Sequence[str], scores: Sequence[MetaScore], *, model: str,
+                       not_evaluated: str = "not evaluated") -> List[Dict[str, Any]]:
+    """Legacy shadow rows — the row shape of ``jev.shadow_rows`` (``cid``, ``model``, ``status`` ok / not
+    evaluated, ``topic``, ``fit``, ``news``, ``promo``) plus legacy's ``reason``."""
+    return [{"cid": cid, "model": model, "status": "ok" if m.ok else not_evaluated,
+             "error": None if m.ok else not_evaluated, "topic": m.topic, "fit": m.fit,
+             "news": bool(m.news) if m.ok else None, "promo": bool(m.promo) if m.ok else None,
+             "reason": m.reason or None} for cid, m in zip(cids, scores)]
+
+
+# ---------------------------------------------------------------------------
+# stage B — content, per candidate
+
+
+@dataclass
+class ContentScore:
+    topic: Optional[str] = None
+    relevance: Optional[int] = None    # 0–5
+    star: Optional[int] = None         # 0–5
+    news: bool = False
+    promo: bool = False
+    paywall: bool = False
+    summary: str = ""
+    reason: str = ""
+    ok: bool = False
+
+
+def score_content(*, title: str, author: str, sender: str, domain: str, excerpt: str, criteria: Dict[str, Any],
+                  base_url: str, model: str, timeout: int = 120, cache: Optional["LLMCache"] = None) -> ContentScore:
+    ck = cache.key_for(model, "B", title, sender, domain, excerpt[:2500]) if cache is not None else ""
+    if cache is not None:
+        hit = cache.get(ck)
+        if hit:
+            return ContentScore(**hit)
+    brief = _criteria_brief(criteria)
+    prompt = (f"{brief}\n\nJudge this article for the newsletter. Title: {title[:200]}\nAuthor: {author or '?'}\nSent by: {sender[:60]}\n"
+              f"Domain: {domain}\nText (excerpt):\n\"\"\"\n{excerpt[:2500]}\n\"\"\"\n\n"
+              f"Return ONLY JSON: {{\"topic\": \"leadership and management|personal development|innovation\", \"relevance\": 0-5, "
+              f"\"star\": 0-5 (would this be the single best of its section?), \"news\": true|false (release/announcement), "
+              f"\"promo\": true|false, \"paywall\": true|false (text is cut off behind a subscription wall), "
+              f"\"summary\": \"one line, <= 25 words\", \"reason\": \"<= 15 words why it fits or not\"}}")
+    cs = ContentScore()
+    try:
+        text = llm.call(base_url=base_url, model=model, prompt=prompt, max_tokens=300, timeout=timeout)
+        data = _parse_json(text)
+    except Exception as exc:  # noqa: BLE001
+        cs.reason = f"llm-error:{type(exc).__name__}"
+        return cs
+    if not isinstance(data, dict):
+        cs.reason = "llm-unparseable"
+        return cs
+    cs.topic, cs.relevance, cs.star = match_topic(data.get("topic")), _clamp(data.get("relevance")), _clamp(data.get("star"))
+    cs.news, cs.promo, cs.paywall = bool(data.get("news")), bool(data.get("promo")), bool(data.get("paywall"))
+    cs.summary, cs.reason = str(data.get("summary") or "")[:240], str(data.get("reason") or "")[:160]
+    cs.ok = cs.relevance is not None
+    if cache is not None and cs.ok:
+        cache.put(ck, cs.__dict__)
+    return cs
+
+
+# ---------------------------------------------------------------------------
+# combine
+
+
+def combine(*, sender_weight: float, domain_bonus: float, meta: Optional[MetaScore], content: Optional[ContentScore]) -> Optional[float]:
+    """Final 0–10-ish score; None when no LLM signal exists (unknown, not zero)."""
+    base: Optional[float] = None
+    if content is not None and content.ok and content.relevance is not None:
+        base = content.relevance / 5.0
+        if content.star:
+            base += 0.04 * content.star
+    elif meta is not None and meta.ok and meta.fit is not None:
+        base = meta.fit / 5.0 * 0.85          # metadata-only is less certain
+    if base is None:
+        return None
+    score = base * sender_weight * (1.0 + domain_bonus) * 10.0
+    news = (content.news if content and content.ok else False) or (meta.news if meta and meta.ok else False)
+    if news:
+        score *= 0.6
+    return round(score, 2)

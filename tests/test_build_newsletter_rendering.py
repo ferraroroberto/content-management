@@ -1,6 +1,6 @@
 """Article titles and links render as text, never as markup.
 
-``newsletter/build_newsletter.py`` assembles the weekly HTML from the Notion
+``tools/newsletter/build_newsletter.py`` assembles the weekly HTML from the Notion
 article rows the archive step wrote. Both fields on those rows are copied
 verbatim from an arbitrary third-party page — the title from the page's own
 ``<title>`` / readability short-title, the link from the tab that was open —
@@ -26,7 +26,10 @@ from __future__ import annotations
 
 import unittest
 
-from newsletter.build_newsletter import generate_complete_html, generate_html_lists
+from tools.newsletter.build_newsletter import (
+    generate_complete_html,
+    generate_html_lists,
+)
 
 TOPICS = ["personal development", "innovation", "leadership and management"]
 

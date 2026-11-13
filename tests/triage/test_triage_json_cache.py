@@ -7,10 +7,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from newsletter.triage import fetch as fx
-from newsletter.triage import gmail as gm
-from newsletter.triage import score as sc
-from newsletter.triage.json_cache import JsonFileCache
+from tools.newsletter.triage import fetch as fx
+from tools.newsletter.triage import gmail as gm
+from tools.newsletter.triage import score as sc
+from tools.newsletter.triage.json_cache import JsonFileCache
 
 
 class JsonFileCacheTests(unittest.TestCase):

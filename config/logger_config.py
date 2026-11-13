@@ -61,9 +61,9 @@ def setup_logger(name, level=logging.INFO, file_logging=True):
 def configure_root_logging(debug: bool = False) -> None:
     """Configure the root logger for scripts that log via the bare
     ``logging`` module rather than a named logger — was a verbatim
-    ``_setup_logging`` copy in ``newsletter/build_newsletter.py``,
-    ``newsletter/normalize_names.py``, ``newsletter/normalize_url.py`` and
-    ``newsletter/substack_draft.py``.
+    ``_setup_logging`` copy in ``tools/newsletter/build_newsletter.py``,
+    ``tools/newsletter/normalize_names.py``, ``tools/newsletter/normalize_url.py`` and
+    ``tools/newsletter/substack_draft.py``.
 
     Re-configures UTF-8 stdio so emoji-bearing log lines don't crash a
     cp1252 console, then attaches one ``StreamHandler`` to the root logger

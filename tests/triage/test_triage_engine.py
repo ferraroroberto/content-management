@@ -14,11 +14,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from newsletter.triage import feedback as fb  # noqa: E402
-from newsletter.triage import fetch as fx  # noqa: E402
-from newsletter.triage import rank as rk  # noqa: E402
-from newsletter.triage import report as rp  # noqa: E402
-from newsletter.triage import score as sc  # noqa: E402
+from tools.newsletter.triage import feedback as fb  # noqa: E402
+from tools.newsletter.triage import fetch as fx  # noqa: E402
+from tools.newsletter.triage import rank as rk  # noqa: E402
+from tools.newsletter.triage import report as rp  # noqa: E402
+from tools.newsletter.triage import score as sc  # noqa: E402
 
 RULES = {"caps": {"hbr_per_edition": {"target": 3}, "same_author_per_edition": {"target": 2},
                   "same_domain_per_edition": {"target": 3}},
@@ -143,7 +143,7 @@ class PriorsTests(unittest.TestCase):
         self.assertEqual(sc._parse_json('```json\n[{"i": 1}]\n```'), [{"i": 1}])
         self.assertEqual(sc._parse_json('Sure! {"topic": "innovation"} done'), {"topic": "innovation"})
         self.assertIsNone(sc._parse_json("no json here"))
-        # The label matcher now lives in newsletter/topics.py, shared with the
+        # The label matcher now lives in tools/newsletter/topics.py, shared with the
         # archive classifier (issue #284); score re-exports it under this name.
         self.assertEqual(sc.match_topic("Leadership & Management"), "leadership and management")
         self.assertEqual(sc.match_topic("Personal Development"), "personal development")

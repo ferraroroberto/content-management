@@ -1,0 +1,908 @@
+"""Weekly triage engine — one review window → one edition-sized shortlist + report.
+
+    python -m tools.newsletter.triage.run [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--days 7]
+                                    [--source gmail|cache] [--no-llm] [--no-fetch] [--top-k 90]
+                                    [--model claude_haiku] [--stage-a-engine legacy|jev|both|jev+legacy]
+                                    [--out DIR] [--debug]
+    python -m tools.newsletter.triage.run --backtest N226[,N227,…]   # offline, from the history cache
+    python -m tools.newsletter.triage.run --rescore RUN_ID [--stage-a-engine jev] [--fresh]   # stored inputs, no Gmail
+
+Cadence (owner rule): a run covers the window from the last watermark (or
+``--since``) to now and fills ONE edition (8/8/8); longer ranges are split into
+7-day windows, oldest first, one report each. Never drains the inbox into one
+edition. Nothing here writes to Notion, Gmail or Chrome.
+
+Pipeline per window: emails → non-noise links (decoded / resolved) → drop
+already-in-Notion → sender/domain priors (criteria.json + overrides.json) →
+stage-A metadata scoring (batched LLM) → fetch + stage-B content scoring for
+the top-K → vetoes (never-tier, paywalled, promo) → caps → shortlist →
+``results/newsletter/triage/triage-<start>_<end>.md``.
+
+Stage A engine (``newsletter_triage.stage_a_engine`` / ``--stage-a-engine``):
+``legacy`` (default) scores with the hub model alias; ``jev`` scores with TypeSafe
+Jev through the hub's ``/v1/systemone``; ``both`` lets legacy decide every verdict
+while Jev scores the same links in the background (bounded by ``jev_budget_s``) and
+its answers are written beside the report as ``<report>.jev-shadow.json``.
+``jev+legacy`` (the recommended setting) is the mirror: Jev decides every verdict
+while legacy scores the same links in the background through stage B (bounded by
+``legacy_budget_s``), its answers written as ``<report>.legacy-shadow.json``.
+
+Re-score (``--rescore RUN_ID``): replace a stored live run's scoring without
+touching Gmail — Stage A inputs are rebuilt from the run's stored emails + candidates
+(anchor = the stored display title, as ``jev_pilot`` replays them), sender/domain
+priors are re-read, and the run is replaced like ``--force``. The owner's decisions,
+review and lessons are keyed by window, so they survive. The inputs are snapshotted to
+``results/newsletter/triage/inputs/`` first, so a re-score that fails after replacing
+the run can be retried from the snapshot.
+
+LLM cache: answers are keyed by the model version the hub serves for the alias
+(``claude_haiku`` → ``claude-haiku-5-5``), so a repointed alias never replays the old
+model's answers; ``--fresh`` (with ``--rescore``) bypasses the cache entirely, both stages,
+and still stores the new answers.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import sys
+import time
+from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+from urllib.parse import urlsplit
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from rapidfuzz import utils as rf_utils  # noqa: E402
+
+from common.runtime_files import ensure_folder, write_text_at
+from config.console import force_utf8_stdio  # noqa: E402
+from config.loader import load_block, load_full_config  # noqa: E402
+from tools.newsletter import llm, notion_io  # noqa: E402
+from tools.newsletter.cache import canonicalize_url  # noqa: E402
+from tools.newsletter.triage import db  # noqa: E402
+from tools.newsletter.triage import fetch as fx  # noqa: E402
+from tools.newsletter.triage import gmail as gm  # noqa: E402
+from tools.newsletter.triage import jev as jx  # noqa: E402
+from tools.newsletter.triage import rank as rk  # noqa: E402
+from tools.newsletter.triage import report as rp  # noqa: E402
+from tools.newsletter.triage import score as sc  # noqa: E402
+from tools.newsletter.triage.criteria import CRITERIA_PATH  # noqa: E402
+from tools.newsletter.triage.run_status import RunStatus  # noqa: E402
+from tools.newsletter.triage.state import STATE_PATH, TRIAGE_DIR, load_state, save_state  # noqa: E402,F401
+
+logger = logging.getLogger("newsletter_triage.run")
+
+HISTORY_DIR = TRIAGE_DIR / "history"
+INPUTS_DIR = TRIAGE_DIR / "inputs"
+NOTION_URLS_CACHE = TRIAGE_DIR / "notion_urls.json"
+DEFAULT_MODEL = "claude_haiku"
+
+_STORE_STATE: Dict[str, Any] = {"checked": False, "ok": False}
+
+
+class RunExists(RuntimeError):
+    """A run for this (window, kind) is already stored — re-run with ``--force`` to replace it."""
+
+
+class NoStoredInputs(RuntimeError):
+    """``--rescore``: the run has no stored candidates and no snapshot — only a Gmail re-run can rebuild it."""
+
+
+def store_ok() -> bool:
+    """One probe per process: is the Supabase store reachable with the schema applied? Degrades to
+    report-only (stats.store = 'unavailable') instead of failing the triage — the state is visible, not silent."""
+    if not _STORE_STATE["checked"]:
+        _STORE_STATE["checked"] = True
+        try:
+            db.ensure_schema()
+            _STORE_STATE["ok"] = True
+        except Exception as err:  # noqa: BLE001 — SchemaMissing, network, bad key: all → report-only
+            logger.error("❌ triage store unavailable (%s) — running report-only, nothing stored", str(err)[:200])
+    return bool(_STORE_STATE["ok"])
+
+
+# ---------------------------------------------------------------------------
+# inputs
+
+
+def load_criteria() -> Dict[str, Any]:
+    if not CRITERIA_PATH.exists():
+        raise FileNotFoundError(f"{CRITERIA_PATH} missing — run `python -m tools.newsletter.triage.criteria`")
+    return json.loads(CRITERIA_PATH.read_text(encoding="utf-8"))
+
+
+def _norm(text: str) -> str:
+    return rf_utils.default_process(text or "")
+
+
+def load_notion_urls(*, ttl_hours: int = 24, refresh: bool = False,
+                     created_before: Optional[str] = None) -> Tuple[set, Dict[str, str]]:
+    """Canonical URLs (+ normalised titles) of articles already in Notion — the dedupe set.
+
+    ``created_before`` (YYYY-MM-DD) restricts the set to articles created before
+    that day — a backtest must not "know" the picks it is trying to reproduce.
+    """
+    data: Optional[Dict[str, Any]] = None
+    if NOTION_URLS_CACHE.exists() and not refresh:
+        try:
+            d = json.loads(NOTION_URLS_CACHE.read_text(encoding="utf-8"))
+            if time.time() - float(d.get("fetched_at", 0)) < ttl_hours * 3600 and "created" in d:
+                data = d
+        except Exception:
+            data = None
+    if data is None:
+        cfg = load_full_config()
+        na = cfg["newsletter_archive"]
+        client = notion_io.init_client(cfg["notion"]["api_token"])
+        created: Dict[str, str] = {}
+        titles: Dict[str, List[str]] = {}
+        for page in notion_io.iter_database(client, na["articles_db_id"]):
+            link = (page["properties"].get("link", {}).get("url") or "").strip()
+            if not link:
+                continue
+            c = canonicalize_url(gm.canonical_substack(link))
+            day = (page.get("created_time") or "")[:10]
+            if c not in created or day < created[c]:
+                created[c] = day
+            t = notion_io.read_title(page, "article")
+            if t:
+                titles[_norm(t)] = [c, day]
+        data = {"fetched_at": time.time(), "created": created, "titles": titles}
+        ensure_folder(NOTION_URLS_CACHE.parent)
+        write_text_at(NOTION_URLS_CACHE, json.dumps(data), encoding="utf-8")
+        logger.info("🗂️ Notion dedupe set: %d article URLs", len(created))
+    created = data["created"]
+    titles = data["titles"]
+    if created_before:
+        urls = {c for c, day in created.items() if day < created_before}
+        tmap = {t: v[0] for t, v in titles.items() if v[1] < created_before}
+    else:
+        urls = set(created)
+        tmap = {t: v[0] for t, v in titles.items()}
+    return urls, tmap
+
+
+def emails_from_cache(start: date, end: date) -> List[gm.EmailRecord]:
+    path = HISTORY_DIR / "emails.jsonl"
+    if not path.exists():
+        raise FileNotFoundError(f"{path} missing — run `python -m tools.newsletter.triage.history` first")
+    lo, hi = start.isoformat(), end.isoformat()
+    out: List[gm.EmailRecord] = []
+    with path.open("r", encoding="utf-8") as fp:
+        for line in fp:
+            if not line.strip():
+                continue
+            d = json.loads(line)
+            if lo <= d.get("timestamp", "")[:10] < hi:
+                out.append(gm.EmailRecord.from_json(d))
+    out.sort(key=lambda r: r.timestamp)
+    return out
+
+
+def emails_from_gmail(start: date, end: date, *, cfg: Dict[str, Any], budget: Optional[int] = None) -> List[gm.EmailRecord]:
+    tm = gm.build_mailbox(cfg)
+    try:
+        query = f"after:{start:%Y/%m/%d} before:{end:%Y/%m/%d}"
+        search = gm.label_search(tm, cfg.get("gmail_label", "newsletters"), query=query)
+        raws = gm.fetch_raw_messages(tm, search)
+    finally:
+        tm.close()
+    min_anchor = int(cfg.get("min_anchor_chars", gm.DEFAULT_MIN_ANCHOR_CHARS))
+    records = [gm.build_record(r, min_anchor_chars=min_anchor)[0] for r in raws]
+    records = [r for r in records if start.isoformat() <= r.timestamp[:10] < end.isoformat()]
+    records.sort(key=lambda r: r.timestamp)
+    cache = gm.RedirectCache(TRIAGE_DIR / "redirects.json")
+    stats = gm.resolve_links([l for r in records for l in r.links], cache,
+                             workers=int(cfg.get("redirect_workers", 8)),
+                             timeout=float(cfg.get("redirect_timeout_s", 10)), budget=budget)
+    logger.info("📬 %d emails in window, redirect resolve %s", len(records), stats)
+    return records
+
+
+# ---------------------------------------------------------------------------
+# candidates
+
+
+def build_candidates(records: Sequence[gm.EmailRecord], priors: sc.Priors, notion_urls: set,
+                     notion_titles: Dict[str, str],
+                     picked_before: Optional[Dict[str, str]] = None) -> Tuple[List[rk.Candidate], Dict[str, List[rk.Candidate]]]:
+    """``picked_before`` = ``db.picked_before(start)``: articles ticked in an earlier window are duplicates even
+    before the archive step puts them in Notion (HBR re-links the same piece from a later digest)."""
+    picked_before = picked_before or {}
+    cands: List[rk.Candidate] = []
+    by_email: Dict[str, List[rk.Candidate]] = defaultdict(list)
+    for rec in records:
+        weight, basis, is_new = priors.sender(rec.sender_address)
+        seen_in_email: set = set()
+        for i, link in enumerate(rec.links):
+            if link.noise:
+                continue
+            canonical = link.canonical
+            if link.resolved:
+                if canonical in seen_in_email:
+                    continue          # same article via two anchors (resolved after extraction-time dedupe)
+                seen_in_email.add(canonical)
+            dom = gm.publication_domain(link.best_url, rec.sender_address)   # each Substack publication = own domain
+            bonus, _ = priors.domain(dom)
+            c = rk.Candidate(cid=f"{rec.message_id}:{i}", message_id=rec.message_id, sender_name=rec.sender_name,
+                             sender_address=rec.sender_address, subject=rec.subject, email_ts=rec.timestamp,
+                             label=link.label, url=link.best_url, canonical=canonical, domain=dom,
+                             sender_weight=weight, sender_basis=basis, is_new_sender=is_new, domain_bonus=bonus,
+                             topic=priors.topic_prior(rec.sender_address, dom))
+            if link.resolved and canonical in picked_before:
+                c.in_notion, c.picked_earlier = True, picked_before[canonical]
+            elif link.resolved and canonical in notion_urls:
+                c.in_notion = True
+            elif link.label and _norm(link.label) in notion_titles:
+                c.in_notion = True
+            if not link.resolved:
+                c.reason = "redirect unresolved"
+            cands.append(c)
+            by_email[rec.message_id].append(c)
+    return cands, by_email
+
+
+def stored_inputs(run: Dict[str, Any]) -> Dict[str, Any]:
+    """``--rescore``: a stored run's inbox + candidate rows, snapshotted to ``INPUTS_DIR`` before the run is
+    replaced. A run left without candidates (a re-score that failed after replacing it) falls back to the
+    window's snapshot; neither → :class:`NoStoredInputs`."""
+    run_id = int(run["id"])
+    path = INPUTS_DIR / f"triage-{run['window_start']}_{run['window_end']}.inputs.json"
+    cands = db.candidates(run_id)
+    if cands:
+        doc = {"run_id": run_id, "window": [run["window_start"], run["window_end"]],
+               "emails": db.emails(run_id), "candidates": cands}
+        ensure_folder(path.parent)
+        tmp = path.with_suffix(".tmp")
+        write_text_at(tmp, json.dumps(doc, ensure_ascii=False, default=str), encoding="utf-8")
+        tmp.replace(path)
+        logger.info("📦 inputs of run %s: %d emails, %d links (snapshot %s)", run_id, len(doc["emails"]), len(cands),
+                    path.name)
+        return doc
+    if path.exists():
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        logger.warning("⚠️ run %s holds no candidates — re-scoring from the snapshot of run %s (%s)", run_id,
+                       doc.get("run_id"), path.name)
+        return doc
+    raise NoStoredInputs(f"run {run_id} ({run['window_start']} → {run['window_end']}) has no stored candidates and "
+                         f"no snapshot at {path} — re-run the week from Gmail instead")
+
+
+def candidates_from_store(doc: Dict[str, Any], priors: sc.Priors, picked_before: Optional[Dict[str, str]] = None,
+                          ) -> Tuple[List[gm.EmailRecord], List[rk.Candidate], Dict[str, List[rk.Candidate]]]:
+    """Stored rows (:func:`stored_inputs`) → ``(records, candidates, by_email)`` in inbox order, as
+    :func:`build_candidates` would have made them: sender/domain priors re-read, anchor = the stored display
+    title, ``in_notion`` as the original run judged it (a pick archived since must not become a duplicate of
+    itself), picks of earlier windows re-checked. Records carry no links — the candidates are the links."""
+    picked_before = picked_before or {}
+    emails = {e["message_id"]: e for e in doc["emails"]}
+    records = sorted((gm.EmailRecord(message_id=e["message_id"], thread_id=None, timestamp=str(e.get("ts") or ""),
+                                     sender_name=e.get("sender_name") or "",
+                                     sender_address=e.get("sender_address") or "", subject=e.get("subject") or "")
+                      for e in doc["emails"]), key=lambda r: r.timestamp)
+    order = {r.message_id: i for i, r in enumerate(records)}
+
+    def inbox_order(row: Dict[str, Any]) -> Tuple[int, str, int]:
+        mid, _, n = row["cid"].rpartition(":")
+        return order.get(mid, len(order)), mid, int(n) if n.isdigit() else 0
+
+    cands: List[rk.Candidate] = []
+    by_email: Dict[str, List[rk.Candidate]] = defaultdict(list)
+    for row in sorted(doc["candidates"], key=inbox_order):
+        mid = row.get("message_id") or row["cid"].rpartition(":")[0]
+        em = emails.get(mid, {})
+        addr = em.get("sender_address") or ""
+        weight, basis, is_new = priors.sender(addr)
+        dom = row.get("domain") or ""
+        bonus, _ = priors.domain(dom)
+        c = rk.Candidate(cid=row["cid"], message_id=mid, sender_name=em.get("sender_name") or "",
+                         sender_address=addr, subject=em.get("subject") or "", email_ts=str(em.get("ts") or ""),
+                         label=row.get("title") or "", url=row.get("url") or "", canonical=row.get("canonical") or "",
+                         domain=dom, sender_weight=weight, sender_basis=basis, is_new_sender=is_new,
+                         domain_bonus=bonus, topic=priors.topic_prior(addr, dom), in_notion=bool(row.get("in_notion")))
+        if c.canonical in picked_before:
+            c.in_notion, c.picked_earlier = True, picked_before[c.canonical]
+        if row.get("reason") == "redirect unresolved":
+            c.reason = "redirect unresolved"
+        cands.append(c)
+        by_email[mid].append(c)
+    return records, cands, by_email
+
+
+# ---------------------------------------------------------------------------
+# one window
+
+
+def run_window(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[str, Any], source: str,
+               use_llm: bool, use_fetch: bool, top_k: int, model: str, out_dir: Path,
+               edition_hint: Optional[str] = None, backtest: Optional[Dict[str, Any]] = None,
+               limit_links: Optional[int] = None, force: bool = False,
+               engine: str = jx.DEFAULT_ENGINE,
+               inputs: Optional[Dict[str, Any]] = None, fresh: bool = False) -> Tuple[Path, rk.Selection, Dict[str, Any]]:
+    """One window → report + stored run. Refuses to replace a stored (window, kind) unless ``force``
+    (:class:`RunExists`). Store failures after registration mark the run ``failed`` and re-raise.
+    ``inputs`` (:func:`stored_inputs`) replaces the e-mail read — the re-score path. ``fresh`` makes the
+    LLM cache answer nothing, so both stages call the model."""
+    kind = "backtest" if backtest is not None else "live"
+    run_id: Optional[int] = None
+    if store_ok():
+        prev = db.run_for_window(start, end, kind)
+        if prev and not force:
+            raise RunExists(f"window {start} → {end} ({kind}) already stored as run {prev['id']} "
+                            f"({prev.get('status')}, {str(prev.get('finished_at') or prev.get('started_at'))[:16]}) "
+                            f"— re-run with --force to replace it")
+        # `edition_hint` stays unset: `triage_editions` is filled once by
+        # `import-history` and never refreshed, so a number read
+        # from it would be stale. `_run_window_body` falls back to the honest
+        # "next free edition" label instead.
+        run_id = db.register_run(start, end, kind=kind, edition=backtest.get("edition") if backtest else None,
+                                 source=source, model=model, criteria_version=str(criteria.get("version", "")))
+    try:
+        path, sel, stats, cands, emails_view = _run_window_body(
+            start, end, cfg=cfg, criteria=criteria, source=source, use_llm=use_llm, use_fetch=use_fetch,
+            top_k=top_k, model=model, out_dir=out_dir, edition_hint=edition_hint or "next free edition",
+            backtest=backtest, limit_links=limit_links, engine=engine, inputs=inputs, fresh=fresh)
+    except Exception as err:
+        if run_id is not None:
+            db.mark_run(run_id, status=RunStatus.FAILED, stats={"error": str(err)[:500]})
+        raise
+    if run_id is None:
+        stats["store"] = "unavailable"
+        return path, sel, stats
+    n_e, n_c = db.store_run_results(run_id, emails_view, db.candidate_rows(cands, sel))
+    if backtest is not None:
+        n_d = db.save_decisions(start, end, _truth_decisions(cands, sel, backtest))
+        logger.info("🧪 stored %d truth decisions for the backtest window", n_d)
+    stats["store"] = f"run {run_id}"
+    db.mark_run(run_id, status=RunStatus.DONE, stats=stats, report_path=str(path))
+    logger.info("🗄️ stored run %s: %d emails, %d candidates", run_id, n_e, n_c)
+    return path, sel, stats
+
+
+def _start_shadow(engine: str, items: List[Dict[str, str]], criteria: Dict[str, Any], *, base_url: str,
+                  model: str, cfg: Dict[str, Any], cache: sc.LLMCache) -> Optional[sc.ShadowPass]:
+    """Start the background pass of the engine that does not decide: ``"jev"`` for ``both``, ``"legacy"``
+    for ``jev+legacy``. ``model`` is the run's legacy model; Jev's comes from ``cfg``."""
+    try:
+        if engine == "jev":
+            return jx.Shadow(items, criteria, base_url=base_url, model=cfg.get("jev_model", jx.DEFAULT_MODEL),
+                             workers=int(cfg.get("jev_workers", jx.DEFAULT_WORKERS)),
+                             budget_s=float(cfg.get("jev_budget_s", jx.DEFAULT_BUDGET_S)))
+        return sc.LegacyShadow(items, criteria, base_url=base_url, model=model,
+                               workers=sc.stage_a_workers(cfg), cache=cache,
+                               budget_s=float(cfg.get("legacy_budget_s", sc.DEFAULT_LEGACY_BUDGET_S)))
+    except Exception as err:  # noqa: BLE001 — the shadow must never fail the deciding run
+        logger.warning("⚠️ %s shadow not started: %s", engine, type(err).__name__)
+        return None
+
+
+def _collect_shadow(engine: str, shadow: Optional[sc.ShadowPass], cids: List[str], *, model: str,
+                    stats: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The shadow engine's answers as rows; a shadow that never started (or cannot be collected) → every
+    item ``not evaluated``, labelled with ``model``."""
+    if engine == "jev":
+        scores: List[Any] = [jx.JevMetaScore(error="shadow not started") for _ in cids]
+    else:
+        scores = [sc.MetaScore() for _ in cids]
+    if shadow is not None:
+        try:
+            scores, model = shadow.collect(), shadow.model
+        except Exception as err:  # noqa: BLE001
+            logger.warning("⚠️ %s shadow not collected: %s", engine, type(err).__name__)
+    if engine == "jev":
+        rows = jx.shadow_rows(cids, scores, model=model)
+    else:
+        rows = sc.legacy_shadow_rows(cids, scores, model=model, not_evaluated=jx.NOT_EVALUATED)
+    stats[f"{engine}_evaluated"] = sum(1 for r in rows if r["status"] == "ok")
+    stats[f"{engine}_not_evaluated"] = len(rows) - stats[f"{engine}_evaluated"]
+    return rows
+
+
+def _write_shadow(report: Path, rows: List[Dict[str, Any]], *, start: date, end: date,
+                  stats: Dict[str, Any], engine: str = "jev") -> None:
+    """The shadow engine's answers beside the report — never in ``triage_candidates``: Jev's for ``both``,
+    legacy's for ``jev+legacy`` (``engine="legacy"``). A failure is logged and recorded in ``stats``, never
+    raised."""
+    path = jx.legacy_shadow_path(report) if engine == "legacy" else jx.shadow_path(report)
+    try:
+        jx.write_shadow(path, rows, window=(start.isoformat(), end.isoformat()), engine=engine)
+        stats[f"{engine}_shadow"] = path.name
+        logger.info("🧪 %s shadow: %d answers (%d not evaluated) → %s", engine, len(rows),
+                    stats[f"{engine}_not_evaluated"], path)
+    except Exception as err:  # noqa: BLE001
+        stats[f"{engine}_shadow"] = f"failed: {type(err).__name__}"
+        logger.warning("⚠️ %s shadow not written: %s", engine, err)
+
+
+def _truth_decisions(cands: List[rk.Candidate], sel: rk.Selection, bt: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Backtest → decisions as if the owner had reviewed the table: every candidate that was a real pick
+    in some edition = yes (star / must-read from the history), every other suggested pick / runner-up = no."""
+    canon, titles = bt["_canon"], bt["_titles"]
+    flags = bt.get("_truth_flags", {})
+    shortlisted = {c.cid for t in rk.TOPICS for c in sel.picks[t] + sel.runners[t]}
+    rows: List[Dict[str, Any]] = []
+    seen: set = set()
+    for c in cands:
+        truth = _is_truth(c, canon, titles)
+        if not truth and c.cid not in shortlisted:
+            continue
+        if c.canonical in seen:
+            continue
+        seen.add(c.canonical)
+        st, mr = flags.get(c.canonical, (False, False))
+        rows.append({"canonical": c.canonical, "cid": c.cid, "sender_address": c.sender_address, "title": c.display_title,
+                     "url": c.url, "topic": c.topic, "pick": truth, "star": truth and st, "must_read": truth and mr,
+                     "note": "backtest: real pick" if truth else "backtest: suggested, not picked"})
+    return rows
+
+
+@dataclass
+class _StageA:
+    """What Stage A leaves for the rest of the window: whether the LLM is still in play, its call estimate
+    and the shadow engine's pending / collected rows."""
+    use_llm: bool
+    llm_calls: int = 0
+    shadow_rows: Optional[List[Dict[str, Any]]] = None
+    legacy_shadow: Optional[sc.ShadowPass] = None
+
+
+def _stage_a(stage_a: List[rk.Candidate], *, use_llm: bool, engine: str, cfg: Dict[str, Any],
+             criteria: Dict[str, Any], base_url: str, model: str, llm_cache: sc.LLMCache,
+             stats: Dict[str, Any]) -> _StageA:
+    """Stage A — metadata for everything that can still be selected. Every engine dispatch lives here and in
+    ``_collect_legacy_shadow``."""
+    out = _StageA(use_llm=use_llm)
+    if out.use_llm and stage_a:
+        if not llm.health_check(base_url=base_url, model=model):
+            logger.error("❌ LLM hub unreachable at %s — producing a rule-only report", base_url)
+            out.use_llm = False
+        else:
+            # key the cache by the model the hub serves *now*, so a repointed alias never replays old answers
+            stats["llm_model_served"] = llm_cache.use_version(model, llm.served_model(base_url=base_url, model=model))
+            logger.info("🤖 %s is served as %s", model, stats["llm_model_served"])
+    if out.use_llm and stage_a:
+        items = [{"sender": c.sender_name, "label": c.label or c.url, "domain": c.domain,
+                  "path": urlsplit(c.url).path} for c in stage_a]
+        if engine in jx.JEV_DECIDES:
+            # `jev+legacy`: legacy keeps scoring in the background through stage B, collected after it
+            if engine == "jev+legacy":
+                out.legacy_shadow = _start_shadow("legacy", items, criteria, base_url=base_url, model=model, cfg=cfg,
+                                                  cache=llm_cache)
+            metas = jx.score_metadata_jev(items, criteria, base_url=base_url,
+                                          model=cfg.get("jev_model", jx.DEFAULT_MODEL),
+                                          workers=int(cfg.get("jev_workers", jx.DEFAULT_WORKERS)))
+            stats["stage_a_engine"], stats["jev_calls"] = engine, len(items)
+        else:
+            shadow = (_start_shadow("jev", items, criteria, base_url=base_url, model=model, cfg=cfg, cache=llm_cache)
+                      if engine == "both" else None)
+            metas = sc.score_metadata(items, criteria, base_url=base_url, model=model, batch=sc.STAGE_A_BATCH,
+                                      workers=sc.stage_a_workers(cfg), cache=llm_cache)
+            out.llm_calls += (llm_cache.misses + sc.STAGE_A_BATCH - 1) // sc.STAGE_A_BATCH
+            if engine == "both":
+                stats["stage_a_engine"] = engine
+                out.shadow_rows = _collect_shadow("jev", shadow, [c.cid for c in stage_a], model=jx.DEFAULT_MODEL,
+                                                  stats=stats)
+        for c, m in zip(stage_a, metas):
+            c.meta = m
+            c.score = sc.combine(sender_weight=c.sender_weight, domain_bonus=c.domain_bonus, meta=m, content=None)
+        stats["stage_a_scored"] = sum(1 for c in stage_a if c.meta and c.meta.ok)
+    else:
+        for c in stage_a:   # rule-only: sender weight + domain prior as a weak score
+            c.score = round(min(10.0, c.sender_weight * (1 + c.domain_bonus) * 4.0), 2) if len(c.label) >= 25 else None
+            c.reason = "rule-only score (no LLM)" if c.score is not None else "short anchor, no LLM"
+    return out
+
+
+def _collect_legacy_shadow(a: _StageA, stage_a: List[rk.Candidate], *, engine: str, model: str,
+                           llm_cache: sc.LLMCache, stats: Dict[str, Any]) -> None:
+    """`jev+legacy`: gather the legacy pass that kept scoring in the background through stage B."""
+    if engine == "jev+legacy" and a.use_llm and stage_a:
+        a.shadow_rows = _collect_shadow("legacy", a.legacy_shadow, [c.cid for c in stage_a], model=model, stats=stats)
+        llm_cache.flush()
+
+
+def _stage_b(stage_a: List[rk.Candidate], *, use_llm: bool, use_fetch: bool, top_k: int, cfg: Dict[str, Any],
+             criteria: Dict[str, Any], base_url: str, model: str, llm_cache: sc.LLMCache,
+             picked_before: Dict[str, str], notion_urls: set, notion_titles: Any, stats: Dict[str, Any]) -> int:
+    """Stage B — fetch + content scoring for the top-K. Returns the LLM-call estimate it added."""
+    ranked = sorted([c for c in stage_a if c.score is not None], key=lambda c: -(c.score or 0))
+    depth = max(top_k, len(stage_a) // 12)          # a 2-week backlog window gets proportionally more depth
+    stage_b = ranked[:depth]
+    llm_calls = 0
+    fetched_ok = 0
+    if use_fetch and stage_b:
+        cache = fx.FetchCache()
+        fetched = fx.fetch_many([c.url for c in stage_b], cache, workers=int(cfg.get("fetch_workers", 8)),
+                                timeout=float(cfg.get("fetch_timeout_s", 15)))
+        for c in stage_b:
+            f = fetched.get(c.url)
+            if not f:
+                continue
+            c.fetched_ok, c.kind, c.paywalled = f.ok, f.kind, f.paywalled
+            if f.title:
+                c.title = f.title
+            if f.author:
+                c.author = f.author
+            if f.ok:
+                fetched_ok += 1
+            elif f.error:
+                c.reason = f"fetch: {f.error}"
+            if f.final_url:
+                canon = canonicalize_url(gm.canonical_substack(f.final_url))
+                if canon in picked_before:
+                    c.in_notion, c.picked_earlier = True, picked_before[canon]
+                elif canon in notion_urls:
+                    c.in_notion = True
+                c.domain = gm.publication_domain(f.final_url, c.sender_address) or c.domain
+            if f.title and _norm(f.title) in notion_titles:
+                c.in_notion = True
+        stats["fetched"] = len(stage_b)
+        stats["fetched_ok"] = fetched_ok
+        stats["paywalled"] = sum(1 for c in stage_b if c.paywalled)
+        if use_llm:
+            todo = [c for c in stage_b if c.fetched_ok and not c.in_notion and not c.paywalled and c.kind == "article"]
+            def work(c: rk.Candidate) -> None:
+                f = cache.get(c.url)
+                c.content = sc.score_content(title=c.title or c.label, author=c.author or "", sender=c.sender_name,
+                                             domain=c.domain, excerpt=f.excerpt if f else "", criteria=criteria,
+                                             base_url=base_url, model=model, cache=llm_cache)
+            with ThreadPoolExecutor(max_workers=int(cfg.get("llm_workers", sc.DEFAULT_LLM_WORKERS))) as pool:
+                list(pool.map(work, todo))
+            llm_cache.flush()
+            llm_calls += len(todo)
+            for c in todo:
+                c.score = sc.combine(sender_weight=c.sender_weight, domain_bonus=c.domain_bonus, meta=c.meta, content=c.content)
+                if c.content and c.content.ok:
+                    c.summary = c.content.summary
+            stats["stage_b_scored"] = sum(1 for c in todo if c.content and c.content.ok)
+    return llm_calls
+
+
+def _write_window_report(start: date, end: date, *, records: List[gm.EmailRecord], priors: sc.Priors,
+                         sel: rk.Selection, cands: List[rk.Candidate], by_email: Dict[str, List[rk.Candidate]],
+                         stats: Dict[str, Any], backtest: Optional[Dict[str, Any]], edition_hint: str, out_dir: Path,
+                         shadow_rows: Optional[List[Dict[str, Any]]], engine: str,
+                         ) -> Tuple[Path, List[Dict[str, Any]]]:
+    """Sender bookkeeping, then the report (and the shadow file, when there is one) on disk."""
+    new_senders: Dict[str, Tuple[str, str, int]] = {}
+    floor: Counter = Counter()
+    emails_view: List[Dict[str, Any]] = []
+    for rec in records:
+        w, basis, is_new = priors.sender(rec.sender_address)
+        if is_new:
+            name, addr, n = new_senders.get(rec.sender_address, (rec.sender_name, rec.sender_address, 0))
+            new_senders[rec.sender_address] = (name, addr, n + 1)
+        if basis.startswith("floor"):
+            floor[rec.sender_name] += 1
+        emails_view.append({"message_id": rec.message_id, "sender_name": rec.sender_name,
+                            "sender_address": rec.sender_address, "subject": rec.subject,
+                            "timestamp": rec.timestamp, "sender_basis": basis, "is_new": is_new})
+
+    if backtest is not None:
+        backtest.update(_backtest_metrics(sel, cands, backtest))
+
+    title = f"Newsletter triage — {start} → {end}" + (f" (backtest {backtest['edition']})" if backtest else "")
+    md = rp.render_report(title=title, window_start=start.isoformat(), window_end=end.isoformat(), edition_hint=edition_hint,
+                          sel=sel, emails=emails_view, cands_by_email=by_email, new_senders=list(new_senders.values()),
+                          floor_senders=floor.most_common(), stats=stats, backtest=backtest)
+    ensure_folder(out_dir)
+    name = f"triage-{start}_{end}" + (f"-backtest-{backtest['edition']}" if backtest else "") + ".md"
+    path = out_dir / name
+    write_text_at(path, md, encoding="utf-8")
+    if shadow_rows is not None:
+        _write_shadow(path, shadow_rows, start=start, end=end, stats=stats,
+                      engine="legacy" if engine == "jev+legacy" else "jev")
+    return path, emails_view
+
+
+def _run_window_body(start: date, end: date, *, cfg: Dict[str, Any], criteria: Dict[str, Any], source: str,
+                     use_llm: bool, use_fetch: bool, top_k: int, model: str, out_dir: Path,
+                     edition_hint: str, backtest: Optional[Dict[str, Any]],
+                     limit_links: Optional[int], engine: str = jx.DEFAULT_ENGINE,
+                     inputs: Optional[Dict[str, Any]] = None, fresh: bool = False,
+                     ) -> Tuple[Path, rk.Selection, Dict[str, Any], List[rk.Candidate], List[Dict[str, Any]]]:
+    t0 = time.monotonic()
+    base_url = cfg.get("llm_hub_base_url") or load_full_config().get("newsletter_archive", {}).get("llm_hub_base_url", "http://127.0.0.1:8000")
+    priors = sc.Priors(criteria)
+    rules = criteria.get("rules", {})
+    picked_before = db.picked_before(start) if store_ok() else {}
+    if inputs is not None:
+        # re-score: Notion as of the window start (like a backtest) for the stage-B final-URL check, so the
+        # week's own picks, archived since the original run, never turn into duplicates
+        notion_urls, notion_titles = load_notion_urls(created_before=start.isoformat())
+        records, cands, by_email = candidates_from_store(inputs, priors, picked_before)
+    else:
+        records = emails_from_cache(start, end) if source == "cache" else emails_from_gmail(start, end, cfg=cfg)
+        notion_urls, notion_titles = load_notion_urls(created_before=start.isoformat() if backtest is not None else None)
+        cands, by_email = build_candidates(records, priors, notion_urls, notion_titles, picked_before)
+    if limit_links:
+        cands = cands[:limit_links]
+    stats: Dict[str, Any] = {"emails": len(records), "links": len(cands),
+                             "duplicates_in_notion": sum(1 for c in cands if c.in_notion and not c.picked_earlier),
+                             "duplicates_picked_earlier": sum(1 for c in cands if c.picked_earlier),
+                             "unresolved_links": sum(1 for c in cands if c.reason == "redirect unresolved")}
+    if inputs is not None:
+        stats["rescored_from"] = inputs.get("run_id")
+    llm_cache = sc.LLMCache(fresh=fresh)
+    if fresh:
+        stats["llm_cache_fresh"] = True
+        logger.info("🔄 fresh: the LLM cache is bypassed — both stages call the model, answers are still stored")
+
+    stage_a = [c for c in cands if not c.in_notion and c.sender_weight > 0]
+    a = _stage_a(stage_a, use_llm=use_llm, engine=engine, cfg=cfg, criteria=criteria, base_url=base_url,
+                 model=model, llm_cache=llm_cache, stats=stats)
+    llm_calls = a.llm_calls + _stage_b(stage_a, use_llm=a.use_llm, use_fetch=use_fetch, top_k=top_k, cfg=cfg,
+                                       criteria=criteria, base_url=base_url, model=model, llm_cache=llm_cache,
+                                       picked_before=picked_before, notion_urls=notion_urls,
+                                       notion_titles=notion_titles, stats=stats)
+    _collect_legacy_shadow(a, stage_a, engine=engine, model=model, llm_cache=llm_cache, stats=stats)
+    stats["scored"] = sum(1 for c in cands if c.score is not None)
+    stats["llm_calls"] = llm_calls
+
+    sel = rk.select(cands, rules)
+    stats["selected"] = len(sel.all_picks())
+    stats["verdicts"] = dict(Counter(c.verdict for c in cands))
+    stats["elapsed_s"] = round(time.monotonic() - t0, 1)
+
+    path, emails_view = _write_window_report(start, end, records=records, priors=priors, sel=sel, cands=cands,
+                                             by_email=by_email, stats=stats, backtest=backtest,
+                                             edition_hint=edition_hint, out_dir=out_dir,
+                                             shadow_rows=a.shadow_rows, engine=engine)
+    logger.info("📝 report: %s — %d picks (%s) in %.0fs", path, stats["selected"],
+                ", ".join(f"{t[:6]} {len(sel.picks[t])}" for t in rk.TOPICS), stats["elapsed_s"])
+    return path, sel, stats, cands, emails_view
+
+
+# ---------------------------------------------------------------------------
+# backtest
+
+
+def _truth_sets() -> Tuple[set, Dict[str, str], List[Dict[str, Any]], List[Dict[str, Any]]]:
+    positives = [json.loads(l) for l in (HISTORY_DIR / "positives.jsonl").open(encoding="utf-8") if l.strip()]
+    matches = [json.loads(l) for l in (HISTORY_DIR / "matches.jsonl").open(encoding="utf-8") if l.strip()]
+    canon = {p["canonical"] for p in positives if p.get("canonical")}
+    titles = {_norm(p["title"]): p["canonical"] for p in positives if p.get("title")}
+    return canon, titles, positives, matches
+
+
+def _is_truth(c: rk.Candidate, canon: set, titles: Dict[str, str]) -> bool:
+    if c.canonical in canon:
+        return True
+    for t in (c.title, c.label):
+        if t and _norm(t) in titles:
+            return True
+    return False
+
+
+def _backtest_metrics(sel: rk.Selection, cands: List[rk.Candidate], bt: Dict[str, Any]) -> Dict[str, Any]:
+    canon, titles = bt["_canon"], bt["_titles"]
+    picks = sel.all_picks()
+    runners = [c for t in rk.TOPICS for c in sel.runners[t]]
+    hits = sum(1 for c in picks if _is_truth(c, canon, titles))
+    truth_ids = bt["_truth_msg_canon"]          # {(message_id, canonical)} of edition picks sourced in window
+    truth_canon = {cn for _m, cn in truth_ids}
+    truth_titles = bt["_truth_titles"]
+    def recalled_by(group: List[rk.Candidate]) -> int:
+        got = set()
+        for c in group:
+            if c.canonical in truth_canon:
+                got.add(c.canonical)
+            else:
+                for t in (c.title, c.label):
+                    if t and _norm(t) in truth_titles:
+                        got.add(truth_titles[_norm(t)])
+        return len(got)
+    n_truth = len(truth_canon)
+    rec_p = recalled_by(picks)
+    rec_r = recalled_by(picks + runners)
+    missed = [bt["_truth_names"].get(cn, cn) for cn in truth_canon
+              if cn not in {c.canonical for c in picks + runners}][:8]
+    # per-truth diagnostics: where did each real pick end up?
+    by_canon: Dict[str, List[rk.Candidate]] = defaultdict(list)
+    by_title: Dict[str, List[rk.Candidate]] = defaultdict(list)
+    for c in cands:
+        by_canon[c.canonical].append(c)
+        for t in (c.title, c.label):
+            if t:
+                by_title[_norm(t)].append(c)
+    diag: List[str] = []
+    for cn in sorted(truth_canon, key=lambda x: bt["_truth_names"].get(x, x)):
+        name = bt["_truth_names"].get(cn, cn)
+        found = by_canon.get(cn) or by_title.get(_norm(name)) or []
+        if not found:
+            diag.append(f"❌ not a candidate · {name[:80]} · {cn[:70]}")
+            continue
+        c = max(found, key=lambda x: (x.score or -1))
+        diag.append(f"{'✅' if c.verdict == 'selected' else '🟡' if c.verdict == 'runner-up' else '⚪'} "
+                    f"{c.verdict:9} {c.score if c.score is not None else '–'} · {c.topic or '–'} · {name[:70]} · {c.reason[:60]}")
+    return {"shortlist": len(picks), "hits": hits, "precision": hits / max(1, len(picks)),
+            "truth": n_truth, "recalled": rec_p, "recall": rec_p / max(1, n_truth),
+            "recall_runners": rec_r / max(1, n_truth), "missed_preview": "; ".join(missed), "diag": diag}
+
+
+def backtest_edition(number: str, *, cfg: Dict[str, Any], criteria: Dict[str, Any], use_llm: bool, use_fetch: bool,
+                     top_k: int, model: str, out_dir: Path, window_days: int = 14, offset_days: int = 7,
+                     force: bool = False, engine: str = jx.DEFAULT_ENGINE) -> Dict[str, Any]:
+    editions = [json.loads(l) for l in (HISTORY_DIR / "editions.jsonl").open(encoding="utf-8") if l.strip()]
+    ed = next((e for e in editions if e["number"] == number), None)
+    if not ed or not ed.get("date"):
+        raise SystemExit(f"edition {number} not in history/editions.jsonl")
+    d = date.fromisoformat(ed["date"])
+    end = d - timedelta(days=offset_days)
+    start = end - timedelta(days=window_days)
+    canon, titles, positives, matches = _truth_sets()
+    truth_msg_canon = set()
+    truth_titles: Dict[str, str] = {}
+    names: Dict[str, str] = {}
+    pos_by_id = {p["article_id"]: p for p in positives}
+    flags = {p["canonical"]: (bool(p.get("star")), bool(p.get("must_read"))) for p in positives if p.get("canonical")}
+    for m in matches:
+        if m["edition"] != number or not m.get("email_date"):
+            continue
+        if start.isoformat() <= m["email_date"] < end.isoformat():
+            p = pos_by_id.get(m["article_id"])
+            if p and p.get("canonical"):
+                truth_msg_canon.add((m.get("message_id"), p["canonical"]))
+                truth_titles[_norm(p["title"])] = p["canonical"]
+                names[p["canonical"]] = p["title"]
+    bt = {"edition": number, "_canon": canon, "_titles": titles, "_truth_msg_canon": truth_msg_canon,
+          "_truth_titles": truth_titles, "_truth_names": names, "_truth_flags": flags}
+    logger.info("🧪 backtest %s (%s): window %s → %s, %d truth picks sourced in window", number, ed["date"], start, end,
+                len({cn for _m, cn in truth_msg_canon}))
+    path, sel, stats = run_window(start, end, cfg=cfg, criteria=criteria, source="cache", use_llm=use_llm,
+                                  use_fetch=use_fetch, top_k=top_k, model=model, out_dir=out_dir,
+                                  edition_hint=number, backtest=bt, force=force, engine=engine)
+    return {k: v for k, v in bt.items() if not k.startswith("_")} | {"report": str(path), "stats": stats}
+
+
+# ---------------------------------------------------------------------------
+# re-score
+
+
+def rescore(run_id: int, *, cfg: Dict[str, Any], criteria: Dict[str, Any], use_llm: bool, use_fetch: bool,
+            top_k: int, model: str, out_dir: Path, engine: str = jx.DEFAULT_ENGINE,
+            limit_links: Optional[int] = None, fresh: bool = False) -> Tuple[Path, rk.Selection, Dict[str, Any]]:
+    """Replace a stored live run's scoring from its stored inputs — no Gmail. Decisions, review and lessons
+    are keyed by window and survive; the run gets a new id (``stats.rescored_from`` = the old one).
+    ``fresh`` bypasses the LLM cache."""
+    run = db.get_run(run_id) if store_ok() else None
+    if not run:
+        raise NoStoredInputs(f"run {run_id} not found in the triage store")
+    if run.get("kind") != "live":
+        raise NoStoredInputs(f"run {run_id} is a {run.get('kind')} run — replay a backtest with --backtest")
+    doc = stored_inputs(run)
+    start, end = date.fromisoformat(str(run["window_start"])[:10]), date.fromisoformat(str(run["window_end"])[:10])
+    logger.info("♻️ re-scoring run %s (%s → %s) from stored inputs, stage A engine %s — no Gmail", run_id, start, end,
+                engine)
+    return run_window(start, end, cfg=cfg, criteria=criteria, source="store", use_llm=use_llm, use_fetch=use_fetch,
+                      top_k=top_k, model=model, out_dir=out_dir, limit_links=limit_links, force=True, engine=engine,
+                      inputs=doc, fresh=fresh)
+
+
+# ---------------------------------------------------------------------------
+# CLI
+
+
+def _windows(start: date, end: date, days: int = 7) -> List[Tuple[date, date]]:
+    out: List[Tuple[date, date]] = []
+    cur = start
+    while cur < end:
+        nxt = min(cur + timedelta(days=days), end)
+        if (end - nxt).days < 2 and nxt != end:   # avoid a 1-day tail window
+            nxt = end
+        out.append((cur, nxt))
+        cur = nxt
+    return out
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    force_utf8_stdio()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--since", help="window start (YYYY-MM-DD); default = state.reviewed_until or today-7")
+    ap.add_argument("--until", help="window end, exclusive (YYYY-MM-DD); default = tomorrow")
+    ap.add_argument("--days", type=int, default=7, help="window length when splitting a backlog")
+    ap.add_argument("--source", choices=("gmail", "cache"), default="gmail")
+    ap.add_argument("--no-llm", action="store_true")
+    ap.add_argument("--no-fetch", action="store_true")
+    ap.add_argument("--top-k", type=int, default=None)
+    ap.add_argument("--model", default=None)
+    ap.add_argument("--stage-a-engine", choices=jx.ENGINES, default=None,
+                    help="stage A scorer; default = config newsletter_triage.stage_a_engine, else legacy")
+    ap.add_argument("--limit-links", type=int, default=None)
+    ap.add_argument("--out", default=str(TRIAGE_DIR))
+    ap.add_argument("--backtest", help="comma-separated edition numbers, e.g. N226,N227")
+    ap.add_argument("--force", action="store_true", help="replace a run already stored for the same window")
+    ap.add_argument("--rescore", type=int, metavar="RUN_ID",
+                    help="replace a stored live run's scoring from its stored inputs (no Gmail)")
+    ap.add_argument("--fresh", action="store_true",
+                    help="with --rescore: ignore the LLM cache so both stages call the model again (answers are still stored)")
+    ap.add_argument("--debug", action="store_true")
+    args = ap.parse_args(argv)
+    if args.fresh and args.rescore is None:
+        ap.error("--fresh only applies to --rescore")
+    logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO,
+                        format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout)
+    for noisy in ("httpx", "httpcore", "hpack", "notion_client", "urllib3", "googleapiclient",
+                  "readability", "readability.readability"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
+    cfg = load_block("newsletter_triage")
+    criteria = load_criteria()
+    model = args.model or cfg.get("llm_model", DEFAULT_MODEL)
+    top_k = args.top_k or int(cfg.get("stage_b_top_k", 90))
+    out_dir = Path(args.out)
+    engine = args.stage_a_engine or cfg.get("stage_a_engine") or jx.DEFAULT_ENGINE
+    if engine not in jx.ENGINES:
+        logger.error("❌ newsletter_triage.stage_a_engine = %r — expected one of %s", engine, ", ".join(jx.ENGINES))
+        return 2
+    if engine != jx.DEFAULT_ENGINE:
+        logger.info("🧪 stage A engine: %s", engine)
+
+    try:
+        return _main_runs(args, cfg=cfg, criteria=criteria, model=model, top_k=top_k, out_dir=out_dir, engine=engine)
+    except RunExists as err:
+        logger.warning("⚠️ %s", err)
+        print(f"⚠️ {err}")
+        return 3
+    except NoStoredInputs as err:
+        logger.error("❌ %s", err)
+        return 4
+
+
+def _main_runs(args: argparse.Namespace, *, cfg: Dict[str, Any], criteria: Dict[str, Any], model: str,
+               top_k: int, out_dir: Path, engine: str = jx.DEFAULT_ENGINE) -> int:
+    if args.rescore is not None:
+        # the window's watermark / state.json are untouched: a re-score covers a week already run
+        path, sel, stats = rescore(args.rescore, cfg=cfg, criteria=criteria, use_llm=not args.no_llm,
+                                   use_fetch=not args.no_fetch, top_k=top_k, model=model, out_dir=out_dir,
+                                   engine=engine, limit_links=args.limit_links, fresh=args.fresh)
+        print(f"re-scored run {args.rescore} → {stats.get('store')}: {stats['selected']} picks → {path}")
+        return 0
+    if args.backtest:
+        results = []
+        for num in [n.strip() for n in args.backtest.split(",") if n.strip()]:
+            results.append(backtest_edition(num, cfg=cfg, criteria=criteria, use_llm=not args.no_llm,
+                                            use_fetch=not args.no_fetch, top_k=top_k, model=model, out_dir=out_dir,
+                                            force=args.force, engine=engine))
+        print("\n=== backtest summary ===")
+        for r in results:
+            print(f"{r['edition']}: precision {r['precision']:.0%} ({r['hits']}/{r['shortlist']}) · "
+                  f"recall {r['recall']:.0%} ({r['recalled']}/{r['truth']}) · +runners {r['recall_runners']:.0%} · {r['report']}")
+        write_text_at(out_dir / "backtest-summary.json", json.dumps(results, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+        return 0
+
+    state = load_state()
+    today = date.today()
+    if args.since:
+        start = date.fromisoformat(args.since)
+    elif state.get("reviewed_until"):
+        start = date.fromisoformat(state["reviewed_until"][:10])
+    else:
+        start = today - timedelta(days=7)
+    end = date.fromisoformat(args.until) if args.until else today + timedelta(days=1)
+    windows = _windows(start, end, args.days)
+    logger.info("🗓️ %d window(s): %s", len(windows), ", ".join(f"{a}→{b}" for a, b in windows))
+    reports = []
+    for a, b in windows:
+        path, sel, stats = run_window(a, b, cfg=cfg, criteria=criteria, source=args.source, use_llm=not args.no_llm,
+                                      use_fetch=not args.no_fetch, top_k=top_k, model=model, out_dir=out_dir,
+                                      limit_links=args.limit_links, force=args.force, engine=engine)
+        reports.append({"window": [a.isoformat(), b.isoformat()], "report": str(path), "selected": stats["selected"]})
+    state.setdefault("runs", []).append({"at": datetime.now(timezone.utc).isoformat(), "windows": reports})
+    state["last_window_end"] = end.isoformat()
+    save_state(state)
+    for r in reports:
+        print(f"{r['window'][0]} → {r['window'][1]}: {r['selected']} picks → {r['report']}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -46,10 +46,10 @@ api_like.py          — manual CLI: react to / remove a reaction from a Note
 ```
 
 The weekly newsletter has its own consumer of this client:
-`newsletter/substack_draft.py` (`newsletter_pipeline.py substack-draft`) builds a
+`tools/newsletter/substack_draft.py` (`newsletter_pipeline.py substack-draft`) builds a
 private draft edition from the Notion articles DB via
 `SubstackAPI.create_draft_from_sections`. It never publishes — see
-[`newsletter/README.md`](../../newsletter/README.md).
+[`tools/newsletter/README.md`](../../tools/newsletter/README.md).
 
 One-time / once-per-~89-days setup (the `substack.sid` cookie lives ~89 days):
 

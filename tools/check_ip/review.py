@@ -1,7 +1,7 @@
 """Read/write layer for the control-panel's check-IP tab.
 
 The tab is UI only — every query and every write goes through here, matching
-how ``newsletter/triage/review.py`` serves the triage tab. Keeping the SQL out
+how ``tools/newsletter/triage/review.py`` serves the triage tab. Keeping the SQL out
 of the Streamlit module is what lets the store be tested without a browser.
 
 The owner's five decision columns are written from exactly one place:

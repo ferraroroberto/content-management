@@ -506,7 +506,7 @@ def _run_nodes(runs: list[tuple[str, Optional[str]]]) -> list[dict]:
 def build_must_read_nodes(title: str, url: str, summary: str) -> list[dict]:
     """The 'One "must" for this week' block: a heading with the linked article
     title, followed by its AI-generated summary as one paragraph per line
-    (``newsletter/summarizer.py`` produces exactly 3 plain-text lines).
+    (``tools/newsletter/summarizer.py`` produces exactly 3 plain-text lines).
 
     Matches the hand-authored format of the live published editions (e.g.
     "One \"must\" for this week: <linked title>" as an H2, summary lines below

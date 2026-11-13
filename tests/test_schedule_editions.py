@@ -1,6 +1,6 @@
 """The future-edition scheduler's arithmetic must be exactly right (issue #230).
 
-``newsletter/schedule_editions.py`` creates the empty future rows that ②
+``tools/newsletter/schedule_editions.py`` creates the empty future rows that ②
 Archive files articles against. Two of its properties are load-bearing and
 neither is visible until something downstream breaks:
 
@@ -8,7 +8,7 @@ neither is visible until something downstream breaks:
   exists *anywhere* in the table, not off whichever row happens to be newest —
   so a table whose numbering and dating disagree still yields a fresh number.
 * **The number is zero-padded to three digits.** ``normalize_newsletter_number``
-  (``newsletter/build_newsletter.py``) rejects anything else, so an unpadded
+  (``tools/newsletter/build_newsletter.py``) rejects anything else, so an unpadded
   ``N34`` would sail through the write and only fail later, at ④ Build.
 
 Everything pinned here is pure — no Notion, no network, no clock.
@@ -21,8 +21,8 @@ from __future__ import annotations
 import unittest
 from datetime import date
 
-from newsletter.build_newsletter import normalize_newsletter_number
-from newsletter.schedule_editions import (
+from tools.newsletter.build_newsletter import normalize_newsletter_number
+from tools.newsletter.schedule_editions import (
     DEFAULT_TARGET,
     BufferState,
     format_edition_number,

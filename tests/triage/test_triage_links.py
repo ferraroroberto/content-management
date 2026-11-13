@@ -16,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from newsletter.triage import gmail as gm  # noqa: E402
+from tools.newsletter.triage import gmail as gm  # noqa: E402
 
 
 def _b64(url: str) -> str:

@@ -4,7 +4,7 @@ REM you've reviewed the final HTML / must-read line.
 REM
 REM Runs the full interactive console sequence (newsletter_pipeline.py "all"):
 REM   1. Bootstrap the dedicated newsletter Chrome on :9222 (targeted — does
-REM      NOT kill your everyday browser; see newsletter\bootstrap_chrome.py)
+REM      NOT kill your everyday browser; see tools\newsletter\bootstrap_chrome.py)
 REM   2. Wait for you to open the newsletter article tabs in that window
 REM   3. Archive each tab to Notion
 REM   4. normalize_names + normalize_url (last 14 days by default)

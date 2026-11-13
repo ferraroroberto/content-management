@@ -17,24 +17,24 @@ This is a **public repo** — never put secrets, tokens or private identifiers i
 - a window already stored in Supabase is **refused** (exit 3) unless `--force` — say so and ask before forcing; the owner's decisions survive a re-run.
 - `--backtest` = replay past editions offline from the history cache (stored as `kind=backtest` with the real picks as decisions) and print precision/recall.
 - `--feedback <report>` = ingest the owner's ticks from a markdown report → `triage_decisions` + `results/newsletter/triage/overrides.json` sender tiers.
-- `--lessons <run-id>` = distil the applied review of a stored run into ≤ 3 proposed criteria notes (hub alias `claude_sonnet`); list them — the owner accepts them in the tab or with `-m newsletter.triage.lessons --accept <ids>`.
-- `--open <run-id>` = `-m newsletter.triage.handoff --run <id> --open`: ensure the newsletter Chrome, one tab per ticked URL of the applied review (already-open tabs skipped); the unchanged `newsletter_pipeline.py archive` then takes over. With no applied review it falls back to the engine's suggested picks and says so.
-- `--mark-reviewed <run-id>` = `-m newsletter.triage.handoff --run <id> --mark-reviewed`: exactly one `until <newest e-mail, Gmail style> > included` comment on the task page + `state.json → reviewed_until`. `-m newsletter.triage.handoff --run <id>` alone prints both (URLs + line) and writes nothing.
+- `--lessons <run-id>` = distil the applied review of a stored run into ≤ 3 proposed criteria notes (hub alias `claude_sonnet`); list them — the owner accepts them in the tab or with `-m tools.newsletter.triage.lessons --accept <ids>`.
+- `--open <run-id>` = `-m tools.newsletter.triage.handoff --run <id> --open`: ensure the newsletter Chrome, one tab per ticked URL of the applied review (already-open tabs skipped); the unchanged `newsletter_pipeline.py archive` then takes over. With no applied review it falls back to the engine's suggested picks and says so.
+- `--mark-reviewed <run-id>` = `-m tools.newsletter.triage.handoff --run <id> --mark-reviewed`: exactly one `until <newest e-mail, Gmail style> > included` comment on the task page + `state.json → reviewed_until`. `-m tools.newsletter.triage.handoff --run <id>` alone prints both (URLs + line) and writes nothing.
 
 ## Step 1 — pre-flight
 
-- `results/newsletter/triage/criteria.json` exists (else `& .\.venv\Scripts\python.exe -m newsletter.triage.criteria`; that needs the history stats from `-m newsletter.triage.history`).
-- `auth/gmail/token.json` exists (else point the owner to `newsletter/README.md` → Gmail one-time setup; do not run the consent flow unattended).
-- Store: `& .\.venv\Scripts\python.exe -m newsletter.triage.db ensure-schema` — if it prints the apply recipe, the engine still runs **report-only** (`stats.store = unavailable`); say so explicitly, never call that "stored".
+- `results/newsletter/triage/criteria.json` exists (else `& .\.venv\Scripts\python.exe -m tools.newsletter.triage.criteria`; that needs the history stats from `-m tools.newsletter.triage.history`).
+- `auth/gmail/token.json` exists (else point the owner to `tools/newsletter/README.md` → Gmail one-time setup; do not run the consent flow unattended).
+- Store: `& .\.venv\Scripts\python.exe -m tools.newsletter.triage.db ensure-schema` — if it prints the apply recipe, the engine still runs **report-only** (`stats.store = unavailable`); say so explicitly, never call that "stored".
 - Hub up at `http://127.0.0.1:8000` — the engine health-checks and degrades to a rule-only report (`stats.llm_calls = 0`) if not; say so.
 
 ## Step 2 — run (synchronously — no background + wait; a headless session has no wake-up)
 
 ```powershell
-& .\.venv\Scripts\python.exe -m newsletter.triage.run [--days N | --since … --until …] [--force]   # live, from Gmail
-& .\.venv\Scripts\python.exe -m newsletter.triage.run --backtest N226,N227 --force                  # offline replay
-& .\.venv\Scripts\python.exe -m newsletter.triage.feedback <report.md>                               # ingest ticks
-& .\.venv\Scripts\python.exe -m newsletter.triage.lessons --run <id>                                 # propose lessons
+& .\.venv\Scripts\python.exe -m tools.newsletter.triage.run [--days N | --since … --until …] [--force]   # live, from Gmail
+& .\.venv\Scripts\python.exe -m tools.newsletter.triage.run --backtest N226,N227 --force                  # offline replay
+& .\.venv\Scripts\python.exe -m tools.newsletter.triage.feedback <report.md>                               # ingest ticks
+& .\.venv\Scripts\python.exe -m tools.newsletter.triage.lessons --run <id>                                 # propose lessons
 ```
 
 Typical live run: ~80 emails → ~1,000 links → stage-A batched scoring (~40 hub calls) → fetch + stage-B for the top-90 → `results/newsletter/triage/triage-<start>_<end>.md` + a `triage_runs` row. 5–10 minutes.
@@ -51,7 +51,7 @@ Then point the owner to the **🧭 triage** tab to review + Apply (or, for a mar
 - Paywalled content is never a pick (criteria §8); `results/newsletter/triage/overrides.json` `tier: never` wins over every score.
 - One window → one edition. Do not merge windows. Never `--force` without saying which stored run gets replaced.
 - Lessons are proposed, never auto-accepted.
-- Don't re-inline Gmail / LLM / Chrome / Supabase helpers — the engine imports the existing ones (`newsletter/triage/db.py` owns every query).
+- Don't re-inline Gmail / LLM / Chrome / Supabase helpers — the engine imports the existing ones (`tools/newsletter/triage/db.py` owns every query).
 
 ## Verification gate (before declaring done)
 

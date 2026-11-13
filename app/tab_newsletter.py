@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING
 import streamlit as st
 
 if TYPE_CHECKING:  # annotation only — the real import stays lazy (app startup)
-    from newsletter.schedule_editions import BufferState
+    from tools.newsletter.schedule_editions import BufferState
 
 from app.process_runner import (
     VENV_PY,
@@ -165,7 +165,7 @@ def _read_buffer_state() -> tuple[BufferState | None, str]:
     DB and takes tens of seconds, and without it the ⓪ block renders as a bare
     heading over empty space for that whole time.
     """
-    from newsletter.schedule_editions import read_buffer_state
+    from tools.newsletter.schedule_editions import read_buffer_state
 
     try:
         return read_buffer_state(), ""
@@ -192,7 +192,7 @@ def _render_schedule_editions(running: bool, base: list[str], dbg: list[str]) ->
     re-reads the maximum edition number at write time, so a stale caption can
     never produce a duplicate number.
     """
-    from newsletter.schedule_editions import DEFAULT_TARGET
+    from tools.newsletter.schedule_editions import DEFAULT_TARGET
 
     st.markdown("**⓪ Schedule future editions**")
 
@@ -247,7 +247,7 @@ def _render_substack_draft(
     Sits below the must-read picker so the chosen selection becomes the draft
     title (the joined must-read line) and the featured "one must read" article
     + summary at the top of the body. Never publishes — there is no
-    ``--confirm`` on this path at all (see ``newsletter/substack_draft.py``).
+    ``--confirm`` on this path at all (see ``tools/newsletter/substack_draft.py``).
     """
     st.divider()
     st.markdown("**⑤ Substack draft**")
@@ -292,7 +292,10 @@ def _render_must_read_picker(newsletter_number: str) -> int | None:
     if not newsletter_number:
         return None
     # Imported here (not at module load) to keep app startup light.
-    from newsletter.build_newsletter import format_must_read_line, topics_sidecar_path
+    from tools.newsletter.build_newsletter import (
+        format_must_read_line,
+        topics_sidecar_path,
+    )
 
     try:
         path = topics_sidecar_path(newsletter_number)

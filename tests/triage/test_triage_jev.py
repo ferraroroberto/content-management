@@ -27,14 +27,14 @@ if str(REPO_ROOT) not in sys.path:
 
 import requests  # noqa: E402
 
-from newsletter.topics import TOPICS  # noqa: E402
-from newsletter.triage import (
+from tools.newsletter.topics import TOPICS  # noqa: E402
+from tools.newsletter.triage import (
     db,  # noqa: E402
     run,  # noqa: E402
 )
-from newsletter.triage import jev as jx  # noqa: E402
-from newsletter.triage import rank as rk  # noqa: E402
-from newsletter.triage import score as sc  # noqa: E402
+from tools.newsletter.triage import jev as jx  # noqa: E402
+from tools.newsletter.triage import rank as rk  # noqa: E402
+from tools.newsletter.triage import score as sc  # noqa: E402
 
 CRITERIA = {"rules": {
     "topics": {TOPICS[0]: {"themes": ["feedback", "teams"], "anti_themes": ["hiring ads"]},

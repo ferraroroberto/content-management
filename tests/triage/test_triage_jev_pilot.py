@@ -17,11 +17,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from newsletter.topics import TOPICS  # noqa: E402
-from newsletter.triage import db  # noqa: E402
-from newsletter.triage import jev as jx  # noqa: E402
-from newsletter.triage import jev_pilot as jp  # noqa: E402
-from newsletter.triage import score as sc  # noqa: E402
+from tools.newsletter.topics import TOPICS  # noqa: E402
+from tools.newsletter.triage import db  # noqa: E402
+from tools.newsletter.triage import jev as jx  # noqa: E402
+from tools.newsletter.triage import jev_pilot as jp  # noqa: E402
+from tools.newsletter.triage import score as sc  # noqa: E402
 
 L, P, I = TOPICS
 

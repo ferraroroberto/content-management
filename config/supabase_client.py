@@ -1,6 +1,6 @@
 """Single-source supabase-py client builder with the service_role -> key -> anon fallback.
 
-The triage store (``newsletter.triage.db``) and the engagement pipeline
+The triage store (``tools.newsletter.triage.db``) and the engagement pipeline
 (``engagement.db.client``) each hand-rolled this loop and had already diverged:
 one treated "table missing" as a working key and never warned on the anon
 fallback, the other fell through on any error and did warn. Both now
