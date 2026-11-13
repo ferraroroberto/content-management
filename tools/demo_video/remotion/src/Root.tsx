@@ -4,7 +4,7 @@ import { Demo } from "./Demo";
 import type { DemoProps } from "./types";
 
 // One composition; its size, fps and length come from the props
-// demo_video/storyboard.py resolves for a cut (--props).
+// tools/demo_video/storyboard.py resolves for a cut (--props).
 const EMPTY: DemoProps = {
   fps: 30,
   width: 1920,

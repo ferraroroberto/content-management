@@ -21,7 +21,7 @@ No model calls are needed: the only cost is the agent session.
 
 ## 0. Preflight
 
-- `node --version` (20+) and `npm install` once in `demo_video/remotion/` (its `node_modules` never goes under OneDrive).
+- `node --version` (20+) and `npm install` once in `tools/demo_video/remotion/` (its `node_modules` never goes under OneDrive).
 - `ffmpeg -version`, `ffprobe -version`.
 - The app to film: its checkout and its `.venv` (the driver runs the app from there).
 - A **demo folder outside the repo** (a private one may sit in OneDrive; the repo is public).
@@ -39,7 +39,7 @@ The last point is the one that matters: the reference video shipped a scene sayi
 
 ## 2. Storyboard and driver
 
-- **`demo.json`** (schema and scene catalogue: [`demo_video/README.md`](../demo_video/README.md)): `product`, `clips` with their `source` recordings, `copy` per language (every on-screen string and every chat answer), `cuts`, `scenes` (each scene type from the catalogue, with `seconds`, captions as `@copy` keys and clip refs to beats), the `soundtrack` per cut, `privacy` (roster, blocklist, accepted tokens) and `recording` (takes, pages, beats). Start from [`demo_video/examples/facilitation-suite/demo.json`](../demo_video/examples/facilitation-suite/demo.json).
+- **`demo.json`** (schema and scene catalogue: [`tools/demo_video/README.md`](../tools/demo_video/README.md)): `product`, `clips` with their `source` recordings, `copy` per language (every on-screen string and every chat answer), `cuts`, `scenes` (each scene type from the catalogue, with `seconds`, captions as `@copy` keys and clip refs to beats), the `soundtrack` per cut, `privacy` (roster, blocklist, accepted tokens) and `recording` (takes, pages, beats). Start from [`tools/demo_video/examples/facilitation-suite/demo.json`](../tools/demo_video/examples/facilitation-suite/demo.json).
 - **`driver.py`**: a throwaway driver for the app, written from [`docs/demo-video-driver-playbook.md`](demo-video-driver-playbook.md) — a disposable instance, synthetic data for a public cut, an anonymised copy for a private one, actions that raise when refused.
 - **Private cut on real material**: put the real roster in `privacy.roster` (a file in the demo folder, never in the repo).
 
@@ -88,7 +88,7 @@ Every cut at 1080p (about 2½ min per 83 s cut), each verified — size, fps, le
 | A timer legend shows the wrong state | the item's timer starts on entering, fighting a scripted start/pause | `start: manual` for scripted timers; measure states with `legend.measure` |
 | `overrun: fail` | a sped-up clip runs into the next beat | lower `rate`, reduce `seconds`, or hold the beat longer when recording |
 | `privacy: fail` on a first name | a made-up name shares a token with a real one | change the made-up name; `privacy.allow` only as the owner's explicit decision |
-| `Remotion is not installed in …` | a fresh checkout or worktree | `npm install` in `demo_video/remotion/` |
+| `Remotion is not installed in …` | a fresh checkout or worktree | `npm install` in `tools/demo_video/remotion/` |
 | Renders are slow to start | Remotion copies `media_dir` into its bundle | keep only what the demo uses in `media/` |
 | `rmtree` "Access is denied" on a OneDrive copy | read-only attributes on copied files | `copytree(..., copy_function=shutil.copyfile)`, `rmtree(..., onexc=chmod-and-retry)` |
 | A heredoc edit silently broke accented text | stdin encoding | write helper scripts to a file and run them with `PYTHONUTF8=1` |

@@ -21,8 +21,14 @@ from app.process_runner import (
     render_status_badge,
     start_pipeline,
 )
-from demo_video.render import output_path
-from demo_video.storyboard import DEMO_FILE, Demo, load_demo, total_frames, validate
+from tools.demo_video.render import output_path
+from tools.demo_video.storyboard import (
+    DEMO_FILE,
+    Demo,
+    load_demo,
+    total_frames,
+    validate,
+)
 
 PIPELINE_NAME = "demo_video"
 RUNBOOK = Path(__file__).resolve().parent.parent / "docs" / "demo-video-runbook.md"

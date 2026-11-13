@@ -1,4 +1,4 @@
-// The resolved props demo_video/storyboard.py writes for one cut: copy keys are
+// The resolved props tools/demo_video/storyboard.py writes for one cut: copy keys are
 // already strings, clip refs are already {src, from, rate}. Nothing here reads
 // demo.json directly.
 

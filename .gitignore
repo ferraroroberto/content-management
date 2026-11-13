@@ -43,7 +43,7 @@ reporting/results/*
 __pycache__/
 
 # demo_video's Remotion template: npm install output
-demo_video/remotion/node_modules/
+tools/demo_video/remotion/node_modules/
 
 # Ignore Notion sample DB
 /reporting/notion/database_sample

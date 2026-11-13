@@ -1,12 +1,12 @@
 # Demo-video driver playbook
 
-How to write the **throwaway driver** that lets `demo_video_pipeline.py --stages record` film any app for a demo video. A driver is cheap and disposable: it lives in the demo folder next to `demo.json`, it is written for one demo, and nothing is ever added to the app's own repo. The worked example is [`demo_video/examples/facilitation-suite/driver.py`](../demo_video/examples/facilitation-suite/driver.py); start from a copy of it.
+How to write the **throwaway driver** that lets `demo_video_pipeline.py --stages record` film any app for a demo video. A driver is cheap and disposable: it lives in the demo folder next to `demo.json`, it is written for one demo, and nothing is ever added to the app's own repo. The worked example is [`tools/demo_video/examples/facilitation-suite/driver.py`](../tools/demo_video/examples/facilitation-suite/driver.py); start from a copy of it.
 
 Budget: about 15 minutes for an app with an HTTP action API, longer for one you can only click through.
 
 ## What the harness does, and what the driver does
 
-The harness (`demo_video/record.py`) owns:
+The harness (`tools/demo_video/record.py`) owns:
 - the browser (real Chrome, a fixed 1920×1080 viewport);
 - one browser context per page (one video file per page: `rec/<lang>/<page>.webm`);
 - the beat runner and the chat pacing;
@@ -27,7 +27,7 @@ The **beats** are data in `demo.json` (`recording.takes[].beats[].steps`), not d
 - **Timing:** `wait`.
 - **Browser steps on a named page:** `click` (optionally the row with `text`), `wait_for`, `wheel`, `mouse`.
 
-See `demo_video/README.md` for the full schema.
+See `tools/demo_video/README.md` for the full schema.
 
 ## Write one, step by step
 

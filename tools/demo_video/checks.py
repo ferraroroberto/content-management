@@ -23,8 +23,8 @@ from typing import Any, Iterable, Optional
 import numpy as np
 
 from common.runtime_files import ensure_folder, write_text_at
-from demo_video.media import Result
-from demo_video.storyboard import (
+from tools.demo_video.media import Result
+from tools.demo_video.storyboard import (
     Cut,
     Demo,
     WindowStates,

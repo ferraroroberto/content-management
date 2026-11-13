@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Protocol
 
 from common.runtime_files import ensure_folder, write_text_at
-from demo_video.storyboard import STATES_KEY, Beat, Demo, Recording, Step, Take
+from tools.demo_video.storyboard import STATES_KEY, Beat, Demo, Recording, Step, Take
 
 logger = logging.getLogger("demo_video.record")
 

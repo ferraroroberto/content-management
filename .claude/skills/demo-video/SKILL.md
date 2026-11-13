@@ -7,7 +7,7 @@ description: Makes a product demo video with the owner — message brief, demo.j
 
 **Goal:** take a demo from "I want a demo of app X" to verified MP4s the owner has reviewed: one `demo.json` storyboard, a throwaway driver, recordings of a disposable instance of the app, and one render per cut. Use the pipeline's own commands for everything they cover; judgment is only for what the owner would judge, and it is the owner's call wherever this skill says **[human]**.
 
-The full procedure, with times and troubleshooting, is [`docs/demo-video-runbook.md`](../../../docs/demo-video-runbook.md); the storyboard schema and scene catalogue are in [`demo_video/README.md`](../../../demo_video/README.md); the driver how-to is [`docs/demo-video-driver-playbook.md`](../../../docs/demo-video-driver-playbook.md). Read the runbook once before step 0. This skill is that runbook, driven.
+The full procedure, with times and troubleshooting, is [`docs/demo-video-runbook.md`](../../../docs/demo-video-runbook.md); the storyboard schema and scene catalogue are in [`tools/demo_video/README.md`](../../../tools/demo_video/README.md); the driver how-to is [`docs/demo-video-driver-playbook.md`](../../../docs/demo-video-driver-playbook.md). Read the runbook once before step 0. This skill is that runbook, driven.
 
 Every step is tagged **[code]** (a deterministic command), **[agent]** (your own reading and judgment) or **[human]** (the owner decides or acts; ask and wait).
 
@@ -46,7 +46,7 @@ Copy this into the conversation and tick it as you go:
 
 Run and report in one block; fix and re-check until all pass:
 
-1. `node --version` (20+). `demo_video/remotion/node_modules` exists — if not, `npm install --no-audit --no-fund` there (a fresh checkout or worktree has none).
+1. `node --version` (20+). `tools/demo_video/remotion/node_modules` exists — if not, `npm install --no-audit --no-fund` there (a fresh checkout or worktree has none).
 2. `ffmpeg -version` and `ffprobe -version` resolve.
 3. The app's checkout and its `.venv` interpreter exist (ask for the path if it isn't a sibling under `E:\automation`).
 4. The demo folder is outside this repo. With `demo.json` present: `demo_video_pipeline.py "<folder>" --status` — read it out.
@@ -57,7 +57,7 @@ Ask in **one message**: who watches it and where; the cuts (id, language, aspect
 
 ## 2. Storyboard and driver [agent → human]
 
-- Copy the worked example (`demo_video/examples/facilitation-suite/`) into the demo folder as the starting point, or start from scratch for another app.
+- Copy the worked example (`tools/demo_video/examples/facilitation-suite/`) into the demo folder as the starting point, or start from scratch for another app.
 - Write `demo.json`: scenes from the catalogue matching the confirmed sentences; every on-screen string and every chat answer in `copy` per language; clips with `source: "rec/{lang}/<page>.webm"`; the soundtrack per cut with `licence`; `privacy` (roster file in the demo folder, blocklist of client names for public cuts); the `recording` takes and beats.
 - Write `driver.py` from the playbook: a disposable instance, synthetic data for public cuts, an anonymised copy (names, roles, companies, countries) for private ones, `act` raising on refusal.
 - Show the owner a table — scene · seconds · what it shows · its message sentence · caption text per language — and wait for approval. Validate with `--status` (it lists missing copy keys, clips and beats).

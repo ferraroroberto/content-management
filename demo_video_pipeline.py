@@ -31,7 +31,7 @@ which cuts are rendered; it exits 2 when the storyboard is invalid or media
 is missing.
 
 The interactive way to make a demo is the ``/demo-video`` skill; see
-``demo_video/README.md``.
+``tools/demo_video/README.md``.
 """
 
 from __future__ import annotations
@@ -48,12 +48,12 @@ force_utf8_stdio()
 from pydantic import ValidationError  # noqa: E402
 
 from config.logger_config import setup_logger  # noqa: E402
-from demo_video.checks import run_checks, write_report  # noqa: E402
-from demo_video.media import contact_sheet, verify_output  # noqa: E402
-from demo_video.prep import run_prep  # noqa: E402
-from demo_video.record import run_recording  # noqa: E402
-from demo_video.render import load_config, output_path, render_cut  # noqa: E402
-from demo_video.storyboard import (  # noqa: E402
+from tools.demo_video.checks import run_checks, write_report  # noqa: E402
+from tools.demo_video.media import contact_sheet, verify_output  # noqa: E402
+from tools.demo_video.prep import run_prep  # noqa: E402
+from tools.demo_video.record import run_recording  # noqa: E402
+from tools.demo_video.render import load_config, output_path, render_cut  # noqa: E402
+from tools.demo_video.storyboard import (  # noqa: E402
     ASPECTS,
     Cut,
     Demo,

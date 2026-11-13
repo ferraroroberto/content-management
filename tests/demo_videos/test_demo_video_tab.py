@@ -16,7 +16,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from app import tab_demo_video  # noqa: E402
 
-EXAMPLE = REPO_ROOT / "demo_video" / "examples" / "facilitation-suite"
+EXAMPLE = REPO_ROOT / "tools" / "demo_video" / "examples" / "facilitation-suite"
 
 
 def _card_script() -> None:
