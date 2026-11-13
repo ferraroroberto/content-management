@@ -7,7 +7,7 @@ history holds them. What is left is the one lane that stays useful:
 
 Usage::
 
-    python -m check_ip.migrate --recompute-duplicates  # re-elect the canonical rows
+    python -m tools.check_ip.migrate --recompute-duplicates  # re-elect the canonical rows
 
 It needs no workbooks, never deletes, and reports what it changed plus the
 annotation count either side of it.
@@ -23,10 +23,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from check_ip import db  # noqa: E402
+from tools.check_ip import db  # noqa: E402
 
 logger = logging.getLogger("check_ip.migrate")
 

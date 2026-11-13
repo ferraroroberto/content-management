@@ -144,7 +144,7 @@ or a Python file it could not read or parse as **NOT CONFIRMED**.
 
 The `must-use` entries in `.fleet.toml` name the one helper for a call, and
 a call outside it is a hit: `requests.<verb>` outside `src/pooled_http.py`
-(the vendored pooled keep-alive session), `sqlite3.connect` outside `check_ip/db.py`,
+(the vendored pooled keep-alive session), `sqlite3.connect` outside `tools/check_ip/db.py`,
 `os.replace` outside `common/atomic_write.py` (the atomic file writer), and
 Starlette's `StaticFiles` outside `src/static_versioning.py`, so the
 recorder's `/static` mount keeps going through `CachingStaticFiles`.

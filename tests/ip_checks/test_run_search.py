@@ -19,8 +19,8 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from check_ip import run  # noqa: E402
 from tests.ip_checks._store_fixtures import StoreTestCase  # noqa: E402
+from tools.check_ip import run  # noqa: E402
 
 IMAGE = Path("books pile.png")
 URL = "https://i.example.test/books.png"

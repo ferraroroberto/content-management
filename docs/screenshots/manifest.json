@@ -175,7 +175,7 @@
         "app/app.py",
         "app/process_runner.py",
         "app/tab_check_ip.py",
-        "check_ip/review.py"
+        "tools/check_ip/review.py"
       ],
       "reach": {
         "label": "check IP"

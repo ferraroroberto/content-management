@@ -13,8 +13,8 @@ This is a **public repo** — never put a third party's name, profile URL, messa
 
 1. **Never contact anyone.** No connection request, no message, no comment, no reply. Not even a draft sent anywhere.
 2. **Never file a report.** No LinkedIn copyright form, no takedown, no "report post".
-3. **Never write `ok` / `person` / `chat` / `report` / `fixed`.** Those five columns are the owner's ten months of manual triage. `check_ip.screen` has no code path that writes them and a regression test enforces it — don't route around that with raw SQL.
-4. **Never edit the database by hand.** Every write goes through `python -m check_ip.screen verdict`.
+3. **Never write `ok` / `person` / `chat` / `report` / `fixed`.** Those five columns are the owner's ten months of manual triage. `tools.check_ip.screen` has no code path that writes them and a regression test enforces it — don't route around that with raw SQL.
+4. **Never edit the database by hand.** Every write goes through `python -m tools.check_ip.screen verdict`.
 5. You are **proposing**, and your proposal is read as a proposal. Say you could not tell, freely — a wrong confident verdict costs the owner more than an honest shrug.
 
 ## The licence — three conditions, judged separately
@@ -68,10 +68,10 @@ Live-run corrections.
 ## Step 1 — pre-flight
 
 ```powershell
-& .\.venv\Scripts\python.exe -m check_ip.screen stats
+& .\.venv\Scripts\python.exe -m tools.check_ip.screen stats
 ```
 
-No store → say so: nothing to screen until a search run (`check_ip.run`) has created it. Don't start a search run unasked — it costs money.
+No store → say so: nothing to screen until a search run (`tools.check_ip.run`) has created it. Don't start a search run unasked — it costs money.
 
 Report the queue depth before starting, so the owner knows what fraction of the backlog this run covers. Report `not_fully_assessed` too — those are rows that look screened but are not, and they are a second backlog behind the first. At roughly 15-20s per link, 100 links is about half an hour and 500 is 2-3 hours — say which.
 
@@ -86,7 +86,7 @@ You are the **orchestrator**. You do not open a browser yourself. Split `N` into
 Hand each worker the brief below verbatim, with its own 10 rows pulled fresh:
 
 ```powershell
-& .\.venv\Scripts\python.exe -m check_ip.screen next --limit 10 --json
+& .\.venv\Scripts\python.exe -m tools.check_ip.screen next --limit 10 --json
 ```
 
 Under `--recheck`, add `--unassessed` to that command. Each served row then also carries `screen_verdict` and `screen_reason` — the opinion this pass is replacing. Hand them to the worker as context, not as an answer: it re-judges all three conditions from the page, and `record_verdict` preserves the old opinion in `screen_history` either way (issue #301).
@@ -116,7 +116,7 @@ Pull the *next* batch only after the previous worker has finished, so screened r
 >
 > **5. Record it immediately** — one call per row, right after judging it, never batched at the end:
 > ```powershell
-> & .\.venv\Scripts\python.exe -m check_ip.screen verdict --id <ID> \
+> & .\.venv\Scripts\python.exe -m tools.check_ip.screen verdict --id <ID> \
 >     --verdict <infringement|acceptable|unclear> \
 >     --credit <met|violated|unknown> \
 >     --noncommercial <met|violated|unknown> \

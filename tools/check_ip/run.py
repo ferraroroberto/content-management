@@ -10,10 +10,10 @@ run would search and spends nothing; run it first.
 
 Usage::
 
-    python -m check_ip.run --dry-run           # what would be searched
-    python -m check_ip.run --limit 10          # a live run over ten images
-    python -m check_ip.run                     # every image that is due
-    python -m check_ip.run --force             # ignore the re-search windows
+    python -m tools.check_ip.run --dry-run           # what would be searched
+    python -m tools.check_ip.run --limit 10          # a live run over ten images
+    python -m tools.check_ip.run                     # every image that is due
+    python -m tools.check_ip.run --force             # ignore the re-search windows
 """
 
 from __future__ import annotations
@@ -27,12 +27,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from check_ip import db, process  # noqa: E402
-from check_ip.imgur import ImgurClient  # noqa: E402
-from check_ip.lens import LensClient  # noqa: E402
+from tools.check_ip import db, process  # noqa: E402
+from tools.check_ip.imgur import ImgurClient  # noqa: E402
+from tools.check_ip.lens import LensClient  # noqa: E402
 
 logger = logging.getLogger("check_ip.run")
 
