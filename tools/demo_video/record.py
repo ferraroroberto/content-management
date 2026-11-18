@@ -174,6 +174,7 @@ def record_take(browser: Any, take: Take, runner: Runner, values: dict, rec: Rec
     contexts, pages, t0 = {}, {}, {}
     try:
         for role, spec in take.pages.items():
+            # browser-per-iteration-exempt: one context per page role, because Playwright records one video file per context
             ctx = browser.new_context(viewport=size, device_scale_factor=1, record_video_dir=str(raw),
                                       record_video_size=size, locale="en-US", color_scheme="light")
             if spec.init_script:

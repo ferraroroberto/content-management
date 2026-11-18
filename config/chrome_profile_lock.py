@@ -147,6 +147,7 @@ def launch_persistent_context_with_lock_wait(
             )
         time.sleep(delay)
         try:
+            # browser-per-iteration-exempt: retry that waits out a locked profile; at most one launch ever succeeds
             ctx = playwright.chromium.launch_persistent_context(**kwargs)
             logger.info("✅ profile %s is free — launch succeeded after waiting", user_data_dir)
             return ctx

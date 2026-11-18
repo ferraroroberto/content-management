@@ -68,6 +68,7 @@ class WiringTests(unittest.TestCase):
                 "logging-not-print",
                 "no-drive-path",
                 "subprocess-timeout",
+                "browser-per-iteration",
                 "state-literal",
                 "state-set-repeat",
                 "state-write",
