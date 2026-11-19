@@ -1,6 +1,6 @@
 ---
 name: demo-video
-description: Makes a product demo video with the owner — message brief, demo.json storyboard and a throwaway app driver, recording a disposable instance of the app, prep, hard-stop checks (overrun, privacy, licence), half-scale previews and final renders — and hands over the MP4s; it never publishes, posts or uploads. Use when the owner wants a demo video of one of their apps (any language, 16:9 / 1:1 / 4:5, public and private cuts), wants to change one, or asks where a demo stands. E.g. "/demo-video <demo folder>", "/demo-video new <app> <demo folder>", "/demo-video status <demo folder>".
+description: With the owner, makes an app demo video — brief, demo.json storyboard, throwaway driver, disposable-instance recording, hard-stop checks (overrun, privacy, licence), half-scale previews, renders — and hands over MP4s; never publishes, posts or uploads. Use to make, change or check one (any language, 16:9/1:1/4:5, public/private cuts). E.g. "/demo-video <demo folder>", "/demo-video new <app> <demo folder>", "/demo-video status <demo folder>".
 ---
 
 # demo-video
