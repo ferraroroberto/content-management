@@ -19,7 +19,7 @@ live, 2026-06.
 Split out of ``schedule_instagram_posts.py``: the Reels wizard
 is a self-contained flow with its own dozen-function lifecycle that shares
 nothing with the feed-post/story driver beyond the page session and a couple
-of low-level helpers (``fill_input``, the module logger) reused from there.
+of low-level helpers (``fill_input`` from ``instagram_composer``, the module logger) reused from there.
 Consumed by ``tools/planning/videos/videos_instagram.py`` (the weekly-video
 orchestrator schedules every clip as a reel, never as a feed post) — mirrors
 how ``tools/planning/linkedin/linkedin_composer.py`` splits composer mechanics out

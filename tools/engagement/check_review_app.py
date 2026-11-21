@@ -7,7 +7,7 @@ drops by 1.
 
 Usage:
     # Make sure Streamlit is running first:
-    #   & .\.venv\Scripts\python.exe -m streamlit run engagement\review_app.py
+    #   & .\.venv\Scripts\python.exe -m streamlit run tools\engagement\review_app.py
     & .\.venv\Scripts\python.exe -m tools.engagement.check_review_app
 
 Screenshots land in results/engagement/e2e/<timestamp>/. Each step prints
