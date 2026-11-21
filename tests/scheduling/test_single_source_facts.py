@@ -28,11 +28,20 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 # Drivers whose waits are all named; add a driver here when its literals are converted.
 _PACED_DRIVERS = (
     "tools/planning/instagram/instagram_composer.py",
+    "tools/planning/instagram/instagram_reels.py",
+    "tools/planning/instagram/instagram_upload.py",
     "tools/planning/instagram/schedule_instagram_posts.py",
     "tools/planning/linkedin/linkedin_composer.py",
+    "tools/planning/linkedin/linkedin_schedule_picker.py",
     "tools/planning/linkedin/schedule_linkedin_posts.py",
+    "tools/planning/threads/schedule_threads_posts.py",
     "tools/planning/threads/threads_composer.py",
+    "tools/planning/twitter/schedule_twitter_posts.py",
     "tools/planning/twitter/twitter_composer.py",
+    "tools/planning/videos/videos_instagram.py",
+    "tools/planning/videos/videos_linkedin.py",
+    "tools/planning/videos/videos_threads.py",
+    "tools/planning/videos/videos_twitter.py",
 )
 
 

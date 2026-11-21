@@ -38,7 +38,12 @@ from tools.planning._scheduler_main import (  # noqa: E402
     build_scheduler_parser,
     run_single_post_scheduler,
 )
-from tools.planning._session_base import results_dir  # noqa: E402
+from tools.planning._session_base import (  # noqa: E402
+    FILL_COMMIT_MS,
+    PANEL_LOAD_MS,
+    SHEET_OPEN_MS,
+    results_dir,
+)
 from tools.planning.twitter.twitter_composer import (  # noqa: E402
     cancel_composer,
     click_compose_area,
@@ -95,9 +100,9 @@ def return_to_home(page: Page, feed_url: str) -> None:
     """Hard-refresh between days so the composer is in a clean state."""
     try:
         page.goto(feed_url, wait_until="domcontentloaded", timeout=30000)
-        page.wait_for_timeout(2500)
+        page.wait_for_timeout(PANEL_LOAD_MS)
         dismiss_blocking_modals(page)
-        page.wait_for_timeout(400)
+        page.wait_for_timeout(FILL_COMMIT_MS)
     except Exception as err:
         logger.warning("⚠️ Could not return to home: %s", err)
 
@@ -154,7 +159,7 @@ def schedule_post(
             raise RuntimeError(f"Composer did not clear — see {shot}")
     except Exception as err:
         raise PostMayBeLiveError(str(err)) from err
-    page.wait_for_timeout(1200)
+    page.wait_for_timeout(SHEET_OPEN_MS)
     logger.info("✅ LIVE %s post scheduled on X", label)
     return "post:LIVE"
 
@@ -178,7 +183,7 @@ def main() -> tuple[int, list[dict]]:
     cfg = load_twitter_config()
     def _after_login(page: Page) -> None:
         dismiss_blocking_modals(page)
-        page.wait_for_timeout(400)
+        page.wait_for_timeout(FILL_COMMIT_MS)
 
     return run_single_post_scheduler(
         args,

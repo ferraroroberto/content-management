@@ -14,7 +14,11 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parents[3]))
-from tools.planning._session_base import results_dir  # noqa: E402
+from tools.planning._session_base import (  # noqa: E402
+    COMPOSER_SETTLE_MS,
+    PANEL_LOAD_MS,
+    results_dir,
+)
 from tools.planning.threads.schedule_threads_posts import return_to_profile  # noqa: E402
 from tools.planning.threads.threads_composer import (  # noqa: E402
     cancel_composer,
@@ -59,7 +63,7 @@ def schedule_one_video(
     type_caption(page, row.payload.caption_short)
     # Threads composer's fileInput accepts .mp4 directly — same helper as image.
     upload_image(page, row.payload.video_path)
-    page.wait_for_timeout(2500)
+    page.wait_for_timeout(PANEL_LOAD_MS)
     open_three_dots_menu(page)
     click_schedule_menuitem(page)
     navigate_calendar_month(page, row.day)
@@ -87,7 +91,7 @@ def schedule_one_video(
         shot = out_dir / f"{label}-th-FAIL.png"
         page.screenshot(path=str(shot), full_page=False)
         raise RuntimeError(f"TH composer did not close — see {shot}")
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(COMPOSER_SETTLE_MS)
     logger.info("✅ LIVE %s TH video scheduled", label)
     return "TH:LIVE"
 

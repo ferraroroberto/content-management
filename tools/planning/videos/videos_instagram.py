@@ -20,7 +20,11 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parents[3]))
-from tools.planning._session_base import results_dir  # noqa: E402
+from tools.planning._session_base import (  # noqa: E402
+    CLICK_SETTLE_MS,
+    COMPOSER_SETTLE_MS,
+    results_dir,
+)
 from tools.planning.instagram.instagram_composer import (  # noqa: E402
     cancel_composer,
     dismiss_meta_verified_modal,
@@ -111,7 +115,7 @@ def schedule_one_video(
     # confirmation dialog rather than navigating back — dismiss it so the next
     # day starts from a clean planner state.
     dismiss_reel_success_dialog(page)
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(COMPOSER_SETTLE_MS)
     logger.info("✅ LIVE %s IG video scheduled as reel", label)
     return "IG:LIVE"
 
@@ -119,7 +123,7 @@ def schedule_one_video(
 def _after_login(page) -> None:
     # Let the planner SPA mount, then dismiss any first-load upsell modal.
     dismiss_meta_verified_modal(page)
-    page.wait_for_timeout(500)
+    page.wait_for_timeout(CLICK_SETTLE_MS)
 
 
 def run(rows: list[VideoRow], video_cfg: dict, *, dry_run: bool) -> list[dict]:

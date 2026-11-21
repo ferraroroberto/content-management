@@ -22,6 +22,11 @@ from typing import Optional
 
 from playwright.sync_api import Page
 
+from tools.planning._session_base import (
+    FIELD_FOCUS_MS,
+    POLL_FAST_MS,
+    POPUP_DISMISS_MS,
+)
 from tools.planning.linkedin.linkedin_labels import (
     DATE_INPUT_SEL,
     SCHEDULE_SUMMARY_SEL,
@@ -108,7 +113,7 @@ def _wait_for_summary_match(
             return True
         if page.evaluate("() => Date.now()") >= deadline:
             return False
-        page.wait_for_timeout(200)
+        page.wait_for_timeout(POLL_FAST_MS)
 
 
 def _set_schedule_date(page: Page, target: date) -> None:
@@ -137,7 +142,7 @@ def _set_schedule_date(page: Page, target: date) -> None:
             di.fill("")
             # Let the controlled input settle before the real value: two
             # back-to-back fills can coalesce and swallow the parse.
-            page.wait_for_timeout(150)
+            page.wait_for_timeout(FIELD_FOCUS_MS)
             di.fill(cand)
         except Exception:
             continue
@@ -187,7 +192,7 @@ def _wait_for_time_slot(page: Page, menu, candidates: tuple[str, ...]):
                 return entry.first
         if page.evaluate("() => Date.now()") >= deadline:
             return None
-        page.wait_for_timeout(200)
+        page.wait_for_timeout(POLL_FAST_MS)
 
 
 def _time_menu_labels(menu) -> list[str]:
@@ -227,7 +232,7 @@ def _time_selected(page: Page, target_minutes: int, candidates: tuple[str, ...])
             return True
         if page.evaluate("() => Date.now()") >= deadline:
             return False
-        page.wait_for_timeout(200)
+        page.wait_for_timeout(POLL_FAST_MS)
 
 
 def _set_schedule_time(page: Page, hour: int, minute: int) -> None:
@@ -257,7 +262,7 @@ def _set_schedule_time(page: Page, hour: int, minute: int) -> None:
         if attempt < TIME_MENU_OPENS:
             try:
                 page.locator(DATE_INPUT_SEL).first.click(timeout=5000)
-                page.wait_for_timeout(300)
+                page.wait_for_timeout(POPUP_DISMISS_MS)
             except Exception:
                 pass
     if entry is None:

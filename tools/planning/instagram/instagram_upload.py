@@ -21,7 +21,11 @@ from typing import Optional
 
 from playwright.sync_api import Page
 
-from tools.planning._session_base import results_dir
+from tools.planning._session_base import (
+    COMPOSER_SETTLE_MS,
+    MENU_OPEN_MS,
+    results_dir,
+)
 from tools.planning.instagram.instagram_labels import (
     ADD_MEDIA_BTN_SELECTOR,
     UPLOAD_FROM_COMPUTER_SELECTOR,
@@ -143,7 +147,7 @@ def _upload_leg1(page: Page, add_btn, file_paths: list[str], paths: list[Path]) 
     # click handler for a short window after the sub-modal closes.
     # Settle, click, and on miss retry once via a JS-native click — that
     # bypasses any React handler-binding race a Playwright dispatch hits.
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(COMPOSER_SETTLE_MS)
 
     def _try_click_for_chooser(click_fn) -> Optional[object]:
         try:
@@ -170,7 +174,7 @@ def _upload_leg1(page: Page, add_btn, file_paths: list[str], paths: list[Path]) 
     if leg1_chooser is None:
         # Re-find: the previous click may have changed the DOM even if no
         # chooser fired. Then JS-click the freshly resolved element.
-        page.wait_for_timeout(600)
+        page.wait_for_timeout(MENU_OPEN_MS)
         add_btn = page.locator(ADD_MEDIA_BTN_SELECTOR).first
         leg1_chooser = _try_click_for_chooser(_js_click)
 
