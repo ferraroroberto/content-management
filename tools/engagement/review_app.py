@@ -1,11 +1,11 @@
 r"""Standalone Streamlit entry for the engagement review UI.
 
-Thin wrapper around `engagement.ui` — keeps the legacy launch command
+Thin wrapper around `tools.engagement.ui` — keeps the legacy launch command
 working while the unified control panel (`tools/app/app.py`) reuses the same
 render functions.
 
 Launch:
-    & .\.venv\Scripts\python.exe -m streamlit run engagement\review_app.py
+    & .\.venv\Scripts\python.exe -m streamlit run tools\engagement\review_app.py
 """
 
 from __future__ import annotations

@@ -10,7 +10,7 @@ ratio range of 4:5 to 16:9", Schedule never enables) and duplicates a single
 upload into two tiles. The Reels composer accepts 9:16 and attaches one tile
 per file. The reel-specific composer helpers live in
 ``planning.instagram.instagram_reels``; the shared caption/menu/session
-helpers reused here still live in ``planning.instagram.schedule_instagram_posts``.
+helpers reused here still live in ``tools.planning.instagram.instagram_composer``.
 """
 
 from __future__ import annotations
@@ -68,7 +68,7 @@ def schedule_one_video(
     # never enables) and IG now routes video to reels anyway. "Create reel" is a
     # full-page wizard that accepts 9:16 and attaches one tile per file (no
     # duplicate-attach). See the Reels-composer section in
-    # ``schedule_instagram_posts`` for the verified-live selectors.
+    # ``instagram_reels`` for the verified-live selectors.
     open_day_schedule_menu(page, row.day, "Create reel")
     wait_reels_composer_ready(page)
 

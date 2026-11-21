@@ -5,8 +5,8 @@ target date and the row for the day after, and prints what a real run would
 write. No Notion writes are performed.
 
 Usage:
-    python notion/next_relation_check.py            # uses today (local date)
-    python notion/next_relation_check.py 20260513   # explicit YYYYMMDD or YYYY-MM-DD
+    python -m tools.reporting.notion.next_relation_check            # uses today (local date)
+    python -m tools.reporting.notion.next_relation_check 20260513 # explicit YYYYMMDD or YYYY-MM-DD
 """
 from __future__ import annotations
 
