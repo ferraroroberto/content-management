@@ -88,6 +88,23 @@ class RankTests(unittest.TestCase):
         rk.select([a, b], RULES)
         self.assertEqual((a.verdict, b.verdict), ("selected", "duplicate"))
 
+    def test_query_identified_articles_are_not_duplicates(self) -> None:
+        a = _cand(1, topic="innovation", score=9.0, domain="youtube.com", sender="a@x.com")
+        b = _cand(2, topic="innovation", score=8.0, domain="youtube.com", sender="b@x.com")
+        a.url = a.canonical = "https://www.youtube.com/watch?v=AAAAAAAAAAA"
+        b.url = b.canonical = "https://www.youtube.com/watch?v=BBBBBBBBBBB"
+        self.assertNotEqual(a.path_key, b.path_key)
+        rk.select([a, b], RULES)
+        self.assertEqual((a.verdict, b.verdict), ("selected", "selected"))
+
+    def test_same_video_with_tracking_params_still_dedupes(self) -> None:
+        a = _cand(1, topic="innovation", score=9.0, domain="youtube.com", sender="a@x.com")
+        b = _cand(2, topic="innovation", score=8.0, domain="youtube.com", sender="b@x.com")
+        a.url = a.canonical = "https://www.youtube.com/watch?v=AAAAAAAAAAA"
+        b.url = b.canonical = "https://www.youtube.com/watch?v=AAAAAAAAAAA&utm_source=nl"
+        rk.select([a, b], RULES)
+        self.assertEqual((a.verdict, b.verdict), ("selected", "duplicate"))
+
     def test_slug_title_when_label_is_a_url(self) -> None:
         c = _cand(1, topic="innovation", score=9.0)
         c.title, c.label = "", "https://rishad.substack.com/p/from-caterpillar-to-butterfly?utm_source=x"

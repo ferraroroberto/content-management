@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 from tools.newsletter.topics import TOPICS
 from tools.newsletter.triage.score import ContentScore, MetaScore
@@ -25,6 +25,10 @@ def slug_title(url: str) -> str:
     if len(words) < 2:
         return (url or "")[:160]
     return " ".join(words).capitalize()[:160]
+
+# Query params that *identify* an article on sites that route by query (YouTube ``?v=``, WordPress ``?p=``).
+# Everything else (utm_*, deliveryName, …) is per-list tracking and must not split the dedupe key.
+ARTICLE_ID_PARAMS = ("v", "p", "id", "p_id", "article", "story", "story_id", "post", "page_id")
 
 MIN_SCORE = 3.0          # below this a link is a "candidate", never auto-selected
 WEAK_FILL = 7.0          # selected but below this = "weak fill": listed, unticked, flagged
@@ -81,9 +85,11 @@ class Candidate:
 
     @property
     def path_key(self) -> str:
-        """host + path — the dedupe key that survives per-list tracking params."""
+        """host + path (+ article-identifying query params) — the dedupe key that survives per-list tracking params."""
         parts = urlsplit(self.canonical or self.url)
-        return f"{parts.netloc}{parts.path}".lower()
+        ids = sorted((k, v) for k, v in parse_qsl(parts.query) if k.lower() in ARTICLE_ID_PARAMS)
+        query = "&".join(f"{k}={v}" for k, v in ids)
+        return f"{parts.netloc}{parts.path}{'?' + query if query else ''}".lower()
 
     @property
     def author_key(self) -> str:
