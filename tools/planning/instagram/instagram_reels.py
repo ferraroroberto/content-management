@@ -99,7 +99,7 @@ def wait_reels_composer_ready(page: Page, *, timeout_ms: int = 30000) -> None:
                 return
             except Exception:
                 pass
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(CLICK_SETTLE_MS)
     raise RuntimeError(
         "Reels composer did not load (no visible 'Add Video' button) — "
         f"url={page.url!r}."
@@ -128,13 +128,13 @@ def reel_add_video(page: Page, video_path: Path) -> None:
 
     chooser = _try(lambda: add.click(timeout=5000))
     if chooser is None:
-        page.wait_for_timeout(600)
+        page.wait_for_timeout(MENU_OPEN_MS)
         chooser = _try(lambda: add.evaluate("el => el.click()"))
     if chooser is None:
         raise RuntimeError("Reels 'Add Video' did not open a file chooser.")
     chooser.set_files([str(video_path)])
     logger.info("📤 Reels: video sent via 'Add Video' file chooser.")
-    page.wait_for_timeout(2500)
+    page.wait_for_timeout(PANEL_LOAD_MS)
 
 
 def wait_reel_footer_enabled(
@@ -166,7 +166,7 @@ def click_reel_footer(page: Page, label: str) -> None:
     """JS-native click the bottom-most reels footer button named ``label``."""
     if not page.evaluate(_REEL_FOOTER_CLICK_JS, label):
         raise RuntimeError(f"Reels footer '{label}' button not found.")
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(COMPOSER_SETTLE_MS)
 
 
 def select_reel_schedule_option(page: Page) -> None:
@@ -184,7 +184,7 @@ def select_reel_schedule_option(page: Page) -> None:
         page.locator('input[aria-label="hours"]').first.wait_for(state="attached", timeout=15000)
     except Exception:
         logger.warning("⚠️ reels time inputs did not mount after selecting 'Schedule' — proceeding anyway.")
-    page.wait_for_timeout(800)
+    page.wait_for_timeout(DIALOG_MOUNT_MS)
 
 
 def _click_reel_calendar_day(page: Page, target: date) -> None:
@@ -206,14 +206,14 @@ def _click_reel_calendar_day(page: Page, target: date) -> None:
             break
         try:
             nxt.first.click(timeout=3000)
-            page.wait_for_timeout(400)
+            page.wait_for_timeout(FILL_COMMIT_MS)
         except Exception:
             break
     cell = page.locator(f'[aria-label="{day_aria}"]')
     if not cell.count():
         raise RuntimeError(f"Reels calendar: could not find day cell {day_aria!r}.")
     cell.first.click(timeout=5000)
-    page.wait_for_timeout(600)
+    page.wait_for_timeout(MENU_OPEN_MS)
 
 
 def set_reel_schedule_datetime(page: Page, target: date, hour: int, minute: int) -> None:
@@ -227,7 +227,7 @@ def set_reel_schedule_datetime(page: Page, target: date, hour: int, minute: int)
     """
     date_inp = page.locator('input[placeholder="mm/dd/yyyy"]').first
     date_inp.click(timeout=4000)
-    page.wait_for_timeout(800)
+    page.wait_for_timeout(DIALOG_MOUNT_MS)
     _click_reel_calendar_day(page, target)
 
     h12 = hour % 12 or 12
@@ -237,7 +237,7 @@ def set_reel_schedule_datetime(page: Page, target: date, hour: int, minute: int)
         fill_input(page, page.locator('input[aria-label="minutes"]').first, f"{minute:02d}")
         fill_input(page, page.locator('input[aria-label="meridiem"]').first, mer)
         page.keyboard.press("Tab")
-        page.wait_for_timeout(300)
+        page.wait_for_timeout(POPUP_DISMISS_MS)
     except Exception as err:
         raise RuntimeError(f"Could not set reel schedule time: {err}")
     logger.info("🕒 Reel scheduled for %s %d:%02d %s", target.isoformat(), h12, minute, mer)
@@ -264,7 +264,7 @@ def dismiss_reel_success_dialog(page: Page) -> None:
         done = page.get_by_role("button", name=re.compile(r"^Done$", re.I))
         if done.count():
             done.first.click(timeout=3000)
-            page.wait_for_timeout(800)
+            page.wait_for_timeout(DIALOG_MOUNT_MS)
     except Exception:
         pass
 
@@ -285,5 +285,5 @@ def wait_reel_composer_closes(page: Page, *, timeout_ms: int = 30000) -> bool:
             return True
         if _reel_scheduled_dialog_visible(page):
             return True
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(CLICK_SETTLE_MS)
     return False

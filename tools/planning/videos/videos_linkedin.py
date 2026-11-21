@@ -20,7 +20,12 @@ from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PWTimeoutError
 
 sys.path.append(str(Path(__file__).parents[3]))
-from tools.planning._session_base import results_dir  # noqa: E402
+from tools.planning._session_base import (  # noqa: E402
+    COMPOSER_SETTLE_MS,
+    DIALOG_MOUNT_MS,
+    PANEL_LOAD_MS,
+    results_dir,
+)
 from tools.planning._waits import wait_for_first_ready  # noqa: E402
 from tools.planning.linkedin.linkedin_composer import (  # noqa: E402
     FEED_ENTRY_CLICK_TIMEOUT_MS,
@@ -154,7 +159,7 @@ def _wait_for_video_ready(page: Page, timeout_ms: int = 180000) -> None:
             ready = False
         if ready:
             return
-        page.wait_for_timeout(1500)
+        page.wait_for_timeout(COMPOSER_SETTLE_MS)
     raise RuntimeError("LinkedIn video processing did not finish within the timeout window.")
 
 
@@ -180,19 +185,19 @@ def schedule_one_video(
 
     session.goto_with_login_check(li_cfg["feed_url"])
     _click_video_button(page)
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(COMPOSER_SETTLE_MS)
     _upload_video(page, row.payload.video_path)
     _wait_for_video_ready(page)
     _click_video_next(page)
-    page.wait_for_timeout(2500)
+    page.wait_for_timeout(PANEL_LOAD_MS)
 
     if not row.payload.caption_long:
         raise RuntimeError("LinkedIn requires the clip page body as the caption — body is empty.")
     _fill_caption_with_mentions(page, row.payload.caption_long)
-    page.wait_for_timeout(800)
+    page.wait_for_timeout(DIALOG_MOUNT_MS)
 
     open_schedule_dialog(page)
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(COMPOSER_SETTLE_MS)
     set_schedule_datetime(
         page, row.day,
         video_cfg["post_hour_local"], video_cfg["post_minute_local"],

@@ -34,7 +34,11 @@ from typing import Optional
 from playwright.sync_api import Page
 
 sys.path.append(str(Path(__file__).parents[3]))
-from tools.planning._session_base import results_dir  # noqa: E402
+from tools.planning._session_base import (  # noqa: E402
+    COMPOSER_SETTLE_MS,
+    PANEL_LOAD_MS,
+    results_dir,
+)
 from tools.planning.threads.threads_composer import (  # noqa: E402
     cancel_composer,
     click_calendar_day,
@@ -97,7 +101,7 @@ def return_to_profile(page: Page, feed_url: str) -> None:
     """Hard-refresh between days."""
     try:
         page.goto(feed_url, wait_until="domcontentloaded", timeout=30000)
-        page.wait_for_timeout(2500)
+        page.wait_for_timeout(PANEL_LOAD_MS)
     except Exception as err:
         logger.warning("⚠️ Could not return to profile: %s", err)
 
@@ -150,7 +154,7 @@ def schedule_post(
             raise RuntimeError(f"Composer did not close — see {shot}")
     except Exception as err:
         raise PostMayBeLiveError(str(err)) from err
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(COMPOSER_SETTLE_MS)
     logger.info("✅ LIVE %s post scheduled on Threads", label)
     return "post:LIVE"
 

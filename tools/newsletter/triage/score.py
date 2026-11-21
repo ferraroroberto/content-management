@@ -87,6 +87,26 @@ class LLMCache(JsonFileCache):
 TIER_WEIGHT = {"never": 0.0, "rarely": 0.35, "review": 1.0, "usually": 1.25, "always": 1.5}
 NEW_SENDER_WEIGHT = 0.85
 FLOOR_WEIGHT = 0.25
+# Sender-weight curve for a sender with a hit rate: weight = BASE + min(1, hits per email) * SLOPE. A sender that
+# lands a pick in every email reaches 1.5, the "always" tier, and one with no hits starts at 0.6 — above the floor
+# weight but below a new sender's benefit of the doubt. Hand-set, not fitted; retune here, not at the call.
+HIT_WEIGHT_BASE = 0.6
+HIT_WEIGHT_SLOPE = 0.9
+# Domain bonus: up to DOMAIN_BONUS_MAX extra weight, reached once a domain's picks hit the larger of
+# DOMAIN_BONUS_MIN_PICKS and DOMAIN_BONUS_TOP_SHARE of the best domain's picks. Hand-set, so a prolific domain
+# nudges a sender it has no history for without outranking a sender's own record.
+DOMAIN_BONUS_MAX = 0.3
+DOMAIN_BONUS_MIN_PICKS = 10
+DOMAIN_BONUS_TOP_SHARE = 0.2
+# Content stage: each star the model awards adds this much to relevance/5 — a tiebreak between similar
+# relevance, not a promotion across a whole relevance point. Hand-set.
+STAR_BONUS_PER_STAR = 0.04
+# Metadata-only scoring has no body to read, so its fit is discounted. Hand-set, equal to NEW_SENDER_WEIGHT by
+# coincidence, not by design.
+META_ONLY_DISCOUNT = 0.85
+# A news item is time-sensitive and stale by the time the edition goes out, so it is scaled down rather than vetoed
+# (a strong news item can still make the shortlist). Hand-set.
+NEWS_PENALTY = 0.6
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +147,7 @@ class Priors:
         r = self.ranked.get(a)
         if r:
             hit = float(r.get("hit_rate_per_email", 0.0))
-            return round(0.6 + min(1.0, hit) * 0.9, 3), f"hit {hit:.2f}/email", False
+            return round(HIT_WEIGHT_BASE + min(1.0, hit) * HIT_WEIGHT_SLOPE, 3), f"hit {hit:.2f}/email", False
         if a in self.floor:
             return FLOOR_WEIGHT, "floor (0 picks in 54 weeks)", False
         return NEW_SENDER_WEIGHT, "new sender", True
@@ -140,7 +160,7 @@ class Priors:
         d = self.domains.get(dom)
         if not d:
             return 0.0, 0
-        return round(0.3 * min(1.0, d["picks"] / max(10, self.max_domain_picks * 0.2)), 3), int(d["picks"])
+        return round(DOMAIN_BONUS_MAX * min(1.0, d["picks"] / max(DOMAIN_BONUS_MIN_PICKS, self.max_domain_picks * DOMAIN_BONUS_TOP_SHARE)), 3), int(d["picks"])
 
     def topic_prior(self, address: str, dom: str) -> Optional[str]:
         """Most frequent topic of this sender, else of the domain — a weak prior for rule-only mode."""
@@ -463,13 +483,13 @@ def combine(*, sender_weight: float, domain_bonus: float, meta: Optional[MetaSco
     if content is not None and content.ok and content.relevance is not None:
         base = content.relevance / 5.0
         if content.star:
-            base += 0.04 * content.star
+            base += STAR_BONUS_PER_STAR * content.star
     elif meta is not None and meta.ok and meta.fit is not None:
-        base = meta.fit / 5.0 * 0.85          # metadata-only is less certain
+        base = meta.fit / 5.0 * META_ONLY_DISCOUNT
     if base is None:
         return None
     score = base * sender_weight * (1.0 + domain_bonus) * 10.0
     news = (content.news if content and content.ok else False) or (meta.news if meta and meta.ok else False)
     if news:
-        score *= 0.6
+        score *= NEWS_PENALTY
     return round(score, 2)

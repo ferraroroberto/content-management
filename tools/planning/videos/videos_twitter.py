@@ -15,7 +15,15 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.append(str(Path(__file__).parents[3]))
-from tools.planning._session_base import results_dir  # noqa: E402
+from tools.planning._session_base import (  # noqa: E402
+    CLICK_SETTLE_MS,
+    DIALOG_MOUNT_MS,
+    FILL_COMMIT_MS,
+    PANEL_LOAD_MS,
+    POLL_MS,
+    SHEET_OPEN_MS,
+    results_dir,
+)
 from tools.planning.twitter.schedule_twitter_posts import return_to_home  # noqa: E402
 from tools.planning.twitter.twitter_composer import (  # noqa: E402
     cancel_composer,
@@ -104,7 +112,7 @@ def _wait_for_video_upload_ready(page, timeout_ms: int) -> None:
         if _video_upload_in_progress(page):
             saw_progress = True
             break
-        page.wait_for_timeout(250)
+        page.wait_for_timeout(POLL_MS)
     if not saw_progress:
         logger.info("ℹ️ TW: no upload-in-progress signal seen — clip appears ready.")
         return
@@ -115,13 +123,13 @@ def _wait_for_video_upload_ready(page, timeout_ms: int) -> None:
     while page.evaluate("() => Date.now()") < deadline:
         if not _video_upload_in_progress(page):
             logger.info("✅ TW clip upload/processing complete — proceeding to schedule.")
-            page.wait_for_timeout(800)
+            page.wait_for_timeout(DIALOG_MOUNT_MS)
             return
         state = f"progress/button-disabled (btn_enabled={_primary_button_enabled(page)})"
         if state != last:
             logger.debug("⏳ TW upload not ready (%s) — polling…", state)
             last = state
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(CLICK_SETTLE_MS)
     raise RuntimeError(
         "TW clip upload/processing never settled — X did not finish accepting the "
         "clip within the wait window. The .mp4 may still exceed X's limits "
@@ -148,7 +156,7 @@ def _wait_tweet_button_enabled(page, timeout_ms: int) -> None:
         if state != last:
             logger.debug("⏳ TW final Schedule not ready (%s) — polling…", state)
             last = state
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(CLICK_SETTLE_MS)
     raise RuntimeError(
         "TW final Schedule button never enabled — X has not accepted the clip. "
         "Most often the .mp4 exceeds X's limits (≈512 MB / 2:20 / ~25 Mbps) or "
@@ -173,7 +181,7 @@ def schedule_one_video(
     type_caption(page, row.payload.caption_short)
     # X's fileInput accepts .mp4 directly — same helper as image upload.
     upload_image(page, row.payload.video_path)
-    page.wait_for_timeout(2500)
+    page.wait_for_timeout(PANEL_LOAD_MS)
     # Wait for X to finish uploading/processing the clip BEFORE opening the
     # schedule modal — confirming a schedule mid-upload stalls finalization and
     # the final Schedule button then never enables.
@@ -206,14 +214,14 @@ def schedule_one_video(
         shot = out_dir / f"{label}-tw-FAIL.png"
         page.screenshot(path=str(shot), full_page=False)
         raise RuntimeError(f"TW composer did not clear — see {shot}")
-    page.wait_for_timeout(1200)
+    page.wait_for_timeout(SHEET_OPEN_MS)
     logger.info("✅ LIVE %s TW video scheduled", label)
     return "TW:LIVE"
 
 
 def _after_login(page) -> None:
     dismiss_blocking_modals(page)
-    page.wait_for_timeout(400)
+    page.wait_for_timeout(FILL_COMMIT_MS)
 
 
 def run(rows: list[VideoRow], video_cfg: dict, *, dry_run: bool) -> list[dict]:
