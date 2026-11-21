@@ -1,6 +1,6 @@
 # Social Media Automation Suite
 
-Six surfaces, one repo:
+Seven surfaces, one repo:
 
 - **Reporting** (`tools/reporting/`, `reporting_pipeline.py`) — pulls daily
   metrics from social media APIs, processes through Supabase, syncs to
@@ -328,6 +328,18 @@ Weekly newsletter inbox → edition shortlist: pick a closed Saturday→Saturday
 Illustration copyright check: reverse-image-search results for every published illustration, ranked most-reused first. Shows what the /check-ip skill proposed for each link, and the verdict plus follow-up trail the owner sets and saves with Apply. Platform, status and illustration filters; the cost-gated search run sits behind its own expander.
 
 ![⚖️ Check IP screenshot](docs/screenshots/check_ip-desktop.png)
+
+### 🎙️ Podcast
+
+Episode package for a two-track recording: pick an episode folder, run the pipeline stages with the live log and cost readout, review the clips one by one, and open the finished local package. Nothing is published from here.
+
+![🎙️ Podcast screenshot](docs/screenshots/podcast-desktop.png)
+
+### 🎬 Demo video
+
+Runs the judgment-free stages of an app demo video — validate the storyboard, record, render the cuts — for the demo folder you point it at, with the live log and the rendered outputs. The brief, storyboard and review happen in Claude Code with the demo-video skill.
+
+![🎬 Demo video screenshot](docs/screenshots/demo_video-desktop.png)
 
 <!-- docs-shots:end -->
 

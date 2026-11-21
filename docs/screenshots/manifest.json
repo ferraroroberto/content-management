@@ -140,7 +140,7 @@
     },
     "triage": {
       "title": "🧭 Triage",
-      "description": "Weekly newsletter inbox → edition shortlist: pick a closed Saturday→Saturday week, run the triage engine (Gmail → links → two-stage scoring → 8+8+8 suggestions stored in Supabase) with the live log, then review the editable table — tick / untick / promote, ⭐ / 🏆, notes — and Apply to persist decisions, learn sender tiers and advance the watermark. A review comment can be distilled into criteria notes you accept one by one. Stage A's engine switch (`legacy` / `jev` / `both` shadow mode) and the `jev_pilot` replay CLI are documented in [`tools/newsletter/README.md`](tools/newsletter/README.md#weekly-engine-step-24-issue-211).",
+      "description": "Weekly newsletter inbox → edition shortlist: pick a closed Saturday→Saturday week, run the triage engine (Gmail → links → two-stage scoring → 8+8+8 suggestions stored in Supabase) with the live log, then review the editable table — tick / untick / promote, ⭐ / 🏆, notes — and Apply to persist decisions, learn sender tiers and advance the watermark. A review comment can be distilled into criteria notes you accept one by one. A stored week can be re-scored from its stored links with a chosen Stage A engine (Jev deciding with a Claude Haiku shadow by default, Jev alone, or Claude Haiku) without fetching Gmail again; your decisions and review comment survive. Stage A's engine switch (`legacy` / `jev` / `both` / the recommended `jev+legacy` shadow modes) and the `jev_pilot` replay CLI are documented in [`tools/newsletter/README.md`](tools/newsletter/README.md#weekly-engine-step-24-issue-211).",
       "source_globs": [
         "tools/app/app.py",
         "tools/app/process_runner.py",
@@ -193,6 +193,58 @@
       "captured_at": "2026-09-20T12:27:57+00:00",
       "files": [
         "docs/screenshots/check_ip-desktop.png"
+      ]
+    },
+    "podcast": {
+      "title": "🎙️ Podcast",
+      "description": "Episode package for a two-track recording: pick an episode folder, run the pipeline stages with the live log and cost readout, review the clips one by one, and open the finished local package. Nothing is published from here.",
+      "source_globs": [
+        "tools/app/app.py",
+        "tools/app/process_runner.py",
+        "tools/app/tab_podcast.py"
+      ],
+      "reach": {
+        "label": "podcast"
+      },
+      "wait": {
+        "text": "episode package"
+      },
+      "mask": [
+        "[data-testid=\"stCode\"]",
+        "[data-testid=\"stAlertContainer\"]",
+        "[data-testid=\"stAlert\"]",
+        "[data-testid=\"stSelectbox\"]"
+      ],
+      "input_hash": "23c626cb23a08d244f3d1b51cbed54e40c2f307cba439d2b7efdd4cce983fe5f",
+      "captured_at": "2026-11-21T20:15:42+00:00",
+      "files": [
+        "docs/screenshots/podcast-desktop.png"
+      ]
+    },
+    "demo_video": {
+      "title": "🎬 Demo video",
+      "description": "Runs the judgment-free stages of an app demo video — validate the storyboard, record, render the cuts — for the demo folder you point it at, with the live log and the rendered outputs. The brief, storyboard and review happen in Claude Code with the demo-video skill.",
+      "source_globs": [
+        "tools/app/app.py",
+        "tools/app/process_runner.py",
+        "tools/app/tab_demo_video.py"
+      ],
+      "reach": {
+        "label": "demo video"
+      },
+      "wait": {
+        "text": "stages that need no judgment"
+      },
+      "mask": [
+        "[data-testid=\"stCode\"]",
+        "[data-testid=\"stAlertContainer\"]",
+        "[data-testid=\"stAlert\"]",
+        "[data-testid=\"stTextInput\"]"
+      ],
+      "input_hash": "3e9ffe386b8bf1e7aca0c255ee91568096b566541b6f82a5a8058488fb7f6270",
+      "captured_at": "2026-11-21T20:15:33+00:00",
+      "files": [
+        "docs/screenshots/demo_video-desktop.png"
       ]
     }
   }

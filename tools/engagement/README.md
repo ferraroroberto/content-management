@@ -46,7 +46,7 @@ flowchart LR
 | `python -m tools.engagement.classify.local_model train` | Train the local sklearn classifier on accumulated whitelist/blacklist labels. Refuses to train below `rules.local_model_min_train_per_class` per class. Writes `results/engagement/classify/local_model.joblib` (gitignored) + a metadata sidecar recording the scikit-learn version that pickled it. |
 | `python -m tools.engagement.classify.local_model eval` | 5-fold stratified CV on the same labeled set; prints AUC + precision/recall/F1 at the configured threshold. |
 | `python -m tools.engagement.reputation.update` | Recompute rolling per-commenter signals + counters + reputation_score from the `comments` table and upsert into `commenters`. Idempotent; preserves manual whitelist/blacklist. |
-| `& .\.venv\Scripts\python.exe -m streamlit run engagement\review_app.py` | Launch the review UI on `http://localhost:8501`. |
+| `& .\.venv\Scripts\python.exe -m streamlit run tools\engagement\review_app.py` | Launch the review UI on `http://localhost:8501`. |
 
 ## One-time setup
 
