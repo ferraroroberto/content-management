@@ -70,6 +70,25 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(self.store.have("guest", self.rid), [])  # staging cleared
         self.assertEqual(self.store.finished("guest", self.rid), first)
 
+    def test_a_recordings_folder_is_scanned_once_and_the_index_follows_writes(self) -> None:
+        for seq in (0, 1):
+            self.store.put("host", self.rid, seq, b"x")
+        restarted = ChunkStore(self.root / "staging")  # a restart reads the folder from disk
+        real_glob = Path.glob
+        with mock.patch.object(Path, "glob", autospec=True,
+                               side_effect=lambda path, pattern: real_glob(path, pattern)) as glob:
+            self.assertEqual(restarted.have("host", self.rid), [0, 1])
+            restarted.put("host", self.rid, 2, b"x")
+            restarted.put("host", self.rid, 2, b"x")
+            self.assertEqual(restarted.have("host", self.rid), [0, 1, 2])
+            self.assertEqual(restarted.have("host", self.rid), [0, 1, 2])
+        self.assertEqual(glob.call_count, 1)
+
+    def test_an_unknown_recording_is_not_scanned_or_remembered(self) -> None:
+        with mock.patch.object(Path, "glob", autospec=True) as glob:
+            self.assertEqual(self.store.have("host", _rid()), [])
+        glob.assert_not_called()
+
     def test_ids_numbers_and_extensions_are_validated(self) -> None:
         with self.assertRaises(ValueError):
             self.store.put("guest", "../../etc", 0, b"x")
@@ -138,6 +157,10 @@ class ServerTests(unittest.TestCase):
         self.assertIn("recorder.js", page.text)
         self.assertEqual(self.client.get(f"/api/{self.token['guest']}").json(), {"side": "guest"})
         self.assertEqual(self.client.get("/static/recorder.js").status_code, 200)
+
+    def test_api_answers_carry_a_server_timing_header(self) -> None:
+        timing = self.client.get(f"/api/{self.token['host']}").headers["server-timing"]
+        self.assertIn("app;dur=", timing)
 
     def test_version_reports_the_build_to_a_link_holder_only(self) -> None:
         body = self.client.get(f"/api/{self.token['host']}/version").json()

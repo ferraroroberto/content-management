@@ -46,6 +46,7 @@ from typing import Optional
 
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
+from starlette.middleware import Middleware
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Mount, Route, WebSocketRoute
@@ -53,6 +54,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from common.runtime_files import write_text_at
 from config.no_window import NO_WINDOW
+from src.request_timing import RequestTimingMiddleware
 from src.static_versioning import CachingStaticFiles, fleet_hash, stamp_assets
 from src.usage_log_starlette import usage_route
 from tools.recorder.store import RECORDING_ID, ChunkStore, MissingChunks
@@ -298,4 +300,4 @@ def create_app(episode: Path, store: ChunkStore, links: dict[str, str],
         Route("/api/{token}/rec/{rid}/finish", finish, methods=["POST"]),
         Mount("/static", CachingStaticFiles(directory=STATIC, asset_hash=ASSET_HASH), name="static"),
     ]
-    return Starlette(routes=routes)
+    return Starlette(routes=routes, middleware=[Middleware(RequestTimingMiddleware)])

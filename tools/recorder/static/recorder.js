@@ -25,6 +25,7 @@ const MIMES = [
   ["video/mp4", "mp4"],
 ];
 const TIMESLICE_MS = 1000;
+const REFRESH_MS = 2000;           // the page's refresh and upload-retry spacing
 const MAX_BACKOFF_MS = 5000;
 const CALL_HEIGHT = 720;           // the call's picture; the recording keeps full resolution
 const CALL_BPS = 1_500_000;
@@ -577,7 +578,9 @@ async function main() {
   await adoptOrphans();
   setControls();
   kick();
-  setInterval(() => { render().catch(() => {}); kick(); }, 1000);
+  // Uploads also start from every recorded chunk, so a hidden tab loses nothing by pausing this.
+  const { startPoll } = await import("/static/_vendored/poll/poll.js");
+  startPoll(async () => { await render().catch(() => {}); kick(); }, REFRESH_MS);
 }
 
 main();

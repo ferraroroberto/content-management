@@ -21,6 +21,7 @@ import json
 import logging
 import re
 import shutil
+import threading
 import time
 from pathlib import Path
 from typing import Optional
@@ -47,6 +48,11 @@ class MissingChunks(Exception):
 class ChunkStore:
     def __init__(self, root: Path):
         self.root = Path(root)
+        # Chunk numbers held per recording folder. A recording's folder is read from
+        # disk once; ``put`` and ``finish`` keep the index current, so the page's
+        # ``have`` check after a reconnect never walks the folder again.
+        self._held: dict[Path, set[int]] = {}
+        self._lock = threading.Lock()
 
     def _dir(self, side: str, rid: str) -> Path:
         if not RECORDING_ID.match(rid):
@@ -60,6 +66,19 @@ class ChunkStore:
     def _save_meta(self, folder: Path, meta: dict) -> None:
         atomic_write_text(folder / "meta.json", json.dumps(meta))
 
+    @staticmethod
+    def _scan(folder: Path) -> set[int]:
+        # request-budget-exempt: the one cold read of a recording's folder; every later request is served from the index
+        return {int(p.stem) for p in folder.glob("*.part")}
+
+    def _index(self, folder: Path) -> set[int]:
+        """The held chunk numbers of a folder the caller found on disk; the caller holds the lock.
+        Callers never pass a folder that does not exist, so an unknown id costs no memory."""
+        held = self._held.get(folder)
+        if held is None:
+            held = self._held[folder] = self._scan(folder)
+        return held
+
     def put(self, side: str, rid: str, seq: int, data: bytes) -> bool:
         """Store chunk ``seq``; returns False when an identical copy was already there."""
         if not 0 <= seq < MAX_SEQ:
@@ -72,11 +91,16 @@ class ChunkStore:
         if path.exists() and path.stat().st_size == len(data):
             return False
         atomic_write_bytes(path, data)  # a reader never sees half a chunk
+        with self._lock:
+            self._index(folder).add(seq)
         return True
 
     def have(self, side: str, rid: str) -> list[int]:
         folder = self._dir(side, rid)
-        return sorted(int(p.stem) for p in folder.glob("*.part")) if folder.is_dir() else []
+        if not folder.is_dir():
+            return []
+        with self._lock:
+            return sorted(self._index(folder))
 
     def finished(self, side: str, rid: str) -> Optional[dict]:
         folder = self._dir(side, rid)
@@ -113,8 +137,11 @@ class ChunkStore:
                                                         "duration_s": result["duration_s"]}, indent=1), encoding="utf-8")
         meta["result"] = result
         self._save_meta(folder, meta)
-        for path in folder.glob("*.part"):
-            path.unlink()
+        with self._lock:
+            held = self._index(folder)
+            self._held[folder] = set()  # the parts are about to go
+        for seq in held:
+            (folder / f"{seq:07d}.part").unlink(missing_ok=True)
         joined.unlink()
         logger.info("✅ %s recording %s: %s, %.1f s, %.0f MB", label, rid[:8], dst.name, result["duration_s"],
                     result["bytes"] / 1e6)
