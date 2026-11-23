@@ -50,7 +50,7 @@ usage_track_scan = { src = "scripts/usage_track_scan.py", sha = "a04abc7b3af872c
 instruction_frontmatter = { src = "scripts/instruction_frontmatter.py", sha = "e55de9619b9625c5499e1b9077350f9860e6037b", dest = "scripts/instruction_frontmatter.py" }
 instruction_repeats = { src = "scripts/instruction_repeats.py", sha = "e55de9619b9625c5499e1b9077350f9860e6037b", dest = "scripts/instruction_repeats.py" }
 request_budget_ratchet = { src = "scripts/request_budget_ratchet.py", sha = "564864cb95a8b416c16d1a1e1e9f31b9d5b2ec8e", dest = "scripts/request_budget_ratchet.py" }
-request_budget_scan = { src = "scripts/request_budget_scan.py", sha = "564864cb95a8b416c16d1a1e1e9f31b9d5b2ec8e", dest = "scripts/request_budget_scan.py" }
+request_budget_scan = { src = "scripts/request_budget_scan.py", sha = "5ba99b0a04b1b5d7b3689f8f7a59bd3fe625a9bc", dest = "scripts/request_budget_scan.py" }
 request_timing = { src = "src/request_timing.py", sha = "564864cb95a8b416c16d1a1e1e9f31b9d5b2ec8e", dest = "src/request_timing.py" }
 poll = { src = "app/webapp/static/_vendored/poll", sha = "564864cb95a8b416c16d1a1e1e9f31b9d5b2ec8e", dest = "tools/recorder/static/_vendored/poll" }
 
