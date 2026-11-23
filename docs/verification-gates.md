@@ -197,3 +197,28 @@ a reasoned `<rule>-exempt: <reason>` marker. Only
 `scripts/usage_track_ratchet.py --update-baseline --allow-additions` adds an
 entry. See the scaffold's `docs/usage-track-ratchet.md` for the rules, exit codes
 and keys.
+
+## 11. Request budget ratchet (`scripts/request_budget_ratchet_gate.py`)
+
+Holds the recorder page (`tools/recorder/static/**`) and the Python under `src/`,
+`tools/`, `common/` and `config/` to the fleet request budget and fails when a file's
+count for a rule rises above `.request-budget-ratchet-baseline.json`. The baseline is
+recorded debt, not a target: the hits in it are the burn-down list. Rules:
+`fixed-rate-poll` (a `setInterval` that reaches the server), `poll-floor` (a poll under
+2 s), `unwatched-loop` (a `while` loop that sleeps under 5 s, sleeps an unfixed
+interval or spawns a program each pass, and is not declared in
+`[[request_budget.loops]]`), `scan-per-request` (a directory scan in the recorder's
+request handlers, `handler_dirs = ["tools/recorder"]`), `default-pool` (a submit to the
+event loop's shared default pool) and `timing-middleware` (the recorder's Starlette app
+does not add `RequestTimingMiddleware`). `bare-exempt` is on too, with no baselined hit.
+The wrapper reports git or a file it could not read as **NOT CONFIRMED**. The script
+imports its vendored sibling, `scripts/request_budget_scan.py`.
+
+The vendored `src/request_timing.py` (the timing middleware and named pools) and
+`tools/recorder/static/_vendored/poll` (the `poll` helper) are present for the burn-down;
+no caller uses them yet. Move a poll onto the helper or a handler onto a named pool,
+then shrink the baseline in the same PR with
+`scripts/request_budget_ratchet.py --update-baseline`; only `--allow-additions` adds an
+entry. A hit that must stay carries a reasoned `request-budget-exempt: <reason>` marker.
+See the scaffold's `docs/request-budget-ratchet.md` for the exit codes and keys and its
+polling-budget page for the reasons behind the rules.
