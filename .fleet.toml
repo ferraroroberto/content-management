@@ -265,3 +265,52 @@ baseline      = ".request-budget-ratchet-baseline.json"
 browser_paths = ["tools/recorder/static/**"]
 server_paths  = ["src/**", "tools/**", "common/**", "config/**"]
 handler_dirs  = ["tools/recorder"]
+
+# Server loops that wait on something outside this process, each bounded by the job it serves
+[[request_budget.loops]]
+path       = "tools/app/process_runner.py"
+function   = "start_skill_console._tail"
+interval_s = 0.2
+why        = "follows the log of a skill console the owner just launched, so a viewer is at the console; it ends when the process exits and the file is drained"
+
+[[request_budget.loops]]
+path       = "tools/demo_video/examples/facilitation-suite/driver.py"
+function   = "FacilitationSuiteDriver.boot"
+interval_s = 0.25
+why        = "waits at most 30 s for the demo instance's /healthz while a take starts, and ends at the first answer"
+
+[[request_budget.loops]]
+path       = "tools/demo_video/record.py"
+function   = "Runner.pause"
+interval_s = 0.25
+why        = "a quarter-second round trip per page keeps Chrome delivering screencast frames during a take; it runs only for the length of one pause"
+
+[[request_budget.loops]]
+path       = "tools/newsletter/triage/jev_pilot.py"
+function   = "RingRecorder._loop"
+interval_s = 3
+why        = "samples the hub's 200-entry request ring while a replay runs, because a slower sample loses records the ring overwrites; it stops when the replay ends"
+
+[[request_budget.loops]]
+path       = "tools/planning/substack/api_client.py"
+function   = "_wait_for_video_transcode"
+interval_s = 3
+why        = "waits on one upload's transcode state, the API's own status poll, until it is transcoded, failed or past its timeout; the post cannot publish before it"
+
+[[request_budget.loops]]
+path       = "tools/planning/videos/videos_session.py"
+function   = "ensure_local_file"
+interval_s = 1
+why        = "waits at most the timeout (600 s by default) for OneDrive to hydrate one file before it is uploaded, and ends when the placeholder attribute clears"
+
+[[request_budget.loops]]
+path       = "tools/reporting/notion/notion_supabase_sync.py"
+function   = "NotionSupabaseSync.run_continuous"
+interval_s = 300
+why        = "the continuous-sync mode keeps Supabase current from Notion at the owner's configured notion.poll_every (300 s in the documented setup); --once is the form that runs without a loop"
+
+[[request_budget.loops]]
+path       = "tools/reporting/social_client/social_api_client.py"
+function   = "interruptible_sleep"
+interval_s = 0.1
+why        = "a rate-limit or retry wait that watches the keyboard so the owner can cut it short with x; it is bounded by the wait it was asked for"

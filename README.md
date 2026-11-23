@@ -197,6 +197,7 @@ content-management/                   # repo root
 │   ├── usage_log.py                  # vendored fleet usage log (+ usage_log_starlette.py, its Starlette mount)
 │   ├── runtime_data.py               # vendored runtime-data root resolver
 │   ├── pooled_http.py                # vendored keep-alive HTTP pool
+│   ├── request_timing.py             # vendored request-timing middleware (the recorder's Server-Timing)
 │   └── static_versioning.py          # repo-owned: cache-busted static serving for the recorder
 ├── scripts/                          # vendored ratchets (*_ratchet.py) and their gate wrappers (*_ratchet_gate.py)
 ├── results/                          # outputs — planning summaries + raw API JSON

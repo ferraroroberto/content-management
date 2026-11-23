@@ -203,7 +203,7 @@ and keys.
 Holds the recorder page (`tools/recorder/static/**`) and the Python under `src/`,
 `tools/`, `common/` and `config/` to the fleet request budget and fails when a file's
 count for a rule rises above `.request-budget-ratchet-baseline.json`. The baseline is
-recorded debt, not a target: the hits in it are the burn-down list. Rules:
+empty and stays empty: a new hit is fixed, declared or exempted, never baselined. Rules:
 `fixed-rate-poll` (a `setInterval` that reaches the server), `poll-floor` (a poll under
 2 s), `unwatched-loop` (a `while` loop that sleeps under 5 s, sleeps an unfixed
 interval or spawns a program each pass, and is not declared in
@@ -214,11 +214,15 @@ does not add `RequestTimingMiddleware`). `bare-exempt` is on too, with no baseli
 The wrapper reports git or a file it could not read as **NOT CONFIRMED**. The script
 imports its vendored sibling, `scripts/request_budget_scan.py`.
 
-The vendored `src/request_timing.py` (the timing middleware and named pools) and
-`tools/recorder/static/_vendored/poll` (the `poll` helper) are present for the burn-down;
-no caller uses them yet. Move a poll onto the helper or a handler onto a named pool,
-then shrink the baseline in the same PR with
-`scripts/request_budget_ratchet.py --update-baseline`; only `--allow-additions` adds an
-entry. A hit that must stay carries a reasoned `request-budget-exempt: <reason>` marker.
+The recorder app adds the vendored `RequestTimingMiddleware` (`src/request_timing.py`),
+and its page refreshes through the vendored `poll` helper
+(`tools/recorder/static/_vendored/poll`), every 2 s and not while the tab is hidden. The
+chunk store reads a recording's folder once and keeps the held chunk numbers in memory.
+A server loop that must run unviewed is declared in `.fleet.toml` under
+`[[request_budget.loops]]` with its interval and why; the declarations are the list of
+such loops. A single hit that must stay carries a reasoned
+`request-budget-exempt: <reason>` marker (the store's one cold folder read does). Only
+`scripts/request_budget_ratchet.py --update-baseline --allow-additions` adds a baseline
+entry, and it is a reviewed decision.
 See the scaffold's `docs/request-budget-ratchet.md` for the exit codes and keys and its
 polling-budget page for the reasons behind the rules.
