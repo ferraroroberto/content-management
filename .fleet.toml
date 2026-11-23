@@ -49,6 +49,10 @@ usage_track_ratchet = { src = "scripts/usage_track_ratchet.py", sha = "4a06ca84f
 usage_track_scan = { src = "scripts/usage_track_scan.py", sha = "a04abc7b3af872cbac974401dd0945587eac6cef", dest = "scripts/usage_track_scan.py" }
 instruction_frontmatter = { src = "scripts/instruction_frontmatter.py", sha = "e55de9619b9625c5499e1b9077350f9860e6037b", dest = "scripts/instruction_frontmatter.py" }
 instruction_repeats = { src = "scripts/instruction_repeats.py", sha = "e55de9619b9625c5499e1b9077350f9860e6037b", dest = "scripts/instruction_repeats.py" }
+request_budget_ratchet = { src = "scripts/request_budget_ratchet.py", sha = "564864cb95a8b416c16d1a1e1e9f31b9d5b2ec8e", dest = "scripts/request_budget_ratchet.py" }
+request_budget_scan = { src = "scripts/request_budget_scan.py", sha = "564864cb95a8b416c16d1a1e1e9f31b9d5b2ec8e", dest = "scripts/request_budget_scan.py" }
+request_timing = { src = "src/request_timing.py", sha = "564864cb95a8b416c16d1a1e1e9f31b9d5b2ec8e", dest = "src/request_timing.py" }
+poll = { src = "app/webapp/static/_vendored/poll", sha = "564864cb95a8b416c16d1a1e1e9f31b9d5b2ec8e", dest = "tools/recorder/static/_vendored/poll" }
 
 # Comment ratchet (project-scaffolding docs/comment-ratchet.md): fails the pre-ship
 # gate when a file's count of `#NNN` issue references inside comments rises above
@@ -250,3 +254,14 @@ name   = "engagement-comment-status"
 module = "tools/engagement/db/comment_status.py"
 type   = "CommentStatus"
 derive = "derive_comment_status"
+
+# Request budget ratchet (project-scaffolding docs/request-budget-ratchet.md): fails the
+# pre-ship gate when a file's count of fixed-rate browser polls, sub-2 s polls, undeclared
+# fast server loops, request-handler directory scans, default-pool submits or a missing
+# timing middleware rises above the baseline.
+[request_budget_ratchet]
+enabled       = true
+baseline      = ".request-budget-ratchet-baseline.json"
+browser_paths = ["tools/recorder/static/**"]
+server_paths  = ["src/**", "tools/**", "common/**", "config/**"]
+handler_dirs  = ["tools/recorder"]

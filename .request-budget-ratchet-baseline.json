@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "entries": [
+    {"key": "tools/app/process_runner.py", "counts": {"unwatched-loop": 2}},
+    {"key": "tools/demo_video/examples/facilitation-suite/driver.py", "counts": {"unwatched-loop": 1}},
+    {"key": "tools/demo_video/record.py", "counts": {"unwatched-loop": 1}},
+    {"key": "tools/newsletter/triage/jev_pilot.py", "counts": {"unwatched-loop": 1}},
+    {"key": "tools/planning/substack/api_client.py", "counts": {"unwatched-loop": 1}},
+    {"key": "tools/planning/videos/videos_session.py", "counts": {"unwatched-loop": 1}},
+    {"key": "tools/recorder/server.py", "counts": {"timing-middleware": 1}},
+    {"key": "tools/recorder/static/recorder.js", "counts": {"fixed-rate-poll": 1, "poll-floor": 1}},
+    {"key": "tools/recorder/store.py", "counts": {"scan-per-request": 2}},
+    {"key": "tools/reporting/notion/notion_supabase_sync.py", "counts": {"unwatched-loop": 1}},
+    {"key": "tools/reporting/social_client/social_api_client.py", "counts": {"unwatched-loop": 1}}
+  ]
+}
