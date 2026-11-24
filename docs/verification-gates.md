@@ -137,8 +137,9 @@ suspects: a lifecycle string compared or stored as a state); every other
 rule is at zero: `no-window` (a `subprocess` spawn without `creationflags=`),
 `logging-not-print` (a `print` in a library package; command-line modules
 print by design and are skipped), `no-drive-path` (a string literal that
-starts with a drive letter), `subprocess-timeout`, `state-set-repeat` and
-`state-write`. The `secret-compare` and `git-wrapper` rules
+starts with a drive letter), `subprocess-timeout`, `path-sep` (text a regex
+parsed out of another format, joined onto a path without normalising its
+backslashes), `state-set-repeat` and `state-write`. The `secret-compare` and `git-wrapper` rules
 stay off because the repo has no helper for either. The wrapper reports git
 or a Python file it could not read or parse as **NOT CONFIRMED**.
 

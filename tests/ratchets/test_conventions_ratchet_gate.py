@@ -72,6 +72,7 @@ class WiringTests(unittest.TestCase):
                 "state-literal",
                 "state-set-repeat",
                 "state-write",
+                "path-sep",
             ],
         )
         self.assertTrue((REPO_ROOT / table["baseline"]).is_file())
