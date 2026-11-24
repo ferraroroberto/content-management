@@ -86,6 +86,8 @@ class UncalledFunctionTurnsTheGateRedTests(unittest.TestCase):
         self.repo = Path(tmp.name)
         (self.repo / "scripts").mkdir()
         (self.repo / "scripts" / "dead_code_ratchet.py").write_bytes(gate.SCRIPT.read_bytes())
+        # every ratchet loads this sibling to find its baseline in .ratchets/
+        (self.repo / "scripts" / "ratchet_baseline.py").write_bytes(gate.SCRIPT.with_name("ratchet_baseline.py").read_bytes())
         self.module = self.repo / "tool.py"
         self.module.write_text(self.CLEAN, encoding="utf-8")
         (self.repo / ".fleet.toml").write_text("[dead_code_ratchet]\nenabled = true\n", encoding="utf-8")

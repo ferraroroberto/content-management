@@ -60,7 +60,7 @@ class WiringTests(unittest.TestCase):
         table = fleet["request_budget_ratchet"]
         self.assertIs(table["enabled"], True)
         self.assertTrue((REPO_ROOT / table["baseline"]).is_file())
-        for key in ("request_budget_ratchet", "request_budget_scan", "request_timing", "poll"):
+        for key in ("request_budget_ratchet", "request_budget_scan", "request_timing", "poll", "ratchet_baseline"):
             with self.subTest(key=key):
                 self.assertTrue((REPO_ROOT / fleet["vendored"][key]["dest"]).exists())
 
@@ -86,7 +86,7 @@ class SeededPollTurnsTheGateRedTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.repo = Path(tmp.name)
         (self.repo / "scripts").mkdir()
-        for name in ("request_budget_ratchet.py", "request_budget_scan.py"):
+        for name in ("request_budget_ratchet.py", "request_budget_scan.py", "ratchet_baseline.py"):
             (self.repo / "scripts" / name).write_bytes((REPO_ROOT / "scripts" / name).read_bytes())
         (self.repo / "site").mkdir()
         self.page = self.repo / "site" / "page.js"

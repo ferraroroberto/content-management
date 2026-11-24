@@ -53,7 +53,7 @@ class WiringTests(unittest.TestCase):
         table = fleet["runtime_write_ratchet"]
         self.assertIs(table["enabled"], True)
         self.assertTrue((REPO_ROOT / table["baseline"]).is_file())
-        for name in ("runtime_write_ratchet", "runtime_write_resolve"):
+        for name in ("runtime_write_ratchet", "runtime_write_resolve", "ratchet_baseline"):
             entry = fleet["vendored"][name]
             self.assertEqual(entry["dest"], f"scripts/{name}.py")
             self.assertTrue((REPO_ROOT / entry["dest"]).is_file())
