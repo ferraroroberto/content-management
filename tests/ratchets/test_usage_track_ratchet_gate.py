@@ -60,7 +60,7 @@ class WiringTests(unittest.TestCase):
         self.assertIs(table["enabled"], True)
         self.assertEqual(table["rules"], ["untracked-control", "untracked-sheet", "dynamic-id", "usage-log-wired"])
         self.assertTrue((REPO_ROOT / table["baseline"]).is_file())
-        for key in ("usage-log", "usage_log", "usage_track_ratchet", "usage_track_scan"):
+        for key in ("usage-log", "usage_log", "usage_track_ratchet", "usage_track_scan", "ratchet_baseline"):
             with self.subTest(key=key):
                 self.assertTrue((REPO_ROOT / fleet["vendored"][key]["dest"]).exists())
 
@@ -93,7 +93,7 @@ class SeededViolationTurnsTheGateRedTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.repo = Path(tmp.name)
         (self.repo / "scripts").mkdir()
-        for name in ("usage_track_ratchet.py", "usage_track_scan.py"):
+        for name in ("usage_track_ratchet.py", "usage_track_scan.py", "ratchet_baseline.py"):
             (self.repo / "scripts" / name).write_bytes((REPO_ROOT / "scripts" / name).read_bytes())
         (self.repo / "site").mkdir()
         self.page = self.repo / "site" / "index.html"

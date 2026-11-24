@@ -84,7 +84,7 @@ class RuleHitTurnsTheGateRedTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.repo = Path(tmp.name)
         (self.repo / "scripts").mkdir()
-        for name in ("instruction_ratchet", "instruction_frontmatter", "instruction_repeats"):
+        for name in ("instruction_ratchet", "instruction_frontmatter", "instruction_repeats", "ratchet_baseline"):
             (self.repo / "scripts" / f"{name}.py").write_bytes(gate.SCRIPT.with_name(f"{name}.py").read_bytes())
         self.claude_md = self.repo / "CLAUDE.md"
         self.claude_md.write_text(self.CLEAN, encoding="utf-8")

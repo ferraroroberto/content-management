@@ -108,6 +108,8 @@ class SeededViolationTurnsTheGateRedTests(unittest.TestCase):
         self.repo = Path(tmp.name)
         (self.repo / "scripts").mkdir()
         (self.repo / "scripts" / "conventions_ratchet.py").write_bytes(gate.SCRIPT.read_bytes())
+        # every ratchet loads this sibling to find its baseline in .ratchets/
+        (self.repo / "scripts" / "ratchet_baseline.py").write_bytes(gate.SCRIPT.with_name("ratchet_baseline.py").read_bytes())
         # the ratchet loads its sibling modules from beside itself
         for sibling_name in ("conventions_readers.py", "conventions_state.py"):
             sibling = gate.SCRIPT.with_name(sibling_name)

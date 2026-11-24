@@ -24,19 +24,19 @@ ignore_refs = [
 # Vendored byte-for-byte from project-scaffolding. sha = the source repo commit
 # the copy was taken from; /propagate-vendored hash-verifies + bumps.
 [vendored]
-comment_ratchet = { src = "scripts/comment_ratchet.py", sha = "1ed07ddb5002d4513adf0ce45f1bfaf68f3acc32", dest = "scripts/comment_ratchet.py" }
-static_ratchet  = { src = "scripts/static_ratchet.py",  sha = "fe8cc1bdbd038ed65947186248df13072eceb25a", dest = "scripts/static_ratchet.py" }
-docs_ratchet    = { src = "scripts/docs_ratchet.py",    sha = "78635aa74a92b9622326cb53992e0634fbaf6246", dest = "scripts/docs_ratchet.py" }
-structure_ratchet = { src = "scripts/structure_ratchet.py", sha = "4a06ca84fc9c5005d4be7fa505c9d0e7c0472dba", dest = "scripts/structure_ratchet.py" }
+comment_ratchet = { src = "scripts/comment_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/comment_ratchet.py" }
+static_ratchet  = { src = "scripts/static_ratchet.py",  sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/static_ratchet.py" }
+docs_ratchet    = { src = "scripts/docs_ratchet.py",    sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/docs_ratchet.py" }
+structure_ratchet = { src = "scripts/structure_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/structure_ratchet.py" }
 structure_layout = { src = "scripts/structure_layout.py", sha = "a04abc7b3af872cbac974401dd0945587eac6cef", dest = "scripts/structure_layout.py" }
 structure_band = { src = "scripts/structure_band.py", sha = "3b708fd3c54ab7b93b08d489406c405762c83c41", dest = "scripts/structure_band.py" }
-instruction_ratchet = { src = "scripts/instruction_ratchet.py", sha = "a04abc7b3af872cbac974401dd0945587eac6cef", dest = "scripts/instruction_ratchet.py" }
-doc_refs_ratchet = { src = "scripts/doc_refs_ratchet.py", sha = "a68f6e49393f0ef0b94ab3c79f4338a50d89fa49", dest = "scripts/doc_refs_ratchet.py" }
-dead_code_ratchet = { src = "scripts/dead_code_ratchet.py", sha = "4d0b0ff30e23eb95c73c4b0b1517ec6a43d3a836", dest = "scripts/dead_code_ratchet.py" }
-conventions_ratchet = { src = "scripts/conventions_ratchet.py", sha = "9f5d6b727d457616ce80e18db9f5a048ab53c3be", dest = "scripts/conventions_ratchet.py" }
+instruction_ratchet = { src = "scripts/instruction_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/instruction_ratchet.py" }
+doc_refs_ratchet = { src = "scripts/doc_refs_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/doc_refs_ratchet.py" }
+dead_code_ratchet = { src = "scripts/dead_code_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/dead_code_ratchet.py" }
+conventions_ratchet = { src = "scripts/conventions_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/conventions_ratchet.py" }
 conventions_readers = { src = "scripts/conventions_readers.py", sha = "9f5d6b727d457616ce80e18db9f5a048ab53c3be", dest = "scripts/conventions_readers.py" }
 conventions_state = { src = "scripts/conventions_state.py", sha = "4d0b0ff30e23eb95c73c4b0b1517ec6a43d3a836", dest = "scripts/conventions_state.py" }
-runtime_write_ratchet = { src = "scripts/runtime_write_ratchet.py", sha = "4a06ca84fc9c5005d4be7fa505c9d0e7c0472dba", dest = "scripts/runtime_write_ratchet.py" }
+runtime_write_ratchet = { src = "scripts/runtime_write_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/runtime_write_ratchet.py" }
 runtime_write_resolve = { src = "scripts/runtime_write_resolve.py", sha = "ce64203b017ba636c82737ee7f768c9ef6f422cd", dest = "scripts/runtime_write_resolve.py" }
 rec-wave = { src = "app/webapp/static/_vendored/rec-wave", sha = "a04abc7b3af872cbac974401dd0945587eac6cef", dest = "tools/recorder/static/_vendored/rec-wave" }
 page-foot = { src = "app/webapp/static/_vendored/page-foot", sha = "48602060fffdacbcdcdde66b9886c6471d835ff3", dest = "tools/recorder/static/_vendored/page-foot" }
@@ -45,11 +45,11 @@ usage_log = { src = "src/usage_log.py", sha = "78635aa74a92b9622326cb53992e0634f
 usage_log_starlette = { src = "src/usage_log_starlette.py", sha = "ea4e1e80f83c4f5a1a6b33e8a029e46ca63150c5", dest = "src/usage_log_starlette.py" }
 runtime_data = { src = "src/runtime_data.py", sha = "fe8cc1bdbd038ed65947186248df13072eceb25a", dest = "src/runtime_data.py" }
 pooled_http = { src = "src/pooled_http.py", sha = "fe8cc1bdbd038ed65947186248df13072eceb25a", dest = "src/pooled_http.py" }
-usage_track_ratchet = { src = "scripts/usage_track_ratchet.py", sha = "4a06ca84fc9c5005d4be7fa505c9d0e7c0472dba", dest = "scripts/usage_track_ratchet.py" }
+usage_track_ratchet = { src = "scripts/usage_track_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/usage_track_ratchet.py" }
 usage_track_scan = { src = "scripts/usage_track_scan.py", sha = "a04abc7b3af872cbac974401dd0945587eac6cef", dest = "scripts/usage_track_scan.py" }
 instruction_frontmatter = { src = "scripts/instruction_frontmatter.py", sha = "e55de9619b9625c5499e1b9077350f9860e6037b", dest = "scripts/instruction_frontmatter.py" }
 instruction_repeats = { src = "scripts/instruction_repeats.py", sha = "e55de9619b9625c5499e1b9077350f9860e6037b", dest = "scripts/instruction_repeats.py" }
-request_budget_ratchet = { src = "scripts/request_budget_ratchet.py", sha = "564864cb95a8b416c16d1a1e1e9f31b9d5b2ec8e", dest = "scripts/request_budget_ratchet.py" }
+request_budget_ratchet = { src = "scripts/request_budget_ratchet.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/request_budget_ratchet.py" }
 request_budget_scan = { src = "scripts/request_budget_scan.py", sha = "5ba99b0a04b1b5d7b3689f8f7a59bd3fe625a9bc", dest = "scripts/request_budget_scan.py" }
 request_timing = { src = "src/request_timing.py", sha = "564864cb95a8b416c16d1a1e1e9f31b9d5b2ec8e", dest = "src/request_timing.py" }
 poll = { src = "app/webapp/static/_vendored/poll", sha = "564864cb95a8b416c16d1a1e1e9f31b9d5b2ec8e", dest = "tools/recorder/static/_vendored/poll" }
@@ -59,9 +59,11 @@ poll = { src = "app/webapp/static/_vendored/poll", sha = "564864cb95a8b416c16d1a
 # the baseline, never on the baselined debt — a comment states the present-tense
 # why, not the change's history. src/gmail_readonly/ and src/google_oauth_common/
 # are vendored copies, so they are excluded like the static ratchet above.
+ratchet_baseline = { src = "scripts/ratchet_baseline.py", sha = "48db2132dab2dfc38b6154948ca17fd1f4b9232f", dest = "scripts/ratchet_baseline.py" }
+
 [comment_ratchet]
 enabled  = true
-baseline = ".comment-ratchet-baseline.json"
+baseline = ".ratchets/comment.json"
 exclude  = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
 history_phrases = true
 docstrings = true
@@ -73,7 +75,7 @@ docstrings = true
 # design), so they cannot be fixed here.
 [static_ratchet]
 enabled    = true
-baseline   = ".static-ratchet-baseline.json"
+baseline   = ".ratchets/static.json"
 min_lines  = 10
 min_tokens = 100
 exclude    = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
@@ -87,7 +89,7 @@ exclude    = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
 # so nothing is excluded.
 [docs_ratchet]
 enabled          = true
-baseline         = ".docs-ratchet-baseline.json"
+baseline         = ".ratchets/docs.json"
 readme_max_bytes = 40960
 include = [
     "README.md",
@@ -118,7 +120,7 @@ include = [
 # ratchets above.
 [structure_ratchet]
 enabled  = true
-baseline = ".structure-ratchet-baseline.json"
+baseline = ".ratchets/structure.json"
 exclude  = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
 
 # Instruction ratchet (project-scaffolding docs/instruction-ratchet.md): fails the
@@ -128,7 +130,7 @@ exclude  = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
 # cap. Existing hits are baselined, never excluded.
 [instruction_ratchet]
 enabled    = true
-baseline   = ".instruction-ratchet-baseline.json"
+baseline   = ".ratchets/instruction.json"
 skill_dirs = [".claude/skills"]
 ci_expectations = true
 agents_pointer = true
@@ -141,7 +143,7 @@ repeated_text_words = 12
 [doc_refs_ratchet]
 enabled    = true
 trees    = true
-baseline   = ".doc-refs-ratchet-baseline.json"
+baseline   = ".ratchets/doc-refs.json"
 include    = ["README.md", "CLAUDE.md", "docs/"]
 allow_refs = []
 
@@ -153,7 +155,7 @@ allow_refs = []
 # [vendored] because that table tracks project-scaffolding copies by commit sha.
 [dead_code_ratchet]
 enabled  = true
-baseline = ".dead-code-ratchet-baseline.json"
+baseline = ".ratchets/dead-code.json"
 exclude  = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
 
 # Conventions ratchet (project-scaffolding docs/conventions-ratchet.md): fails the
@@ -164,7 +166,7 @@ exclude  = ["src/gmail_readonly/**", "src/google_oauth_common/**"]
 # the vendored src/gmail_readonly/ and src/google_oauth_common/ copies carry no hits.
 [conventions_ratchet]
 enabled  = true
-baseline = ".conventions-ratchet-baseline.json"
+baseline = ".ratchets/conventions.json"
 rules = ["no-window", "logging-not-print", "no-drive-path", "subprocess-timeout", "browser-per-iteration", "state-literal", "state-set-repeat", "state-write", "path-sep"]
 # the default print_paths (app/, src/) would skip every tool package
 print_paths = ["tools/", "config/"]
@@ -205,7 +207,7 @@ why    = "static assets go through CachingStaticFiles"
 # run left under a code folder. Mechanism: project-scaffolding docs/runtime-write-ratchet.md.
 [runtime_write_ratchet]
 enabled  = true
-baseline = ".runtime-write-ratchet-baseline.json"
+baseline = ".ratchets/runtime-write.json"
 # The tool packages (tools/) are this repo's code, beside src/, scripts/
 # and config/; src/gmail_readonly/ and src/google_oauth_common/ are vendored copies.
 code_folders = ["src", "scripts", "config", "tools"]
@@ -222,7 +224,7 @@ safe_calls   = ["results_dir", "db_path", "raw_sidecar", "screenshot_path"]
 # vendored, started and mounted. The recorder's whole front end is tools/recorder/static/.
 [usage_track_ratchet]
 enabled  = true
-baseline = ".usage-track-ratchet-baseline.json"
+baseline = ".ratchets/usage-track.json"
 rules    = ["untracked-control", "untracked-sheet", "dynamic-id", "usage-log-wired"]
 paths    = ["tools/recorder/static/**"]
 
@@ -261,7 +263,7 @@ derive = "derive_comment_status"
 # timing middleware rises above the baseline.
 [request_budget_ratchet]
 enabled       = true
-baseline      = ".request-budget-ratchet-baseline.json"
+baseline      = ".ratchets/request-budget.json"
 browser_paths = ["tools/recorder/static/**"]
 server_paths  = ["src/**", "tools/**", "common/**", "config/**"]
 handler_dirs  = ["tools/recorder"]

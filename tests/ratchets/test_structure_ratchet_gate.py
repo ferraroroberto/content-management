@@ -86,6 +86,8 @@ class GrowthTurnsTheGateRedTests(unittest.TestCase):
         self.repo = Path(tmp.name)
         (self.repo / "scripts").mkdir()
         shutil.copy(gate.SCRIPT, self.repo / "scripts" / "structure_ratchet.py")
+        # every ratchet loads this sibling to find its baseline in .ratchets/
+        shutil.copy(gate.SCRIPT.with_name("ratchet_baseline.py"), self.repo / "scripts" / "ratchet_baseline.py")
         shutil.copy(gate.SCRIPT.with_name("structure_layout.py"), self.repo / "scripts" / "structure_layout.py")
         shutil.copy(gate.SCRIPT.with_name("structure_band.py"), self.repo / "scripts" / "structure_band.py")
         (self.repo / "tests").mkdir()

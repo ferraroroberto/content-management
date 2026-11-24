@@ -88,6 +88,8 @@ class AddedReferenceTurnsTheGateRedTests(unittest.TestCase):
         self.repo = Path(tmp.name)
         (self.repo / "scripts").mkdir()
         shutil.copy(gate.SCRIPT, self.repo / "scripts" / "docs_ratchet.py")
+        # every ratchet loads this sibling to find its baseline in .ratchets/
+        shutil.copy(gate.SCRIPT.with_name("ratchet_baseline.py"), self.repo / "scripts" / "ratchet_baseline.py")
         (self.repo / "docs").mkdir()
         (self.repo / "README.md").write_text("# Demo\n\nStates what is true.\n", encoding="utf-8")
         (self.repo / "docs" / "guide.md").write_text("# Guide\n\nStates why.\n", encoding="utf-8")
